@@ -1040,3 +1040,27 @@ Residual offset:
 - calibrated EVはtestでentry数を増やしすぎる。
 - 現時点では採用不可。
 - 次は train期間OOF predictions を作ってcalibration fit月数を増やすか、exit timing target改善を優先する。
+
+### Train-Period OOF Prediction Infrastructure
+
+作業:
+
+- `trade_data.modeling` に `oof` サブコマンドを追加した。
+- 指定したOOF対象月を `--fold-month-count` ごとのholdout foldに分ける。
+- 各foldでholdout月を学習から外し、必要なら `--purge-label-overlap` と `--embargo-hours` でlabel overlapを削除する。
+- 予測は `predictions_oof.parquet` に保存する。
+- report: `docs/reports/2026-06-28_train_oof_predictions_infra.md`
+
+検証:
+
+- `python3 -m unittest tests.test_modeling`: 17 tests OK。
+- `python3 -m trade_data.modeling oof --help`: OK。
+- 軽量smoke run: `experiments/20260627_222746_oof_smoke_policy/`
+- `python3 -m unittest discover tests`: 47 tests OK。
+- `git diff --check`: OK。
+
+判断:
+
+- train期間OOF predictionsを作るための基盤は整った。
+- smoke runは機能確認用であり、スコアは研究判断に使わない。
+- 次は HGB 80iter regime/purge v2 と同じtrain monthsで本番OOFを実行し、validation OOFと結合してside/regime calibrationを再評価する。

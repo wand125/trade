@@ -166,6 +166,18 @@ Artifacts are written under:
 experiments/
 ```
 
+Build blocked out-of-fold predictions for calibration or meta-model training:
+
+```bash
+python -m trade_data.modeling oof \
+  --dataset-dir data/processed/datasets/xauusd_m1_p1_l1p2 \
+  --months 2023-01,2023-02,2023-03,2023-04 \
+  --fold-month-count 1 \
+  --target-set policy \
+  --purge-label-overlap true \
+  --embargo-hours 24
+```
+
 Fit a second-stage meta EV model from saved prediction frames:
 
 ```bash

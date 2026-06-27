@@ -5,9 +5,11 @@ from trade_data.modeling import (
     add_calibrated_ev_columns,
     apply_split_purging,
     build_sample_weights,
+    chunk_months,
     fit_linear_calibrator,
     parse_csv_months,
     prediction_frame,
+    prediction_frame_evaluation_metrics,
     regression_training_values,
     resolve_target_names,
     resolve_split_months,
@@ -79,6 +81,15 @@ class ModelingTests(unittest.TestCase):
 
     def test_parse_csv_months(self):
         self.assertEqual(parse_csv_months("2024-01,2024-03"), ["2024-01", "2024-03"])
+
+    def test_chunk_months_groups_contiguous_months(self):
+        chunks = chunk_months(["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"], 2)
+
+        self.assertEqual(chunks, [["2024-01", "2024-02"], ["2024-03", "2024-04"], ["2024-05"]])
+
+    def test_chunk_months_rejects_non_positive_size(self):
+        with self.assertRaises(ValueError):
+            chunk_months(["2024-01"], 0)
 
     def test_resolve_split_months_accepts_explicit_non_contiguous_months(self):
         months = resolve_split_months("train", "2024-01,2024-03", None, None)
@@ -161,6 +172,30 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(output["roll_vol_60"].tolist(), [0.01, 0.02])
         self.assertEqual(output["trend_regime"].tolist(), ["up", "down"])
         self.assertIn("pred_long_best_adjusted_pnl", output.columns)
+
+    def test_prediction_frame_evaluation_metrics_uses_available_targets(self):
+        frame = pd.DataFrame(
+            {
+                "long_best_adjusted_pnl": [10.0, 1.0],
+                "short_best_adjusted_pnl": [0.0, 12.0],
+                "pred_long_best_adjusted_pnl": [11.0, 2.0],
+                "pred_short_best_adjusted_pnl": [1.0, 13.0],
+                "label": [1, -1],
+                "pred_label": [1, -1],
+            }
+        )
+
+        metrics = prediction_frame_evaluation_metrics(
+            frame,
+            regression_targets=["long_best_adjusted_pnl", "short_best_adjusted_pnl"],
+            classification_targets=["label", "best_holding_time_bin"],
+            entry_threshold=5.0,
+        )
+
+        self.assertIn("long_best_adjusted_pnl", metrics["regression"])
+        self.assertIn("label", metrics["classification"])
+        self.assertNotIn("best_holding_time_bin", metrics["classification"])
+        self.assertEqual(metrics["selection"]["selected_trade_count"], 2)
 
     def test_apply_split_purging_removes_label_overlap(self):
         train = pd.DataFrame(
