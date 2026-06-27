@@ -1,0 +1,235 @@
+# XAUUSD Data Pipeline
+
+Python pipeline for downloading long-run XAUUSD data from HistData, converting it
+to Parquet, and preparing M1/M5 datasets for short-term modelling.
+
+HistData timestamps are Eastern Standard Time without daylight saving
+adjustments. The conversion scripts normalize timestamps to UTC.
+
+## Repository Policy
+
+This repository tracks source code, tests, and research documentation.
+Generated data and model artifacts are intentionally excluded from Git:
+
+- `data/raw/`: downloaded HistData ZIP files
+- `data/processed/`: converted Parquet files and feature/label datasets
+- `data/reports/`: backtest output CSV/JSON artifacts
+- `experiments/`: trained models, predictions, and experiment outputs
+
+The directory placeholders are kept with `.gitkeep` files. Recreate generated
+artifacts locally with the commands below instead of committing them.
+
+## Setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+## Download M1 Bars
+
+XAUUSD M1 data starts from 2009 on HistData. Past complete years are downloaded
+as yearly ZIP files. The current partial year may be monthly.
+
+```bash
+python -m trade_data.histdata download --mode m1 --pair XAUUSD --start-year 2009
+```
+
+To dry-run without downloading:
+
+```bash
+python -m trade_data.histdata download --mode m1 --pair XAUUSD --start-year 2009 --dry-run
+```
+
+## Download Tick Data
+
+Tick data is monthly and much larger. Start with a narrow range.
+
+```bash
+python -m trade_data.histdata download --mode tick --pair XAUUSD --start-year 2025 --end-year 2025
+```
+
+Limit the number of files during testing:
+
+```bash
+python -m trade_data.histdata download --mode tick --pair XAUUSD --start-year 2025 --max-files 1
+```
+
+## Convert To Parquet
+
+M1 and M5:
+
+```bash
+python -m trade_data.convert m1 --pair XAUUSD --also-m5
+```
+
+Tick data:
+
+```bash
+python -m trade_data.convert tick --pair XAUUSD
+```
+
+## Validate
+
+```bash
+python -m trade_data.validate data/processed/histdata/xauusd/xauusd_m1.parquet
+python -m trade_data.validate data/processed/histdata/xauusd/xauusd_m5.parquet
+```
+
+## Backtest Baselines
+
+Run one baseline strategy for a month:
+
+```bash
+python -m trade_data.backtest run --month 2025-01 --strategy ma_cross
+```
+
+Run all baseline strategies for a month:
+
+```bash
+python -m trade_data.backtest benchmark --month 2025-01
+```
+
+Artifacts are written under:
+
+```text
+data/reports/backtests/
+```
+
+## Build Feature/Label Datasets
+
+Build a monthly M1 dataset with leak-free features and future-24h labels:
+
+```bash
+python -m trade_data.dataset build --month 2025-01 --min-adjusted-edge 15
+```
+
+Build a contiguous monthly range:
+
+```bash
+python -m trade_data.dataset build-range --start-month 2024-01 --end-month 2024-07 --min-adjusted-edge 15
+```
+
+Outputs are written under:
+
+```text
+data/processed/datasets/xauusd_m1/
+```
+
+The dataset includes leak-free features, continuous regression targets, quantile
+classification targets, and the coarse `long/short/stay_flat` label.
+
+## Train Initial Models
+
+Train the first lightweight multi-task benchmark:
+
+```bash
+python -m trade_data.modeling train \
+  --train-start 2024-01 --train-end 2024-06 \
+  --valid-start 2024-07 --valid-end 2024-07 \
+  --test-start 2025-01 --test-end 2025-01 \
+  --min-adjusted-edge 15 \
+  --max-iter 80 \
+  --learning-rate 0.05 \
+  --entry-threshold 15
+```
+
+Artifacts are written under:
+
+```text
+experiments/
+```
+
+## Backtest Saved Model Predictions
+
+Run an executable policy from saved model predictions:
+
+```bash
+python -m trade_data.backtest model-policy \
+  --month 2025-01 \
+  --predictions experiments/20260627_171852_hgb_multitask_edge15/predictions_test.parquet \
+  --policy stateful_ev \
+  --entry-threshold 30 \
+  --exit-threshold 10 \
+  --side-margin 5 \
+  --profit-multiplier 1.0 \
+  --loss-multiplier 1.25
+```
+
+Sweep policy thresholds on a validation month:
+
+```bash
+python -m trade_data.backtest model-sweep \
+  --month 2024-07 \
+  --predictions experiments/20260627_171852_hgb_multitask_edge15/predictions_valid.parquet \
+  --entry-thresholds 5,10,15,20,25,30 \
+  --exit-thresholds=-5,0,5,10 \
+  --side-margins 0,5,10 \
+  --profit-multiplier 1.0 \
+  --loss-multiplier 1.25
+```
+
+Aggregate multiple validation sweeps by identical policy parameters:
+
+```bash
+python -m trade_data.backtest model-sweep-summary \
+  --sweeps data/reports/backtests/fold_a/metrics.csv,data/reports/backtests/fold_b/metrics.csv \
+  --min-folds 2 \
+  --min-trades-per-fold 30 \
+  --max-forced-exit-rate 0.0 \
+  --max-drawdown 100 \
+  --min-adjusted-pnl-per-fold 0 \
+  --sort-by mean_pnl
+```
+
+Use the summary command to choose entry/exit thresholds from validation folds
+only. The final test month should receive the selected policy unchanged.
+
+## Rebuild Generated Artifacts
+
+From a fresh clone, the normal regeneration flow is:
+
+```bash
+python -m trade_data.histdata download --mode m1 --pair XAUUSD --start-year 2009
+python -m trade_data.histdata download --mode tick --pair XAUUSD --start-year 2025 --end-year 2025 --max-files 1
+python -m trade_data.convert m1 --pair XAUUSD --also-m5
+python -m trade_data.convert tick --pair XAUUSD
+python -m trade_data.validate data/processed/histdata/xauusd/xauusd_m1.parquet
+python -m trade_data.dataset build-range --start-month 2023-01 --end-month 2025-12 --min-adjusted-edge 15 --skip-existing
+```
+
+Then train and evaluate a walk-forward fold:
+
+```bash
+python -m trade_data.modeling train \
+  --train-start 2023-01 --train-end 2024-12 \
+  --valid-start 2025-01 --valid-end 2025-01 \
+  --test-start 2025-02 --test-end 2025-02 \
+  --min-adjusted-edge 15
+
+python -m trade_data.backtest model-sweep \
+  --month 2025-01 \
+  --predictions experiments/<run>/predictions_valid.parquet \
+  --policies stateful_ev,stateless_ev,timed_ev \
+  --entry-thresholds 5,10,15,20,25,30,40,50 \
+  --exit-thresholds=-5,0,5,10,15 \
+  --side-margins 0,5,10,20 \
+  --risk-penalties 0,0.1,0.2,0.4,0.6 \
+  --min-trades 30 \
+  --max-forced-exit-rate 0.5 \
+  --max-drawdown 100 \
+  --long-column pred_calibrated_long_best_adjusted_pnl \
+  --short-column pred_calibrated_short_best_adjusted_pnl \
+  --profit-multiplier 1.0 \
+  --loss-multiplier 1.25
+```
+
+## Research Docs
+
+Research goal and documentation workflow:
+
+- `GOAL.md`
+- `docs/README.md`
+- `docs/status.md`
+- `docs/research_log.md`

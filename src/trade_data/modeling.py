@@ -1,0 +1,510 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Iterable
+
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+)
+
+from trade_data.dataset import iter_months, output_stem
+
+
+EV_TARGETS = [
+    "long_best_adjusted_pnl",
+    "short_best_adjusted_pnl",
+]
+
+REGRESSION_TARGETS = [
+    *EV_TARGETS,
+    "side_score",
+    "long_best_holding_minutes",
+    "short_best_holding_minutes",
+    "long_max_adverse_pnl",
+    "short_max_adverse_pnl",
+]
+
+CLASSIFICATION_TARGETS = [
+    "best_adjusted_pnl_quantile",
+    "side_score_quantile",
+    "best_holding_time_bin",
+    "long_best_holding_time_bin",
+    "short_best_holding_time_bin",
+    "label",
+]
+
+
+@dataclass(frozen=True)
+class SplitConfig:
+    train_start: str
+    train_end: str
+    valid_start: str
+    valid_end: str
+    test_start: str
+    test_end: str
+    horizon_hours: float
+    min_adjusted_edge: float
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    min_samples_leaf: int
+    l2_regularization: float
+    random_seed: int
+    sample_frac: float
+    entry_threshold: float
+    target_clip_quantile: float
+
+
+@dataclass(frozen=True)
+class LinearCalibrator:
+    slope: float
+    intercept: float
+
+
+def dataset_path(dataset_dir: Path, month: str, horizon_hours: float, edge: float) -> Path:
+    return dataset_dir / f"{output_stem(month, horizon_hours, edge)}.parquet"
+
+
+def summary_path(dataset_dir: Path, month: str, horizon_hours: float, edge: float) -> Path:
+    return dataset_path(dataset_dir, month, horizon_hours, edge).with_suffix(".summary.json")
+
+
+def load_feature_columns(dataset_dir: Path, month: str, horizon_hours: float, edge: float) -> list[str]:
+    path = summary_path(dataset_dir, month, horizon_hours, edge)
+    if not path.exists():
+        raise FileNotFoundError(f"summary not found: {path}")
+    with path.open("r", encoding="utf-8") as handle:
+        summary = json.load(handle)
+    return list(summary["feature_columns"])
+
+
+def load_months(
+    dataset_dir: Path,
+    months: list[str],
+    horizon_hours: float,
+    edge: float,
+) -> tuple[pd.DataFrame, list[str]]:
+    if not months:
+        raise ValueError("months must not be empty")
+    feature_columns = load_feature_columns(dataset_dir, months[0], horizon_hours, edge)
+    frames: list[pd.DataFrame] = []
+    for month in months:
+        path = dataset_path(dataset_dir, month, horizon_hours, edge)
+        if not path.exists():
+            raise FileNotFoundError(f"dataset not found: {path}")
+        expected_features = load_feature_columns(dataset_dir, month, horizon_hours, edge)
+        if expected_features != feature_columns:
+            raise ValueError(f"feature columns differ for {month}")
+        frame = pd.read_parquet(path)
+        frame["dataset_month"] = month
+        frames.append(frame)
+    return pd.concat(frames, ignore_index=True), feature_columns
+
+
+def maybe_sample(df: pd.DataFrame, sample_frac: float, random_seed: int) -> pd.DataFrame:
+    if sample_frac >= 1.0:
+        return df
+    if not 0 < sample_frac <= 1:
+        raise ValueError("sample_frac must be in (0, 1]")
+    return df.sample(frac=sample_frac, random_state=random_seed).sort_values("decision_timestamp")
+
+
+def as_matrix(df: pd.DataFrame, feature_columns: list[str]) -> np.ndarray:
+    return df[feature_columns].astype("float32").to_numpy()
+
+
+def train_regressor(config: ModelConfig) -> HistGradientBoostingRegressor:
+    return HistGradientBoostingRegressor(
+        max_iter=config.max_iter,
+        learning_rate=config.learning_rate,
+        max_leaf_nodes=config.max_leaf_nodes,
+        min_samples_leaf=config.min_samples_leaf,
+        l2_regularization=config.l2_regularization,
+        random_state=config.random_seed,
+    )
+
+
+def train_classifier(config: ModelConfig) -> HistGradientBoostingClassifier:
+    return HistGradientBoostingClassifier(
+        max_iter=config.max_iter,
+        learning_rate=config.learning_rate,
+        max_leaf_nodes=config.max_leaf_nodes,
+        min_samples_leaf=config.min_samples_leaf,
+        l2_regularization=config.l2_regularization,
+        random_state=config.random_seed,
+    )
+
+
+def regression_training_values(series: pd.Series, clip_quantile: float) -> np.ndarray:
+    values = series.astype(float)
+    if clip_quantile >= 1.0:
+        return values.to_numpy()
+    if not 0.5 < clip_quantile <= 1.0:
+        raise ValueError("target_clip_quantile must be in (0.5, 1.0]")
+    lower = values.quantile(1.0 - clip_quantile)
+    upper = values.quantile(clip_quantile)
+    return values.clip(lower=lower, upper=upper).to_numpy()
+
+
+def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    return {
+        "mae": float(mean_absolute_error(y_true, y_pred)),
+        "rmse": float(mean_squared_error(y_true, y_pred) ** 0.5),
+        "r2": float(r2_score(y_true, y_pred)),
+    }
+
+
+def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+    return {
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+        "macro_f1": float(f1_score(y_true, y_pred, average="macro")),
+    }
+
+
+def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd.DataFrame:
+    columns = [
+        "decision_timestamp",
+        "entry_timestamp",
+        "dataset_month",
+        "label",
+        "long_best_adjusted_pnl",
+        "short_best_adjusted_pnl",
+        "side_score",
+        "best_adjusted_pnl",
+        "best_holding_minutes",
+        "long_best_holding_minutes",
+        "short_best_holding_minutes",
+        "long_max_adverse_pnl",
+        "short_max_adverse_pnl",
+    ]
+    output = df[columns].copy()
+    for name, values in predictions.items():
+        output[f"pred_{name}"] = values
+    return output
+
+
+def selection_metrics(
+    predictions: pd.DataFrame,
+    threshold: float,
+    long_column: str = "pred_long_best_adjusted_pnl",
+    short_column: str = "pred_short_best_adjusted_pnl",
+) -> dict[str, object]:
+    pred_long = predictions[long_column]
+    pred_short = predictions[short_column]
+    best_pred = pd.concat([pred_long, pred_short], axis=1).max(axis=1)
+    side = np.where(pred_long >= pred_short, 1, -1)
+    trade_mask = best_pred > threshold
+    chosen_actual = np.where(
+        side == 1,
+        predictions["long_best_adjusted_pnl"],
+        predictions["short_best_adjusted_pnl"],
+    )
+    selected = pd.Series(np.where(trade_mask, chosen_actual, 0.0), index=predictions.index)
+    best_actual = predictions[["long_best_adjusted_pnl", "short_best_adjusted_pnl"]].max(axis=1)
+    oracle_selected = best_actual.where(best_actual > threshold, 0.0)
+    actual_best_side = np.where(
+        predictions["long_best_adjusted_pnl"] >= predictions["short_best_adjusted_pnl"],
+        1,
+        -1,
+    )
+    predicted_side = pd.Series(side, index=predictions.index)
+    actual_best_side = pd.Series(actual_best_side, index=predictions.index)
+    side_accuracy = float((predicted_side[trade_mask] == actual_best_side[trade_mask]).mean()) if trade_mask.any() else 0.0
+    return {
+        "entry_threshold": threshold,
+        "selected_trade_count": int(trade_mask.sum()),
+        "selected_oracle_exit_adjusted_pnl": float(selected.sum()),
+        "selected_avg_adjusted_pnl": float(selected[trade_mask].mean()) if trade_mask.any() else 0.0,
+        "selected_side_accuracy": side_accuracy,
+        "oracle_trade_count": int((best_actual > threshold).sum()),
+        "oracle_exit_adjusted_pnl_upper_bound": float(oracle_selected.sum()),
+    }
+
+
+def fit_linear_calibrator(y_true: pd.Series, y_pred: pd.Series) -> LinearCalibrator:
+    frame = pd.DataFrame({"y_true": y_true, "y_pred": y_pred}).replace([np.inf, -np.inf], np.nan).dropna()
+    if len(frame) < 2:
+        return LinearCalibrator(slope=1.0, intercept=0.0)
+    pred = frame["y_pred"].astype(float)
+    true = frame["y_true"].astype(float)
+    variance = float(((pred - pred.mean()) ** 2).mean())
+    if variance <= 1e-12:
+        return LinearCalibrator(slope=1.0, intercept=float(true.mean() - pred.mean()))
+    covariance = float(((pred - pred.mean()) * (true - true.mean())).mean())
+    slope = covariance / variance
+    intercept = float(true.mean() - slope * pred.mean())
+    return LinearCalibrator(slope=float(slope), intercept=intercept)
+
+
+def fit_ev_calibrators(valid_predictions: pd.DataFrame) -> dict[str, LinearCalibrator]:
+    calibrators: dict[str, LinearCalibrator] = {}
+    for target in EV_TARGETS:
+        calibrators[target] = fit_linear_calibrator(
+            valid_predictions[target],
+            valid_predictions[f"pred_{target}"],
+        )
+    return calibrators
+
+
+def add_calibrated_ev_columns(
+    predictions: pd.DataFrame,
+    calibrators: dict[str, LinearCalibrator],
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for target, calibrator in calibrators.items():
+        output[f"pred_calibrated_{target}"] = (
+            output[f"pred_{target}"].astype(float) * calibrator.slope + calibrator.intercept
+        )
+    return output
+
+
+def calibrated_regression_metrics(predictions: pd.DataFrame) -> dict[str, dict[str, float]]:
+    metrics: dict[str, dict[str, float]] = {}
+    for target in EV_TARGETS:
+        metrics[target] = regression_metrics(
+            predictions[target].to_numpy(),
+            predictions[f"pred_calibrated_{target}"].to_numpy(),
+        )
+    return metrics
+
+
+def evaluate_models(
+    models: dict[str, object],
+    df: pd.DataFrame,
+    feature_columns: list[str],
+) -> tuple[dict[str, dict[str, float]], dict[str, np.ndarray]]:
+    x = as_matrix(df, feature_columns)
+    metrics: dict[str, dict[str, float]] = {"regression": {}, "classification": {}}
+    predictions: dict[str, np.ndarray] = {}
+    for target in REGRESSION_TARGETS:
+        pred = models[target].predict(x)
+        predictions[target] = pred
+        metrics["regression"][target] = regression_metrics(df[target].to_numpy(), pred)
+    for target in CLASSIFICATION_TARGETS:
+        pred = models[target].predict(x)
+        predictions[target] = pred
+        metrics["classification"][target] = classification_metrics(df[target].astype(int).to_numpy(), pred)
+    return metrics, predictions
+
+
+def make_run_dir(root: Path, label: str) -> Path:
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    path = root / f"{timestamp}_{label}"
+    path.mkdir(parents=True, exist_ok=False)
+    return path
+
+
+def train(args: argparse.Namespace) -> int:
+    split = SplitConfig(
+        train_start=args.train_start,
+        train_end=args.train_end,
+        valid_start=args.valid_start,
+        valid_end=args.valid_end,
+        test_start=args.test_start,
+        test_end=args.test_end,
+        horizon_hours=args.horizon_hours,
+        min_adjusted_edge=args.min_adjusted_edge,
+    )
+    model_config = ModelConfig(
+        max_iter=args.max_iter,
+        learning_rate=args.learning_rate,
+        max_leaf_nodes=args.max_leaf_nodes,
+        l2_regularization=args.l2_regularization,
+        random_seed=args.random_seed,
+        sample_frac=args.sample_frac,
+        entry_threshold=args.entry_threshold,
+        min_samples_leaf=args.min_samples_leaf,
+        target_clip_quantile=args.target_clip_quantile,
+    )
+    train_months = iter_months(args.train_start, args.train_end)
+    valid_months = iter_months(args.valid_start, args.valid_end)
+    test_months = iter_months(args.test_start, args.test_end)
+
+    train_df, feature_columns = load_months(
+        args.dataset_dir,
+        train_months,
+        args.horizon_hours,
+        args.min_adjusted_edge,
+    )
+    valid_df, _ = load_months(args.dataset_dir, valid_months, args.horizon_hours, args.min_adjusted_edge)
+    test_df, _ = load_months(args.dataset_dir, test_months, args.horizon_hours, args.min_adjusted_edge)
+    train_df = maybe_sample(train_df, args.sample_frac, args.random_seed)
+
+    x_train = as_matrix(train_df, feature_columns)
+    models: dict[str, object] = {}
+    for target in REGRESSION_TARGETS:
+        print(f"train regressor: {target}")
+        model = train_regressor(model_config)
+        model.fit(x_train, regression_training_values(train_df[target], args.target_clip_quantile))
+        models[target] = model
+    for target in CLASSIFICATION_TARGETS:
+        print(f"train classifier: {target}")
+        model = train_classifier(model_config)
+        model.fit(x_train, train_df[target].astype(int).to_numpy())
+        models[target] = model
+
+    metrics: dict[str, object] = {
+        "split": asdict(split),
+        "model_config": asdict(model_config),
+        "rows": {
+            "train": int(len(train_df)),
+            "valid": int(len(valid_df)),
+            "test": int(len(test_df)),
+        },
+        "months": {
+            "train": train_months,
+            "valid": valid_months,
+            "test": test_months,
+        },
+        "feature_count": len(feature_columns),
+    }
+    metrics_by_split: dict[str, dict[str, object]] = {}
+    predictions_by_split: dict[str, pd.DataFrame] = {}
+    for split_name, frame in [("train", train_df), ("valid", valid_df), ("test", test_df)]:
+        split_metrics, predictions = evaluate_models(models, frame, feature_columns)
+        pred_frame = prediction_frame(frame, predictions)
+        split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
+        metrics_by_split[split_name] = split_metrics
+        predictions_by_split[split_name] = pred_frame
+
+    calibrators = fit_ev_calibrators(predictions_by_split["valid"])
+    metrics["calibration"] = {target: asdict(calibrator) for target, calibrator in calibrators.items()}
+    for split_name, pred_frame in predictions_by_split.items():
+        pred_frame = add_calibrated_ev_columns(pred_frame, calibrators)
+        metrics_by_split[split_name]["selection_calibrated"] = selection_metrics(
+            pred_frame,
+            args.entry_threshold,
+            long_column="pred_calibrated_long_best_adjusted_pnl",
+            short_column="pred_calibrated_short_best_adjusted_pnl",
+        )
+        metrics_by_split[split_name]["regression_calibrated"] = calibrated_regression_metrics(pred_frame)
+        metrics[split_name] = metrics_by_split[split_name]
+        predictions_by_split[split_name] = pred_frame
+
+    run_dir = make_run_dir(args.output_dir, f"hgb_multitask_edge{args.min_adjusted_edge:g}")
+    model_dir = run_dir / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for target, model in models.items():
+        joblib.dump(model, model_dir / f"{target}.joblib")
+    for split_name, pred_frame in predictions_by_split.items():
+        pred_frame.to_parquet(run_dir / f"predictions_{split_name}.parquet", index=False)
+    with (run_dir / "feature_columns.json").open("w", encoding="utf-8") as handle:
+        json.dump(feature_columns, handle, ensure_ascii=False, indent=2)
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    write_report(run_dir, metrics)
+    print(json.dumps(metrics["valid"], indent=2))
+    print(json.dumps(metrics["test"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def write_report(run_dir: Path, metrics: dict[str, object]) -> None:
+    test_selection = metrics["test"]["selection"]
+    valid_selection = metrics["valid"]["selection"]
+    test_calibrated = metrics["test"]["selection_calibrated"]
+    valid_calibrated = metrics["valid"]["selection_calibrated"]
+    lines = [
+        "# HistGradientBoosting Multi-Task Model Report",
+        "",
+        f"- train months: {', '.join(metrics['months']['train'])}",
+        f"- valid months: {', '.join(metrics['months']['valid'])}",
+        f"- test months: {', '.join(metrics['months']['test'])}",
+        f"- feature count: {metrics['feature_count']}",
+        f"- train rows: {metrics['rows']['train']}",
+        f"- valid rows: {metrics['rows']['valid']}",
+        f"- test rows: {metrics['rows']['test']}",
+        "",
+        "## Selection Metrics",
+        "",
+        "| split | ev | trades | oracle-exit pnl | avg pnl | side acc | oracle upper bound |",
+        "|---|---|---:|---:|---:|---:|---:|",
+        (
+            f"| valid | raw | {valid_selection['selected_trade_count']} | "
+            f"{valid_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+            f"{valid_selection['selected_avg_adjusted_pnl']:.4f} | "
+            f"{valid_selection['selected_side_accuracy']:.4f} | "
+            f"{valid_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+        ),
+        (
+            f"| valid | calibrated | {valid_calibrated['selected_trade_count']} | "
+            f"{valid_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
+            f"{valid_calibrated['selected_avg_adjusted_pnl']:.4f} | "
+            f"{valid_calibrated['selected_side_accuracy']:.4f} | "
+            f"{valid_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+        ),
+        (
+            f"| test | raw | {test_selection['selected_trade_count']} | "
+            f"{test_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+            f"{test_selection['selected_avg_adjusted_pnl']:.4f} | "
+            f"{test_selection['selected_side_accuracy']:.4f} | "
+            f"{test_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+        ),
+        (
+            f"| test | calibrated | {test_calibrated['selected_trade_count']} | "
+            f"{test_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
+            f"{test_calibrated['selected_avg_adjusted_pnl']:.4f} | "
+            f"{test_calibrated['selected_side_accuracy']:.4f} | "
+            f"{test_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+        ),
+        "",
+        "This selection metric still uses oracle exits from the target data. It evaluates entry and side ranking only, not executable exit timing.",
+    ]
+    (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Train lightweight XAUUSD models")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    train_parser = subparsers.add_parser("train", help="train lightweight multi-task models")
+    train_parser.add_argument("--dataset-dir", type=Path, default=Path("data/processed/datasets/xauusd_m1"))
+    train_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    train_parser.add_argument("--train-start", required=True)
+    train_parser.add_argument("--train-end", required=True)
+    train_parser.add_argument("--valid-start", required=True)
+    train_parser.add_argument("--valid-end", required=True)
+    train_parser.add_argument("--test-start", required=True)
+    train_parser.add_argument("--test-end", required=True)
+    train_parser.add_argument("--horizon-hours", type=float, default=24.0)
+    train_parser.add_argument("--min-adjusted-edge", type=float, default=15.0)
+    train_parser.add_argument("--max-iter", type=int, default=80)
+    train_parser.add_argument("--learning-rate", type=float, default=0.05)
+    train_parser.add_argument("--max-leaf-nodes", type=int, default=31)
+    train_parser.add_argument("--min-samples-leaf", type=int, default=20)
+    train_parser.add_argument("--l2-regularization", type=float, default=0.0)
+    train_parser.add_argument("--random-seed", type=int, default=7)
+    train_parser.add_argument("--sample-frac", type=float, default=1.0)
+    train_parser.add_argument("--entry-threshold", type=float, default=15.0)
+    train_parser.add_argument("--target-clip-quantile", type=float, default=1.0)
+    train_parser.set_defaults(func=train)
+    return parser
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return int(args.func(args))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
