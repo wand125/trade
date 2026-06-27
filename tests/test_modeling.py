@@ -3,6 +3,7 @@ import unittest
 from trade_data.dataset import iter_months
 from trade_data.modeling import (
     add_calibrated_ev_columns,
+    apply_split_purging,
     build_sample_weights,
     fit_linear_calibrator,
     parse_csv_months,
@@ -141,6 +142,13 @@ class ModelingTests(unittest.TestCase):
                 "long_entry_local_rank_bin": [3, 1],
                 "short_entry_local_rank_bin": [1, 3],
                 "roll_vol_60": [0.01, 0.02],
+                "trend_score_240": [1.0, -1.0],
+                "volatility_score_60": [0.001, 0.002],
+                "trend_regime": ["up", "down"],
+                "volatility_regime": ["high_vol", "high_vol"],
+                "session_regime": ["asia", "london"],
+                "gap_regime": ["normal_gap", "normal_gap"],
+                "combined_regime": ["up_high_vol", "down_high_vol"],
             }
         )
         predictions = {
@@ -151,7 +159,83 @@ class ModelingTests(unittest.TestCase):
         output = prediction_frame(df, predictions)
 
         self.assertEqual(output["roll_vol_60"].tolist(), [0.01, 0.02])
+        self.assertEqual(output["trend_regime"].tolist(), ["up", "down"])
         self.assertIn("pred_long_best_adjusted_pnl", output.columns)
+
+    def test_apply_split_purging_removes_label_overlap(self):
+        train = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(
+                    ["2025-01-01 00:00", "2025-01-01 01:00"],
+                    utc=True,
+                ),
+                "entry_timestamp": pd.to_datetime(
+                    ["2025-01-01 00:01", "2025-01-01 01:01"],
+                    utc=True,
+                ),
+            }
+        )
+        valid = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(["2025-01-01 02:00"], utc=True),
+                "entry_timestamp": pd.to_datetime(["2025-01-01 02:01"], utc=True),
+            }
+        )
+        test = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(["2025-01-02 00:00"], utc=True),
+                "entry_timestamp": pd.to_datetime(["2025-01-02 00:01"], utc=True),
+            }
+        )
+
+        purged_train, purged_valid, _, stats = apply_split_purging(
+            train,
+            valid,
+            test,
+            horizon_hours=1.5,
+            embargo_hours=0.0,
+            enabled=True,
+        )
+
+        self.assertEqual(len(purged_train), 1)
+        self.assertEqual(len(purged_valid), 1)
+        self.assertEqual(stats["train_rows_removed"], 1)
+        self.assertEqual(purged_train["decision_timestamp"].iloc[0], train["decision_timestamp"].iloc[0])
+
+    def test_split_purging_keeps_gap_between_discontinuous_test_months(self):
+        train = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(["2025-01-01 00:00"], utc=True),
+                "entry_timestamp": pd.to_datetime(["2025-01-01 00:01"], utc=True),
+                "dataset_month": ["2025-01"],
+            }
+        )
+        valid = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(["2025-01-15 00:00"], utc=True),
+                "entry_timestamp": pd.to_datetime(["2025-01-15 00:01"], utc=True),
+                "dataset_month": ["2025-01"],
+            }
+        )
+        test = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(["2024-12-01 00:00", "2025-02-01 00:00"], utc=True),
+                "entry_timestamp": pd.to_datetime(["2024-12-01 00:01", "2025-02-01 00:01"], utc=True),
+                "dataset_month": ["2024-12", "2025-02"],
+            }
+        )
+
+        _, purged_valid, _, stats = apply_split_purging(
+            train,
+            valid,
+            test,
+            horizon_hours=24,
+            embargo_hours=24,
+            enabled=True,
+        )
+
+        self.assertEqual(len(purged_valid), 1)
+        self.assertEqual(stats["valid_rows_removed"], 0)
 
 
 if __name__ == "__main__":

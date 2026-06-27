@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from trade_data.dataset import DatasetConfig, build_features, build_month_dataset, future_best_labels
+from trade_data.regime import add_regime_columns
 
 
 def frame(opens, start="2025-01-01 00:00:00+00:00"):
@@ -98,6 +99,30 @@ class DatasetTests(unittest.TestCase):
         self.assertIn("target_columns", summary)
         self.assertIn("long_wait_regret", summary["target_columns"])
         self.assertIn("long_profit_barrier_hit", summary["target_columns"])
+        self.assertIn("trend_regime", dataset.columns)
+        self.assertIn("volatility_regime", dataset.columns)
+        self.assertIn("session_regime", dataset.columns)
+        self.assertIn("trend_score_240", summary["feature_columns"])
+        self.assertIn("volatility_score_60", summary["feature_columns"])
+        self.assertIn("regime_counts", summary)
+
+    def test_regime_columns_use_past_rolling_features(self):
+        df = pd.DataFrame(
+            {
+                "decision_timestamp": pd.date_range("2025-01-01 13:00:00+00:00", periods=3, freq="h"),
+                "roll_return_240": [0.02, -0.02, 0.0],
+                "roll_vol_240": [0.001, 0.001, 0.001],
+                "roll_vol_60": [0.001, 0.0001, 0.0004],
+                "gap_minutes": [1.0, 10.0, 20.0],
+            }
+        )
+
+        with_regime = add_regime_columns(df)
+
+        self.assertEqual(with_regime["trend_regime"].tolist(), ["up", "down", "range"])
+        self.assertEqual(with_regime["volatility_regime"].tolist(), ["high_vol", "low_vol", "normal_vol"])
+        self.assertEqual(with_regime["session_regime"].iloc[0], "ny_overlap")
+        self.assertEqual(with_regime["gap_regime"].tolist(), ["normal_gap", "micro_gap", "gap"])
 
 
 if __name__ == "__main__":

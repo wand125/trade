@@ -22,6 +22,7 @@ from sklearn.metrics import (
 )
 
 from trade_data.dataset import iter_months, output_stem
+from trade_data.regime import REGIME_COLUMNS, REGIME_NUMERIC_COLUMNS
 
 
 EV_TARGETS = [
@@ -116,6 +117,7 @@ GENERALIZATION_FEATURE_COLUMNS = [
     "fft_low_power_256",
     "fft_high_power_256",
     "fft_centroid_256",
+    *REGIME_NUMERIC_COLUMNS,
 ]
 
 
@@ -132,6 +134,8 @@ class SplitConfig:
     test_months: list[str]
     horizon_hours: float
     min_adjusted_edge: float
+    purge_label_overlap: bool
+    embargo_hours: float
 
 
 @dataclass(frozen=True)
@@ -238,6 +242,125 @@ def validate_disjoint_splits(splits: dict[str, list[str]]) -> None:
             if month in seen:
                 raise ValueError(f"month {month} appears in both {seen[month]} and {split_name}")
             seen[month] = split_name
+
+
+def label_end_timestamp(df: pd.DataFrame, horizon_hours: float) -> pd.Series:
+    horizon = pd.Timedelta(hours=horizon_hours)
+    if "entry_timestamp" in df.columns:
+        entry = pd.to_datetime(df["entry_timestamp"], utc=True)
+        end = entry + horizon
+    else:
+        end = pd.to_datetime(df["decision_timestamp"], utc=True) + horizon
+    fallback = pd.to_datetime(df["decision_timestamp"], utc=True) + horizon
+    return end.fillna(fallback)
+
+
+def label_interval_window(
+    df: pd.DataFrame,
+    horizon_hours: float,
+    embargo_hours: float,
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    if df.empty:
+        raise ValueError("cannot build label interval window from empty frame")
+    embargo = pd.Timedelta(hours=embargo_hours)
+    starts = pd.to_datetime(df["decision_timestamp"], utc=True)
+    ends = label_end_timestamp(df, horizon_hours)
+    return starts.min() - embargo, ends.max() + embargo
+
+
+def label_interval_windows(
+    df: pd.DataFrame,
+    horizon_hours: float,
+    embargo_hours: float,
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    if df.empty:
+        return []
+    if "dataset_month" not in df.columns:
+        return [label_interval_window(df, horizon_hours, embargo_hours)]
+    return [
+        label_interval_window(group, horizon_hours, embargo_hours)
+        for _, group in df.groupby("dataset_month", sort=False)
+        if not group.empty
+    ]
+
+
+def purge_overlapping_labels(
+    source: pd.DataFrame,
+    blocked_frames: list[pd.DataFrame],
+    horizon_hours: float,
+    embargo_hours: float,
+) -> tuple[pd.DataFrame, int]:
+    if source.empty or not blocked_frames:
+        return source, 0
+    windows: list[tuple[pd.Timestamp, pd.Timestamp]] = []
+    for frame in blocked_frames:
+        windows.extend(label_interval_windows(frame, horizon_hours, embargo_hours))
+    if not windows:
+        return source, 0
+    source_start = pd.to_datetime(source["decision_timestamp"], utc=True)
+    source_end = label_end_timestamp(source, horizon_hours)
+    keep = pd.Series(True, index=source.index)
+    for blocked_start, blocked_end in windows:
+        overlaps = (source_start <= blocked_end) & (source_end >= blocked_start)
+        keep &= ~overlaps
+    removed = int((~keep).sum())
+    return source.loc[keep].copy(), removed
+
+
+def apply_split_purging(
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    horizon_hours: float,
+    embargo_hours: float,
+    enabled: bool,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, object]]:
+    stats: dict[str, object] = {
+        "enabled": bool(enabled),
+        "horizon_hours": float(horizon_hours),
+        "embargo_hours": float(embargo_hours),
+        "train_rows_before": int(len(train_df)),
+        "valid_rows_before": int(len(valid_df)),
+        "test_rows_before": int(len(test_df)),
+        "train_rows_removed": 0,
+        "valid_rows_removed": 0,
+    }
+    if not enabled:
+        stats.update(
+            {
+                "train_rows_after": int(len(train_df)),
+                "valid_rows_after": int(len(valid_df)),
+                "test_rows_after": int(len(test_df)),
+            }
+        )
+        return train_df, valid_df, test_df, stats
+
+    purged_train, train_removed = purge_overlapping_labels(
+        train_df,
+        [valid_df, test_df],
+        horizon_hours,
+        embargo_hours,
+    )
+    purged_valid, valid_removed = purge_overlapping_labels(
+        valid_df,
+        [test_df],
+        horizon_hours,
+        embargo_hours,
+    )
+    stats.update(
+        {
+            "train_rows_removed": train_removed,
+            "valid_rows_removed": valid_removed,
+            "train_rows_after": int(len(purged_train)),
+            "valid_rows_after": int(len(purged_valid)),
+            "test_rows_after": int(len(test_df)),
+        }
+    )
+    if purged_train.empty:
+        raise ValueError("purging removed all train rows")
+    if purged_valid.empty:
+        raise ValueError("purging removed all validation rows")
+    return purged_train, purged_valid, test_df, stats
 
 
 def split_months_from_args(args: argparse.Namespace) -> tuple[list[str], list[str], list[str]]:
@@ -385,6 +508,7 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "short_entry_local_rank_bin",
     ]
     columns.extend([column for column in GENERALIZATION_FEATURE_COLUMNS if column in df.columns])
+    columns.extend([column for column in REGIME_COLUMNS if column in df.columns])
     columns = list(dict.fromkeys(columns))
     output = df[columns].copy()
     for name, values in predictions.items():
@@ -555,6 +679,8 @@ def train(args: argparse.Namespace) -> int:
         test_months=test_months,
         horizon_hours=args.horizon_hours,
         min_adjusted_edge=args.min_adjusted_edge,
+        purge_label_overlap=args.purge_label_overlap,
+        embargo_hours=args.embargo_hours,
     )
     model_config = ModelConfig(
         max_iter=args.max_iter,
@@ -585,6 +711,14 @@ def train(args: argparse.Namespace) -> int:
     )
     valid_df, _ = load_months(args.dataset_dir, valid_months, args.horizon_hours, args.min_adjusted_edge)
     test_df, _ = load_months(args.dataset_dir, test_months, args.horizon_hours, args.min_adjusted_edge)
+    train_df, valid_df, test_df, purge_stats = apply_split_purging(
+        train_df,
+        valid_df,
+        test_df,
+        horizon_hours=args.horizon_hours,
+        embargo_hours=args.embargo_hours,
+        enabled=args.purge_label_overlap,
+    )
     train_df = maybe_sample(train_df, args.sample_frac, args.random_seed)
     sample_weight = build_sample_weights(train_df, args.sample_weighting)
 
@@ -627,6 +761,7 @@ def train(args: argparse.Namespace) -> int:
         "target_set": args.target_set,
         "regression_targets": regression_targets,
         "classification_targets": classification_targets,
+        "purging": purge_stats,
         "model_diagnostics": model_diagnostics(models, model_config),
     }
     metrics_by_split: dict[str, dict[str, object]] = {}
@@ -750,6 +885,18 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--test-months", help="comma-separated test months in YYYY-MM format")
     train_parser.add_argument("--horizon-hours", type=float, default=24.0)
     train_parser.add_argument("--min-adjusted-edge", type=float, default=15.0)
+    train_parser.add_argument(
+        "--purge-label-overlap",
+        type=parse_bool,
+        default=True,
+        help="remove train/validation rows whose label horizon overlaps later validation/test windows",
+    )
+    train_parser.add_argument(
+        "--embargo-hours",
+        type=float,
+        default=0.0,
+        help="extra time buffer around blocked validation/test label windows",
+    )
     train_parser.add_argument("--max-iter", type=int, default=200)
     train_parser.add_argument("--learning-rate", type=float, default=0.03)
     train_parser.add_argument("--max-leaf-nodes", type=int, default=15)

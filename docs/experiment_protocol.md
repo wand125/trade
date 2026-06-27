@@ -79,7 +79,7 @@ experiments/
 最低限、以下を確認する。
 
 - train / validation / test が時系列順で分離されている。
-- ラベルの未来窓が重なる場合は purging / embargo の必要性を記録している。
+- ラベルの未来窓が重なる場合は purging / embargo を適用、または適用しない理由を記録している。
 - test結果を見てpolicy thresholdを選び直していない。
 - NoTrade、random、previous bestを上回るか確認している。
 - long/short、regime、時間帯、volatility、holding bucket別の損益を見ている。

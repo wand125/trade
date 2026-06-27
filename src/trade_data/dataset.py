@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from trade_data.backtest import adjusted_pnl, compute_rsi, month_bounds, read_ohlcv, slice_for_month
+from trade_data.regime import REGIME_CATEGORY_COLUMNS, REGIME_NUMERIC_COLUMNS, add_regime_columns
 
 
 BASE_FEATURE_COLUMNS = [
@@ -470,6 +471,8 @@ def build_month_dataset(
         ],
         axis=1,
     )
+    output = add_regime_columns(output)
+    feature_columns = [*feature_columns, *REGIME_NUMERIC_COLUMNS]
     valid_entry = output["entry_idx"] >= 0
     entry_timestamps = pd.Series(pd.NaT, index=output.index, dtype="datetime64[ns, UTC]")
     valid_entry_indices = output.loc[valid_entry, "entry_idx"].astype(int)
@@ -513,6 +516,7 @@ def build_month_dataset(
         "low",
         "close",
         *feature_columns,
+        *REGIME_CATEGORY_COLUMNS,
         "long_best_adjusted_pnl",
         "short_best_adjusted_pnl",
         "long_best_raw_pnl",
@@ -568,6 +572,11 @@ def dataset_summary(
     for column in quantized_target_columns:
         counts = dataset[column].value_counts().sort_index().to_dict()
         quantile_counts[column] = {str(int(key)): int(value) for key, value in counts.items()}
+    regime_counts = {}
+    for column in REGIME_CATEGORY_COLUMNS:
+        if column in dataset.columns and not pd.api.types.is_numeric_dtype(dataset[column]):
+            counts = dataset[column].value_counts().sort_index().to_dict()
+            regime_counts[column] = {str(key): int(value) for key, value in counts.items()}
     return {
         "config": asdict(config),
         "rows": int(len(dataset)),
@@ -597,6 +606,7 @@ def dataset_summary(
         "label_counts": label_counts,
         "label_meanings": {"-1": "short", "0": "stay_flat", "1": "long"},
         "quantized_target_counts": quantile_counts,
+        "regime_counts": regime_counts,
         "best_adjusted_pnl": {
             "mean": None if dataset.empty else float(dataset["best_adjusted_pnl"].mean()),
             "median": None if dataset.empty else float(dataset["best_adjusted_pnl"].median()),

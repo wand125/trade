@@ -4,13 +4,15 @@ import argparse
 import json
 import random
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable
 
 import numpy as np
 import pandas as pd
+
+from trade_data.regime import REGIME_COLUMNS
 
 
 DIRECTION_LABELS = {
@@ -45,6 +47,8 @@ SWEEP_KEY_COLUMNS = [
 
 ANALYSIS_PREDICTION_COLUMNS = [
     "decision_timestamp",
+    "dataset_month",
+    *REGIME_COLUMNS,
     "long_best_adjusted_pnl",
     "short_best_adjusted_pnl",
     "long_best_holding_minutes",
@@ -72,9 +76,15 @@ ANALYSIS_PREDICTION_COLUMNS = [
 ]
 
 ANALYSIS_GROUP_COLUMNS = [
+    "dataset_month",
     "direction",
     "exit_reason",
     "entry_hour",
+    "trend_regime",
+    "volatility_regime",
+    "session_regime",
+    "gap_regime",
+    "combined_regime",
     "holding_bucket",
     "predicted_best_side",
     "actual_best_side",
@@ -96,6 +106,9 @@ class BacktestConfig:
     max_holding: pd.Timedelta = pd.Timedelta(hours=24)
     profit_multiplier: float = 0.9
     loss_multiplier: float = 1.3
+    spread_points: float = 0.0
+    slippage_points: float = 0.0
+    execution_delay_bars: int = 0
 
 
 @dataclass(frozen=True)
@@ -171,6 +184,26 @@ def adjusted_pnl(raw_pnl: float, profit_multiplier: float, loss_multiplier: floa
     if raw_pnl < 0:
         return raw_pnl * loss_multiplier
     return 0.0
+
+
+def execution_cost_per_side(config: BacktestConfig) -> float:
+    if config.spread_points < 0:
+        raise ValueError("spread_points must be non-negative")
+    if config.slippage_points < 0:
+        raise ValueError("slippage_points must be non-negative")
+    return config.spread_points / 2.0 + config.slippage_points
+
+
+def apply_execution_cost(
+    open_price: float,
+    direction: int,
+    is_entry: bool,
+    config: BacktestConfig,
+) -> float:
+    cost = execution_cost_per_side(config)
+    if is_entry:
+        return float(open_price + direction * cost)
+    return float(open_price - direction * cost)
 
 
 def month_bounds(month: str) -> tuple[pd.Timestamp, pd.Timestamp]:
@@ -508,7 +541,11 @@ def run_backtest(
 ) -> list[Trade]:
     if len(df) != len(desired_position):
         raise ValueError("df and desired_position must have the same length")
+    if config.execution_delay_bars < 0:
+        raise ValueError("execution_delay_bars must be non-negative")
     if len(df) < 2:
+        return []
+    if len(df) < 2 + config.execution_delay_bars:
         return []
 
     timestamps = df["timestamp"].tolist()
@@ -518,11 +555,11 @@ def run_backtest(
     position: Position | None = None
     trades: list[Trade] = []
 
-    for decision_idx in range(len(df) - 1):
-        execution_idx = decision_idx + 1
+    for decision_idx in range(len(df) - 1 - config.execution_delay_bars):
+        execution_idx = decision_idx + 1 + config.execution_delay_bars
         decision_timestamp = timestamps[decision_idx]
         execution_timestamp = timestamps[execution_idx]
-        execution_price = opens[execution_idx]
+        execution_open_price = opens[execution_idx]
         desired = int(signals[decision_idx])
         if desired not in (-1, 0, 1):
             desired = 0
@@ -535,7 +572,12 @@ def run_backtest(
                     close_position(
                         position=position,
                         exit_timestamp=execution_timestamp,
-                        exit_price=execution_price,
+                        exit_price=apply_execution_cost(
+                            execution_open_price,
+                            position.direction,
+                            is_entry=False,
+                            config=config,
+                        ),
                         exit_decision_timestamp=decision_timestamp,
                         exit_reason="forced_exit" if forced else "signal_close",
                         config=config,
@@ -549,7 +591,12 @@ def run_backtest(
                 position = Position(
                     direction=desired,
                     entry_timestamp=execution_timestamp,
-                    entry_price=execution_price,
+                    entry_price=apply_execution_cost(
+                        execution_open_price,
+                        desired,
+                        is_entry=True,
+                        config=config,
+                    ),
                     entry_decision_timestamp=decision_timestamp,
                     max_exit_timestamp=execution_timestamp + config.max_holding,
                 )
@@ -559,7 +606,12 @@ def run_backtest(
             close_position(
                 position=position,
                 exit_timestamp=timestamps[-1],
-                exit_price=opens[-1],
+                exit_price=apply_execution_cost(
+                    opens[-1],
+                    position.direction,
+                    is_entry=False,
+                    config=config,
+                ),
                 exit_decision_timestamp=timestamps[-1],
                 exit_reason="end_of_data",
                 config=config,
@@ -646,6 +698,9 @@ def summarize_trades(
             "forced_exit_count": 0,
             "avg_holding_minutes": 0.0,
             "median_holding_minutes": 0.0,
+            "spread_points": config.spread_points,
+            "slippage_points": config.slippage_points,
+            "execution_delay_bars": config.execution_delay_bars,
         }
 
     adjusted = trades["adjusted_pnl"].astype(float)
@@ -686,6 +741,9 @@ def summarize_trades(
         "forced_exit_count": int((trades["exit_reason"] == "forced_exit").sum()),
         "avg_holding_minutes": float(trades["holding_minutes"].mean()),
         "median_holding_minutes": float(trades["holding_minutes"].median()),
+        "spread_points": config.spread_points,
+        "slippage_points": config.slippage_points,
+        "execution_delay_bars": config.execution_delay_bars,
     }
 
 
@@ -735,6 +793,9 @@ def write_result(
             "max_holding": str(backtest_config.max_holding),
             "profit_multiplier": backtest_config.profit_multiplier,
             "loss_multiplier": backtest_config.loss_multiplier,
+            "spread_points": backtest_config.spread_points,
+            "slippage_points": backtest_config.slippage_points,
+            "execution_delay_bars": backtest_config.execution_delay_bars,
         },
     }
     if strategy_config is not None:
@@ -1193,6 +1254,9 @@ def prepare_data_and_config(args: argparse.Namespace) -> tuple[pd.DataFrame, Bac
         max_holding=max_holding,
         profit_multiplier=args.profit_multiplier,
         loss_multiplier=args.loss_multiplier,
+        spread_points=args.spread_points,
+        slippage_points=args.slippage_points,
+        execution_delay_bars=args.execution_delay_bars,
     )
     return data, config
 
@@ -1225,6 +1289,51 @@ def run_model_policy(
     metrics["signal_flat_count"] = int((signal == 0).sum())
     curve = equity_curve(trades, backtest_config.evaluation_start)
     return metrics, trades, curve, signal
+
+
+def handle_model_cost_sensitivity(args: argparse.Namespace) -> int:
+    df, base_backtest_config = prepare_data_and_config(args)
+    model_policy_config = model_policy_config_from_args(args)
+    spreads = parse_csv_floats(args.spread_points_list)
+    slippages = parse_csv_floats(args.slippage_points_list)
+    delays = [int(value) for value in parse_csv_floats(args.execution_delay_bars_list)]
+    if any(value < 0 for value in delays):
+        raise SystemExit("execution delay bars must be non-negative")
+
+    run_dir = make_run_dir(args.output_dir, f"model_cost_sensitivity_{args.month}")
+    rows: list[dict[str, object]] = []
+    for spread_points in spreads:
+        for slippage_points in slippages:
+            for execution_delay_bars in delays:
+                backtest_config = replace(
+                    base_backtest_config,
+                    spread_points=spread_points,
+                    slippage_points=slippage_points,
+                    execution_delay_bars=execution_delay_bars,
+                )
+                metrics, _, _, _ = run_model_policy(df, backtest_config, model_policy_config)
+                rows.append(metrics)
+
+    metrics_frame = pd.DataFrame(rows).sort_values(
+        ["spread_points", "slippage_points", "execution_delay_bars"],
+    )
+    metrics_frame.to_csv(run_dir / "metrics.csv", index=False)
+    metadata = {
+        "month": args.month,
+        "predictions": str(args.predictions),
+        "model_policy_config": {
+            **asdict(model_policy_config),
+            "predictions": str(model_policy_config.predictions),
+        },
+        "spread_points_list": spreads,
+        "slippage_points_list": slippages,
+        "execution_delay_bars_list": delays,
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2, default=json_default)
+    print(metrics_frame.to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
 
 
 def handle_run(args: argparse.Namespace) -> int:
@@ -1265,6 +1374,32 @@ def handle_model_policy(args: argparse.Namespace) -> int:
     print(f"signal_flat_count: {metrics['signal_flat_count']}")
     print(f"artifacts: {run_dir}")
     return 0
+
+
+def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--predictions", type=Path, required=True)
+    parser.add_argument("--policy", choices=available_model_policies(), default="stateful_ev")
+    parser.add_argument("--entry-threshold", type=float, default=15.0)
+    parser.add_argument("--exit-threshold", type=float, default=0.0)
+    parser.add_argument("--side-margin", type=float, default=0.0)
+    parser.add_argument("--long-column", default="pred_long_best_adjusted_pnl")
+    parser.add_argument("--short-column", default="pred_short_best_adjusted_pnl")
+    parser.add_argument("--long-risk-column", default="pred_long_max_adverse_pnl")
+    parser.add_argument("--short-risk-column", default="pred_short_max_adverse_pnl")
+    parser.add_argument("--risk-penalty", type=float, default=0.0)
+    parser.add_argument("--long-holding-column", default="pred_long_best_holding_minutes")
+    parser.add_argument("--short-holding-column", default="pred_short_best_holding_minutes")
+    parser.add_argument("--min-predicted-hold-minutes", type=float, default=1.0)
+    parser.add_argument("--max-predicted-hold-minutes", type=float, default=1440.0)
+    parser.add_argument("--long-wait-regret-column", default="pred_long_wait_regret")
+    parser.add_argument("--short-wait-regret-column", default="pred_short_wait_regret")
+    parser.add_argument("--long-entry-rank-column", default="pred_long_entry_local_rank")
+    parser.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
+    parser.add_argument("--long-profit-barrier-column", default="pred_long_profit_barrier_hit")
+    parser.add_argument("--short-profit-barrier-column", default="pred_short_profit_barrier_hit")
+    parser.add_argument("--max-wait-regret", type=float, default=float("inf"))
+    parser.add_argument("--min-entry-rank", type=float, default=0.0)
+    parser.add_argument("--require-profit-barrier", action="store_true")
 
 
 def handle_model_sweep(args: argparse.Namespace) -> int:
@@ -1626,6 +1761,24 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-hold-hours", type=float, default=24.0)
     parser.add_argument("--profit-multiplier", type=float, default=0.9)
     parser.add_argument("--loss-multiplier", type=float, default=1.3)
+    parser.add_argument(
+        "--spread-points",
+        type=float,
+        default=0.0,
+        help="full spread in price points; half is charged on each execution side",
+    )
+    parser.add_argument(
+        "--slippage-points",
+        type=float,
+        default=0.0,
+        help="additional adverse price points charged on each execution side",
+    )
+    parser.add_argument(
+        "--execution-delay-bars",
+        type=int,
+        default=0,
+        help="extra bars to delay execution after the normal next-open fill",
+    )
     parser.add_argument("--fast-window", type=int, default=20)
     parser.add_argument("--slow-window", type=int, default=80)
     parser.add_argument("--rsi-window", type=int, default=14)
@@ -1659,30 +1812,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     model_policy = subparsers.add_parser("model-policy", help="run a backtest from saved model predictions")
     add_common_args(model_policy)
-    model_policy.add_argument("--predictions", type=Path, required=True)
-    model_policy.add_argument("--policy", choices=available_model_policies(), default="stateful_ev")
-    model_policy.add_argument("--entry-threshold", type=float, default=15.0)
-    model_policy.add_argument("--exit-threshold", type=float, default=0.0)
-    model_policy.add_argument("--side-margin", type=float, default=0.0)
-    model_policy.add_argument("--long-column", default="pred_long_best_adjusted_pnl")
-    model_policy.add_argument("--short-column", default="pred_short_best_adjusted_pnl")
-    model_policy.add_argument("--long-risk-column", default="pred_long_max_adverse_pnl")
-    model_policy.add_argument("--short-risk-column", default="pred_short_max_adverse_pnl")
-    model_policy.add_argument("--risk-penalty", type=float, default=0.0)
-    model_policy.add_argument("--long-holding-column", default="pred_long_best_holding_minutes")
-    model_policy.add_argument("--short-holding-column", default="pred_short_best_holding_minutes")
-    model_policy.add_argument("--min-predicted-hold-minutes", type=float, default=1.0)
-    model_policy.add_argument("--max-predicted-hold-minutes", type=float, default=1440.0)
-    model_policy.add_argument("--long-wait-regret-column", default="pred_long_wait_regret")
-    model_policy.add_argument("--short-wait-regret-column", default="pred_short_wait_regret")
-    model_policy.add_argument("--long-entry-rank-column", default="pred_long_entry_local_rank")
-    model_policy.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
-    model_policy.add_argument("--long-profit-barrier-column", default="pred_long_profit_barrier_hit")
-    model_policy.add_argument("--short-profit-barrier-column", default="pred_short_profit_barrier_hit")
-    model_policy.add_argument("--max-wait-regret", type=float, default=float("inf"))
-    model_policy.add_argument("--min-entry-rank", type=float, default=0.0)
-    model_policy.add_argument("--require-profit-barrier", action="store_true")
+    add_model_policy_args(model_policy)
     model_policy.set_defaults(func=handle_model_policy)
+
+    model_cost_sensitivity = subparsers.add_parser(
+        "model-cost-sensitivity",
+        help="run one model policy across spread, slippage, and execution-delay stress settings",
+    )
+    add_common_args(model_cost_sensitivity)
+    add_model_policy_args(model_cost_sensitivity)
+    model_cost_sensitivity.add_argument("--spread-points-list", default="0,0.1,0.2")
+    model_cost_sensitivity.add_argument("--slippage-points-list", default="0,0.05,0.1")
+    model_cost_sensitivity.add_argument("--execution-delay-bars-list", default="0,1")
+    model_cost_sensitivity.set_defaults(func=handle_model_cost_sensitivity)
 
     model_sweep = subparsers.add_parser("model-sweep", help="sweep thresholds for saved model predictions")
     add_common_args(model_sweep)

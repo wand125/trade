@@ -84,6 +84,27 @@ adjusted_pnl = 0              if raw_pnl = 0
 
 初期実装では `adjusted_pnl` を主スコアにする。
 
+### 明示的な執行コスト
+
+profit/loss倍率とは別に、明示的な執行コストも指定できる。
+
+- `spread_points`: full spread。半分をentry/exitそれぞれで不利側に乗せる。
+- `slippage_points`: entry/exitそれぞれで追加する不利方向の価格差。
+- `execution_delay_bars`: 通常の次足open約定からさらに何bar遅らせるか。
+
+価格調整:
+
+```text
+cost_per_side = spread_points / 2 + slippage_points
+
+long entry  = open + cost_per_side
+long exit   = open - cost_per_side
+short entry = open - cost_per_side
+short exit  = open + cost_per_side
+```
+
+固定policyのstress testには `model-cost-sensitivity` を使う。
+
 ## 初期実装
 
 実装ファイル:
@@ -151,3 +172,4 @@ python -m trade_data.backtest benchmark --month 2025-01
 - test month に合わせて特徴量や閾値を手作業で調整しない。
 - ランダム分割だけでモデル評価を終えない。
 - 単月だけの最高スコアを研究成果とみなさない。
+- spread、slippage、execution delayへの感度を見ずに採用しない。

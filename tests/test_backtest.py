@@ -6,6 +6,7 @@ import pandas as pd
 from trade_data.backtest import (
     BacktestConfig,
     ModelPolicyConfig,
+    apply_execution_cost,
     enrich_trades_with_predictions,
     model_signal_from_predictions,
     normalize_sweep_metrics,
@@ -52,6 +53,40 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(trade["exit_price"], 106)
         self.assertAlmostEqual(trade["raw_pnl"], 5.0)
         self.assertAlmostEqual(trade["adjusted_pnl"], 4.5)
+
+    def test_execution_cost_is_adverse_for_entry_and_exit(self):
+        config = BacktestConfig(
+            evaluation_start=pd.Timestamp("2025-01-01", tz="UTC"),
+            evaluation_end=pd.Timestamp("2025-01-02", tz="UTC"),
+            spread_points=0.2,
+            slippage_points=0.1,
+        )
+
+        self.assertAlmostEqual(apply_execution_cost(100.0, 1, True, config), 100.2)
+        self.assertAlmostEqual(apply_execution_cost(100.0, 1, False, config), 99.8)
+        self.assertAlmostEqual(apply_execution_cost(100.0, -1, True, config), 99.8)
+        self.assertAlmostEqual(apply_execution_cost(100.0, -1, False, config), 100.2)
+
+    def test_backtest_applies_spread_slippage_and_execution_delay(self):
+        df = frame_with_opens([100, 101, 105, 106, 107, 108])
+        signal = pd.Series([1, 1, 0, 0, 0, 0])
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+            spread_points=0.2,
+            slippage_points=0.1,
+            execution_delay_bars=1,
+        )
+
+        trades = trades_to_frame(run_backtest(df, signal, config))
+
+        self.assertEqual(len(trades), 1)
+        trade = trades.iloc[0]
+        self.assertEqual(trade["entry_timestamp"], df["timestamp"].iloc[2])
+        self.assertEqual(trade["exit_timestamp"], df["timestamp"].iloc[4])
+        self.assertAlmostEqual(trade["entry_price"], 105.2)
+        self.assertAlmostEqual(trade["exit_price"], 106.8)
+        self.assertAlmostEqual(trade["raw_pnl"], 1.6)
 
     def test_forced_exit_after_24_hours(self):
         opens = [100.0] * 1500
@@ -318,6 +353,12 @@ class BacktestTests(unittest.TestCase):
         predictions = pd.DataFrame(
             {
                 "decision_timestamp": [timestamps[0], timestamps[1]],
+                "dataset_month": ["2025-01", "2025-01"],
+                "trend_regime": ["up", "down"],
+                "volatility_regime": ["normal_vol", "high_vol"],
+                "session_regime": ["asia", "london"],
+                "gap_regime": ["normal_gap", "normal_gap"],
+                "combined_regime": ["up_normal_vol", "down_high_vol"],
                 "long_best_adjusted_pnl": [10.0, 5.0],
                 "short_best_adjusted_pnl": [3.0, -1.0],
                 "long_best_holding_minutes": [5.0, 4.0],
@@ -366,6 +407,8 @@ class BacktestTests(unittest.TestCase):
 
         grouped = trade_group_summary(enriched, "direction")
         self.assertEqual(set(grouped["direction"]), {"long", "short"})
+        regime_grouped = trade_group_summary(enriched, "trend_regime")
+        self.assertEqual(set(regime_grouped["trend_regime"]), {"up", "down"})
 
 
 if __name__ == "__main__":

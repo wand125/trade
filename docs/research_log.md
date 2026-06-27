@@ -896,3 +896,62 @@ Artifacts:
 3. spread/slippage/delay sensitivityをbacktestへ追加する。
 4. purged/embargo walk-forward splitを実装する。
 5. OOF predictionsとside/regime別EV calibrationへ進む。
+
+### Regime / Cost / Purge Controls
+
+作業:
+
+- `src/trade_data/regime.py` を追加し、regime scoreとregime categoryを標準化した。
+- datasetに `trend_score_240`, `volatility_score_60` をfeatureとして追加し、`trend_regime`, `volatility_regime`, `session_regime`, `gap_regime`, `combined_regime` を診断列として保存するようにした。
+- `analyze-trades` がregime別group outputを出せるようにした。
+- backtestに `spread_points`, `slippage_points`, `execution_delay_bars` を追加した。
+- 固定policyのコスト感度を見る `model-cost-sensitivity` を追加した。
+- `trade_data.modeling train` に `--purge-label-overlap` と `--embargo-hours` を追加した。デフォルトでラベル期間が後続valid/testに重なるtrain/valid行をpurgeする。
+- report: `docs/reports/2026-06-28_regime_cost_purge_controls.md`
+
+検証:
+
+- `python3 -m unittest discover tests`: 40 tests OK。
+- `git diff --check`: OK。
+- `model-cost-sensitivity --help` と `modeling train --help`: OK。
+
+判断:
+
+- 検証設計上の不足だったregime分析、執行stress、label overlap purgeの土台は入った。
+- この時点では既存datasetにregime列がなかったため、次はdataset再生成が必要と判断した。
+- 次の実験は、regime列込みdataset、purge有効学習、固定policyのcost sensitivity、regime別failure analysisの順に進める。
+
+### Regime/Purge HGB 80iter Follow-up
+
+作業:
+
+- 1.0/1.2 aligned datasetをregime列込みで 2023-01 から 2025-02 まで再生成した。
+- `feature_count` は 49。追加featureは `trend_score_240` と `volatility_score_60`。
+- purge実装にバグを発見した。複数test月を1つの連続windowとして扱い、2025-01 validが丸ごと落ちていた。
+- `dataset_month` ごとにblocked windowを分割するよう修正し、非連続test月の間にあるvalid月を保持するテストを追加した。
+- purge有効、embargo 24hで HGB 80iter policy modelを再学習した。
+
+Artifact:
+
+- model: `experiments/20260627_215123_policy_iter80_p1_l1p2_regime_purge_e24_v2/`
+- validation sweep summary: `data/reports/backtests/20260627_215228_model_sweep_summary/`
+- fixed test: `data/reports/backtests/20260627_215245_model_timed_ev_2024-12/`, `data/reports/backtests/20260627_215245_model_timed_ev_2025-02/`
+- regime analysis: `data/reports/backtests/20260627_215257_analyze_regime_purge_v2_2024-12/`, `data/reports/backtests/20260627_215257_analyze_regime_purge_v2_2025-02/`
+
+結果:
+
+- 修正後purge: train 546,537 -> 535,493、valid 119,241 -> 112,494、test 56,204。
+- 30 trades/fold条件ではeligibleなし。
+- 10 trades/fold条件では `timed_ev entry=15 risk=0 max_wait=2 min_rank=0.5` が validation全foldプラス。
+- fixed test:
+  - 2024-12: adjusted pnl `-35.7010`, 15 trades, max DD `58.5892`
+  - 2025-02: adjusted pnl `-47.6716`, 17 trades, max DD `54.6236`
+- 多めに取引するeligible候補は 2024-12 `-154.9860`、2025-02 `-125.5468` と悪化。
+- regime分析では、両testともtradeが `low_vol` に集中した。
+- 2025-02は `asia` が `-46.9276`、`rollover` が `-24.8160`、`ny_late` が `+24.0720`。
+
+判断:
+
+- regime/cost/purgeの基盤は有効だが、HGB 80iterの汎化成績はまだ改善していない。
+- NoTradeに負けているため採用不可。
+- 次は低ボラ・asia・rolloverでentryを抑えるregime gate、direction/regime別calibration、profit barrier確率化を試す。
