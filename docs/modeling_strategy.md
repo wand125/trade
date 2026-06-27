@@ -182,6 +182,15 @@ short_utility > long_utility なら short
 3. 複数 validation 月で calibration と policy selection を行う。
 4. それでも test が崩れる場合は、閾値ではなく教師 target と特徴量を変える。
 
+学習時間を伸ばす場合の扱い:
+
+- `max_iter` を伸ばした実験では、必ず `model_diagnostics` の `n_iter` と `hit_max_iter` を確認する。
+- `max_iter` に張り付いている場合でも、validationだけの改善では採用しない。
+- 採用候補は、複数validation foldの executable backtest で、最低P/L、最低取引数、drawdown、forced exit条件を満たす必要がある。
+- 30 trades/foldを満たさない候補は低信頼として扱う。
+- さらに長く回す場合は、learning rateを下げ、OOF validationでvalidation過適合を確認する。
+- policy検証だけなら `--target-set policy` を使い、必要targetに絞って反復数比較を速く行う。
+
 次に改善する target / feature:
 
 - fixed horizon return を追加し、oracle best exit だけに依存しない。

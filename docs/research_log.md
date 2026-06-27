@@ -703,3 +703,62 @@ test:
 - ただしtestでNoTradeに勝てていないため、過学習は解消していない。
 - 次はvalidationだけでmetaを学習するのをやめ、train期間にもOOF predictionsを作ってmeta学習量を増やす。
 - 2024-12の失敗tradeをentry方向、exit遅れ、EV過大評価に分けて診断する。
+
+### 学習時間と過学習対策
+
+作業:
+
+- HGBに過学習抑制パラメータを追加。
+  - `max_depth`
+  - `max_features`
+  - `early_stopping`
+  - `validation_fraction`
+  - `n_iter_no_change`
+  - `tol`
+- defaultを保守的に変更。
+  - `learning_rate=0.03`
+  - `max_leaf_nodes=15`
+  - `max_depth=4`
+  - `min_samples_leaf=100`
+  - `l2_regularization=0.2`
+  - `max_features=0.8`
+  - `target_clip_quantile=0.99`
+  - `sample_weighting=month_label`
+- `model_diagnostics` を追加し、targetごとの `n_iter` とmax_iter到達有無を保存。
+- `target-set policy` を追加し、executable policyに必要なtargetだけで長時間学習比較できるようにした。
+- meta modelにも `month_side` weighting、regime feature input、prediction shrinkage、強めの正則化defaultを追加。
+- 2019-01 から 2022-12 のdatasetを生成し、データ増量の準備も行った。
+
+実験:
+
+- report: `docs/reports/2026-06-28_training_time_and_generalization.md`
+- iter80: `experiments/20260627_201301_policy_iter80_base_train/`
+- iter320: `experiments/20260627_201455_policy_iter320_base_train/`
+- train rows: 546,537
+- target set: `policy`
+- valid: 2024-07, 2024-09, 2024-11, 2025-01
+- test: 2024-12, 2025-02
+
+結果:
+
+- iter80もiter320も、14 targetすべてがmax_iterに到達した。
+- iter320はvalidation selection pnlを増やしたが、test side accuracyは改善しなかった。
+- iter80はvalidation sweepで10 trades/fold条件でもeligibleなし。
+- iter320は10 trades/fold条件でeligibleが出たが、30 trades/fold条件ではeligibleなし。
+- min fold pnl優先候補:
+  - `timed_ev entry=15 side_margin=0 risk=0 max_wait_regret=4 min_entry_rank=0 require_profit_barrier=true`
+  - validation mean adjusted pnl: +41.8295
+  - validation min adjusted pnl: +26.2700
+  - min trades per fold: 15
+  - max drawdown: 51.2338
+- test:
+  - 2024-12: -99.9843
+  - 2025-02: -38.9125
+
+判断:
+
+- 学習時間を伸ばす余地はある。少なくとも `max_iter=320` でも内部early stoppingは発火していない。
+- ただし、学習時間を80から320へ伸ばしてもtestでNoTradeを超えない。
+- validationでは改善するため、長く回すほどvalidationに適合する可能性がある。
+- 今後さらに長く回す場合は、低learning rate、OOF validation、追加test月をセットにして、validation過適合かどうかを確認する。
+- データ増量は面白いが、本流は「反復数を伸ばしても汎化するか」を厳密に見ること。

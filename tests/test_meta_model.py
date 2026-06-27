@@ -6,9 +6,12 @@ import pandas as pd
 from trade_data.meta_model import (
     MetaModelConfig,
     add_meta_predictions,
+    available_feature_columns,
     build_training_frame,
+    build_sample_weights,
     filter_months,
     parse_csv_months,
+    side_target_means,
     train_model,
 )
 
@@ -77,6 +80,23 @@ class MetaModelTests(unittest.TestCase):
         self.assertIn("pred_side_ev", frame.columns)
         self.assertIn("target", frame.columns)
 
+    def test_available_feature_columns_includes_present_regime_features(self):
+        df = prediction_frame()
+        df["roll_vol_60"] = [0.1, 0.2, 0.3]
+
+        self.assertIn("roll_vol_60", available_feature_columns(df))
+
+    def test_month_side_sample_weighting_balances_cells(self):
+        df = prediction_frame()
+        df["dataset_month"] = ["2024-07", "2024-07", "2024-09"]
+        frame = build_training_frame(df)
+
+        weights = pd.Series(build_sample_weights(frame, "month_side"))
+        weighted = frame.assign(weight=weights).groupby(["dataset_month", "side"])["weight"].sum()
+
+        self.assertAlmostEqual(float(weighted.max()), float(weighted.min()))
+        self.assertAlmostEqual(float(weights.mean()), 1.0)
+
     def test_meta_model_adds_side_predictions(self):
         df = prediction_frame()
         frame = build_training_frame(df)
@@ -84,11 +104,19 @@ class MetaModelTests(unittest.TestCase):
             max_iter=2,
             learning_rate=0.1,
             max_leaf_nodes=3,
+            max_depth=None,
             min_samples_leaf=1,
             l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
             random_seed=1,
             target_clip_quantile=1.0,
             entry_threshold=5.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
         )
 
         model = train_model(frame, config)
@@ -97,6 +125,35 @@ class MetaModelTests(unittest.TestCase):
         self.assertIn("pred_meta_long_adjusted_pnl", output.columns)
         self.assertIn("pred_meta_short_adjusted_pnl", output.columns)
         self.assertFalse(output["pred_meta_long_adjusted_pnl"].isna().any())
+
+    def test_meta_prediction_shrinkage_uses_side_means(self):
+        df = prediction_frame()
+        frame = build_training_frame(df)
+        config = MetaModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            entry_threshold=5.0,
+            sample_weighting="none",
+            prediction_shrinkage=0.0,
+        )
+
+        model = train_model(frame, config)
+        means = side_target_means(frame)
+        output = add_meta_predictions(df, model, prediction_shrinkage=0.0, side_means=means)
+
+        self.assertTrue((output["pred_meta_long_adjusted_pnl"] == means["long"]).all())
+        self.assertTrue((output["pred_meta_short_adjusted_pnl"] == means["short"]).all())
 
 
 if __name__ == "__main__":

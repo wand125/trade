@@ -59,6 +59,65 @@ CLASSIFICATION_TARGETS = [
     "label",
 ]
 
+POLICY_REGRESSION_TARGETS = [
+    *EV_TARGETS,
+    "side_score",
+    "long_best_holding_minutes",
+    "short_best_holding_minutes",
+    "long_max_adverse_pnl",
+    "short_max_adverse_pnl",
+    "long_wait_regret",
+    "short_wait_regret",
+    "long_entry_local_rank",
+    "short_entry_local_rank",
+]
+
+POLICY_CLASSIFICATION_TARGETS = [
+    "long_profit_barrier_hit",
+    "short_profit_barrier_hit",
+    "label",
+]
+
+TARGET_SETS = {
+    "full": (REGRESSION_TARGETS, CLASSIFICATION_TARGETS),
+    "policy": (POLICY_REGRESSION_TARGETS, POLICY_CLASSIFICATION_TARGETS),
+}
+
+GENERALIZATION_FEATURE_COLUMNS = [
+    "ret_15",
+    "ret_60",
+    "diff_1",
+    "hl_range",
+    "gap_minutes",
+    "gap_flag",
+    "rsi_14",
+    "ema_12_dist",
+    "ema_26_dist",
+    "ema_12_26",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "roll_z_60",
+    "roll_vol_60",
+    "roll_return_60",
+    "roll_min_dist_60",
+    "roll_max_dist_60",
+    "atr_60",
+    "roll_z_240",
+    "roll_vol_240",
+    "roll_return_240",
+    "roll_min_dist_240",
+    "roll_max_dist_240",
+    "atr_240",
+    "fft_low_power_64",
+    "fft_high_power_64",
+    "fft_centroid_64",
+    "fft_low_power_256",
+    "fft_high_power_256",
+    "fft_centroid_256",
+]
+
 
 @dataclass(frozen=True)
 class SplitConfig:
@@ -80,13 +139,20 @@ class ModelConfig:
     max_iter: int
     learning_rate: float
     max_leaf_nodes: int
+    max_depth: int | None
     min_samples_leaf: int
     l2_regularization: float
+    max_features: float
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
     random_seed: int
     sample_frac: float
     entry_threshold: float
     target_clip_quantile: float
     sample_weighting: str
+    target_set: str
 
 
 @dataclass(frozen=True)
@@ -210,6 +276,13 @@ def split_summary(df: pd.DataFrame) -> dict[str, object]:
     }
 
 
+def resolve_target_names(target_set: str) -> tuple[list[str], list[str]]:
+    if target_set not in TARGET_SETS:
+        raise ValueError(f"unknown target_set: {target_set}")
+    regression_targets, classification_targets = TARGET_SETS[target_set]
+    return list(regression_targets), list(classification_targets)
+
+
 def maybe_sample(df: pd.DataFrame, sample_frac: float, random_seed: int) -> pd.DataFrame:
     if sample_frac >= 1.0:
         return df
@@ -227,8 +300,14 @@ def train_regressor(config: ModelConfig) -> HistGradientBoostingRegressor:
         max_iter=config.max_iter,
         learning_rate=config.learning_rate,
         max_leaf_nodes=config.max_leaf_nodes,
+        max_depth=config.max_depth,
         min_samples_leaf=config.min_samples_leaf,
         l2_regularization=config.l2_regularization,
+        max_features=config.max_features,
+        early_stopping=config.early_stopping,
+        validation_fraction=config.validation_fraction,
+        n_iter_no_change=config.n_iter_no_change,
+        tol=config.tol,
         random_state=config.random_seed,
     )
 
@@ -238,8 +317,14 @@ def train_classifier(config: ModelConfig) -> HistGradientBoostingClassifier:
         max_iter=config.max_iter,
         learning_rate=config.learning_rate,
         max_leaf_nodes=config.max_leaf_nodes,
+        max_depth=config.max_depth,
         min_samples_leaf=config.min_samples_leaf,
         l2_regularization=config.l2_regularization,
+        max_features=config.max_features,
+        early_stopping=config.early_stopping,
+        validation_fraction=config.validation_fraction,
+        n_iter_no_change=config.n_iter_no_change,
+        tol=config.tol,
         random_state=config.random_seed,
     )
 
@@ -299,6 +384,8 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "long_entry_local_rank_bin",
         "short_entry_local_rank_bin",
     ]
+    columns.extend([column for column in GENERALIZATION_FEATURE_COLUMNS if column in df.columns])
+    columns = list(dict.fromkeys(columns))
     output = df[columns].copy()
     for name, values in predictions.items():
         output[f"pred_{name}"] = values
@@ -394,19 +481,42 @@ def evaluate_models(
     models: dict[str, object],
     df: pd.DataFrame,
     feature_columns: list[str],
+    regression_targets: list[str] | None = None,
+    classification_targets: list[str] | None = None,
 ) -> tuple[dict[str, dict[str, float]], dict[str, np.ndarray]]:
+    regression_targets = regression_targets or REGRESSION_TARGETS
+    classification_targets = classification_targets or CLASSIFICATION_TARGETS
     x = as_matrix(df, feature_columns)
     metrics: dict[str, dict[str, float]] = {"regression": {}, "classification": {}}
     predictions: dict[str, np.ndarray] = {}
-    for target in REGRESSION_TARGETS:
+    for target in regression_targets:
         pred = models[target].predict(x)
         predictions[target] = pred
         metrics["regression"][target] = regression_metrics(df[target].to_numpy(), pred)
-    for target in CLASSIFICATION_TARGETS:
+    for target in classification_targets:
         pred = models[target].predict(x)
         predictions[target] = pred
         metrics["classification"][target] = classification_metrics(df[target].astype(int).to_numpy(), pred)
     return metrics, predictions
+
+
+def model_diagnostics(models: dict[str, object], config: ModelConfig) -> dict[str, dict[str, object]]:
+    diagnostics: dict[str, dict[str, object]] = {}
+    for target, model in models.items():
+        train_score = getattr(model, "train_score_", None)
+        validation_score = getattr(model, "validation_score_", None)
+        n_iter = int(getattr(model, "n_iter_", config.max_iter))
+        diagnostics[target] = {
+            "n_iter": n_iter,
+            "max_iter": config.max_iter,
+            "hit_max_iter": bool(n_iter >= config.max_iter),
+            "early_stopping_enabled": bool(config.early_stopping),
+            "train_score_final": None if train_score is None or len(train_score) == 0 else float(train_score[-1]),
+            "validation_score_final": None
+            if validation_score is None or len(validation_score) == 0
+            else float(validation_score[-1]),
+        }
+    return diagnostics
 
 
 def make_run_dir(root: Path, label: str) -> Path:
@@ -420,6 +530,15 @@ def make_run_dir(root: Path, label: str) -> Path:
         except FileExistsError:
             continue
     raise FileExistsError(f"could not create unique run directory for {label}")
+
+
+def parse_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y"}:
+        return True
+    if normalized in {"0", "false", "no", "n"}:
+        return False
+    raise argparse.ArgumentTypeError("value must be true/false")
 
 
 def train(args: argparse.Namespace) -> int:
@@ -441,14 +560,22 @@ def train(args: argparse.Namespace) -> int:
         max_iter=args.max_iter,
         learning_rate=args.learning_rate,
         max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
         l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
         random_seed=args.random_seed,
         sample_frac=args.sample_frac,
         entry_threshold=args.entry_threshold,
         min_samples_leaf=args.min_samples_leaf,
         target_clip_quantile=args.target_clip_quantile,
         sample_weighting=args.sample_weighting,
+        target_set=args.target_set,
     )
+    regression_targets, classification_targets = resolve_target_names(args.target_set)
 
     train_df, feature_columns = load_months(
         args.dataset_dir,
@@ -463,7 +590,7 @@ def train(args: argparse.Namespace) -> int:
 
     x_train = as_matrix(train_df, feature_columns)
     models: dict[str, object] = {}
-    for target in REGRESSION_TARGETS:
+    for target in regression_targets:
         print(f"train regressor: {target}")
         model = train_regressor(model_config)
         model.fit(
@@ -472,7 +599,7 @@ def train(args: argparse.Namespace) -> int:
             sample_weight=sample_weight,
         )
         models[target] = model
-    for target in CLASSIFICATION_TARGETS:
+    for target in classification_targets:
         print(f"train classifier: {target}")
         model = train_classifier(model_config)
         model.fit(x_train, train_df[target].astype(int).to_numpy(), sample_weight=sample_weight)
@@ -497,11 +624,21 @@ def train(args: argparse.Namespace) -> int:
             "test": test_months,
         },
         "feature_count": len(feature_columns),
+        "target_set": args.target_set,
+        "regression_targets": regression_targets,
+        "classification_targets": classification_targets,
+        "model_diagnostics": model_diagnostics(models, model_config),
     }
     metrics_by_split: dict[str, dict[str, object]] = {}
     predictions_by_split: dict[str, pd.DataFrame] = {}
     for split_name, frame in [("train", train_df), ("valid", valid_df), ("test", test_df)]:
-        split_metrics, predictions = evaluate_models(models, frame, feature_columns)
+        split_metrics, predictions = evaluate_models(
+            models,
+            frame,
+            feature_columns,
+            regression_targets,
+            classification_targets,
+        )
         pred_frame = prediction_frame(frame, predictions)
         split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
         metrics_by_split[split_name] = split_metrics
@@ -521,7 +658,8 @@ def train(args: argparse.Namespace) -> int:
         metrics[split_name] = metrics_by_split[split_name]
         predictions_by_split[split_name] = pred_frame
 
-    run_dir = make_run_dir(args.output_dir, f"hgb_multitask_edge{args.min_adjusted_edge:g}")
+    run_label = args.label or f"hgb_{args.target_set}_edge{args.min_adjusted_edge:g}"
+    run_dir = make_run_dir(args.output_dir, run_label)
     model_dir = run_dir / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
     for target, model in models.items():
@@ -600,6 +738,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser = subparsers.add_parser("train", help="train lightweight multi-task models")
     train_parser.add_argument("--dataset-dir", type=Path, default=Path("data/processed/datasets/xauusd_m1"))
     train_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    train_parser.add_argument("--label", default="", help="optional run label for the experiment directory")
     train_parser.add_argument("--train-start")
     train_parser.add_argument("--train-end")
     train_parser.add_argument("--valid-start")
@@ -611,20 +750,32 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--test-months", help="comma-separated test months in YYYY-MM format")
     train_parser.add_argument("--horizon-hours", type=float, default=24.0)
     train_parser.add_argument("--min-adjusted-edge", type=float, default=15.0)
-    train_parser.add_argument("--max-iter", type=int, default=80)
-    train_parser.add_argument("--learning-rate", type=float, default=0.05)
-    train_parser.add_argument("--max-leaf-nodes", type=int, default=31)
-    train_parser.add_argument("--min-samples-leaf", type=int, default=20)
-    train_parser.add_argument("--l2-regularization", type=float, default=0.0)
+    train_parser.add_argument("--max-iter", type=int, default=200)
+    train_parser.add_argument("--learning-rate", type=float, default=0.03)
+    train_parser.add_argument("--max-leaf-nodes", type=int, default=15)
+    train_parser.add_argument("--max-depth", type=int, default=4, help="<=0 disables depth limit")
+    train_parser.add_argument("--min-samples-leaf", type=int, default=100)
+    train_parser.add_argument("--l2-regularization", type=float, default=0.2)
+    train_parser.add_argument("--max-features", type=float, default=0.8)
+    train_parser.add_argument("--early-stopping", type=parse_bool, default=True)
+    train_parser.add_argument("--validation-fraction", type=float, default=0.15)
+    train_parser.add_argument("--n-iter-no-change", type=int, default=10)
+    train_parser.add_argument("--tol", type=float, default=1e-6)
     train_parser.add_argument("--random-seed", type=int, default=7)
     train_parser.add_argument("--sample-frac", type=float, default=1.0)
     train_parser.add_argument("--entry-threshold", type=float, default=15.0)
-    train_parser.add_argument("--target-clip-quantile", type=float, default=1.0)
+    train_parser.add_argument("--target-clip-quantile", type=float, default=0.99)
     train_parser.add_argument(
         "--sample-weighting",
         choices=["none", "month", "label", "month_label"],
-        default="none",
+        default="month_label",
         help="training sample weighting scheme",
+    )
+    train_parser.add_argument(
+        "--target-set",
+        choices=sorted(TARGET_SETS),
+        default="full",
+        help="full trains all research targets; policy trains only columns needed by executable policy sweeps",
     )
     train_parser.set_defaults(func=train)
     return parser

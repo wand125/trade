@@ -15,7 +15,7 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from trade_data.modeling import selection_metrics
+from trade_data.modeling import GENERALIZATION_FEATURE_COLUMNS, parse_bool, selection_metrics
 
 
 SIDE_COLUMNS = {
@@ -81,11 +81,19 @@ class MetaModelConfig:
     max_iter: int
     learning_rate: float
     max_leaf_nodes: int
+    max_depth: int | None
     min_samples_leaf: int
     l2_regularization: float
+    max_features: float
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
     random_seed: int
     target_clip_quantile: float
     entry_threshold: float
+    sample_weighting: str
+    prediction_shrinkage: float
 
 
 def make_run_dir(root: Path, label: str) -> Path:
@@ -105,6 +113,13 @@ def optional_column(df: pd.DataFrame, primary: str, fallback: str) -> pd.Series:
     if primary in df.columns:
         return df[primary]
     return df[fallback]
+
+
+def available_feature_columns(df: pd.DataFrame) -> list[str]:
+    return [
+        *BASE_FEATURE_COLUMNS,
+        *[column for column in GENERALIZATION_FEATURE_COLUMNS if column in df.columns],
+    ]
 
 
 def parse_csv_months(value: str | None) -> list[str] | None:
@@ -174,21 +189,29 @@ def side_examples(df: pd.DataFrame, side_name: str) -> pd.DataFrame:
             "pred_label": df["pred_label"].astype(float),
             "target": df[spec["target"]].astype(float),
             "opposite_target": df[spec["opposite_target"]].astype(float),
+            "side_name": side_name,
         }
     )
+    if "dataset_month" in df.columns:
+        output["dataset_month"] = df["dataset_month"].astype(str)
+    for column in GENERALIZATION_FEATURE_COLUMNS:
+        if column in df.columns:
+            output[column] = df[column].astype(float)
     return output
 
 
-def build_training_frame(df: pd.DataFrame) -> pd.DataFrame:
+def build_training_frame(df: pd.DataFrame, feature_columns: list[str] | None = None) -> pd.DataFrame:
+    feature_columns = feature_columns or available_feature_columns(df)
     frame = pd.concat(
         [side_examples(df, "long"), side_examples(df, "short")],
         ignore_index=True,
     )
-    return frame.replace([np.inf, -np.inf], np.nan).dropna(subset=[*BASE_FEATURE_COLUMNS, "target"])
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(subset=[*feature_columns, "target"])
 
 
-def as_matrix(df: pd.DataFrame) -> np.ndarray:
-    return df[BASE_FEATURE_COLUMNS].astype("float32").to_numpy()
+def as_matrix(df: pd.DataFrame, feature_columns: list[str] | None = None) -> np.ndarray:
+    feature_columns = feature_columns or BASE_FEATURE_COLUMNS
+    return df[feature_columns].astype("float32").to_numpy()
 
 
 def clipped_target(values: pd.Series, clip_quantile: float) -> np.ndarray:
@@ -210,27 +233,81 @@ def regression_metrics(y_true: pd.Series, y_pred: np.ndarray) -> dict[str, float
     }
 
 
-def train_model(frame: pd.DataFrame, config: MetaModelConfig) -> HistGradientBoostingRegressor:
+def build_sample_weights(frame: pd.DataFrame, weighting: str) -> np.ndarray | None:
+    if weighting == "none":
+        return None
+    weights = pd.Series(1.0, index=frame.index, dtype="float64")
+    if weighting == "month":
+        if "dataset_month" not in frame.columns:
+            raise ValueError("month sample weighting requires dataset_month")
+        weights *= 1.0 / frame.groupby("dataset_month")["target"].transform("size")
+    elif weighting == "side":
+        weights *= 1.0 / frame.groupby("side")["target"].transform("size")
+    elif weighting == "month_side":
+        if "dataset_month" not in frame.columns:
+            raise ValueError("month_side sample weighting requires dataset_month")
+        weights *= 1.0 / frame.groupby(["dataset_month", "side"])["target"].transform("size")
+    else:
+        raise ValueError(f"unknown sample weighting: {weighting}")
+    weights = weights / weights.mean()
+    return weights.to_numpy(dtype="float64")
+
+
+def side_target_means(frame: pd.DataFrame) -> dict[str, float]:
+    means = frame.groupby("side")["target"].mean()
+    return {
+        "long": float(means.get(1.0, frame["target"].mean())),
+        "short": float(means.get(-1.0, frame["target"].mean())),
+    }
+
+
+def train_model(
+    frame: pd.DataFrame,
+    config: MetaModelConfig,
+    feature_columns: list[str] | None = None,
+) -> HistGradientBoostingRegressor:
     model = HistGradientBoostingRegressor(
         max_iter=config.max_iter,
         learning_rate=config.learning_rate,
         max_leaf_nodes=config.max_leaf_nodes,
+        max_depth=config.max_depth,
         min_samples_leaf=config.min_samples_leaf,
         l2_regularization=config.l2_regularization,
+        max_features=config.max_features,
+        early_stopping=config.early_stopping,
+        validation_fraction=config.validation_fraction,
+        n_iter_no_change=config.n_iter_no_change,
+        tol=config.tol,
         random_state=config.random_seed,
     )
-    model.fit(as_matrix(frame), clipped_target(frame["target"], config.target_clip_quantile))
+    model.fit(
+        as_matrix(frame, feature_columns),
+        clipped_target(frame["target"], config.target_clip_quantile),
+        sample_weight=build_sample_weights(frame, config.sample_weighting),
+    )
     return model
 
 
-def add_meta_predictions(df: pd.DataFrame, model: HistGradientBoostingRegressor) -> pd.DataFrame:
+def add_meta_predictions(
+    df: pd.DataFrame,
+    model: HistGradientBoostingRegressor,
+    feature_columns: list[str] | None = None,
+    prediction_shrinkage: float = 1.0,
+    side_means: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    if not 0.0 <= prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
     output = df.copy()
     for side_name, output_column in [
         ("long", "pred_meta_long_adjusted_pnl"),
         ("short", "pred_meta_short_adjusted_pnl"),
     ]:
         examples = side_examples(df, side_name)
-        output[output_column] = model.predict(as_matrix(examples))
+        predictions = model.predict(as_matrix(examples, feature_columns))
+        if side_means is not None and prediction_shrinkage < 1.0:
+            center = side_means[side_name]
+            predictions = prediction_shrinkage * predictions + (1.0 - prediction_shrinkage) * center
+        output[output_column] = predictions
     return output
 
 
@@ -253,11 +330,19 @@ def fit(args: argparse.Namespace) -> int:
         max_iter=args.max_iter,
         learning_rate=args.learning_rate,
         max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
         min_samples_leaf=args.min_samples_leaf,
         l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
         random_seed=args.random_seed,
         target_clip_quantile=args.target_clip_quantile,
         entry_threshold=args.entry_threshold,
+        sample_weighting=args.sample_weighting,
+        prediction_shrinkage=args.prediction_shrinkage,
     )
     train_months = parse_csv_months(args.train_months)
     apply_months = parse_csv_months(args.apply_months)
@@ -271,10 +356,28 @@ def fit(args: argparse.Namespace) -> int:
         apply_months,
         "apply",
     )
-    train_frame = build_training_frame(train_predictions)
-    model = train_model(train_frame, config)
-    train_output = add_meta_predictions(train_predictions, model)
-    apply_output = add_meta_predictions(apply_predictions, model)
+    feature_columns = available_feature_columns(train_predictions)
+    regime_feature_columns = [column for column in GENERALIZATION_FEATURE_COLUMNS if column in train_predictions.columns]
+    missing_apply_features = sorted(set(regime_feature_columns) - set(apply_predictions.columns))
+    if missing_apply_features:
+        raise ValueError(f"apply predictions missing feature columns: {', '.join(missing_apply_features)}")
+    train_frame = build_training_frame(train_predictions, feature_columns)
+    means = side_target_means(train_frame)
+    model = train_model(train_frame, config, feature_columns)
+    train_output = add_meta_predictions(
+        train_predictions,
+        model,
+        feature_columns,
+        config.prediction_shrinkage,
+        means,
+    )
+    apply_output = add_meta_predictions(
+        apply_predictions,
+        model,
+        feature_columns,
+        config.prediction_shrinkage,
+        means,
+    )
 
     run_dir = make_run_dir(args.output_dir, args.label)
     train_output.to_parquet(run_dir / "predictions_train_meta.parquet", index=False)
@@ -295,7 +398,8 @@ def fit(args: argparse.Namespace) -> int:
             "train": month_counts(train_predictions),
             "apply": month_counts(apply_predictions),
         },
-        "feature_columns": BASE_FEATURE_COLUMNS,
+        "feature_columns": feature_columns,
+        "side_target_means": means,
         "train": split_meta_metrics(train_output, args.entry_threshold),
         "apply": split_meta_metrics(apply_output, args.entry_threshold),
     }
@@ -318,14 +422,26 @@ def build_parser() -> argparse.ArgumentParser:
     fit_parser.add_argument("--apply-months", help="comma-separated dataset months to apply to")
     fit_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
     fit_parser.add_argument("--label", default="meta_ev")
-    fit_parser.add_argument("--max-iter", type=int, default=80)
-    fit_parser.add_argument("--learning-rate", type=float, default=0.03)
-    fit_parser.add_argument("--max-leaf-nodes", type=int, default=15)
-    fit_parser.add_argument("--min-samples-leaf", type=int, default=100)
-    fit_parser.add_argument("--l2-regularization", type=float, default=0.2)
+    fit_parser.add_argument("--max-iter", type=int, default=200)
+    fit_parser.add_argument("--learning-rate", type=float, default=0.025)
+    fit_parser.add_argument("--max-leaf-nodes", type=int, default=7)
+    fit_parser.add_argument("--max-depth", type=int, default=3, help="<=0 disables depth limit")
+    fit_parser.add_argument("--min-samples-leaf", type=int, default=300)
+    fit_parser.add_argument("--l2-regularization", type=float, default=1.0)
+    fit_parser.add_argument("--max-features", type=float, default=0.8)
+    fit_parser.add_argument("--early-stopping", type=parse_bool, default=True)
+    fit_parser.add_argument("--validation-fraction", type=float, default=0.15)
+    fit_parser.add_argument("--n-iter-no-change", type=int, default=10)
+    fit_parser.add_argument("--tol", type=float, default=1e-6)
     fit_parser.add_argument("--random-seed", type=int, default=17)
-    fit_parser.add_argument("--target-clip-quantile", type=float, default=0.99)
+    fit_parser.add_argument("--target-clip-quantile", type=float, default=0.98)
     fit_parser.add_argument("--entry-threshold", type=float, default=15.0)
+    fit_parser.add_argument(
+        "--sample-weighting",
+        choices=["none", "month", "side", "month_side"],
+        default="month_side",
+    )
+    fit_parser.add_argument("--prediction-shrinkage", type=float, default=0.75)
     fit_parser.set_defaults(func=fit)
     return parser
 
