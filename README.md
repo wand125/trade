@@ -182,6 +182,21 @@ python -m trade_data.backtest model-policy \
   --loss-multiplier 1.25
 ```
 
+Optionally filter model entries with dense entry quality predictions:
+
+```bash
+python -m trade_data.backtest model-policy \
+  --month 2025-01 \
+  --predictions experiments/20260627_192112_hgb_multitask_edge15/predictions_test.parquet \
+  --policy timed_ev \
+  --entry-threshold 5 \
+  --side-margin 5 \
+  --risk-penalty 0.1 \
+  --min-entry-rank 0.5 \
+  --profit-multiplier 1.0 \
+  --loss-multiplier 1.25
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash

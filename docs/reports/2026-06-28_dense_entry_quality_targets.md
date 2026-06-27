@@ -1,0 +1,145 @@
+# Dense Entry Quality Targets
+
+日付: 2026-06-28 JST
+
+## 目的
+
+`long / short / stay_flat` だけでは entry timing の情報を落としすぎるため、entry quality を密なtargetとして追加する。
+
+狙い:
+
+- entry正例の少なさを補う。
+- 1つのdecision rowを多方面の教師信号として使う。
+- EV予測の過大評価とentry timingの失敗を分離して観察する。
+- 新targetをpolicy側でも使い、悪いentryを抑制できるか確認する。
+
+## 実装
+
+Dataset target:
+
+- `long_profit_barrier_hit`, `short_profit_barrier_hit`
+- `long_wait_regret`, `short_wait_regret`
+- `long_entry_local_rank`, `short_entry_local_rank`
+- `long_entry_urgency`, `short_entry_urgency`
+- wait regret quantile
+- entry local rank bin
+
+Policy filter:
+
+- `--max-wait-regret`
+- `--min-entry-rank`
+- `--require-profit-barrier`
+
+デフォルトでは既存policyと同じ挙動にし、指定時だけentry条件に追加する。
+
+## Dataset
+
+旧倍率 0.9 / 1.3 のまま、2023-01 から 2025-12 までの主datasetを新schemaで再生成した。
+
+Command:
+
+```bash
+python3 -m trade_data.dataset build-range \
+  --start-month 2023-01 \
+  --end-month 2025-12 \
+  --min-adjusted-edge 15 \
+  --entry-timing-lookahead-minutes 60
+```
+
+## Model
+
+Artifact:
+
+- `experiments/20260627_192112_hgb_multitask_edge15/`
+
+Split:
+
+- train: 2023-01..2023-12, 2024-01..2024-06, 2024-08, 2024-10
+- valid: 2024-07, 2024-09, 2024-11, 2025-01
+- test: 2024-12, 2025-02
+
+Settings:
+
+- model: HistGradientBoosting
+- sample weighting: `month_label`
+- target clip quantile: 0.99
+- max leaf nodes: 15
+- min samples leaf: 100
+- l2 regularization: 0.2
+- train target multipliers: 0.9 / 1.3
+- validation/test backtest multipliers: 1.0 / 1.25
+
+重要な注意:
+
+現在のHGB実装はtargetごとの独立モデルであり、shared representationのmulti-task学習ではない。そのため、追加targetはEVモデル自体を改善しない。追加targetを性能に効かせるには、policy filterや二段階meta modelで予測値を使う必要がある。
+
+## Validation
+
+通常のEV sweepでは strict 条件を満たす候補なし。
+
+Quality filter sweep:
+
+- sweeps:
+  - `data/reports/backtests/20260627_192749_model_sweep_2024-07/`
+  - `data/reports/backtests/20260627_192749_model_sweep_2024-09/`
+  - `data/reports/backtests/20260627_192749_model_sweep_2024-11/`
+  - `data/reports/backtests/20260627_192749_model_sweep_2025-01/`
+- summary: `data/reports/backtests/20260627_192904_model_sweep_summary/`
+- constraints: min folds 4, min trades per fold 10, max forced exit rate 0.1, max drawdown 100, min pnl per fold 0
+
+Selected validation candidate:
+
+| policy | entry | exit | side margin | risk | max wait regret | min entry rank | barrier | mean pnl | min pnl | min trades | max DD | forced max |
+|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| timed_ev | 5 | 0 | 5 | 0.1 | inf | 0.5 | false | 38.6307 | 2.3763 | 17 | 85.5988 | 0.0476 |
+
+## Test
+
+Validationで選んだ候補を固定して test に適用した。
+
+Artifacts:
+
+- `data/reports/backtests/20260627_192921_model_timed_ev_2024-12/`
+- `data/reports/backtests/20260627_192921_model_timed_ev_2025-02/`
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -135.9573 | -85.3350 | 22 | 0.4545 | 0.4629 | 155.0055 | 0 |
+| 2025-02 | -101.0583 | -42.7980 | 32 | 0.4688 | 0.6531 | 116.0663 | 1 |
+
+より強く絞る低頻度候補:
+
+- policy: `timed_ev`
+- entry threshold: 20
+- side margin: 0
+- risk penalty: 0.2
+- max wait regret: 4
+- min entry rank: 0.5
+
+Artifacts:
+
+- `data/reports/backtests/20260627_192937_model_timed_ev_2024-12/`
+- `data/reports/backtests/20260627_192937_model_timed_ev_2025-02/`
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -9.5233 | -1.7540 | 5 | 0.6000 | 0.7548 | 30.9213 | 0 |
+| 2025-02 | -43.2768 | -19.1100 | 11 | 0.4545 | 0.6418 | 63.8468 | 0 |
+
+## 判断
+
+Dense entry quality target と policy filter は、露出と損失を抑える方向には効いた。しかし no_trade はまだ超えていない。
+
+主な反省:
+
+- 独立HGBでは追加targetがEV予測を直接改善しない。
+- `min_entry_rank` はvalidationでは効いたが、testでは十分ではなかった。
+- 強く絞ると2024-12の大損は抑えられるが、取引数が少なく、2025-02もプラスにできない。
+- `require_profit_barrier` は今回の上位候補には出てこなかった。
+
+次にやるべきこと:
+
+1. 予測済みtargetを入力にした二段階meta modelを作る。
+2. meta model は validation月だけで calibrate し、testには固定適用する。
+3. targetごとの独立HGBではなく、shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+4. entryだけでなく、保有中のexit判定に `wait_regret`, `entry_rank`, `barrier_hit` を使えるか検討する。

@@ -12,7 +12,7 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-entry quality を密に学習するための追加教師targetは実装済み。単体テストと `/tmp` での3か月スモーク学習は完了。主datasetの再生成が必要。
+entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
@@ -39,11 +39,11 @@ entry quality を密に学習するための追加教師targetは実装済み。
 
 ## 次の作業
 
-1. 新schemaで旧倍率datasetを再生成する。
-2. dense entry quality target込みで mixed-regime HGB を再学習する。
-3. validation foldで calibrated EV と policy threshold を再選択する。
-4. 2024-12 test の失敗が改善するか確認する。
-5. `timed_ev` の exit timing を、best holding minutes 予測だけでなく exit probability / trailing logic と比較する。
+1. 予測済みtargetを入力にした二段階meta modelを作る。
+2. meta model を validation月でcalibrateし、test月へ固定適用する。
+3. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+4. `timed_ev` の exit timing を、best holding minutes 予測だけでなく exit probability / trailing logic と比較する。
+5. direction/regime別 calibration を追加する。
 6. 小型 MLP / TCN / CNN+GRU の最初の深層学習実験を作る。
 
 ## 未決定事項
@@ -67,6 +67,8 @@ short/down-regime 確認として、train 2023-01..2024-10、valid 2024-11、tes
 学習品質改善として、非連続月指定と `month_label` sample weighting を実装した。混合regime train、valid 2024-07/2024-09/2024-11/2025-01、test 2024-12/2025-02 で実験したところ、validationの下落月は改善したが、2024-12 test は adjusted pnl `-183.5370` と崩れた。一方で 2025-02 test は `+54.9137`。学習データ混合とweightingだけでは過学習問題は解決しておらず、次は教師targetとregime featureを改善する。
 
 entry timing を `long / short / stay_flat` に潰さず、`profit_barrier_hit`, `wait_regret`, `entry_local_rank`, `entry_urgency` に分解する方針を採用した。これは entry 正例の少なさを補い、1つのdecision rowから複数の教師信号を得るための変更。コード実装と単体テストは完了しており、次は旧倍率datasetの再生成と新target込みの学習。
+
+dense entry quality target込みでHGBを再学習し、quality filter付きpolicyを追加した。validationでは `timed_ev entry=5 side_margin=5 risk=0.1 min_entry_rank=0.5` が4fold eligible になったが、testでは 2024-12 `-135.9573`、2025-02 `-101.0583` と no_trade に負けた。強く絞る候補は2024-12を `-9.5233` まで抑えたが、取引数が少なくedgeとはみなせない。独立HGBでは追加targetがEV予測を直接改善しないため、次は二段階meta modelまたはshared representationの深層学習に進む。
 
 ## 直近の実験
 
@@ -96,3 +98,8 @@ entry timing を `long / short / stay_flat` に潰さず、`profit_barrier_hit`,
 - `data/reports/backtests/20260627_190009_model_sweep_summary/`
 - `data/reports/backtests/20260627_190023_model_timed_ev_2024-12/`
 - `data/reports/backtests/20260627_190023_model_timed_ev_2025-02/`
+- `docs/reports/2026-06-28_dense_entry_quality_targets.md`
+- `experiments/20260627_192112_hgb_multitask_edge15/`
+- `data/reports/backtests/20260627_192904_model_sweep_summary/`
+- `data/reports/backtests/20260627_192921_model_timed_ev_2024-12/`
+- `data/reports/backtests/20260627_192921_model_timed_ev_2025-02/`

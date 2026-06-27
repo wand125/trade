@@ -151,6 +151,7 @@ short_utility > long_utility なら short
 - これは深層学習前の固定比較対象であり、最終モデルではない。
 - regression で long/short expected adjusted pnl と side_score を予測する。
 - classification で分位点 bin と補助 `label` を予測する。
+- 現在のHGB実装はtargetごとの独立モデルであり、shared representationを持たない。そのため、dense entry quality targetはEV予測の表現改善には直接効かない。
 - 現時点の selection metric は oracle exit を使うため、entry/side ranking の暫定評価に限る。
 - 次の評価では、予測値だけで entry/exit を実行する backtest policy に接続する。
 
@@ -161,6 +162,7 @@ short_utility > long_utility なら short
 - `model-sweep` は validation 月で閾値を選ぶために使い、test 月で閾値を選ばない。
 - `model-sweep-summary` は複数 validation fold の sweep を同一 policy parameter ごとに集計する。
 - policy selection は単月の最高損益ではなく、fold 数、最低取引数、強制決済率、drawdown、各foldの最低P/Lを満たす候補から選ぶ。
+- dense entry quality prediction は `--max-wait-regret`, `--min-entry-rank`, `--require-profit-barrier` でentry filterとして使える。
 - 2025-01 の初回 test は adjusted pnl `-35.8255` で、trading baseline より損失は小さいが no_trade には負けた。
 - 以後は oracle-exit metric と executable backtest score を明確に分けて記録する。
 - 教師 target は旧倍率 0.9 / 1.3 を維持し、validation/test の executable backtest は新倍率 1.0 / 1.25 で評価する。
@@ -186,6 +188,7 @@ short_utility > long_utility なら short
 - long/short 別、regime 別の calibration を追加する。
 - 直近数日トレンド、ボラティリティ、ATR percentile、MA乖離、drawdown などの regime feature を追加する。
 - exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。
+- HGBの予測済みtargetを入力にした二段階meta modelを作り、executable trade outcomeをvalidationでcalibrateする。
 
 深層学習:
 

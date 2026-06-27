@@ -146,6 +146,34 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [-1, -1, -1])
 
+    def test_model_signal_can_filter_low_quality_entries(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [1.0, 1.0, 1.0],
+                "pred_long_wait_regret": [5.0, 1.0, 1.0],
+                "pred_short_wait_regret": [0.0, 0.0, 0.0],
+                "pred_long_entry_local_rank": [0.2, 0.8, 0.8],
+                "pred_short_entry_local_rank": [1.0, 1.0, 1.0],
+                "pred_long_profit_barrier_hit": [1, 1, 0],
+                "pred_short_profit_barrier_hit": [1, 1, 1],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            max_wait_regret=2.0,
+            min_entry_rank=0.5,
+            require_profit_barrier=True,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, 1, 0])
+
     def test_stateful_model_signal_holds_until_exit_threshold(self):
         df = frame_with_opens([100, 101, 102, 103, 104, 105])
         predictions = pd.DataFrame(
@@ -207,6 +235,9 @@ class BacktestTests(unittest.TestCase):
         normalized = normalize_sweep_metrics(frame, "fold_a")
 
         self.assertEqual(normalized["risk_penalty"].tolist(), [0.0])
+        self.assertEqual(normalized["max_wait_regret"].tolist(), [float("inf")])
+        self.assertEqual(normalized["min_entry_rank"].tolist(), [0.0])
+        self.assertEqual(normalized["require_profit_barrier"].tolist(), [False])
         self.assertEqual(normalized["sweep_source"].tolist(), ["fold_a"])
         self.assertAlmostEqual(normalized["forced_exit_rate"].iloc[0], 0.25)
 
@@ -218,6 +249,7 @@ class BacktestTests(unittest.TestCase):
                 "exit_threshold": [0, 0, 5],
                 "side_margin": [5, 5, 0],
                 "risk_penalty": [0, 0, 0.1],
+                "require_profit_barrier": ["False", "False", "True"],
                 "total_adjusted_pnl": [120.0, 110.0, 200.0],
                 "total_raw_pnl": [130.0, 120.0, 220.0],
                 "trade_count": [40, 35, 40],
@@ -234,6 +266,7 @@ class BacktestTests(unittest.TestCase):
                 "exit_threshold": [0, 0, 5],
                 "side_margin": [5, 5, 0],
                 "risk_penalty": [0, 0, 0.1],
+                "require_profit_barrier": ["False", "False", "True"],
                 "total_adjusted_pnl": [100.0, 140.0, 210.0],
                 "total_raw_pnl": [110.0, 150.0, 230.0],
                 "trade_count": [42, 36, 44],

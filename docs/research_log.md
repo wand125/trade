@@ -580,3 +580,45 @@ final test: new multipliers 1.0 / 1.25
 - 2025-01 の1か月datasetを `/tmp` に新schemaで生成し、rows 30,197、旧label分布は従来edge15と一致。
 - 2024-07 から 2024-09 の3か月datasetを `/tmp` に新schemaで生成。
 - `max_iter=2`, `sample_frac=0.2` のスモーク学習で、追加した全targetの train/evaluate/prediction 保存まで完了。
+
+### Dense Entry Quality 実験
+
+作業:
+
+- 主datasetを 2023-01 から 2025-12 まで新schemaで再生成。
+- dense entry quality target込みで mixed-regime HGB を再学習。
+- HGBはtargetごとの独立モデルなので、追加targetがEVモデルの表現改善には直接効かない点を確認。
+- `model-policy` / `model-sweep` に quality filter を追加。
+  - `--max-wait-regret`
+  - `--min-entry-rank`
+  - `--require-profit-barrier`
+
+実験:
+
+- report: `docs/reports/2026-06-28_dense_entry_quality_targets.md`
+- model: `experiments/20260627_192112_hgb_multitask_edge15/`
+- validation quality summary: `data/reports/backtests/20260627_192904_model_sweep_summary/`
+
+validation選択:
+
+- `timed_ev`, entry 5, exit 0, side margin 5, risk penalty 0.1, min entry rank 0.5
+- validation mean adjusted pnl: +38.6307
+- validation min adjusted pnl: +2.3763
+- min trades per fold: 17
+- max drawdown: 85.5988
+- max forced exit rate: 0.0476
+
+test:
+
+- 2024-12: adjusted pnl -135.9573
+- 2025-02: adjusted pnl -101.0583
+
+追加診断:
+
+- 強く絞る候補では 2024-12 が -9.5233 まで改善したが、5 trades しかなく、2025-02 は -43.2768。
+
+判断:
+
+- entry quality filter は露出削減と損失抑制には効く。
+- しかし no_trade を超えるedgeはまだ出ていない。
+- 次は、予測済みtargetを入力にした二段階meta model、またはshared representationの小型深層学習へ進む。
