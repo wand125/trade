@@ -993,3 +993,50 @@ Fixed test:
 - `asia` / `asia,rollover` は 2025-02を改善するが2024-12を悪化させる。
 - `rollover` はvalidationでは強いがtestではNoTradeに負ける。
 - 本流は hard block ではなく、side/regime別EV calibration、予測EV shrinkage、regime別threshold offsetへ進める。
+
+### Side/Regime EV Calibration
+
+作業:
+
+- `trade_data.meta_model` に side/regime EV calibration を追加した。
+- `fit-group-calibration` と `oof-group-calibration` を追加した。
+- 出力列は `pred_regime_calibrated_long_best_adjusted_pnl` / `pred_regime_calibrated_short_best_adjusted_pnl`。
+- validation内OOFでは、各validation月をholdoutし、残りvalidation月でcalibratorをfitする。
+- testにはvalidation全体でfitしたcalibratorを固定適用する。
+- report: `docs/reports/2026-06-28_side_regime_ev_calibration.md`
+
+検証:
+
+- `python3 -m unittest tests.test_meta_model`: 11 tests OK。
+- `python3 -m trade_data.meta_model oof-group-calibration --help`: OK。
+- `git diff --check`: OK。
+
+実験:
+
+- 対象モデル: `experiments/20260627_215123_policy_iter80_p1_l1p2_regime_purge_e24_v2/`
+- group columns: `volatility_regime,session_regime`
+- validation: 2024-07, 2024-09, 2024-11, 2025-01。
+- test: 2024-12, 2025-02。
+
+Shrink to group mean:
+
+- artifact: `experiments/20260627_221255_regime_ev_calib_vol_session/`
+- summary: `data/reports/backtests/20260627_221441_model_sweep_summary/`
+- OOF validation top: mean pnl `63.4787`, min pnl `13.9340`, min trades `28`。
+- fixed test: 2024-12 `-260.2992`, 2025-02 `-6.6830`。
+
+Residual offset:
+
+- artifact: `experiments/20260627_221536_regime_ev_calib_vol_session_offset/`
+- summary: `data/reports/backtests/20260627_221737_model_sweep_summary/`
+- OOF validation top: mean pnl `102.5949`, min pnl `73.6080`, min trades `54`。
+- fixed test top: 2024-12 `-185.8364`, 2025-02 `-65.1476`。
+- fixed test conservative candidate: 2024-12 `-149.2616`, 2025-02 `-10.7646`。
+
+判断:
+
+- OOF validationでは強く改善するが、fixed testではraw EV候補より悪い。
+- validation 4ヶ月だけのside/regime補正は未知test月へ汎化していない。
+- calibrated EVはtestでentry数を増やしすぎる。
+- 現時点では採用不可。
+- 次は train期間OOF predictions を作ってcalibration fit月数を増やすか、exit timing target改善を優先する。

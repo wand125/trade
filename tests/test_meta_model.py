@@ -4,13 +4,17 @@ import unittest
 import pandas as pd
 
 from trade_data.meta_model import (
+    GroupEVCalibrationConfig,
     MetaModelConfig,
+    add_group_calibrated_ev_columns,
     add_meta_predictions,
     available_feature_columns,
     build_training_frame,
     build_sample_weights,
+    fit_group_ev_calibrator,
     filter_months,
     parse_csv_months,
+    parse_csv_strings,
     side_target_means,
     train_model,
 )
@@ -42,6 +46,8 @@ def prediction_frame():
             "pred_best_adjusted_pnl_quantile": [2, 4, 3],
             "pred_side_score_quantile": [3, 4, 0],
             "pred_label": [1, 1, -1],
+            "session_regime": ["asia", "asia", "ny_late"],
+            "volatility_regime": ["low_vol", "low_vol", "normal_vol"],
         }
     )
 
@@ -53,6 +59,10 @@ class MetaModelTests(unittest.TestCase):
 
         with self.assertRaises(argparse.ArgumentTypeError):
             parse_csv_months("2024-13")
+
+    def test_parse_csv_strings_allows_empty(self):
+        self.assertEqual(parse_csv_strings("session_regime,volatility_regime"), ["session_regime", "volatility_regime"])
+        self.assertEqual(parse_csv_strings(""), [])
 
     def test_filter_months_uses_dataset_month(self):
         df = pd.DataFrame(
@@ -154,6 +164,37 @@ class MetaModelTests(unittest.TestCase):
 
         self.assertTrue((output["pred_meta_long_adjusted_pnl"] == means["long"]).all())
         self.assertTrue((output["pred_meta_short_adjusted_pnl"] == means["short"]).all())
+
+    def test_group_ev_calibration_shrinks_predictions_to_regime_mean(self):
+        df = prediction_frame()
+        df["long_best_adjusted_pnl"] = [2.0, 4.0, 20.0]
+        df["pred_long_best_adjusted_pnl"] = [20.0, 22.0, 20.0]
+        config = GroupEVCalibrationConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            prediction_shrinkage=0.0,
+        )
+
+        calibrator = fit_group_ev_calibrator(df, config)
+        output = add_group_calibrated_ev_columns(df, calibrator)
+
+        self.assertEqual(output["pred_regime_calibrated_long_best_adjusted_pnl"].tolist(), [3.0, 3.0, 20.0])
+
+    def test_group_ev_calibration_falls_back_to_side_stats_for_small_groups(self):
+        df = prediction_frame()
+        config = GroupEVCalibrationConfig(
+            group_columns=("session_regime",),
+            min_group_size=3,
+            prior_strength=0.0,
+            prediction_shrinkage=0.0,
+        )
+
+        calibrator = fit_group_ev_calibrator(df, config)
+        output = add_group_calibrated_ev_columns(df, calibrator)
+
+        side_mean = df["long_best_adjusted_pnl"].mean()
+        self.assertTrue((output["pred_regime_calibrated_long_best_adjusted_pnl"] == side_mean).all())
 
 
 if __name__ == "__main__":

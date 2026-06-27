@@ -96,6 +96,28 @@ class MetaModelConfig:
     prediction_shrinkage: float
 
 
+@dataclass(frozen=True)
+class GroupEVCalibrationConfig:
+    group_columns: tuple[str, ...]
+    min_group_size: int
+    prior_strength: float
+    prediction_shrinkage: float
+
+
+@dataclass(frozen=True)
+class GroupEVStats:
+    n: int
+    pred_mean: float
+    target_mean: float
+
+
+@dataclass(frozen=True)
+class GroupEVCalibrator:
+    config: GroupEVCalibrationConfig
+    side_stats: dict[str, GroupEVStats]
+    group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]]
+
+
 def make_run_dir(root: Path, label: str) -> Path:
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     for index in range(100):
@@ -134,6 +156,12 @@ def parse_csv_months(value: str | None) -> list[str] | None:
     return months
 
 
+def parse_csv_strings(value: str | None) -> list[str]:
+    if value is None:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
 def filter_months(df: pd.DataFrame, months: list[str] | None, label: str) -> pd.DataFrame:
     if months is None:
         return df
@@ -153,6 +181,107 @@ def month_counts(df: pd.DataFrame) -> dict[str, int]:
         return {}
     counts = df["dataset_month"].value_counts().sort_index()
     return {str(month): int(count) for month, count in counts.items()}
+
+
+def group_key_series(df: pd.DataFrame, group_columns: tuple[str, ...]) -> pd.Series:
+    if not group_columns:
+        return pd.Series([tuple()] * len(df), index=df.index, dtype="object")
+    return df.loc[:, list(group_columns)].astype("string").fillna("__missing__").apply(tuple, axis=1)
+
+
+def fit_group_ev_calibrator(
+    predictions: pd.DataFrame,
+    config: GroupEVCalibrationConfig,
+) -> GroupEVCalibrator:
+    if config.min_group_size <= 0:
+        raise ValueError("min_group_size must be positive")
+    if config.prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    missing_group_columns = sorted(set(config.group_columns) - set(predictions.columns))
+    if missing_group_columns:
+        raise ValueError(f"predictions missing group columns: {', '.join(missing_group_columns)}")
+
+    side_stats: dict[str, GroupEVStats] = {}
+    group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]] = {}
+    keys = group_key_series(predictions, config.group_columns)
+    for side_name, spec in SIDE_COLUMNS.items():
+        frame = pd.DataFrame(
+            {
+                "target": predictions[spec["target"]].astype(float),
+                "pred": predictions[spec["ev"]].astype(float),
+                "key": keys,
+            }
+        ).replace([np.inf, -np.inf], np.nan).dropna(subset=["target", "pred"])
+        if frame.empty:
+            raise ValueError(f"no valid rows for {side_name} calibration")
+        side_stat = GroupEVStats(
+            n=int(len(frame)),
+            pred_mean=float(frame["pred"].mean()),
+            target_mean=float(frame["target"].mean()),
+        )
+        side_stats[side_name] = side_stat
+        group_stats[side_name] = {}
+        for key, group in frame.groupby("key", sort=False):
+            group_count = int(len(group))
+            if group_count < config.min_group_size:
+                continue
+            if config.prior_strength == 0:
+                weight = 1.0
+            else:
+                weight = group_count / (group_count + config.prior_strength)
+            group_stats[side_name][key] = GroupEVStats(
+                n=group_count,
+                pred_mean=float(weight * group["pred"].mean() + (1.0 - weight) * side_stat.pred_mean),
+                target_mean=float(
+                    weight * group["target"].mean() + (1.0 - weight) * side_stat.target_mean
+                ),
+            )
+    return GroupEVCalibrator(config=config, side_stats=side_stats, group_stats=group_stats)
+
+
+def calibrated_group_ev_values(
+    predictions: pd.DataFrame,
+    side_name: str,
+    calibrator: GroupEVCalibrator,
+) -> pd.Series:
+    spec = SIDE_COLUMNS[side_name]
+    raw = predictions[spec["ev"]].astype(float).reset_index(drop=True)
+    stats = pd.DataFrame(
+        {
+            "pred_mean": calibrator.side_stats[side_name].pred_mean,
+            "target_mean": calibrator.side_stats[side_name].target_mean,
+        },
+        index=predictions.index,
+    ).reset_index(drop=True)
+    if calibrator.config.group_columns:
+        keys = group_key_series(predictions, calibrator.config.group_columns).reset_index(drop=True)
+        for key, group_stat in calibrator.group_stats[side_name].items():
+            mask = keys == key
+            if mask.any():
+                stats.loc[mask, "pred_mean"] = group_stat.pred_mean
+                stats.loc[mask, "target_mean"] = group_stat.target_mean
+    values = stats["target_mean"] + calibrator.config.prediction_shrinkage * (raw - stats["pred_mean"])
+    return pd.Series(values.to_numpy(), index=predictions.index)
+
+
+def add_group_calibrated_ev_columns(
+    predictions: pd.DataFrame,
+    calibrator: GroupEVCalibrator,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    output["pred_regime_calibrated_long_best_adjusted_pnl"] = calibrated_group_ev_values(
+        predictions,
+        "long",
+        calibrator,
+    )
+    output["pred_regime_calibrated_short_best_adjusted_pnl"] = calibrated_group_ev_values(
+        predictions,
+        "short",
+        calibrator,
+    )
+    return output
 
 
 def side_examples(df: pd.DataFrame, side_name: str) -> pd.DataFrame:
@@ -325,6 +454,188 @@ def split_meta_metrics(df: pd.DataFrame, entry_threshold: float) -> dict[str, ob
     return metrics
 
 
+def split_group_calibration_metrics(df: pd.DataFrame, entry_threshold: float) -> dict[str, object]:
+    return {
+        "long": regression_metrics(
+            df["long_best_adjusted_pnl"],
+            df["pred_regime_calibrated_long_best_adjusted_pnl"].to_numpy(),
+        ),
+        "short": regression_metrics(
+            df["short_best_adjusted_pnl"],
+            df["pred_regime_calibrated_short_best_adjusted_pnl"].to_numpy(),
+        ),
+        "selection": selection_metrics(
+            df,
+            threshold=entry_threshold,
+            long_column="pred_regime_calibrated_long_best_adjusted_pnl",
+            short_column="pred_regime_calibrated_short_best_adjusted_pnl",
+        ),
+    }
+
+
+def serializable_group_calibrator(calibrator: GroupEVCalibrator) -> dict[str, object]:
+    return {
+        "config": asdict(calibrator.config),
+        "side_stats": {side: asdict(stats) for side, stats in calibrator.side_stats.items()},
+        "group_stats": {
+            side: {
+                "|".join(key): asdict(stats)
+                for key, stats in side_groups.items()
+            }
+            for side, side_groups in calibrator.group_stats.items()
+        },
+    }
+
+
+def validate_group_columns(
+    fit_predictions: pd.DataFrame,
+    apply_predictions: pd.DataFrame,
+    group_columns: tuple[str, ...],
+) -> None:
+    missing_fit = sorted(set(group_columns) - set(fit_predictions.columns))
+    missing_apply = sorted(set(group_columns) - set(apply_predictions.columns))
+    if missing_fit:
+        raise ValueError(f"fit predictions missing group columns: {', '.join(missing_fit)}")
+    if missing_apply:
+        raise ValueError(f"apply predictions missing group columns: {', '.join(missing_apply)}")
+
+
+def fit_group_calibration(args: argparse.Namespace) -> int:
+    fit_months = parse_csv_months(args.fit_months)
+    apply_months = parse_csv_months(args.apply_months)
+    fit_predictions = filter_months(
+        pd.read_parquet(args.fit_predictions),
+        fit_months,
+        "fit",
+    )
+    apply_predictions = filter_months(
+        pd.read_parquet(args.apply_predictions),
+        apply_months,
+        "apply",
+    )
+    config = GroupEVCalibrationConfig(
+        group_columns=tuple(parse_csv_strings(args.group_columns)),
+        min_group_size=args.min_group_size,
+        prior_strength=args.prior_strength,
+        prediction_shrinkage=args.prediction_shrinkage,
+    )
+    validate_group_columns(fit_predictions, apply_predictions, config.group_columns)
+    calibrator = fit_group_ev_calibrator(fit_predictions, config)
+    fit_output = add_group_calibrated_ev_columns(fit_predictions, calibrator)
+    apply_output = add_group_calibrated_ev_columns(apply_predictions, calibrator)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    fit_output.to_parquet(run_dir / "predictions_fit_regime_calibrated.parquet", index=False)
+    apply_output.to_parquet(run_dir / "predictions_apply_regime_calibrated.parquet", index=False)
+    metrics = {
+        "mode": "fit_apply",
+        "fit_predictions": str(args.fit_predictions),
+        "apply_predictions": str(args.apply_predictions),
+        "fit_months": fit_months,
+        "apply_months": apply_months,
+        "rows": {
+            "fit": int(len(fit_predictions)),
+            "apply": int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "fit": month_counts(fit_predictions),
+            "apply": month_counts(apply_predictions),
+        },
+        "calibrator": serializable_group_calibrator(calibrator),
+        "fit": split_group_calibration_metrics(fit_output, args.entry_threshold),
+        "apply": split_group_calibration_metrics(apply_output, args.entry_threshold),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    print(json.dumps(metrics["fit"], indent=2))
+    print(json.dumps(metrics["apply"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def oof_group_calibration(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    test_months = parse_csv_months(args.test_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF calibration")
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    test_predictions = filter_months(
+        pd.read_parquet(args.test_predictions),
+        test_months,
+        "test",
+    )
+    config = GroupEVCalibrationConfig(
+        group_columns=tuple(parse_csv_strings(args.group_columns)),
+        min_group_size=args.min_group_size,
+        prior_strength=args.prior_strength,
+        prediction_shrinkage=args.prediction_shrinkage,
+    )
+    validate_group_columns(validation_predictions, test_predictions, config.group_columns)
+
+    fold_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for holdout_month in validation_months:
+        fit_predictions = validation_predictions[
+            validation_predictions["dataset_month"] != holdout_month
+        ].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_predictions.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build OOF fold for {holdout_month}")
+        fold_calibrator = fit_group_ev_calibrator(fit_predictions, config)
+        holdout_output = add_group_calibrated_ev_columns(holdout_predictions, fold_calibrator)
+        fold_outputs.append(holdout_output)
+        fold_metrics[holdout_month] = {
+            "fit_rows": int(len(fit_predictions)),
+            "holdout_rows": int(len(holdout_predictions)),
+            "holdout": split_group_calibration_metrics(holdout_output, args.entry_threshold),
+            "calibrator": serializable_group_calibrator(fold_calibrator),
+        }
+
+    validation_oof = pd.concat(fold_outputs, ignore_index=True).sort_values("decision_timestamp")
+    final_calibrator = fit_group_ev_calibrator(validation_predictions, config)
+    test_output = add_group_calibrated_ev_columns(test_predictions, final_calibrator)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_regime_calibrated.parquet",
+        index=False,
+    )
+    test_output.to_parquet(run_dir / "predictions_test_regime_calibrated.parquet", index=False)
+    metrics = {
+        "mode": "validation_oof_test",
+        "validation_predictions": str(args.validation_predictions),
+        "test_predictions": str(args.test_predictions),
+        "validation_months": validation_months,
+        "test_months": test_months,
+        "rows": {
+            "validation": int(len(validation_predictions)),
+            "validation_oof": int(len(validation_oof)),
+            "test": int(len(test_predictions)),
+        },
+        "month_rows": {
+            "validation": month_counts(validation_predictions),
+            "validation_oof": month_counts(validation_oof),
+            "test": month_counts(test_predictions),
+        },
+        "final_calibrator": serializable_group_calibrator(final_calibrator),
+        "folds": fold_metrics,
+        "validation_oof": split_group_calibration_metrics(validation_oof, args.entry_threshold),
+        "test": split_group_calibration_metrics(test_output, args.entry_threshold),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(json.dumps(metrics["test"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def fit(args: argparse.Namespace) -> int:
     config = MetaModelConfig(
         max_iter=args.max_iter,
@@ -415,6 +726,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Fit second-stage meta models from prediction frames")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    def add_group_calibration_args(group_parser: argparse.ArgumentParser) -> None:
+        group_parser.add_argument(
+            "--group-columns",
+            default="volatility_regime,session_regime",
+            help="comma-separated categorical columns for side/regime EV calibration",
+        )
+        group_parser.add_argument("--min-group-size", type=int, default=500)
+        group_parser.add_argument("--prior-strength", type=float, default=2000.0)
+        group_parser.add_argument("--prediction-shrinkage", type=float, default=0.65)
+        group_parser.add_argument("--entry-threshold", type=float, default=15.0)
+        group_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+        group_parser.add_argument("--label", default="regime_ev_calibration")
+
     fit_parser = subparsers.add_parser("fit", help="fit a meta EV model and apply it")
     fit_parser.add_argument("--train-predictions", type=Path, required=True)
     fit_parser.add_argument("--apply-predictions", type=Path, required=True)
@@ -443,6 +767,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fit_parser.add_argument("--prediction-shrinkage", type=float, default=0.75)
     fit_parser.set_defaults(func=fit)
+
+    group_fit_parser = subparsers.add_parser(
+        "fit-group-calibration",
+        help="fit side/regime EV calibration on one prediction frame and apply it to another",
+    )
+    group_fit_parser.add_argument("--fit-predictions", type=Path, required=True)
+    group_fit_parser.add_argument("--apply-predictions", type=Path, required=True)
+    group_fit_parser.add_argument("--fit-months", help="comma-separated dataset months to fit on")
+    group_fit_parser.add_argument("--apply-months", help="comma-separated dataset months to apply to")
+    add_group_calibration_args(group_fit_parser)
+    group_fit_parser.set_defaults(func=fit_group_calibration)
+
+    group_oof_parser = subparsers.add_parser(
+        "oof-group-calibration",
+        help="build validation OOF side/regime EV calibration and a fixed test application",
+    )
+    group_oof_parser.add_argument("--validation-predictions", type=Path, required=True)
+    group_oof_parser.add_argument("--test-predictions", type=Path, required=True)
+    group_oof_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    group_oof_parser.add_argument("--test-months", required=True, help="comma-separated test dataset months")
+    add_group_calibration_args(group_oof_parser)
+    group_oof_parser.set_defaults(func=oof_group_calibration)
     return parser
 
 
