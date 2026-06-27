@@ -117,8 +117,8 @@ class BacktestConfig:
     evaluation_start: pd.Timestamp
     evaluation_end: pd.Timestamp
     max_holding: pd.Timedelta = pd.Timedelta(hours=24)
-    profit_multiplier: float = 0.9
-    loss_multiplier: float = 1.3
+    profit_multiplier: float = 1.0
+    loss_multiplier: float = 1.2
     spread_points: float = 0.0
     slippage_points: float = 0.0
     execution_delay_bars: int = 0
@@ -1856,8 +1856,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--warmup-days", type=int, default=7)
     parser.add_argument("--post-days", type=int, default=4)
     parser.add_argument("--max-hold-hours", type=float, default=24.0)
-    parser.add_argument("--profit-multiplier", type=float, default=0.9)
-    parser.add_argument("--loss-multiplier", type=float, default=1.3)
+    parser.add_argument("--profit-multiplier", type=float, default=1.0)
+    parser.add_argument("--loss-multiplier", type=float, default=1.2)
     parser.add_argument(
         "--spread-points",
         type=float,

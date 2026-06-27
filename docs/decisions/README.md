@@ -26,3 +26,4 @@
 - `0003_overfitting_and_walk_forward.md`: データ増加とwalk-forward評価
 - `0004_relaxed_adjusted_pnl.md`: 評価倍率 1.0 / 1.25
 - `0005_dense_entry_quality_targets.md`: entry timingを密な品質ターゲットに分解
+- `0006_loss_multiplier_120_standard.md`: 評価倍率 1.0 / 1.20 へ統一

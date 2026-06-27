@@ -11,6 +11,7 @@ from trade_data.meta_model import (
     available_feature_columns,
     build_training_frame,
     build_sample_weights,
+    combine_fit_predictions,
     fit_group_ev_calibrator,
     filter_months,
     parse_csv_months,
@@ -81,6 +82,15 @@ class MetaModelTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             filter_months(df, ["2024-09"], "test")
+
+    def test_combine_fit_predictions_prepends_base_and_resets_index(self):
+        primary = pd.DataFrame({"dataset_month": ["2024-07"], "value": [2]}, index=[10])
+        base = pd.DataFrame({"dataset_month": ["2023-01", "2023-02"], "value": [0, 1]}, index=[20, 21])
+
+        combined = combine_fit_predictions(primary, base)
+
+        self.assertEqual(combined["dataset_month"].tolist(), ["2023-01", "2023-02", "2024-07"])
+        self.assertEqual(combined.index.tolist(), [0, 1, 2])
 
     def test_build_training_frame_expands_long_and_short_examples(self):
         frame = build_training_frame(prediction_frame())

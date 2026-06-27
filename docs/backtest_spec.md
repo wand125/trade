@@ -77,12 +77,12 @@ raw_pnl = entry_price - exit_price
 補正後損益:
 
 ```text
-adjusted_pnl = raw_pnl * 0.9  if raw_pnl > 0
-adjusted_pnl = raw_pnl * 1.3  if raw_pnl < 0
+adjusted_pnl = raw_pnl * 1.0  if raw_pnl > 0
+adjusted_pnl = raw_pnl * 1.2  if raw_pnl < 0
 adjusted_pnl = 0              if raw_pnl = 0
 ```
 
-初期実装では `adjusted_pnl` を主スコアにする。
+現行の標準評価では `profit_multiplier=1.0`, `loss_multiplier=1.2` の `adjusted_pnl` を主スコアにする。初期仕様の 0.9 / 1.3 や途中の 1.0 / 1.25 は過去比較として明示指定した場合のみ使う。
 
 ### 明示的な執行コスト
 

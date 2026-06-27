@@ -52,7 +52,7 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(trade["entry_price"], 101)
         self.assertEqual(trade["exit_price"], 106)
         self.assertAlmostEqual(trade["raw_pnl"], 5.0)
-        self.assertAlmostEqual(trade["adjusted_pnl"], 4.5)
+        self.assertAlmostEqual(trade["adjusted_pnl"], 5.0)
 
     def test_execution_cost_is_adverse_for_entry_and_exit(self):
         config = BacktestConfig(
@@ -139,8 +139,8 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(metrics["short_trade_count"], 1)
         self.assertAlmostEqual(metrics["long_raw_pnl"], 3.0)
         self.assertAlmostEqual(metrics["short_raw_pnl"], 5.0)
-        self.assertAlmostEqual(metrics["long_adjusted_pnl"], 2.7)
-        self.assertAlmostEqual(metrics["short_adjusted_pnl"], 4.5)
+        self.assertAlmostEqual(metrics["long_adjusted_pnl"], 3.0)
+        self.assertAlmostEqual(metrics["short_adjusted_pnl"], 5.0)
         self.assertAlmostEqual(metrics["long_win_rate"], 1.0)
         self.assertAlmostEqual(metrics["short_win_rate"], 1.0)
 

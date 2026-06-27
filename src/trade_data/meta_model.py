@@ -500,6 +500,19 @@ def validate_group_columns(
         raise ValueError(f"apply predictions missing group columns: {', '.join(missing_apply)}")
 
 
+def combine_fit_predictions(
+    primary_fit_predictions: pd.DataFrame,
+    base_fit_predictions: pd.DataFrame | None,
+) -> pd.DataFrame:
+    if primary_fit_predictions.empty:
+        raise ValueError("primary fit predictions are empty")
+    if base_fit_predictions is None:
+        return primary_fit_predictions.copy()
+    if base_fit_predictions.empty:
+        raise ValueError("base fit predictions are empty")
+    return pd.concat([base_fit_predictions, primary_fit_predictions], ignore_index=True)
+
+
 def fit_group_calibration(args: argparse.Namespace) -> int:
     fit_months = parse_csv_months(args.fit_months)
     apply_months = parse_csv_months(args.apply_months)
@@ -556,8 +569,11 @@ def fit_group_calibration(args: argparse.Namespace) -> int:
 def oof_group_calibration(args: argparse.Namespace) -> int:
     validation_months = parse_csv_months(args.validation_months)
     test_months = parse_csv_months(args.test_months)
+    base_fit_months = parse_csv_months(args.base_fit_months)
     if validation_months is None or len(validation_months) < 2:
         raise ValueError("at least two validation months are required for OOF calibration")
+    if args.base_fit_predictions is None and base_fit_months is not None:
+        raise ValueError("--base-fit-months requires --base-fit-predictions")
     validation_predictions = filter_months(
         pd.read_parquet(args.validation_predictions),
         validation_months,
@@ -568,6 +584,13 @@ def oof_group_calibration(args: argparse.Namespace) -> int:
         test_months,
         "test",
     )
+    base_fit_predictions = None
+    if args.base_fit_predictions is not None:
+        base_fit_predictions = filter_months(
+            pd.read_parquet(args.base_fit_predictions),
+            base_fit_months,
+            "base_fit",
+        )
     config = GroupEVCalibrationConfig(
         group_columns=tuple(parse_csv_strings(args.group_columns)),
         min_group_size=args.min_group_size,
@@ -575,13 +598,16 @@ def oof_group_calibration(args: argparse.Namespace) -> int:
         prediction_shrinkage=args.prediction_shrinkage,
     )
     validate_group_columns(validation_predictions, test_predictions, config.group_columns)
+    if base_fit_predictions is not None:
+        validate_group_columns(base_fit_predictions, validation_predictions, config.group_columns)
 
     fold_outputs: list[pd.DataFrame] = []
     fold_metrics: dict[str, object] = {}
     for holdout_month in validation_months:
-        fit_predictions = validation_predictions[
+        validation_fit_predictions = validation_predictions[
             validation_predictions["dataset_month"] != holdout_month
         ].copy()
+        fit_predictions = combine_fit_predictions(validation_fit_predictions, base_fit_predictions)
         holdout_predictions = validation_predictions[
             validation_predictions["dataset_month"] == holdout_month
         ].copy()
@@ -592,13 +618,16 @@ def oof_group_calibration(args: argparse.Namespace) -> int:
         fold_outputs.append(holdout_output)
         fold_metrics[holdout_month] = {
             "fit_rows": int(len(fit_predictions)),
+            "base_fit_rows": 0 if base_fit_predictions is None else int(len(base_fit_predictions)),
+            "validation_fit_rows": int(len(validation_fit_predictions)),
             "holdout_rows": int(len(holdout_predictions)),
             "holdout": split_group_calibration_metrics(holdout_output, args.entry_threshold),
             "calibrator": serializable_group_calibrator(fold_calibrator),
         }
 
     validation_oof = pd.concat(fold_outputs, ignore_index=True).sort_values("decision_timestamp")
-    final_calibrator = fit_group_ev_calibrator(validation_predictions, config)
+    final_fit_predictions = combine_fit_predictions(validation_predictions, base_fit_predictions)
+    final_calibrator = fit_group_ev_calibrator(final_fit_predictions, config)
     test_output = add_group_calibrated_ev_columns(test_predictions, final_calibrator)
 
     run_dir = make_run_dir(args.output_dir, args.label)
@@ -611,14 +640,19 @@ def oof_group_calibration(args: argparse.Namespace) -> int:
         "mode": "validation_oof_test",
         "validation_predictions": str(args.validation_predictions),
         "test_predictions": str(args.test_predictions),
+        "base_fit_predictions": None if args.base_fit_predictions is None else str(args.base_fit_predictions),
         "validation_months": validation_months,
         "test_months": test_months,
+        "base_fit_months": base_fit_months,
         "rows": {
+            "base_fit": 0 if base_fit_predictions is None else int(len(base_fit_predictions)),
             "validation": int(len(validation_predictions)),
             "validation_oof": int(len(validation_oof)),
+            "final_fit": int(len(final_fit_predictions)),
             "test": int(len(test_predictions)),
         },
         "month_rows": {
+            "base_fit": {} if base_fit_predictions is None else month_counts(base_fit_predictions),
             "validation": month_counts(validation_predictions),
             "validation_oof": month_counts(validation_oof),
             "test": month_counts(test_predictions),
@@ -786,11 +820,17 @@ def build_parser() -> argparse.ArgumentParser:
     group_oof_parser.add_argument("--validation-predictions", type=Path, required=True)
     group_oof_parser.add_argument("--test-predictions", type=Path, required=True)
     group_oof_parser.add_argument(
+        "--base-fit-predictions",
+        type=Path,
+        help="optional OOF prediction frame to include in every validation calibration fit",
+    )
+    group_oof_parser.add_argument(
         "--validation-months",
         required=True,
         help="comma-separated validation dataset months for OOF folds",
     )
     group_oof_parser.add_argument("--test-months", required=True, help="comma-separated test dataset months")
+    group_oof_parser.add_argument("--base-fit-months", help="comma-separated base fit months")
     add_group_calibration_args(group_oof_parser)
     group_oof_parser.set_defaults(func=oof_group_calibration)
     return parser

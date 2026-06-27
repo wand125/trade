@@ -1064,3 +1064,35 @@ Residual offset:
 - train期間OOF predictionsを作るための基盤は整った。
 - smoke runは機能確認用であり、スコアは研究判断に使わない。
 - 次は HGB 80iter regime/purge v2 と同じtrain monthsで本番OOFを実行し、validation OOFと結合してside/regime calibrationを再評価する。
+
+### Train OOF Calibration and Loss 1.20 Standard
+
+作業:
+
+- `oof-group-calibration` に `--base-fit-predictions` / `--base-fit-months` を追加した。
+- 各validation holdoutのcalibration fitを `train OOF + 他validation月` に変更できるようにした。
+- `trade_data.backtest` のデフォルト評価倍率を profit 1.0 / loss 1.20 に変更した。
+- ADR `docs/decisions/0006_loss_multiplier_120_standard.md` を追加した。
+- report: `docs/reports/2026-06-28_train_oof_calibration_loss120.md`
+
+実験:
+
+- train OOF: `experiments/20260627_223559_policy_train_oof_4m_p1_l1p2_regime_purge_e24/`
+- offset calibration: `experiments/20260627_223950_regime_ev_calib_train_oof4m_vol_session_offset/`
+- shrink065 calibration: `experiments/20260627_224357_regime_ev_calib_train_oof4m_vol_session_shrink065/`
+- shrink065 loss1.20 summary: `data/reports/backtests/20260627_224840_model_sweep_summary/`
+- offset loss1.20 summary: `data/reports/backtests/20260627_225028_model_sweep_summary/`
+
+結果:
+
+- shrink065 top-min validation: mean pnl `49.9715`, min pnl `41.1354`, min trades `10`, max DD `35.1396`。
+- shrink065 top-min fixed test: 2024-12 `+18.8306`, 2025-02 `-44.5990`。
+- offset top-min validation: mean pnl `72.3580`, min pnl `46.8804`, min trades `15`, max DD `47.0160`。
+- offset top-min fixed test: 2024-12 `-63.2266`, 2025-02 `-44.3740`。
+
+判断:
+
+- loss 1.20統一で損益は改善したが、NoTradeを安定して超える状態ではない。
+- train OOFをcalibration fitに足す方向は、entry過多の抑制には効いた。
+- shrink065は2024-12をプラス化したが、2025-02では少数のshort失敗が損失を支配する。
+- 次は2025-02 short失敗tradeのregime/session分解と、exit timing targetの改善を優先する。

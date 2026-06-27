@@ -200,7 +200,7 @@ python -m trade_data.backtest model-policy \
   --exit-threshold 10 \
   --side-margin 5 \
   --profit-multiplier 1.0 \
-  --loss-multiplier 1.25
+  --loss-multiplier 1.20
 ```
 
 Optionally filter model entries with dense entry quality predictions:
@@ -215,7 +215,7 @@ python -m trade_data.backtest model-policy \
   --risk-penalty 0.1 \
   --min-entry-rank 0.5 \
   --profit-multiplier 1.0 \
-  --loss-multiplier 1.25
+  --loss-multiplier 1.20
 ```
 
 Sweep policy thresholds on a validation month:
@@ -228,7 +228,7 @@ python -m trade_data.backtest model-sweep \
   --exit-thresholds=-5,0,5,10 \
   --side-margins 0,5,10 \
   --profit-multiplier 1.0 \
-  --loss-multiplier 1.25
+  --loss-multiplier 1.20
 ```
 
 Aggregate multiple validation sweeps by identical policy parameters:
@@ -287,7 +287,7 @@ python -m trade_data.backtest model-sweep \
   --long-column pred_calibrated_long_best_adjusted_pnl \
   --short-column pred_calibrated_short_best_adjusted_pnl \
   --profit-multiplier 1.0 \
-  --loss-multiplier 1.25
+  --loss-multiplier 1.20
 ```
 
 ## Research Docs

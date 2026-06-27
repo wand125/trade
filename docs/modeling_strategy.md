@@ -117,8 +117,9 @@ edge は validation 期間で調整し、test 月に合わせて選ばない。
 初期実装:
 
 - 近傍時間窓: `--entry-timing-lookahead-minutes`, default 60
-- 学習target: 旧倍率 0.9 / 1.3 のdatasetから生成
-- validation/test評価: 新倍率 1.0 / 1.25 のbacktestでpolicyを選ぶ
+- 現行の学習target: profit 1.0 / loss 1.20 のdatasetから生成
+- 現行のvalidation/test評価: profit 1.0 / loss 1.20 のbacktestでpolicyを選ぶ
+- 旧倍率 0.9 / 1.3 と途中倍率 1.0 / 1.25 は過去比較として扱い、使う場合は明示する
 
 詳細判断は `docs/decisions/0005_dense_entry_quality_targets.md` に記録する。
 
@@ -165,12 +166,12 @@ short_utility > long_utility なら short
 - dense entry quality prediction は `--max-wait-regret`, `--min-entry-rank`, `--require-profit-barrier` でentry filterとして使える。
 - 2025-01 の初回 test は adjusted pnl `-35.8255` で、trading baseline より損失は小さいが no_trade には負けた。
 - 以後は oracle-exit metric と executable backtest score を明確に分けて記録する。
-- 教師 target は旧倍率 0.9 / 1.3 を維持し、validation/test の executable backtest は新倍率 1.0 / 1.25 で評価する。
+- 教師 target と validation/test の executable backtest は、現行標準では profit 1.0 / loss 1.20 に揃える。
 
 直近の暫定採用条件:
 
-- train target: 旧倍率 0.9 / 1.3
-- validation/test backtest: 新倍率 1.0 / 1.25
+- train target: profit 1.0 / loss 1.20
+- validation/test backtest: profit 1.0 / loss 1.20
 - policy選択: 複数 validation sweep を横断集計
 - 制約: 各fold 30 trades以上、強制決済率、max drawdown、各fold adjusted pnl を明示的に制御する
 - 2024-11/2024-12 の down-regime fold を入れると、従来候補は棄却された

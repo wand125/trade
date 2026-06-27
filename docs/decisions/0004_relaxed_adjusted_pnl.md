@@ -1,7 +1,7 @@
 # 0004: 評価倍率を 1.0 / 1.25 に緩和する
 
 日付: 2026-06-28 JST
-状態: accepted, revised
+状態: superseded by 0006
 
 ## 背景
 

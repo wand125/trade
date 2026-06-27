@@ -41,11 +41,11 @@ entry quality を密に学習するための追加教師targetは実装済み。
 
 ## 次の作業
 
-1. HGB 80iter regime/purge v2 と同じtrain monthsで本番OOF predictionsを生成する。
-2. train OOF + validation OOF を使ってside/regime calibrationとmeta modelを再評価する。
-3. exit timing targetを fixed horizon、barrier time、hazard-like close probability へ拡張する。
-4. profit barrierを0/1予測ではなく確率として保存し、閾値をcalibrateする。
-5. calibration採用基準にentry数上限、fold間trade分布、regime別direction accuracyを追加する。
+1. 2025-02 のshort失敗tradeを regime/session/entry timing/exit timing で分解する。
+2. exit timing targetを fixed horizon、barrier time、hazard-like close probability へ拡張する。
+3. profit barrierを0/1予測ではなく確率として保存し、閾値をcalibrateする。
+4. calibration採用基準にentry数上限、fold間trade分布、side別/regime別direction accuracyを追加する。
+5. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
 6. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 7. 追加holdout月を用意し、2024-12/2025-02に過剰適合しない評価へ移る。
 
@@ -55,7 +55,7 @@ entry quality を密に学習するための追加教師targetは実装済み。
 - Tick を全期間取得するか、研究対象月の周辺だけ取得するか。
 - 1 か月最適化の評価月を、固定月にするかランダム抽出にするか。
 - エントリー/決済を独立モデルにするか、1 つの policy model にするか。
-- 0.9 倍/1.3 倍の損益補正に加えて、明示的なスプレッドコストを入れるか。
+- 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
 
@@ -96,6 +96,8 @@ hard regime gateを `model-policy` / `model-sweep` に追加した。`asia`、`r
 side/regime別EV calibrationを追加した。validation内OOFで各月をholdoutし、`volatility_regime,session_regime` ごとにEVを補正する。OOF validationでは強い候補が出たが、fixed testでは悪化した。offset型のtop OOF候補は 2024-12 `-185.8364`、2025-02 `-65.1476`、保守候補でも 2024-12 `-149.2616`、2025-02 `-10.7646`。raw EVの前回候補より悪く、calibrationは採用不可。次はvalidation 4ヶ月だけで補正するのではなく、train期間OOF predictionsを作ってcalibration fit月数を増やすか、exit timing target改善へ進む。
 
 train期間OOF predictions生成基盤を追加した。`trade_data.modeling oof` で、指定月をfoldごとにholdoutし、その月を学習に使っていないHGB予測を `predictions_oof.parquet` として保存できる。軽量smoke runは `experiments/20260627_222746_oof_smoke_policy/` で完了。次は HGB 80iter regime/purge v2 と同じtrain monthsに対して本番OOFを実行し、side/regime calibrationのfitデータを増やす。
+
+train期間OOFを4ヶ月holdout単位で生成し、side/regime calibrationの各validation foldへ `train OOF + 他validation月` をfitデータとして追加できるようにした。あわせて評価倍率を profit 1.0 / loss 1.20 に統一し、`trade_data.backtest` のデフォルトも 1.0 / 1.20 に更新した。shrink 0.65 calibration のvalidation top-min候補は 4fold全てプラス、min pnl `41.1354`、min trades `10` だったが、fixed testは 2024-12 `+18.8306`、2025-02 `-44.5990`。offset calibrationはvalidation平均が高いが、fixed testは 2024-12 `-63.2266`、2025-02 `-44.3740`。loss 1.20統一で数値は改善したが、NoTradeを安定して超える状態ではない。次は2025-02のshort失敗trade分解とexit timing target改善を優先する。
 
 ## 直近の実験
 
@@ -168,3 +170,4 @@ train期間OOF predictions生成基盤を追加した。`trade_data.modeling oof
 - `docs/reports/2026-06-28_regime_gate_experiment.md`
 - `docs/reports/2026-06-28_side_regime_ev_calibration.md`
 - `docs/reports/2026-06-28_train_oof_predictions_infra.md`
+- `docs/reports/2026-06-28_train_oof_calibration_loss120.md`
