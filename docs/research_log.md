@@ -787,3 +787,85 @@ test:
 - 1280は採用しない。
 - 長く回すほど内部lossとselection量は増えるが、月別validationとtest backtestは安定しない。
 - 次に長時間学習を試すなら、`learning_rate` を下げ、OOFまたは月別backtestをearly stopping指標にする必要がある。
+
+### 1.0/1.2 Target/Evaluation Alignment
+
+方針:
+
+- 教師生成とvalidation/test評価の倍率差が予測EVのずれを作っている可能性を検証する。
+- 新dataset `data/processed/datasets/xauusd_m1_p1_l1p2/` を作成し、profit 1.0 / loss 1.2 で教師を再生成した。
+- validation/test/backtestも profit 1.0 / loss 1.2 に揃えた。
+- 80iterへ戻す方針を維持しつつ、ユーザー指定により320iterも比較検証した。
+
+実験:
+
+- iter80: `experiments/20260627_203932_policy_iter80_p1_l1p2/`
+- iter320: `experiments/20260627_204140_policy_iter320_p1_l1p2/`
+- report: `docs/reports/2026-06-28_training_time_and_generalization.md`
+
+結果:
+
+- iter80は10 trades/fold条件でもvalidation eligibleなし。
+- iter320は10 trades/fold条件でvalidation eligible 31件。
+- min fold pnl優先候補:
+  - `timed_ev entry=5 side_margin=0 risk=0.1 max_wait_regret=inf min_entry_rank=0.5 require_profit_barrier=true`
+  - validation mean adjusted pnl: `+31.5473`
+  - validation min adjusted pnl: `+16.5412`
+  - min trades/fold: `38`
+  - max drawdown: `73.3766`
+- `16.5412` は4つのvalidation月のうち最悪月の月間 `total_adjusted_pnl`。1オンス前提なので概ねUSDだが、profit 1.0 / loss 1.2 を適用したadjusted値で、raw値や%ではない。
+- fixed test:
+  - 2024-12: adjusted pnl `-131.6996`, raw pnl `-102.5750`, 35 trades
+  - 2025-02: adjusted pnl `-71.2528`, raw pnl `-42.0540`, 39 trades
+- test診断sweepでは、10 trades/fold以上かつ各fold PnL 0以上のeligible候補なし。
+
+判断:
+
+- 倍率をtrain/valid/testで揃えてもtest汎化は改善しなかった。
+- 320iterはvalidationでは成立するがholdoutで崩れるため採用しない。
+- 10 trades/月条件は今後の探索で許容するが、少数tradeだけのtestプラスはedgeとして扱わない。
+- 次は倍率差ではなく、validation選択の過適合、regime差、exit timing target、expected PnL calibrationを優先する。
+
+### 長時間学習と方向性レビュー
+
+作業:
+
+- 1.0/1.2 aligned datasetで長時間学習を追加診断した。
+- same LR: `max_iter=1280`, `learning_rate=0.03`
+- low LR: `max_iter=1280`, `learning_rate=0.01`
+- 実験中にdocsを再読し、方向性レビューを作成した。
+- report: `docs/reports/2026-06-28_research_direction_review.md`
+
+Artifacts:
+
+- same LR: `experiments/20260627_205602_policy_iter1280_p1_l1p2/`
+- low LR: `experiments/20260627_210612_policy_iter1280_lr001_p1_l1p2/`
+- training report: `docs/reports/2026-06-28_training_time_and_generalization.md`
+
+結果:
+
+- same LR 1280:
+  - validation 30 trades/fold eligibleなし。
+  - validation 10 trades/fold候補は `mean pnl=15.6527`, `min pnl=1.1964` と薄い。
+  - fixed test: 2024-12 `-69.7450`, 2025-02 `-137.1102`。
+- low LR 1280:
+  - validation 30 trades/foldでeligible 2件。
+  - min fold pnl優先候補:
+    - `timed_ev entry=15 side_margin=0 risk=0 max_wait_regret=inf min_entry_rank=0 require_profit_barrier=true`
+    - validation mean adjusted pnl `+48.2348`
+    - validation min adjusted pnl `+40.8376`
+    - min trades/fold `46`
+  - fixed test: 2024-12 `-134.5306`, 2025-02 `-110.0922`。
+- test sweepを後付けで見るとプラス候補はあるが、最上位test候補はvalidationでは `min pnl=-28.2506` でeligibleではない。
+
+判断:
+
+- 低LR長時間学習はvalidationでは明確に良くなる。
+- しかしtest固定適用で崩れるため、主因は学習時間不足ではなく、validation selection過適合、regime shift、EV calibration崩れ、exit timing未解決と見る。
+- HGBの反復数探索はここでいったん打ち切る。
+- 次は以下を優先する。
+  - 2024-12/2025-02のtrade failure analyzer。
+  - train期間OOF predictions。
+  - side/regime別EV calibration。
+  - exit timing target強化。
+  - shared representationを持つ小型MLP/TCN。

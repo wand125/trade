@@ -217,3 +217,200 @@ Executable validation sweep:
 2. 30 trades/foldを満たせない候補は本採用しない。
 3. 古いデータ追加は、full targetではなく `target-set policy` から検証する。
 4. test side accuracyが上がらない限り、entry/exit policyの閾値調整だけでは解決しない。
+
+## Aligned 1.0/1.2 Target/Evaluation
+
+旧datasetは教師生成に profit 0.9 / loss 1.3 を使い、validation/test は緩和評価で profit 1.0 / loss 1.25 を使っていた。この差が、予測EVと実行評価のずれを大きくしている可能性があるため、教師生成とvalidation/testを profit 1.0 / loss 1.2 に揃えた。
+
+Dataset:
+
+- `data/processed/datasets/xauusd_m1_p1_l1p2/`
+- months: 2023-01 から 2025-02
+- summary: `data/processed/datasets/xauusd_m1_p1_l1p2/build_range_2023-01_2025-02_edge15.summary.json`
+
+1.0/1.2 datasetでは旧0.9/1.3 datasetより `stay_flat` が減り、long/short正例が増えた。これはNoTrade寄りに潰れすぎる問題を緩和する狙いには合っている。
+
+Artifacts:
+
+- iter80: `experiments/20260627_203932_policy_iter80_p1_l1p2/`
+- iter320: `experiments/20260627_204140_policy_iter320_p1_l1p2/`
+
+Training:
+
+- splitは前回と同一。
+- target set: `policy`
+- common paramsは前回のregularized HGBと同一。
+- train/validation/test/backtest multipliers: profit 1.0 / loss 1.2
+
+Model diagnostics:
+
+| run | targets | hit max_iter | min iter | max iter |
+|---|---:|---:|---:|---:|
+| iter80 | 14 | 14 | 80 | 80 |
+| iter320 | 14 | 14 | 320 | 320 |
+
+今回も全targetがmax_iterに到達した。320iterでも内部early stoppingは発火していない。
+
+Selection metric:
+
+| run | valid long r2 | valid short r2 | valid selected pnl | valid side acc | test long r2 | test short r2 | test selected pnl | test side acc |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| iter80 | -0.0393 | 0.0670 | 787,226.9478 | 0.5096 | -0.0083 | -0.0825 | 538,799.8284 | 0.4414 |
+| iter320 | -0.0026 | 0.0429 | 1,259,477.9458 | 0.5154 | 0.0012 | -0.0612 | 731,975.2148 | 0.4531 |
+
+iter320はiter80よりselection量を増やしたが、test side accuracyはまだ低い。倍率を揃えても方向汎化は十分に改善していない。
+
+Executable validation sweep:
+
+- iter80: 10 trades/fold条件でもeligibleなし。
+- iter320: 10 trades/fold条件でeligible 31件。
+
+min fold pnl優先の選択候補:
+
+| policy | entry | side margin | risk | max wait regret | min entry rank | barrier | mean pnl | min pnl | min trades | max DD | forced max |
+|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| timed_ev | 5 | 0 | 0.1 | inf | 0.5 | true | 31.5473 | 16.5412 | 38 | 73.3766 | 0.0000 |
+
+`min pnl=16.5412` は4つのvalidation月へ同一policyを適用したときの、最悪月の `total_adjusted_pnl`。1オンス前提のXAUUSDなので、単位は概ねUSD。ただしraw PnLではなく、利益を1.0倍、損失を1.2倍に補正した後の月間合計であり、割合でも1trade平均でもない。
+
+Test fixed application:
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -131.6996 | -102.5750 | 35 | 0.3714 | 0.2463 | 135.1108 | 0 |
+| 2025-02 | -71.2528 | -42.0540 | 39 | 0.5128 | 0.5933 | 103.3232 | 0 |
+
+Test診断sweep:
+
+- 2024-12のtopは `+25.6710` だが1tradeのみ。
+- 2025-02のtopは `+14.8710` だが7tradesのみ。
+- test 2ヶ月summaryでは、10 trades/fold以上かつ各fold PnL 0以上を満たすeligible候補はなし。
+
+判断:
+
+- train/valid/testを1.0/1.2に揃えることで、validationでは320iterの候補が出た。
+- しかしholdout testでは2ヶ月ともNoTradeに負けた。
+- 80iterは10 trades/foldまで緩めても候補なし。
+- 320iterはユーザー指定どおり検証したが、test崩れが大きいため採用しない。
+- `min trades=10` は探索条件として許容する。ただしtestで10 trades/月以上の候補が残らない場合は、偶然の少数tradeをedgeとして扱わない。
+- 次は倍率差よりも、validation選択そのものの過適合、月別regime差、exit timingとEV calibrationの崩れを優先して診断する。
+
+## Long Training Diagnostic on 1.0/1.2
+
+ユーザー要望により、1.0/1.2 aligned datasetで長時間学習を追加診断した。目的は採用ではなく、学習時間不足かvalidation過適合かを切り分けること。
+
+Artifacts:
+
+- same LR long run: `experiments/20260627_205602_policy_iter1280_p1_l1p2/`
+- low LR long run: `experiments/20260627_210612_policy_iter1280_lr001_p1_l1p2/`
+
+Settings:
+
+- splitは1.0/1.2の80/320比較と同一。
+- target set: `policy`
+- same LR: `max_iter=1280`, `learning_rate=0.03`
+- low LR: `max_iter=1280`, `learning_rate=0.01`
+- その他の正則化パラメータは320iterと同一。
+
+Model diagnostics:
+
+| run | targets | hit max_iter | min iter | max iter |
+|---|---:|---:|---:|---:|
+| iter80 lr0.03 | 14 | 14 | 80 | 80 |
+| iter320 lr0.03 | 14 | 14 | 320 | 320 |
+| iter1280 lr0.03 | 14 | 14 | 1280 | 1280 |
+| iter1280 lr0.01 | 14 | 14 | 1280 | 1280 |
+
+全runで全targetがmax_iterに到達した。内部early stoppingは発火していない。
+
+Model metric summary:
+
+| run | valid long r2 | valid short r2 | valid cal long r2 | valid cal short r2 | test long r2 | test short r2 | test side acc | test selected pnl |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| iter80 lr0.03 | -0.0393 | 0.0670 | 0.0768 | 0.0707 | -0.0083 | -0.0825 | 0.4414 | 538,799.8284 |
+| iter320 lr0.03 | -0.0026 | 0.0429 | 0.0670 | 0.0516 | 0.0012 | -0.0612 | 0.4531 | 731,975.2148 |
+| iter1280 lr0.03 | -0.0114 | -0.0061 | 0.0412 | 0.0270 | -0.0181 | -0.0716 | 0.4792 | 810,608.6956 |
+| iter1280 lr0.01 | -0.0002 | 0.0320 | 0.0618 | 0.0438 | 0.0007 | -0.0469 | 0.4619 | 761,472.2850 |
+
+同一LRの1280は、selection量は増えたがvalid R2とcalibrated R2が320より悪化した。低LR1280は同一LR1280より健全だが、320を明確には超えていない。test side accuracyはいずれも0.5未満で、方向を読めているとは言いにくい。
+
+### Same LR 1280
+
+Validation summary:
+
+- strict 30 trades/fold: eligibleなし
+- relaxed 10 trades/fold: eligible 1件
+
+10 trades/fold候補:
+
+| policy | entry | side margin | risk | max wait regret | min entry rank | barrier | mean pnl | min pnl | min trades | max DD | forced max |
+|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| timed_ev | 20 | 5 | 0.1 | 4 | 0.5 | true | 15.6527 | 1.1964 | 20 | 71.1210 | 0.0000 |
+
+Test fixed application:
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -69.7450 | -40.1070 | 30 | 0.4000 | 0.6078 | 74.5420 | 0 |
+| 2025-02 | -137.1102 | -95.9690 | 40 | 0.4500 | 0.4446 | 146.4156 | 0 |
+
+Test sweep診断では、10 trades/fold以上かつ各foldプラスの候補が後付けなら1件出たが、これはtestで選んだ候補であり採用不可。
+
+### Low LR 1280
+
+Validation summary:
+
+- strict 30 trades/fold: eligible 2件
+- relaxed 10 trades/fold: eligible 3件
+
+min fold pnl優先の選択候補:
+
+| policy | entry | side margin | risk | max wait regret | min entry rank | barrier | mean pnl | min pnl | min trades | max DD | forced max |
+|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| timed_ev | 15 | 0 | 0 | inf | 0 | true | 48.2348 | 40.8376 | 46 | 87.6726 | 0.0179 |
+
+このvalid候補は320の1.0/1.2候補より明確に強い。特に30 trades/fold条件でも通っている点は改善。ただしtest固定適用では崩れた。
+
+Test fixed application:
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -134.5306 | -101.4610 | 55 | 0.4000 | 0.3220 | 143.4870 | 1 |
+| 2025-02 | -110.0922 | -66.1180 | 72 | 0.5278 | 0.5827 | 130.8148 | 0 |
+
+Test sweep診断:
+
+| policy | entry | side margin | risk | max wait regret | min entry rank | barrier | mean pnl | min pnl | min trades | max DD | forced max |
+|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| timed_ev | 15 | 0 | 0.2 | 2 | 0.5 | false | 17.5052 | 11.0620 | 18 | 29.9154 | 0.0000 |
+
+このtest上位候補は、validationでは `mean pnl=2.5216`, `min pnl=-28.2506`, `min trades=10`, `eligible=false` だった。つまり、testで良い閾値はvalidationで選べない。これはモデル本体だけでなく、policy threshold selectionも分布差に過適合していることを示す。
+
+## Direction Review
+
+長時間学習中にdocsを再読し、方向性レビューを作成した。
+
+- report: `docs/reports/2026-06-28_research_direction_review.md`
+
+要点:
+
+- 研究の大枠はずれていない。
+- HGB反復数と同一validation sweepの繰り返しは袋小路になりやすい。
+- 低LR長時間学習でもtestが改善しないため、HGB反復数探索はいったん打ち切る。
+- 次は失敗trade分解、OOF標準化、side/regime別EV calibration、exit timing target、shared representationへ進む。
+
+## Updated Judgment
+
+- 長時間学習は、validationスコアを良くする効果はある。
+- しかしtestでNoTradeを超えず、2024-12/2025-02とも大きく負ける。
+- 低LR1280はvalid上は最も良いが、test固定適用では今回最悪級に崩れた。
+- したがって現状の特徴量、target、policy selectionでは「学習時間不足」が主因とは判断しない。
+- 主因は、validation policy selectionの過適合、regime shift、EV calibration崩れ、exit timing未解決と見る。
+
+次の作業:
+
+1. 2024-12/2025-02のtrade failure analyzerを作る。
+2. train期間にもOOF predictionsを作り、meta calibrationの学習量を増やす。
+3. side/regime別EV calibrationとshrinkageを追加する。
+4. exit timing targetをhazard/fixed horizon/barrier timeへ拡張する。
+5. 独立HGBではなく、shared trunkを持つ小型MLP/TCNへ進む。
