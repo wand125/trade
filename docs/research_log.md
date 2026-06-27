@@ -762,3 +762,28 @@ test:
 - validationでは改善するため、長く回すほどvalidationに適合する可能性がある。
 - 今後さらに長く回す場合は、低learning rate、OOF validation、追加test月をセットにして、validation過適合かどうかを確認する。
 - データ増量は面白いが、本流は「反復数を伸ばしても汎化するか」を厳密に見ること。
+
+### 1280 Iter 追試
+
+作業:
+
+- iter320と同じ条件で `max_iter=1280` を試した。
+- artifact: `experiments/20260627_202929_policy_iter1280_base_train/`
+
+結果:
+
+- 14 targetすべてが `max_iter=1280` に到達した。
+- valid selection pnlは 1,025,559.2831 まで増えた。
+- ただし valid R2 は long 0.0014 / short -0.0107 で、iter320より悪化。
+- test R2 は long -0.0213 / short -0.0591。
+- test side accuracyは 0.4744 でiter320より少し上がったが、実行可能backtestでは改善しなかった。
+- validation sweepでは、30 trades/foldでも10 trades/foldでもeligible候補なし。
+- 参考候補 `timed_ev entry=15 side_margin=0 risk=0.2 max_wait_regret=4 require_profit_barrier=true` のtest:
+  - 2024-12: -97.7620
+  - 2025-02: -97.0460
+
+判断:
+
+- 1280は採用しない。
+- 長く回すほど内部lossとselection量は増えるが、月別validationとtest backtestは安定しない。
+- 次に長時間学習を試すなら、`learning_rate` を下げ、OOFまたは月別backtestをearly stopping指標にする必要がある。

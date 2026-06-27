@@ -151,6 +151,66 @@ Test:
 - しかし320でtest side accuracyが改善していないため、単純に長く学習するだけでは汎化性能は改善しにくい。
 - 学習時間をさらに伸ばす場合は、validation-internal OOFや追加test月を使い、反復数増加がvalidation過適合になっていないかを必ず確認する。
 
+## 1280 Iter Follow-up
+
+`max_iter=320` でも全targetがmax_iterに到達していたため、同じ条件で `max_iter=1280` を追加確認した。
+
+Artifact:
+
+- `experiments/20260627_202929_policy_iter1280_base_train/`
+
+Settings:
+
+- train/valid/test splitはiter80/iter320と同一。
+- target set: `policy`
+- `max_iter=1280`
+- その他の正則化パラメータはiter320と同一。
+
+Model diagnostics:
+
+| run | targets | hit max_iter | min iter | max iter |
+|---|---:|---:|---:|---:|
+| iter80 | 14 | 14 | 80 | 80 |
+| iter320 | 14 | 14 | 320 | 320 |
+| iter1280 | 14 | 14 | 1280 | 1280 |
+
+1280でも全targetがmax_iterに到達し、内部early stoppingは発火しなかった。train/validation内部lossは進んでいるが、外部評価は改善しなかった。
+
+Selection metric:
+
+| run | valid long r2 | valid short r2 | valid selected pnl | valid side acc | test long r2 | test short r2 | test selected pnl | test side acc |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| iter80 | -0.0196 | 0.0640 | 401,423.6509 | 0.5401 | -0.0072 | -0.0623 | 297,549.3014 | 0.4529 |
+| iter320 | 0.0087 | 0.0386 | 787,915.4966 | 0.5157 | -0.0065 | -0.0451 | 517,566.6426 | 0.4515 |
+| iter1280 | 0.0014 | -0.0107 | 1,025,559.2831 | 0.5173 | -0.0213 | -0.0591 | 621,918.7119 | 0.4744 |
+
+1280はselection対象数とoracle-exit pnlを増やしたが、R2はiter320より悪化した。test side accuracyは少し上がったが、実行可能backtestでは改善しなかった。
+
+Executable validation sweep:
+
+- strict 30 trades/fold: eligibleなし
+- relaxed 10 trades/fold: eligibleなし
+
+最悪foldが最もましだった参考候補:
+
+| policy | entry | side margin | risk | max wait regret | min entry rank | barrier | mean pnl | min pnl | min trades | max DD | forced max |
+|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| timed_ev | 15 | 0 | 0.2 | 4 | 0 | true | 49.4420 | -9.7723 | 44 | 72.3265 | 0.0227 |
+
+この候補は1foldがマイナスのため採用不可。参考としてtestへ固定適用した。
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -97.7620 | -54.9400 | 48 | 0.5000 | 0.5434 | 112.4120 | 1 |
+| 2025-02 | -97.0460 | -45.7700 | 70 | 0.5429 | 0.6215 | 140.4965 | 0 |
+
+1280判断:
+
+- 1280でも収束しきっていないように見えるが、外部評価は320より悪い。
+- validationの対象数とoracle-exit pnlは増えるが、実行可能backtestの安定性は落ちる。
+- これは「長く回すほど良い」という状況ではなく、現状の特徴量・target・policyでは反復数増加が過適合方向に働いている可能性が高い。
+- 次に長時間学習を試すなら、`learning_rate` を下げる、OOFで選ぶ、またはvalidation損失ではなく月別backtestをearly stopping指標にする必要がある。
+
 次の方針:
 
 1. `max_iter` をさらに伸ばす場合は、同時に `learning_rate` を下げ、OOF validationで比較する。
