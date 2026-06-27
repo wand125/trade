@@ -1,6 +1,6 @@
 # Multi-Fold Policy Selection
 
-日付: 2026-06-28 JST
+日時: 2026-06-28 03:44 JST
 
 ## 目的
 

@@ -100,6 +100,8 @@ experiments/
 
 実験ごとに `docs/reports/` または `experiments/.../report.md` にレポートを書く。
 
+各レポートには、日付だけでなく時刻まで含めた `日時: YYYY-MM-DD HH:MM JST` または `- Datetime: YYYY-MM-DD HH:MM JST` を記録する。既存レポートを時刻付きへ補正する場合は、ファイル更新時刻を基準にする。
+
 テンプレート:
 
 - `docs/templates/experiment_report.md`
@@ -113,4 +115,4 @@ experiments/
 - ロング/ショートの片側に偏る。
 - 特定月だけ異常に良い。
 - gap 周辺で損失が集中する。
-- 損失補正 1.3 倍に弱い。
+- 標準損失補正やコスト変更に弱い。

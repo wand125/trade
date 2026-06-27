@@ -1,6 +1,6 @@
 # Regime, Cost Sensitivity, and Purged Split Controls
 
-日付: 2026-06-28 JST
+日時: 2026-06-28 06:55 JST
 
 ## 目的
 

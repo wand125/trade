@@ -3,7 +3,7 @@
 ## Summary
 
 - Experiment ID: `2026-06-28_baseline_backtest_2025-01`
-- Date: 2026-06-28 JST
+- Datetime: 2026-06-28 01:58 JST
 - Status: completed
 - Main result: 2025-01 の初期ベースラインは、no trade を除き全て adjusted pnl がマイナス。
 

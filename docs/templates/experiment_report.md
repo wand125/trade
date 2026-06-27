@@ -3,7 +3,7 @@
 ## Summary
 
 - Experiment ID:
-- Date:
+- Datetime:
 - Owner:
 - Status:
 - Main result:
@@ -80,4 +80,3 @@
 ## Next Actions
 
 - 
-

@@ -1,6 +1,6 @@
 # Training Time and Generalization
 
-日付: 2026-06-28 JST
+日時: 2026-06-28 06:10 JST
 
 ## 目的
 

@@ -21,7 +21,7 @@ from sklearn.metrics import (
     r2_score,
 )
 
-from trade_data.dataset import iter_months, output_stem
+from trade_data.dataset import EXIT_FIXED_HORIZON_MINUTES, iter_months, output_stem
 from trade_data.regime import REGIME_COLUMNS, REGIME_NUMERIC_COLUMNS
 
 
@@ -29,9 +29,15 @@ EV_TARGETS = [
     "long_best_adjusted_pnl",
     "short_best_adjusted_pnl",
 ]
+EXIT_FIXED_HORIZON_TARGETS = [
+    f"{side}_fixed_{minutes}m_adjusted_pnl"
+    for minutes in EXIT_FIXED_HORIZON_MINUTES
+    for side in ["long", "short"]
+]
 
 REGRESSION_TARGETS = [
     *EV_TARGETS,
+    *EXIT_FIXED_HORIZON_TARGETS,
     "side_score",
     "long_best_holding_minutes",
     "short_best_holding_minutes",
@@ -413,6 +419,27 @@ def resolve_target_names(target_set: str) -> tuple[list[str], list[str]]:
     return list(regression_targets), list(classification_targets)
 
 
+def filter_available_target_names(
+    frames: list[pd.DataFrame],
+    regression_targets: list[str],
+    classification_targets: list[str],
+) -> tuple[list[str], list[str], dict[str, list[str]]]:
+    if not frames:
+        raise ValueError("at least one frame is required")
+    available = set(frames[0].columns)
+    for frame in frames[1:]:
+        available &= set(frame.columns)
+    filtered_regression = [target for target in regression_targets if target in available]
+    filtered_classification = [target for target in classification_targets if target in available]
+    missing = {
+        "regression": [target for target in regression_targets if target not in available],
+        "classification": [target for target in classification_targets if target not in available],
+    }
+    if not filtered_regression and not filtered_classification:
+        raise ValueError("no requested targets are available in all frames")
+    return filtered_regression, filtered_classification, missing
+
+
 def maybe_sample(df: pd.DataFrame, sample_frac: float, random_seed: int) -> pd.DataFrame:
     if sample_frac >= 1.0:
         return df
@@ -516,6 +543,7 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "label",
         "long_best_adjusted_pnl",
         "short_best_adjusted_pnl",
+        *EXIT_FIXED_HORIZON_TARGETS,
         "side_score",
         "best_adjusted_pnl",
         "best_holding_minutes",
@@ -538,7 +566,7 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
     ]
     columns.extend([column for column in GENERALIZATION_FEATURE_COLUMNS if column in df.columns])
     columns.extend([column for column in REGIME_COLUMNS if column in df.columns])
-    columns = list(dict.fromkeys(columns))
+    columns = [column for column in dict.fromkeys(columns) if column in df.columns]
     output = df[columns].copy()
     for name, values in predictions.items():
         output[f"pred_{name}"] = values
@@ -782,6 +810,11 @@ def train(args: argparse.Namespace) -> int:
     )
     valid_df, _ = load_months(args.dataset_dir, valid_months, args.horizon_hours, args.min_adjusted_edge)
     test_df, _ = load_months(args.dataset_dir, test_months, args.horizon_hours, args.min_adjusted_edge)
+    regression_targets, classification_targets, missing_targets = filter_available_target_names(
+        [train_df, valid_df, test_df],
+        regression_targets,
+        classification_targets,
+    )
     train_df, valid_df, test_df, purge_stats = apply_split_purging(
         train_df,
         valid_df,
@@ -822,6 +855,7 @@ def train(args: argparse.Namespace) -> int:
         "target_set": args.target_set,
         "regression_targets": regression_targets,
         "classification_targets": classification_targets,
+        "missing_targets": missing_targets,
         "purging": purge_stats,
         "model_diagnostics": model_diagnostics(models, model_config),
     }
@@ -890,6 +924,11 @@ def oof(args: argparse.Namespace) -> int:
         months,
         args.horizon_hours,
         args.min_adjusted_edge,
+    )
+    regression_targets, classification_targets, missing_targets = filter_available_target_names(
+        [all_df],
+        regression_targets,
+        classification_targets,
     )
     fold_months = chunk_months(months, args.fold_month_count)
     run_label = args.label or f"hgb_{args.target_set}_oof_edge{args.min_adjusted_edge:g}"
@@ -965,6 +1004,7 @@ def oof(args: argparse.Namespace) -> int:
         "target_set": args.target_set,
         "regression_targets": regression_targets,
         "classification_targets": classification_targets,
+        "missing_targets": missing_targets,
         "feature_count": len(feature_columns),
         "rows": {
             "input": int(len(all_df)),

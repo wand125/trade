@@ -20,7 +20,7 @@
 
 ## 影響
 
-- `trade_data.backtest` のデフォルトを profit 1.0 / loss 1.20 に変更する。
+- `trade_data.dataset` と `trade_data.backtest` のデフォルトを profit 1.0 / loss 1.20 に変更する。
 - README、GOAL、仕様文書の標準例を 1.0 / 1.20 に更新する。
 - 過去レポートの 0.9 / 1.3 や 1.0 / 1.25 の結果は履歴として残す。
 - 今後の実験レポートでは、倍率を明記し、過去結果と比較する場合は同倍率で再評価する。

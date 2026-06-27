@@ -6,6 +6,7 @@ from trade_data.modeling import (
     apply_split_purging,
     build_sample_weights,
     chunk_months,
+    filter_available_target_names,
     fit_linear_calibrator,
     parse_csv_months,
     prediction_frame,
@@ -104,6 +105,32 @@ class ModelingTests(unittest.TestCase):
         self.assertIn("long_wait_regret", regression_targets)
         self.assertIn("short_entry_local_rank", regression_targets)
         self.assertIn("long_profit_barrier_hit", classification_targets)
+
+    def test_full_target_set_includes_fixed_exit_horizon_targets(self):
+        regression_targets, _ = resolve_target_names("full")
+
+        self.assertIn("long_fixed_60m_adjusted_pnl", regression_targets)
+        self.assertIn("short_fixed_720m_adjusted_pnl", regression_targets)
+
+    def test_filter_available_target_names_drops_missing_research_targets(self):
+        frame = pd.DataFrame(
+            {
+                "long_best_adjusted_pnl": [1.0],
+                "short_best_adjusted_pnl": [2.0],
+                "label": [1],
+            }
+        )
+
+        regression_targets, classification_targets, missing = filter_available_target_names(
+            [frame],
+            ["long_best_adjusted_pnl", "long_fixed_60m_adjusted_pnl"],
+            ["label", "long_profit_barrier_hit"],
+        )
+
+        self.assertEqual(regression_targets, ["long_best_adjusted_pnl"])
+        self.assertEqual(classification_targets, ["label"])
+        self.assertEqual(missing["regression"], ["long_fixed_60m_adjusted_pnl"])
+        self.assertEqual(missing["classification"], ["long_profit_barrier_hit"])
 
     def test_validate_disjoint_splits_rejects_overlap(self):
         with self.assertRaises(ValueError):

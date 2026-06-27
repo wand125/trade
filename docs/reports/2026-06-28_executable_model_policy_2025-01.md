@@ -3,7 +3,7 @@
 ## Summary
 
 - Experiment ID: `2026-06-28_executable_model_policy_2025-01`
-- Date: 2026-06-28 JST
+- Datetime: 2026-06-28 02:30 JST
 - Status: completed
 - Main result: HGB multi-task model predictions were connected to an executable backtest policy, but the selected policy still lost money after adjusted pnl.
 

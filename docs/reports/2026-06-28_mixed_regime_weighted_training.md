@@ -1,6 +1,6 @@
 # Mixed-Regime Weighted Training
 
-日付: 2026-06-28 JST
+日時: 2026-06-28 04:01 JST
 
 ## 目的
 

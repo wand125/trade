@@ -1,4 +1,4 @@
-# YYYY-MM-DD JST
+# YYYY-MM-DD HH:MM JST
 
 ## 作業
 
@@ -19,4 +19,3 @@
 ## 次の行動
 
 - 
-

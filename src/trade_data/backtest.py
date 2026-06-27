@@ -927,20 +927,31 @@ def read_trades_csv(path: Path) -> pd.DataFrame:
     return trades
 
 
-def read_analysis_predictions(path: Path) -> pd.DataFrame:
-    predictions = pd.read_parquet(path)
+def prepare_analysis_predictions(
+    predictions: pd.DataFrame,
+    long_column: str,
+    short_column: str,
+) -> pd.DataFrame:
     required = [
         "decision_timestamp",
         "long_best_adjusted_pnl",
         "short_best_adjusted_pnl",
-        "pred_long_best_adjusted_pnl",
-        "pred_short_best_adjusted_pnl",
+        long_column,
+        short_column,
     ]
     missing = sorted(set(required) - set(predictions.columns))
     if missing:
-        raise ValueError(f"{path} is missing columns: {', '.join(missing)}")
-    columns = [column for column in ANALYSIS_PREDICTION_COLUMNS if column in predictions.columns]
+        raise ValueError(f"predictions are missing columns: {', '.join(missing)}")
+    analysis_columns = [*ANALYSIS_PREDICTION_COLUMNS, long_column, short_column]
+    columns = list(dict.fromkeys(column for column in analysis_columns if column in predictions.columns))
     predictions = predictions[columns].copy()
+    predictions["pred_long_best_adjusted_pnl"] = predictions[long_column]
+    predictions["pred_short_best_adjusted_pnl"] = predictions[short_column]
+    return predictions
+
+
+def read_analysis_predictions(path: Path, long_column: str, short_column: str) -> pd.DataFrame:
+    predictions = prepare_analysis_predictions(pd.read_parquet(path), long_column, short_column)
     predictions["decision_timestamp"] = pd.to_datetime(predictions["decision_timestamp"], utc=True)
     duplicated = predictions["decision_timestamp"].duplicated()
     if duplicated.any():
@@ -1776,7 +1787,7 @@ def handle_model_sweep_summary(args: argparse.Namespace) -> int:
 
 def handle_analyze_trades(args: argparse.Namespace) -> int:
     trades = read_trades_csv(args.trades)
-    predictions = read_analysis_predictions(args.predictions)
+    predictions = read_analysis_predictions(args.predictions, args.long_column, args.short_column)
     enriched = enrich_trades_with_predictions(trades, predictions)
     flags = trade_failure_flags(enriched)
     summary = trade_analysis_summary(enriched)
@@ -1796,6 +1807,8 @@ def handle_analyze_trades(args: argparse.Namespace) -> int:
     metadata = {
         "trades": str(args.trades),
         "predictions": str(args.predictions),
+        "long_column": args.long_column,
+        "short_column": args.short_column,
         "label": args.label,
         "top_n": args.top_n,
         "summary": summary,
@@ -1984,6 +1997,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     analyze_trades.add_argument("--trades", type=Path, required=True)
     analyze_trades.add_argument("--predictions", type=Path, required=True)
+    analyze_trades.add_argument("--long-column", default="pred_long_best_adjusted_pnl")
+    analyze_trades.add_argument("--short-column", default="pred_short_best_adjusted_pnl")
     analyze_trades.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     analyze_trades.add_argument("--label", default="trade_analysis")
     analyze_trades.add_argument("--top-n", type=int, default=20)

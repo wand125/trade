@@ -1,6 +1,6 @@
 # Train OOF Calibration With Loss 1.20
 
-日付: 2026-06-28 JST
+日時: 2026-06-28 08:09 JST
 
 ## 目的
 
@@ -27,7 +27,7 @@ final test用calibratorは以下でfitする。
 base train OOF predictions + all validation predictions
 ```
 
-また、`trade_data.backtest` のデフォルト評価倍率を profit 1.0 / loss 1.20 に変更した。
+また、`trade_data.dataset` と `trade_data.backtest` のデフォルト倍率を profit 1.0 / loss 1.20 に変更した。
 
 ## Train OOF
 

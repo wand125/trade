@@ -1,6 +1,6 @@
 # Side/Regime EV Calibration
 
-日付: 2026-06-28 JST
+日時: 2026-06-28 07:19 JST
 
 ## 目的
 

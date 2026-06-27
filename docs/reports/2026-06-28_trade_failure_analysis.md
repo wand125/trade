@@ -1,6 +1,6 @@
 # Trade Failure Analysis
 
-日付: 2026-06-28 JST
+日時: 2026-06-28 06:25 JST
 
 ## 目的
 

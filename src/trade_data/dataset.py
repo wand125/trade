@@ -39,6 +39,7 @@ BASE_FEATURE_COLUMNS = [
 
 ROLLING_WINDOWS = [15, 60, 240]
 FFT_WINDOWS = [64, 256]
+EXIT_FIXED_HORIZON_MINUTES = [60, 240, 720]
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,10 @@ def future_best_labels(
     short_adverse = np.full(n, np.nan)
     long_profit_barrier_hit = np.full(n, np.nan)
     short_profit_barrier_hit = np.full(n, np.nan)
+    fixed_horizon_targets: dict[str, np.ndarray] = {}
+    for minutes in EXIT_FIXED_HORIZON_MINUTES:
+        fixed_horizon_targets[f"long_fixed_{minutes}m_adjusted_pnl"] = np.full(n, np.nan)
+        fixed_horizon_targets[f"short_fixed_{minutes}m_adjusted_pnl"] = np.full(n, np.nan)
     long_best_exit_idx = np.full(n, -1, dtype="int64")
     short_best_exit_idx = np.full(n, -1, dtype="int64")
     long_best_exit_price = np.full(n, np.nan)
@@ -199,6 +204,10 @@ def future_best_labels(
     entry_idx_values = np.full(n, -1, dtype="int64")
     profit_barrier_raw = min_adjusted_edge / profit_multiplier
     loss_barrier_raw = min_adjusted_edge / loss_multiplier
+    fixed_horizon_ns = {
+        minutes: int(pd.Timedelta(minutes=minutes) / pd.Timedelta(nanoseconds=1))
+        for minutes in EXIT_FIXED_HORIZON_MINUTES
+    }
 
     for decision_idx in range(n - 1):
         entry_idx = decision_idx + 1
@@ -246,6 +255,22 @@ def future_best_labels(
             profit_barrier_raw,
             loss_barrier_raw,
         )
+        for minutes in EXIT_FIXED_HORIZON_MINUTES:
+            fixed_ns = fixed_horizon_ns[minutes]
+            fixed_exit_idx = int(np.searchsorted(ts_ns, ts_ns[entry_idx] + fixed_ns, side="left"))
+            if fixed_exit_idx <= exit_end and fixed_exit_idx < n:
+                long_fixed_raw = opens[fixed_exit_idx] - entry_price
+                short_fixed_raw = entry_price - opens[fixed_exit_idx]
+                fixed_horizon_targets[f"long_fixed_{minutes}m_adjusted_pnl"][decision_idx] = adjusted_pnl(
+                    long_fixed_raw,
+                    profit_multiplier,
+                    loss_multiplier,
+                )
+                fixed_horizon_targets[f"short_fixed_{minutes}m_adjusted_pnl"][decision_idx] = adjusted_pnl(
+                    short_fixed_raw,
+                    profit_multiplier,
+                    loss_multiplier,
+                )
 
         if long_value >= short_value:
             chosen_label = 1
@@ -307,6 +332,7 @@ def future_best_labels(
             "short_max_adverse_pnl": short_adverse,
             "long_profit_barrier_hit": long_profit_barrier_hit,
             "short_profit_barrier_hit": short_profit_barrier_hit,
+            **fixed_horizon_targets,
             "long_best_exit_idx": long_best_exit_idx,
             "short_best_exit_idx": short_best_exit_idx,
             "long_best_exit_price": long_best_exit_price,
@@ -502,6 +528,11 @@ def build_month_dataset(
         output[column] = output[column].astype("float32")
 
     quantized_target_columns = add_quantized_targets(output, config.quantile_bins)
+    fixed_horizon_target_columns = [
+        f"{side}_fixed_{minutes}m_adjusted_pnl"
+        for minutes in EXIT_FIXED_HORIZON_MINUTES
+        for side in ["long", "short"]
+    ]
 
     ordered_columns = [
         "decision_timestamp",
@@ -511,6 +542,7 @@ def build_month_dataset(
         *quantized_target_columns,
         "long_profit_barrier_hit",
         "short_profit_barrier_hit",
+        *fixed_horizon_target_columns,
         "open",
         "high",
         "low",
@@ -553,6 +585,7 @@ def build_month_dataset(
         [
             "long_profit_barrier_hit",
             "short_profit_barrier_hit",
+            *fixed_horizon_target_columns,
             *timing_target_columns,
         ],
     )
@@ -731,8 +764,8 @@ def add_dataset_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--warmup-days", type=int, default=14)
     parser.add_argument("--post-days", type=int, default=4)
     parser.add_argument("--min-adjusted-edge", type=float, default=1.0)
-    parser.add_argument("--profit-multiplier", type=float, default=0.9)
-    parser.add_argument("--loss-multiplier", type=float, default=1.3)
+    parser.add_argument("--profit-multiplier", type=float, default=1.0)
+    parser.add_argument("--loss-multiplier", type=float, default=1.2)
     parser.add_argument("--quantile-bins", type=int, default=5)
     parser.add_argument(
         "--entry-timing-lookahead-minutes",

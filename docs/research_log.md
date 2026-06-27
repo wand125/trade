@@ -1071,7 +1071,7 @@ Residual offset:
 
 - `oof-group-calibration` に `--base-fit-predictions` / `--base-fit-months` を追加した。
 - 各validation holdoutのcalibration fitを `train OOF + 他validation月` に変更できるようにした。
-- `trade_data.backtest` のデフォルト評価倍率を profit 1.0 / loss 1.20 に変更した。
+- `trade_data.dataset` と `trade_data.backtest` のデフォルト倍率を profit 1.0 / loss 1.20 に変更した。
 - ADR `docs/decisions/0006_loss_multiplier_120_standard.md` を追加した。
 - report: `docs/reports/2026-06-28_train_oof_calibration_loss120.md`
 
@@ -1096,3 +1096,27 @@ Residual offset:
 - train OOFをcalibration fitに足す方向は、entry過多の抑制には効いた。
 - shrink065は2024-12をプラス化したが、2025-02では少数のshort失敗が損失を支配する。
 - 次は2025-02 short失敗tradeのregime/session分解と、exit timing targetの改善を優先する。
+
+### 2026-06-28 08:07 JST Calibrated Trade Failure And Exit Targets
+
+作業:
+
+- `analyze-trades` に `--long-column` / `--short-column` を追加し、calibrated EV列を指定してtrade failure分析できるようにした。
+- 既存レポートに日付だけでなく時刻を入れる運用へ変更した。
+- 既存 `docs/reports/*.md` はファイル更新時刻を基準に時刻付きへ補正した。
+- `future_best_labels` に固定保有 60/240/720 分のlong/short adjusted pnl targetを追加した。
+- `modeling` は古いdatasetにも対応できるよう、存在しない研究用targetを自動的に落とし、missing targetsをmetricsへ記録するようにした。
+- report: `docs/reports/2026-06-28_calibrated_trade_failure_exit_targets.md`
+
+結果:
+
+- calibrated列で再分析した shrink065 top-min は、2024-12 `+18.8306`、2025-02 `-44.5990`。
+- 2025-02は 12 trades、direction error rate `0.7500`、predicted side error rate `0.7500`、EV overestimate vs realized mean `20.0388`。
+- 2025-02の実績best sideがshortだった8 tradesは全てlongで入り、adjusted pnl `-30.7830`。
+- 唯一のshortは `2025-02-10 04:32 UTC` の `asia/up/low_vol` で、adjusted pnl `-39.0000`。
+
+判断:
+
+- 問題は単純な「shortが多すぎる」ではなく、calibrated EVの方向選択が未知月で壊れていること。
+- 全tradeでexit regretが正で、勝ちtradeも含めて手放し方に改善余地がある。
+- 固定horizon targetはまずfull target setの研究用targetとして追加し、policy target setにはまだ入れない。

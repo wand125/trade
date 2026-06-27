@@ -10,6 +10,7 @@ from trade_data.backtest import (
     enrich_trades_with_predictions,
     model_signal_from_predictions,
     normalize_sweep_metrics,
+    prepare_analysis_predictions,
     run_backtest,
     summarize_trades,
     summarize_sweep_frames,
@@ -435,6 +436,29 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(set(grouped["direction"]), {"long", "short"})
         regime_grouped = trade_group_summary(enriched, "trend_regime")
         self.assertEqual(set(regime_grouped["trend_regime"]), {"up", "down"})
+
+    def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
+        timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "long_best_adjusted_pnl": [1.0],
+                "short_best_adjusted_pnl": [2.0],
+                "pred_long_best_adjusted_pnl": [10.0],
+                "pred_short_best_adjusted_pnl": [20.0],
+                "pred_regime_calibrated_long_best_adjusted_pnl": [30.0],
+                "pred_regime_calibrated_short_best_adjusted_pnl": [40.0],
+            }
+        )
+
+        prepared = prepare_analysis_predictions(
+            predictions,
+            "pred_regime_calibrated_long_best_adjusted_pnl",
+            "pred_regime_calibrated_short_best_adjusted_pnl",
+        )
+
+        self.assertEqual(prepared["pred_long_best_adjusted_pnl"].tolist(), [30.0])
+        self.assertEqual(prepared["pred_short_best_adjusted_pnl"].tolist(), [40.0])
 
 
 if __name__ == "__main__":
