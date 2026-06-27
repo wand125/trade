@@ -452,6 +452,62 @@ model:
 - 次は `model-sweep-summary` に方向別P/L、long/short exposure、regime別評価を入れる。
 - モデル側では regime feature、volatility/trend classifier、side-specific calibration を検討する。
 
+### Mixed-Regime Weighted Training
+
+問題意識:
+
+- testで過学習が判明しているため、現時点の学習品質は高くない。
+- 一部の連続した数か月だけでtrain/validを作ると、相場局面に依存したモデルになりやすい。
+- 学習データ自体に、上昇・下落・レンジを混ぜる必要がある。
+
+実装:
+
+- `src/trade_data/modeling.py` に `--train-months`, `--valid-months`, `--test-months` を追加。
+- 非連続の月リストでsplitを作れるようにした。
+- `--sample-weighting none|month|label|month_label` を追加。
+- `month_label` は各 `dataset_month × label` セルの総重みを揃える。
+
+実験:
+
+- report: `docs/reports/2026-06-28_mixed_regime_weighted_training.md`
+- model: `experiments/20260627_185200_hgb_multitask_edge15/`
+- train: 2023-01..2023-12, 2024-01..2024-06, 2024-08, 2024-10
+- valid: 2024-07, 2024-09, 2024-11, 2025-01
+- test: 2024-12, 2025-02
+- sample weighting: `month_label`
+- target clip quantile: 0.99
+- max leaf nodes: 15
+- min samples leaf: 100
+- l2: 0.2
+
+validation:
+
+- strict summary artifact: `data/reports/backtests/20260627_185959_model_sweep_summary/`
+- relaxed summary artifact: `data/reports/backtests/20260627_190009_model_sweep_summary/`
+- strict constraints では eligible candidate なし。
+- relaxed constraints では `timed_ev`, entry 10, side margin 5, risk penalty 0.4 が選ばれた。
+- validation mean adjusted pnl: +146.0508
+- validation min adjusted pnl: +73.0053
+- max drawdown: 124.0158
+- max forced exit rate: 0.0213
+
+test:
+
+- 2024-12 artifact: `data/reports/backtests/20260627_190023_model_timed_ev_2024-12/`
+- 2024-12 adjusted pnl: -183.5370
+- 2024-12 long adjusted pnl: -128.3435
+- 2024-12 short adjusted pnl: -55.1935
+- 2025-02 artifact: `data/reports/backtests/20260627_190023_model_timed_ev_2025-02/`
+- 2025-02 adjusted pnl: +54.9137
+
+判断:
+
+- 学習データ混合と `month_label` weighting は、validation上の下落月では改善した。
+- しかし 2024-12 test には汎化せず、過学習問題は解決していない。
+- 2025-02 は改善したため、方向性に一部効果はある。
+- 次は閾値調整ではなく、教師targetと特徴量の改善が必要。
+- 特に oracle best exit target だけでは、実行可能なentry/exit timingを学習しきれていない可能性が高い。
+
 ### 評価倍率の緩和
 
 会話上の判断:

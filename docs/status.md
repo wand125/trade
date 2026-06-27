@@ -62,6 +62,8 @@
 
 short/down-regime 確認として、train 2023-01..2024-10、valid 2024-11、test 2024-12 のfoldを追加した。4fold strict summary では eligible candidate が消え、従来候補 `timed_ev`, entry 15, side margin 5, risk 0 は validation min pnl `-21.0065` まで悪化した。2024-12 test では adjusted pnl `-175.6668`、max drawdown `206.9538`、long adjusted pnl `-110.5037`、short adjusted pnl `-65.1630`。short signal は多かったため、問題は単純な long bias ではなく、下落/レンジ局面での entry/exit timing と EV calibration の崩れ。
 
+学習品質改善として、非連続月指定と `month_label` sample weighting を実装した。混合regime train、valid 2024-07/2024-09/2024-11/2025-01、test 2024-12/2025-02 で実験したところ、validationの下落月は改善したが、2024-12 test は adjusted pnl `-183.5370` と崩れた。一方で 2025-02 test は `+54.9137`。学習データ混合とweightingだけでは過学習問題は解決しておらず、次は教師targetとregime featureを改善する。
+
 ## 直近の実験
 
 - `docs/reports/2026-06-28_baseline_backtest_2025-01.md`
@@ -85,3 +87,8 @@ short/down-regime 確認として、train 2023-01..2024-10、valid 2024-11、tes
 - `data/reports/backtests/20260627_183932_model_sweep_2024-11/`
 - `data/reports/backtests/20260627_184136_model_sweep_summary/`
 - `data/reports/backtests/20260627_184333_model_timed_ev_2024-12/`
+- `docs/reports/2026-06-28_mixed_regime_weighted_training.md`
+- `experiments/20260627_185200_hgb_multitask_edge15/`
+- `data/reports/backtests/20260627_190009_model_sweep_summary/`
+- `data/reports/backtests/20260627_190023_model_timed_ev_2024-12/`
+- `data/reports/backtests/20260627_190023_model_timed_ev_2025-02/`

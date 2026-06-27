@@ -148,9 +148,23 @@ short_utility > long_utility なら short
 
 - train target: 旧倍率 0.9 / 1.3
 - validation/test backtest: 新倍率 1.0 / 1.25
-- policy選択: 2024-07 と 2025-01 の validation sweep を横断集計
-- 制約: 各fold 30 trades以上、強制決済率 0、max drawdown 100以下、各fold adjusted pnl 0以上
-- 暫定候補: `timed_ev`, entry threshold 15, side margin 5, risk penalty 0
+- policy選択: 複数 validation sweep を横断集計
+- 制約: 各fold 30 trades以上、強制決済率、max drawdown、各fold adjusted pnl を明示的に制御する
+- 2024-11/2024-12 の down-regime fold を入れると、従来候補は棄却された
+
+学習品質改善の優先順位:
+
+1. 連続期間だけでなく、上昇・下落・レンジ月を混ぜた train split を使う。
+2. `month_label` sample weighting で、特定月・多数派ラベルが損失を支配しないようにする。
+3. 複数 validation 月で calibration と policy selection を行う。
+4. それでも test が崩れる場合は、閾値ではなく教師 target と特徴量を変える。
+
+次に改善する target / feature:
+
+- fixed horizon return / barrier hit probability を追加し、oracle best exit だけに依存しない。
+- long/short 別、regime 別の calibration を追加する。
+- 直近数日トレンド、ボラティリティ、ATR percentile、MA乖離、drawdown などの regime feature を追加する。
+- exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。
 
 深層学習:
 

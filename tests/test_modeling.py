@@ -3,9 +3,13 @@ import unittest
 from trade_data.dataset import iter_months
 from trade_data.modeling import (
     add_calibrated_ev_columns,
+    build_sample_weights,
     fit_linear_calibrator,
+    parse_csv_months,
     regression_training_values,
+    resolve_split_months,
     selection_metrics,
+    validate_disjoint_splits,
 )
 
 import pandas as pd
@@ -69,6 +73,33 @@ class ModelingTests(unittest.TestCase):
         values = regression_training_values(pd.Series([0.0, 1.0, 2.0]), 1.0)
 
         self.assertEqual(values.tolist(), [0.0, 1.0, 2.0])
+
+    def test_parse_csv_months(self):
+        self.assertEqual(parse_csv_months("2024-01,2024-03"), ["2024-01", "2024-03"])
+
+    def test_resolve_split_months_accepts_explicit_non_contiguous_months(self):
+        months = resolve_split_months("train", "2024-01,2024-03", None, None)
+
+        self.assertEqual(months, ["2024-01", "2024-03"])
+
+    def test_validate_disjoint_splits_rejects_overlap(self):
+        with self.assertRaises(ValueError):
+            validate_disjoint_splits({"train": ["2024-01"], "valid": ["2024-01"], "test": ["2024-02"]})
+
+    def test_month_label_sample_weighting_balances_cells(self):
+        df = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01", "2024-01", "2024-01", "2024-02", "2024-02"],
+                "label": [1, 1, -1, 1, -1],
+            }
+        )
+
+        weights = pd.Series(build_sample_weights(df, "month_label"))
+        weighted = df.assign(weight=weights).groupby(["dataset_month", "label"])["weight"].sum()
+
+        self.assertAlmostEqual(weighted.loc[("2024-01", 1)], weighted.loc[("2024-01", -1)])
+        self.assertAlmostEqual(weighted.loc[("2024-01", -1)], weighted.loc[("2024-02", 1)])
+        self.assertAlmostEqual(float(weights.mean()), 1.0)
 
 
 if __name__ == "__main__":

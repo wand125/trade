@@ -50,12 +50,15 @@ CLASSIFICATION_TARGETS = [
 
 @dataclass(frozen=True)
 class SplitConfig:
-    train_start: str
-    train_end: str
-    valid_start: str
-    valid_end: str
-    test_start: str
-    test_end: str
+    train_start: str | None
+    train_end: str | None
+    valid_start: str | None
+    valid_end: str | None
+    test_start: str | None
+    test_end: str | None
+    train_months: list[str]
+    valid_months: list[str]
+    test_months: list[str]
     horizon_hours: float
     min_adjusted_edge: float
 
@@ -71,6 +74,7 @@ class ModelConfig:
     sample_frac: float
     entry_threshold: float
     target_clip_quantile: float
+    sample_weighting: str
 
 
 @dataclass(frozen=True)
@@ -117,6 +121,81 @@ def load_months(
         frame["dataset_month"] = month
         frames.append(frame)
     return pd.concat(frames, ignore_index=True), feature_columns
+
+
+def parse_csv_months(value: str) -> list[str]:
+    months = [part.strip() for part in value.split(",") if part.strip()]
+    if not months:
+        raise argparse.ArgumentTypeError("at least one month is required")
+    for month in months:
+        try:
+            pd.Timestamp(f"{month}-01")
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("months must be in YYYY-MM format") from exc
+        if pd.Timestamp(f"{month}-01").strftime("%Y-%m") != month:
+            raise argparse.ArgumentTypeError("months must be in YYYY-MM format")
+    return months
+
+
+def resolve_split_months(
+    split_name: str,
+    explicit_months: str | None,
+    start_month: str | None,
+    end_month: str | None,
+) -> list[str]:
+    if explicit_months:
+        return parse_csv_months(explicit_months)
+    if start_month and end_month:
+        return iter_months(start_month, end_month)
+    raise ValueError(f"{split_name} requires either --{split_name}-months or --{split_name}-start/--{split_name}-end")
+
+
+def validate_disjoint_splits(splits: dict[str, list[str]]) -> None:
+    seen: dict[str, str] = {}
+    for split_name, months in splits.items():
+        duplicate_months = sorted({month for month in months if months.count(month) > 1})
+        if duplicate_months:
+            raise ValueError(f"{split_name} has duplicate months: {', '.join(duplicate_months)}")
+        for month in months:
+            if month in seen:
+                raise ValueError(f"month {month} appears in both {seen[month]} and {split_name}")
+            seen[month] = split_name
+
+
+def split_months_from_args(args: argparse.Namespace) -> tuple[list[str], list[str], list[str]]:
+    train_months = resolve_split_months("train", args.train_months, args.train_start, args.train_end)
+    valid_months = resolve_split_months("valid", args.valid_months, args.valid_start, args.valid_end)
+    test_months = resolve_split_months("test", args.test_months, args.test_start, args.test_end)
+    validate_disjoint_splits({"train": train_months, "valid": valid_months, "test": test_months})
+    return train_months, valid_months, test_months
+
+
+def build_sample_weights(df: pd.DataFrame, weighting: str) -> np.ndarray | None:
+    if weighting == "none":
+        return None
+    weights = pd.Series(1.0, index=df.index, dtype="float64")
+    if weighting == "month":
+        month_counts = df["dataset_month"].value_counts()
+        weights *= df["dataset_month"].map(1.0 / month_counts)
+    elif weighting == "label":
+        label_counts = df["label"].value_counts()
+        weights *= df["label"].map(1.0 / label_counts)
+    elif weighting == "month_label":
+        group_counts = df.groupby(["dataset_month", "label"])["label"].transform("size")
+        weights *= 1.0 / group_counts
+    elif weighting != "none":
+        raise ValueError(f"unknown sample weighting: {weighting}")
+    weights = weights / weights.mean()
+    return weights.to_numpy(dtype="float64")
+
+
+def split_summary(df: pd.DataFrame) -> dict[str, object]:
+    label_counts = df["label"].value_counts().sort_index()
+    month_counts = df["dataset_month"].value_counts().sort_index()
+    return {
+        "label_counts": {str(int(label)): int(count) for label, count in label_counts.items()},
+        "month_rows": {str(month): int(count) for month, count in month_counts.items()},
+    }
 
 
 def maybe_sample(df: pd.DataFrame, sample_frac: float, random_seed: int) -> pd.DataFrame:
@@ -314,6 +393,7 @@ def make_run_dir(root: Path, label: str) -> Path:
 
 
 def train(args: argparse.Namespace) -> int:
+    train_months, valid_months, test_months = split_months_from_args(args)
     split = SplitConfig(
         train_start=args.train_start,
         train_end=args.train_end,
@@ -321,6 +401,9 @@ def train(args: argparse.Namespace) -> int:
         valid_end=args.valid_end,
         test_start=args.test_start,
         test_end=args.test_end,
+        train_months=train_months,
+        valid_months=valid_months,
+        test_months=test_months,
         horizon_hours=args.horizon_hours,
         min_adjusted_edge=args.min_adjusted_edge,
     )
@@ -334,10 +417,8 @@ def train(args: argparse.Namespace) -> int:
         entry_threshold=args.entry_threshold,
         min_samples_leaf=args.min_samples_leaf,
         target_clip_quantile=args.target_clip_quantile,
+        sample_weighting=args.sample_weighting,
     )
-    train_months = iter_months(args.train_start, args.train_end)
-    valid_months = iter_months(args.valid_start, args.valid_end)
-    test_months = iter_months(args.test_start, args.test_end)
 
     train_df, feature_columns = load_months(
         args.dataset_dir,
@@ -348,18 +429,23 @@ def train(args: argparse.Namespace) -> int:
     valid_df, _ = load_months(args.dataset_dir, valid_months, args.horizon_hours, args.min_adjusted_edge)
     test_df, _ = load_months(args.dataset_dir, test_months, args.horizon_hours, args.min_adjusted_edge)
     train_df = maybe_sample(train_df, args.sample_frac, args.random_seed)
+    sample_weight = build_sample_weights(train_df, args.sample_weighting)
 
     x_train = as_matrix(train_df, feature_columns)
     models: dict[str, object] = {}
     for target in REGRESSION_TARGETS:
         print(f"train regressor: {target}")
         model = train_regressor(model_config)
-        model.fit(x_train, regression_training_values(train_df[target], args.target_clip_quantile))
+        model.fit(
+            x_train,
+            regression_training_values(train_df[target], args.target_clip_quantile),
+            sample_weight=sample_weight,
+        )
         models[target] = model
     for target in CLASSIFICATION_TARGETS:
         print(f"train classifier: {target}")
         model = train_classifier(model_config)
-        model.fit(x_train, train_df[target].astype(int).to_numpy())
+        model.fit(x_train, train_df[target].astype(int).to_numpy(), sample_weight=sample_weight)
         models[target] = model
 
     metrics: dict[str, object] = {
@@ -369,6 +455,11 @@ def train(args: argparse.Namespace) -> int:
             "train": int(len(train_df)),
             "valid": int(len(valid_df)),
             "test": int(len(test_df)),
+        },
+        "split_summary": {
+            "train": split_summary(train_df),
+            "valid": split_summary(valid_df),
+            "test": split_summary(test_df),
         },
         "months": {
             "train": train_months,
@@ -479,12 +570,15 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser = subparsers.add_parser("train", help="train lightweight multi-task models")
     train_parser.add_argument("--dataset-dir", type=Path, default=Path("data/processed/datasets/xauusd_m1"))
     train_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
-    train_parser.add_argument("--train-start", required=True)
-    train_parser.add_argument("--train-end", required=True)
-    train_parser.add_argument("--valid-start", required=True)
-    train_parser.add_argument("--valid-end", required=True)
-    train_parser.add_argument("--test-start", required=True)
-    train_parser.add_argument("--test-end", required=True)
+    train_parser.add_argument("--train-start")
+    train_parser.add_argument("--train-end")
+    train_parser.add_argument("--valid-start")
+    train_parser.add_argument("--valid-end")
+    train_parser.add_argument("--test-start")
+    train_parser.add_argument("--test-end")
+    train_parser.add_argument("--train-months", help="comma-separated train months in YYYY-MM format")
+    train_parser.add_argument("--valid-months", help="comma-separated validation months in YYYY-MM format")
+    train_parser.add_argument("--test-months", help="comma-separated test months in YYYY-MM format")
     train_parser.add_argument("--horizon-hours", type=float, default=24.0)
     train_parser.add_argument("--min-adjusted-edge", type=float, default=15.0)
     train_parser.add_argument("--max-iter", type=int, default=80)
@@ -496,6 +590,12 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--sample-frac", type=float, default=1.0)
     train_parser.add_argument("--entry-threshold", type=float, default=15.0)
     train_parser.add_argument("--target-clip-quantile", type=float, default=1.0)
+    train_parser.add_argument(
+        "--sample-weighting",
+        choices=["none", "month", "label", "month_label"],
+        default="none",
+        help="training sample weighting scheme",
+    )
     train_parser.set_defaults(func=train)
     return parser
 

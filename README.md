@@ -135,6 +135,17 @@ python -m trade_data.modeling train \
   --entry-threshold 15
 ```
 
+Train on explicit, non-contiguous months and rebalance by month/label cells:
+
+```bash
+python -m trade_data.modeling train \
+  --train-months 2023-01,2023-02,2023-03,2023-04 \
+  --valid-months 2024-07,2024-09,2024-11 \
+  --test-months 2024-12,2025-02 \
+  --min-adjusted-edge 15 \
+  --sample-weighting month_label
+```
+
 Artifacts are written under:
 
 ```text
