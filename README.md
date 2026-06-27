@@ -166,6 +166,15 @@ Artifacts are written under:
 experiments/
 ```
 
+Fit a second-stage meta EV model from saved prediction frames:
+
+```bash
+python -m trade_data.meta_model fit \
+  --train-predictions experiments/20260627_192112_hgb_multitask_edge15/predictions_valid.parquet \
+  --apply-predictions experiments/20260627_192112_hgb_multitask_edge15/predictions_test.parquet \
+  --label meta_ev_dense_entry_quality
+```
+
 ## Backtest Saved Model Predictions
 
 Run an executable policy from saved model predictions:

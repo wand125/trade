@@ -652,9 +652,15 @@ def json_default(value: object) -> str:
 
 def make_run_dir(root: Path, label: str) -> Path:
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    path = root / f"{timestamp}_{label}"
-    path.mkdir(parents=True, exist_ok=False)
-    return path
+    for index in range(100):
+        suffix = "" if index == 0 else f"_{index}"
+        path = root / f"{timestamp}_{label}{suffix}"
+        try:
+            path.mkdir(parents=True, exist_ok=False)
+            return path
+        except FileExistsError:
+            continue
+    raise FileExistsError(f"could not create unique run directory for {label}")
 
 
 def write_result(

@@ -39,8 +39,8 @@ entry quality を密に学習するための追加教師targetは実装済み。
 
 ## 次の作業
 
-1. 予測済みtargetを入力にした二段階meta modelを作る。
-2. meta model を validation月でcalibrateし、test月へ固定適用する。
+1. meta fit 月と policy selection 月を分ける validation内walk-forwardを作る。
+2. regime featureをmeta model入力へ追加する。
 3. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 4. `timed_ev` の exit timing を、best holding minutes 予測だけでなく exit probability / trailing logic と比較する。
 5. direction/regime別 calibration を追加する。
@@ -69,6 +69,8 @@ short/down-regime 確認として、train 2023-01..2024-10、valid 2024-11、tes
 entry timing を `long / short / stay_flat` に潰さず、`profit_barrier_hit`, `wait_regret`, `entry_local_rank`, `entry_urgency` に分解する方針を採用した。これは entry 正例の少なさを補い、1つのdecision rowから複数の教師信号を得るための変更。コード実装と単体テストは完了しており、次は旧倍率datasetの再生成と新target込みの学習。
 
 dense entry quality target込みでHGBを再学習し、quality filter付きpolicyを追加した。validationでは `timed_ev entry=5 side_margin=5 risk=0.1 min_entry_rank=0.5` が4fold eligible になったが、testでは 2024-12 `-135.9573`、2025-02 `-101.0583` と no_trade に負けた。強く絞る候補は2024-12を `-9.5233` まで抑えたが、取引数が少なくedgeとはみなせない。独立HGBでは追加targetがEV予測を直接改善しないため、次は二段階meta modelまたはshared representationの深層学習に進む。
+
+二段階meta EV modelを追加した。validation predictionsでfitするとvalidation上のR2は long `0.1837` / short `0.1980` まで上がるが、test適用では long `-0.0652` / short `-0.1921` と悪化。標準quality候補では 2025-02 は `+23.7068` へ戻る一方、2024-12 は `-240.5445` と大きく崩れた。meta modelも同じvalidationでfitと選択を行うと過学習するため、次はvalidation内walk-forwardでfit月と選択月を分ける。
 
 ## 直近の実験
 
@@ -103,3 +105,6 @@ dense entry quality target込みでHGBを再学習し、quality filter付きpoli
 - `data/reports/backtests/20260627_192904_model_sweep_summary/`
 - `data/reports/backtests/20260627_192921_model_timed_ev_2024-12/`
 - `data/reports/backtests/20260627_192921_model_timed_ev_2025-02/`
+- `experiments/20260627_193559_meta_ev_dense_entry_quality/`
+- `data/reports/backtests/20260627_193642_model_timed_ev_2024-12/`
+- `data/reports/backtests/20260627_193655_model_timed_ev_2025-02/`

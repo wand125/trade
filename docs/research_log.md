@@ -622,3 +622,34 @@ test:
 - entry quality filter は露出削減と損失抑制には効く。
 - しかし no_trade を超えるedgeはまだ出ていない。
 - 次は、予測済みtargetを入力にした二段階meta model、またはshared representationの小型深層学習へ進む。
+
+### 二段階 Meta EV Model
+
+作業:
+
+- `src/trade_data/meta_model.py` を追加。
+- validation predictions を long/short の side-aware examples に展開し、base modelの予測済みtargetから side別 adjusted pnl を再推定するHGBを実装。
+- `trade-meta` CLIを追加。
+
+実験:
+
+- meta artifact: `experiments/20260627_193559_meta_ev_dense_entry_quality/`
+- train predictions: `experiments/20260627_192112_hgb_multitask_edge15/predictions_valid.parquet`
+- apply predictions: `experiments/20260627_192112_hgb_multitask_edge15/predictions_test.parquet`
+
+結果:
+
+- validation-fit R2: long 0.1837 / short 0.1980
+- test-apply R2: long -0.0652 / short -0.1921
+- meta EV + standard quality candidate:
+  - 2024-12: -240.5445
+  - 2025-02: +23.7068
+- meta EV + stronger filter:
+  - 2024-12: -114.5178
+  - 2025-02: -71.8913
+
+判断:
+
+- validationにfitしたmeta modelは、testでは再過学習している。
+- 2025-02は一部改善するが、2024-12で崩れるため採用しない。
+- 次は meta fit 月と policy selection 月を分ける。validation内walk-forwardでmeta modelを評価する。

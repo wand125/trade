@@ -189,6 +189,7 @@ short_utility > long_utility なら short
 - 直近数日トレンド、ボラティリティ、ATR percentile、MA乖離、drawdown などの regime feature を追加する。
 - exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。
 - HGBの予測済みtargetを入力にした二段階meta modelを作り、executable trade outcomeをvalidationでcalibrateする。
+- meta model は同じvalidation月でfitとpolicy selectionをしない。validation内walk-forwardで、meta fit月、policy selection月、test月を分ける。
 
 深層学習:
 
