@@ -313,6 +313,70 @@ summary条件:
 - forced exit rate 0 を制約に入れると、exit timing が壊れている候補を避けやすい。
 - 次は fold を増やし、`timed_ev` の保持時間予測だけでなく exit probability / trailing logic を比較する。
 
+### 追加 Walk-forward Fold
+
+目的:
+
+- 2foldだけではpolicy selectionが偶然安定して見えている可能性がある。
+- 2024-07 と 2025-01 の間に 2024-09 validation fold を追加し、同じ候補が残るか確認する。
+
+split:
+
+- train: 2023-01 から 2024-08
+- valid: 2024-09
+- test: 2024-10
+
+model:
+
+- artifacts: `experiments/20260627_183038_hgb_multitask_edge15/`
+- model type: HistGradientBoosting multi-task
+- train target: 旧倍率 0.9 / 1.3
+- validation/test backtest: 新倍率 1.0 / 1.25
+
+2024-09 valid sweep:
+
+- artifacts: `data/reports/backtests/20260627_183050_model_sweep_2024-09/`
+- 単月上位は risk付き `stateful_ev` だったが、強制決済を含む。
+- forced exit rate 0 の候補では `timed_ev` が有力。
+
+3fold summary:
+
+- artifacts: `data/reports/backtests/20260627_183241_model_sweep_summary/`
+- folds: 2024-07, 2024-09, 2025-01
+- constraints: min trades 30, max forced exit rate 0, max drawdown 100, min adjusted pnl per fold 0
+- selected candidate: `timed_ev`, entry threshold 15, exit threshold 0, side margin 5, risk penalty 0
+- validation mean adjusted pnl: 126.3996
+- validation min adjusted pnl: 111.2060
+- mean trades: 43.3333
+- max drawdown: 66.4905
+- forced exits: 0
+
+2024-10 test:
+
+- artifacts: `data/reports/backtests/20260627_183253_model_timed_ev_2024-10/`
+- adjusted pnl: +48.9555
+- raw pnl: +99.6620
+- trades: 43
+- win rate: 0.6047
+- profit factor: 1.1931
+- max drawdown: 77.1468
+- forced exits: 0
+
+2024-10 baseline:
+
+- random: +43.9895
+- no_trade: 0.0000
+- breakout: -206.6695
+- rsi_reversal: -242.5953
+- ma_cross: -397.3735
+
+判断:
+
+- 3foldでも標準候補は変わらなかった。
+- 2024-10 test では no_trade と random を上回った。
+- ただし signal は long 側に偏っており、上昇局面依存の疑いが残る。
+- 次は short 優勢またはレンジ相場を含むfoldを追加し、direction bias を評価する。
+
 ### 評価倍率の緩和
 
 会話上の判断:

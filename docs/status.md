@@ -54,9 +54,11 @@
 
 ## 直近の推奨作業
 
-旧倍率 target で学習し、新倍率 validation/test で評価する流れに更新した。2024-07 と 2025-01 の validation sweep を横断集計し、各fold 30 trades以上、強制決済率 0、max drawdown 100以下、各fold adjusted pnl 0以上の条件で `timed_ev`, entry threshold 15, side margin 5, risk penalty 0 を暫定候補にした。
+旧倍率 target で学習し、新倍率 validation/test で評価する流れに更新した。2024-07、2024-09、2025-01 の validation sweep を横断集計し、各fold 30 trades以上、強制決済率 0、max drawdown 100以下、各fold adjusted pnl 0以上の条件で `timed_ev`, entry threshold 15, side margin 5, risk penalty 0 を暫定候補にした。
 
 この候補を 2025-02 test に固定適用すると adjusted pnl `+23.7253`、raw pnl `+78.7070`、42 trades、profit factor `1.0863`、max drawdown `112.5325`、forced exits 0 だった。no_trade `0.0` と random `-14.0078` は上回ったが、drawdown 制約はtestでは 100 を少し超えたため、まだ安定モデルとはみなさない。
+
+同じ候補を追加foldの 2024-10 test に固定適用すると adjusted pnl `+48.9555`、raw pnl `+99.6620`、43 trades、profit factor `1.1931`、max drawdown `77.1468`、forced exits 0 だった。2024-10 の no_trade `0.0` と random `+43.9895` を上回った。ただし signal は long 側に偏ったため、short 優勢相場での確認が必要。
 
 ## 直近の実験
 
@@ -73,3 +75,7 @@
 - `data/reports/backtests/20260627_180029_model_sweep_2025-01/`
 - `data/reports/backtests/20260627_180908_model_sweep_summary/`
 - `data/reports/backtests/20260627_180701_model_timed_ev_2025-02/`
+- `experiments/20260627_183038_hgb_multitask_edge15/`
+- `data/reports/backtests/20260627_183050_model_sweep_2024-09/`
+- `data/reports/backtests/20260627_183241_model_sweep_summary/`
+- `data/reports/backtests/20260627_183253_model_timed_ev_2024-10/`
