@@ -12,6 +12,8 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
+entry quality を密に学習するための追加教師targetは実装済み。単体テストと `/tmp` での3か月スモーク学習は完了。主datasetの再生成が必要。
+
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
 モデル予測を使う実行可能 backtest policy は作成済み。
@@ -37,12 +39,12 @@
 
 ## 次の作業
 
-1. walk-forward fold をさらに増やし、`model-sweep-summary` の選択が月をまたいで崩れないか確認する。
-2. `timed_ev` の exit timing を、best holding minutes 予測だけでなく exit probability / trailing logic と比較する。
-3. モデルが出す expected pnl の calibration を月別に確認する。
-4. 小型 MLP / TCN / CNN+GRU の最初の深層学習実験を作る。
-5. 複数月にまたがるベースライン比較を拡張する。
-6. test 月には触らず、validation fold の制約付き集計だけで entry threshold とリスク補正を調整する。
+1. 新schemaで旧倍率datasetを再生成する。
+2. dense entry quality target込みで mixed-regime HGB を再学習する。
+3. validation foldで calibrated EV と policy threshold を再選択する。
+4. 2024-12 test の失敗が改善するか確認する。
+5. `timed_ev` の exit timing を、best holding minutes 予測だけでなく exit probability / trailing logic と比較する。
+6. 小型 MLP / TCN / CNN+GRU の最初の深層学習実験を作る。
 
 ## 未決定事項
 
@@ -63,6 +65,8 @@
 short/down-regime 確認として、train 2023-01..2024-10、valid 2024-11、test 2024-12 のfoldを追加した。4fold strict summary では eligible candidate が消え、従来候補 `timed_ev`, entry 15, side margin 5, risk 0 は validation min pnl `-21.0065` まで悪化した。2024-12 test では adjusted pnl `-175.6668`、max drawdown `206.9538`、long adjusted pnl `-110.5037`、short adjusted pnl `-65.1630`。short signal は多かったため、問題は単純な long bias ではなく、下落/レンジ局面での entry/exit timing と EV calibration の崩れ。
 
 学習品質改善として、非連続月指定と `month_label` sample weighting を実装した。混合regime train、valid 2024-07/2024-09/2024-11/2025-01、test 2024-12/2025-02 で実験したところ、validationの下落月は改善したが、2024-12 test は adjusted pnl `-183.5370` と崩れた。一方で 2025-02 test は `+54.9137`。学習データ混合とweightingだけでは過学習問題は解決しておらず、次は教師targetとregime featureを改善する。
+
+entry timing を `long / short / stay_flat` に潰さず、`profit_barrier_hit`, `wait_regret`, `entry_local_rank`, `entry_urgency` に分解する方針を採用した。これは entry 正例の少なさを補い、1つのdecision rowから複数の教師信号を得るための変更。コード実装と単体テストは完了しており、次は旧倍率datasetの再生成と新target込みの学習。
 
 ## 直近の実験
 

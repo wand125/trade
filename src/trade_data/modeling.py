@@ -36,11 +36,23 @@ REGRESSION_TARGETS = [
     "short_best_holding_minutes",
     "long_max_adverse_pnl",
     "short_max_adverse_pnl",
+    "long_wait_regret",
+    "short_wait_regret",
+    "long_entry_local_rank",
+    "short_entry_local_rank",
+    "long_entry_urgency",
+    "short_entry_urgency",
 ]
 
 CLASSIFICATION_TARGETS = [
     "best_adjusted_pnl_quantile",
     "side_score_quantile",
+    "long_profit_barrier_hit",
+    "short_profit_barrier_hit",
+    "long_wait_regret_quantile",
+    "short_wait_regret_quantile",
+    "long_entry_local_rank_bin",
+    "short_entry_local_rank_bin",
     "best_holding_time_bin",
     "long_best_holding_time_bin",
     "short_best_holding_time_bin",
@@ -274,6 +286,18 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "short_best_holding_minutes",
         "long_max_adverse_pnl",
         "short_max_adverse_pnl",
+        "long_profit_barrier_hit",
+        "short_profit_barrier_hit",
+        "long_wait_regret",
+        "short_wait_regret",
+        "long_entry_local_rank",
+        "short_entry_local_rank",
+        "long_entry_urgency",
+        "short_entry_urgency",
+        "long_wait_regret_quantile",
+        "short_wait_regret_quantile",
+        "long_entry_local_rank_bin",
+        "short_entry_local_rank_bin",
     ]
     output = df[columns].copy()
     for name, values in predictions.items():

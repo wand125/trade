@@ -101,6 +101,27 @@ edge は validation 期間で調整し、test 月に合わせて選ばない。
 
 量子化は、連続値を捨てるためではなく、ノイズの多い損益回帰を安定させる補助タスクとして使う。
 
+### Dense Entry Quality Target
+
+`long / short / stay_flat` に圧縮すると、entry timing の情報が落ちすぎる。特に、entryに向いている度合いを学ばせたい場合、正例だけを拾う分類では学習量が少なくなりやすい。
+
+そのため、entry timing は以下の密な target に分解する。
+
+- `profit_barrier_hit`: 利益バリアへ損失バリアより先に到達したか。
+- `wait_regret`: 近い未来により良いentryがあった場合の機会損失。
+- `entry_local_rank`: 近傍時間窓内でのentry quality順位。
+- `entry_urgency`: 近傍中央値に対する現在entry qualityの強さ。
+
+これらは long/short 別に作り、回帰targetと量子化分類targetの両方で学習する。量子化は情報を捨てるためではなく、ノイズの強い連続targetを安定化する補助タスクとして使う。
+
+初期実装:
+
+- 近傍時間窓: `--entry-timing-lookahead-minutes`, default 60
+- 学習target: 旧倍率 0.9 / 1.3 のdatasetから生成
+- validation/test評価: 新倍率 1.0 / 1.25 のbacktestでpolicyを選ぶ
+
+詳細判断は `docs/decisions/0005_dense_entry_quality_targets.md` に記録する。
+
 推論時の基本方針:
 
 ```text
@@ -161,7 +182,7 @@ short_utility > long_utility なら short
 
 次に改善する target / feature:
 
-- fixed horizon return / barrier hit probability を追加し、oracle best exit だけに依存しない。
+- fixed horizon return を追加し、oracle best exit だけに依存しない。
 - long/short 別、regime 別の calibration を追加する。
 - 直近数日トレンド、ボラティリティ、ATR percentile、MA乖離、drawdown などの regime feature を追加する。
 - exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。

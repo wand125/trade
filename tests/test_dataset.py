@@ -41,11 +41,14 @@ class DatasetTests(unittest.TestCase):
         self.assertAlmostEqual(labels.loc[0, "short_max_adverse_pnl"], -4.0)
         self.assertAlmostEqual(labels.loc[0, "side_score"], 1.8)
         self.assertEqual(labels.loc[0, "best_exit_idx"], 2)
+        self.assertEqual(labels.loc[0, "long_profit_barrier_hit"], 1)
+        self.assertEqual(labels.loc[0, "short_profit_barrier_hit"], 0)
 
         self.assertEqual(labels.loc[1, "entry_idx"], 2)
         self.assertEqual(labels.loc[1, "label"], -1)
         self.assertAlmostEqual(labels.loc[1, "short_best_adjusted_pnl"], 5.4)
         self.assertEqual(labels.loc[1, "best_exit_idx"], 3)
+        self.assertEqual(labels.loc[1, "short_profit_barrier_hit"], 1)
 
     def test_features_use_current_and_past_values(self):
         df = frame([100, 101, 103, 106, 110])
@@ -70,6 +73,7 @@ class DatasetTests(unittest.TestCase):
             loss_multiplier=1.3,
             include_fft=False,
             quantile_bins=5,
+            entry_timing_lookahead_minutes=60,
         )
 
         dataset, summary = build_month_dataset(df, "2025-01", config)
@@ -79,9 +83,21 @@ class DatasetTests(unittest.TestCase):
         self.assertIn("label", dataset.columns)
         self.assertIn("side_score", dataset.columns)
         self.assertIn("best_adjusted_pnl_quantile", dataset.columns)
+        self.assertIn("long_profit_barrier_hit", dataset.columns)
+        self.assertIn("short_profit_barrier_hit", dataset.columns)
+        self.assertIn("long_wait_regret", dataset.columns)
+        self.assertIn("short_wait_regret", dataset.columns)
+        self.assertIn("long_entry_local_rank", dataset.columns)
+        self.assertIn("short_entry_local_rank", dataset.columns)
+        self.assertIn("long_entry_urgency", dataset.columns)
+        self.assertIn("short_entry_urgency", dataset.columns)
+        self.assertIn("long_wait_regret_quantile", dataset.columns)
+        self.assertIn("long_entry_local_rank_bin", dataset.columns)
         self.assertIn("best_holding_time_bin", dataset.columns)
         self.assertEqual(summary["rows"], len(dataset))
         self.assertIn("target_columns", summary)
+        self.assertIn("long_wait_regret", summary["target_columns"])
+        self.assertIn("long_profit_barrier_hit", summary["target_columns"])
 
 
 if __name__ == "__main__":

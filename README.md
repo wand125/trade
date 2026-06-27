@@ -102,13 +102,20 @@ data/reports/backtests/
 Build a monthly M1 dataset with leak-free features and future-24h labels:
 
 ```bash
-python -m trade_data.dataset build --month 2025-01 --min-adjusted-edge 15
+python -m trade_data.dataset build \
+  --month 2025-01 \
+  --min-adjusted-edge 15 \
+  --entry-timing-lookahead-minutes 60
 ```
 
 Build a contiguous monthly range:
 
 ```bash
-python -m trade_data.dataset build-range --start-month 2024-01 --end-month 2024-07 --min-adjusted-edge 15
+python -m trade_data.dataset build-range \
+  --start-month 2024-01 \
+  --end-month 2024-07 \
+  --min-adjusted-edge 15 \
+  --entry-timing-lookahead-minutes 60
 ```
 
 Outputs are written under:
@@ -118,7 +125,14 @@ data/processed/datasets/xauusd_m1/
 ```
 
 The dataset includes leak-free features, continuous regression targets, quantile
-classification targets, and the coarse `long/short/stay_flat` label.
+classification targets, dense entry quality targets, and the coarse
+`long/short/stay_flat` label.
+
+Dense entry quality targets include `profit_barrier_hit`, `wait_regret`,
+`entry_local_rank`, and `entry_urgency` for both long and short. Existing
+datasets generated before this schema change must be regenerated before
+training current models. Do not use `--skip-existing` when refreshing an old
+dataset directory to the current schema.
 
 ## Train Initial Models
 
@@ -207,7 +221,11 @@ python -m trade_data.histdata download --mode tick --pair XAUUSD --start-year 20
 python -m trade_data.convert m1 --pair XAUUSD --also-m5
 python -m trade_data.convert tick --pair XAUUSD
 python -m trade_data.validate data/processed/histdata/xauusd/xauusd_m1.parquet
-python -m trade_data.dataset build-range --start-month 2023-01 --end-month 2025-12 --min-adjusted-edge 15 --skip-existing
+python -m trade_data.dataset build-range \
+  --start-month 2023-01 \
+  --end-month 2025-12 \
+  --min-adjusted-edge 15 \
+  --entry-timing-lookahead-minutes 60
 ```
 
 Then train and evaluate a walk-forward fold:

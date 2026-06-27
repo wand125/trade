@@ -51,6 +51,7 @@ class DatasetConfig:
     loss_multiplier: float
     include_fft: bool
     quantile_bins: int
+    entry_timing_lookahead_minutes: int = 60
 
 
 def log_returns(close: pd.Series, periods: int = 1) -> pd.Series:
@@ -181,6 +182,8 @@ def future_best_labels(
     short_forced_adj = np.full(n, np.nan)
     long_adverse = np.full(n, np.nan)
     short_adverse = np.full(n, np.nan)
+    long_profit_barrier_hit = np.full(n, np.nan)
+    short_profit_barrier_hit = np.full(n, np.nan)
     long_best_exit_idx = np.full(n, -1, dtype="int64")
     short_best_exit_idx = np.full(n, -1, dtype="int64")
     long_best_exit_price = np.full(n, np.nan)
@@ -193,6 +196,8 @@ def future_best_labels(
     best_exit_price = np.full(n, np.nan)
     best_holding_minutes = np.full(n, np.nan)
     entry_idx_values = np.full(n, -1, dtype="int64")
+    profit_barrier_raw = min_adjusted_edge / profit_multiplier
+    loss_barrier_raw = min_adjusted_edge / loss_multiplier
 
     for decision_idx in range(n - 1):
         entry_idx = decision_idx + 1
@@ -230,6 +235,16 @@ def future_best_labels(
         )
         long_adverse_value = float(np.min(future_prices - entry_price))
         short_adverse_value = float(np.min(entry_price - future_prices))
+        long_profit_barrier_hit[decision_idx] = profit_barrier_hit_before_loss(
+            future_prices - entry_price,
+            profit_barrier_raw,
+            loss_barrier_raw,
+        )
+        short_profit_barrier_hit[decision_idx] = profit_barrier_hit_before_loss(
+            entry_price - future_prices,
+            profit_barrier_raw,
+            loss_barrier_raw,
+        )
 
         if long_value >= short_value:
             chosen_label = 1
@@ -289,6 +304,8 @@ def future_best_labels(
             "short_forced_adjusted_pnl": short_forced_adj,
             "long_max_adverse_pnl": long_adverse,
             "short_max_adverse_pnl": short_adverse,
+            "long_profit_barrier_hit": long_profit_barrier_hit,
+            "short_profit_barrier_hit": short_profit_barrier_hit,
             "long_best_exit_idx": long_best_exit_idx,
             "short_best_exit_idx": short_best_exit_idx,
             "long_best_exit_price": long_best_exit_price,
@@ -306,6 +323,59 @@ def future_best_labels(
         index=df.index,
     )
     return result
+
+
+def profit_barrier_hit_before_loss(
+    side_path: np.ndarray,
+    profit_barrier_raw: float,
+    loss_barrier_raw: float,
+) -> int:
+    profit_hits = np.flatnonzero(side_path >= profit_barrier_raw)
+    loss_hits = np.flatnonzero(side_path <= -loss_barrier_raw)
+    if len(profit_hits) == 0:
+        return 0
+    if len(loss_hits) == 0:
+        return 1
+    return int(profit_hits[0] <= loss_hits[0])
+
+
+def add_entry_timing_targets(dataset: pd.DataFrame, lookahead_minutes: int) -> list[str]:
+    if lookahead_minutes <= 0:
+        raise ValueError("entry_timing_lookahead_minutes must be positive")
+    timestamps = dataset["decision_timestamp"]
+    ts_ns = timestamps.astype("int64").to_numpy()
+    lookahead_ns = int(pd.Timedelta(minutes=lookahead_minutes) / pd.Timedelta(nanoseconds=1))
+    target_columns: list[str] = []
+    for side in ["long", "short"]:
+        quality_column = f"{side}_best_adjusted_pnl"
+        values = dataset[quality_column].astype(float).to_numpy()
+        wait_regret = np.full(len(dataset), np.nan, dtype="float64")
+        local_rank = np.full(len(dataset), np.nan, dtype="float64")
+        urgency = np.full(len(dataset), np.nan, dtype="float64")
+        for idx, current_value in enumerate(values):
+            if not np.isfinite(current_value):
+                continue
+            right = int(np.searchsorted(ts_ns, ts_ns[idx] + lookahead_ns, side="right"))
+            window = values[idx:right]
+            window = window[np.isfinite(window)]
+            if len(window) == 0:
+                continue
+            best_imminent = float(window.max())
+            median_imminent = float(np.median(window))
+            wait_regret[idx] = max(0.0, best_imminent - current_value)
+            local_rank[idx] = float((window <= current_value).mean())
+            urgency[idx] = current_value - median_imminent
+        dataset[f"{side}_wait_regret"] = wait_regret
+        dataset[f"{side}_entry_local_rank"] = local_rank
+        dataset[f"{side}_entry_urgency"] = urgency
+        target_columns.extend(
+            [
+                f"{side}_wait_regret",
+                f"{side}_entry_local_rank",
+                f"{side}_entry_urgency",
+            ]
+        )
+    return target_columns
 
 
 def quantile_codes(values: pd.Series, bins: int) -> pd.Series:
@@ -331,16 +401,35 @@ def holding_time_bins(values: pd.Series) -> pd.Series:
     return binned.astype("Int16")
 
 
+def rank_bins(values: pd.Series, bins: int) -> pd.Series:
+    if bins <= 1:
+        raise ValueError("rank bins must be greater than 1")
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    edges[0] = -0.001
+    edges[-1] = 1.001
+    labels = list(range(bins))
+    binned = pd.cut(values, bins=edges, labels=labels, include_lowest=True)
+    return binned.astype("Int16")
+
+
 def add_quantized_targets(dataset: pd.DataFrame, bins: int) -> list[str]:
     target_columns = [
         "best_adjusted_pnl_quantile",
         "side_score_quantile",
+        "long_wait_regret_quantile",
+        "short_wait_regret_quantile",
+        "long_entry_local_rank_bin",
+        "short_entry_local_rank_bin",
         "best_holding_time_bin",
         "long_best_holding_time_bin",
         "short_best_holding_time_bin",
     ]
     dataset["best_adjusted_pnl_quantile"] = quantile_codes(dataset["best_adjusted_pnl"], bins)
     dataset["side_score_quantile"] = quantile_codes(dataset["side_score"], bins)
+    dataset["long_wait_regret_quantile"] = quantile_codes(dataset["long_wait_regret"], bins)
+    dataset["short_wait_regret_quantile"] = quantile_codes(dataset["short_wait_regret"], bins)
+    dataset["long_entry_local_rank_bin"] = rank_bins(dataset["long_entry_local_rank"], bins)
+    dataset["short_entry_local_rank_bin"] = rank_bins(dataset["short_entry_local_rank"], bins)
     dataset["best_holding_time_bin"] = holding_time_bins(dataset["best_holding_minutes"])
     dataset["long_best_holding_time_bin"] = holding_time_bins(dataset["long_best_holding_minutes"])
     dataset["short_best_holding_time_bin"] = holding_time_bins(dataset["short_best_holding_minutes"])
@@ -392,6 +481,7 @@ def build_month_dataset(
     valid_exit_indices = output.loc[valid_exit, "best_exit_idx"].astype(int)
     exit_timestamps.loc[valid_exit] = sliced.loc[valid_exit_indices, "timestamp"].to_numpy()
     output["best_exit_timestamp"] = exit_timestamps
+    timing_target_columns = add_entry_timing_targets(output, config.entry_timing_lookahead_minutes)
 
     in_eval = (output["entry_timestamp"] >= start) & (output["entry_timestamp"] < end)
     feature_ready = output[feature_columns].notna().all(axis=1)
@@ -402,6 +492,8 @@ def build_month_dataset(
     output["best_exit_idx"] = output["best_exit_idx"].astype("int64")
     output["long_best_exit_idx"] = output["long_best_exit_idx"].astype("int64")
     output["short_best_exit_idx"] = output["short_best_exit_idx"].astype("int64")
+    output["long_profit_barrier_hit"] = output["long_profit_barrier_hit"].astype("int8")
+    output["short_profit_barrier_hit"] = output["short_profit_barrier_hit"].astype("int8")
 
     for column in feature_columns:
         output[column] = output[column].astype("float32")
@@ -414,6 +506,8 @@ def build_month_dataset(
         "best_exit_timestamp",
         "label",
         *quantized_target_columns,
+        "long_profit_barrier_hit",
+        "short_profit_barrier_hit",
         "open",
         "high",
         "low",
@@ -429,6 +523,12 @@ def build_month_dataset(
         "short_forced_raw_pnl",
         "long_max_adverse_pnl",
         "short_max_adverse_pnl",
+        "long_wait_regret",
+        "short_wait_regret",
+        "long_entry_local_rank",
+        "short_entry_local_rank",
+        "long_entry_urgency",
+        "short_entry_urgency",
         "side_score",
         "forced_side_score",
         "best_adjusted_pnl",
@@ -441,7 +541,17 @@ def build_month_dataset(
         "short_best_holding_minutes",
     ]
     output = output[ordered_columns].reset_index(drop=True)
-    summary = dataset_summary(output, config, feature_columns, quantized_target_columns)
+    summary = dataset_summary(
+        output,
+        config,
+        feature_columns,
+        quantized_target_columns,
+        [
+            "long_profit_barrier_hit",
+            "short_profit_barrier_hit",
+            *timing_target_columns,
+        ],
+    )
     return output, summary
 
 
@@ -450,6 +560,7 @@ def dataset_summary(
     config: DatasetConfig,
     feature_columns: list[str],
     quantized_target_columns: list[str],
+    extra_target_columns: list[str] | None = None,
 ) -> dict[str, object]:
     label_counts = dataset["label"].value_counts().sort_index().to_dict()
     label_counts = {str(int(key)): int(value) for key, value in label_counts.items()}
@@ -465,6 +576,7 @@ def dataset_summary(
         "target_columns": [
             "label",
             *quantized_target_columns,
+            *(extra_target_columns or []),
             "long_best_adjusted_pnl",
             "short_best_adjusted_pnl",
             "long_forced_adjusted_pnl",
@@ -521,6 +633,7 @@ def config_from_args(args: argparse.Namespace, month: str) -> DatasetConfig:
         loss_multiplier=args.loss_multiplier,
         include_fft=args.include_fft,
         quantile_bins=args.quantile_bins,
+        entry_timing_lookahead_minutes=args.entry_timing_lookahead_minutes,
     )
 
 
@@ -611,6 +724,12 @@ def add_dataset_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profit-multiplier", type=float, default=0.9)
     parser.add_argument("--loss-multiplier", type=float, default=1.3)
     parser.add_argument("--quantile-bins", type=int, default=5)
+    parser.add_argument(
+        "--entry-timing-lookahead-minutes",
+        type=int,
+        default=60,
+        help="future window used to score local entry quality targets",
+    )
     parser.add_argument("--compression", default="zstd")
     parser.add_argument("--include-fft", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--skip-existing", action="store_true")

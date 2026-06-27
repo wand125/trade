@@ -536,3 +536,47 @@ train target: old multipliers 0.9 / 1.3
 validation policy selection: new multipliers 1.0 / 1.25
 final test: new multipliers 1.0 / 1.25
 ```
+
+### Dense Entry Quality Target
+
+会話上の問題提起:
+
+- entry timing を直接学習させると、正例が少なくなり学習量が足りない。
+- `long / short / stay_flat` まで圧縮すると、deep learning に渡す情報として粗すぎる。
+- 1つのdatasetを、entry方向だけでなく、entryに向いている度合い、待つべきか、exit timing、EV calibration など多方面から学習に使いたい。
+
+判断:
+
+- entry timing は単一分類ではなく、密な品質targetに分解する。
+- 量子化は情報を落とす主手段ではなく、連続targetのノイズを安定化する補助タスクとして使う。
+- 学習datasetは旧倍率 0.9 / 1.3 を維持する。
+- validation/test の policy 評価は新倍率 1.0 / 1.25 を維持する。
+
+実装:
+
+- `src/trade_data/dataset.py`
+  - `long_profit_barrier_hit`, `short_profit_barrier_hit`
+  - `long_wait_regret`, `short_wait_regret`
+  - `long_entry_local_rank`, `short_entry_local_rank`
+  - `long_entry_urgency`, `short_entry_urgency`
+  - wait regret quantile と local rank bin
+  - `--entry-timing-lookahead-minutes`, default 60
+- `src/trade_data/modeling.py`
+  - 上記targetを regression/classification のmulti-task学習対象に追加。
+  - predictions parquet に真値と予測値を残す。
+- `tests/test_dataset.py`
+  - barrier hit と新target列の生成を確認。
+
+次の行動:
+
+1. 新schemaで旧倍率datasetを再生成する。
+2. mixed-regime split で新target込みのHGBを学習する。
+3. validation foldで calibrated EV と timed policy を再選択する。
+4. 2024-12 test の失敗が entry quality target で緩和されるか確認する。
+
+検証:
+
+- `python3 -m unittest discover tests`: 23 tests OK
+- 2025-01 の1か月datasetを `/tmp` に新schemaで生成し、rows 30,197、旧label分布は従来edge15と一致。
+- 2024-07 から 2024-09 の3か月datasetを `/tmp` に新schemaで生成。
+- `max_iter=2`, `sample_frac=0.2` のスモーク学習で、追加した全targetの train/evaluate/prediction 保存まで完了。
