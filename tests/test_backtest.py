@@ -13,6 +13,7 @@ from trade_data.backtest import (
     normalize_sweep_metrics,
     prepare_analysis_predictions,
     run_backtest,
+    summarize_candidate_selection,
     summarize_trades,
     summarize_sweep_frames,
     trade_analysis_summary,
@@ -455,6 +456,70 @@ class BacktestTests(unittest.TestCase):
         self.assertTrue(bool(top["eligible"]))
         stateful = summary[summary["policy"] == "stateful_ev"].iloc[0]
         self.assertFalse(bool(stateful["eligible"]))
+
+    def test_candidate_selection_combines_cost_and_plateau_gates(self):
+        def fold(values):
+            rows = []
+            for offset, pnl, long_pnl, short_pnl in values:
+                rows.append(
+                    {
+                        "policy": "fixed_horizon_ev",
+                        "entry_threshold": 0,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 2,
+                        "risk_penalty": 0,
+                        "max_wait_regret": 4,
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "extra_side_margin_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 40,
+                        "win_rate": 0.55,
+                        "max_drawdown": 30.0,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "long_adjusted_pnl": long_pnl,
+                        "short_adjusted_pnl": short_pnl,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_a = fold([(4, 30, 20, 10), (8, 28, 15, 13), (10, 24, 12, 12)])
+        base_b = fold([(4, 26, 18, 8), (8, 27, 14, 13), (10, 23, 11, 12)])
+        cost_a = fold([(4, 10, 18, -45), (8, 18, 10, 8), (10, 16, 8, 8)])
+        cost_b = fold([(4, 9, 16, -44), (8, 17, 9, 8), (10, 14, 7, 7)])
+
+        summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=30,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=20.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=1,
+        )
+
+        top = summary.iloc[0]
+        self.assertEqual(top["short_entry_threshold_offset"], 8)
+        self.assertTrue(bool(top["eligible"]))
+        self.assertEqual(top["plateau_support_count"], 1)
+        offset4 = summary[summary["short_entry_threshold_offset"] == 4].iloc[0]
+        self.assertFalse(bool(offset4["eligible"]))
+        self.assertFalse(bool(offset4["side_loss_ok"]))
 
     def test_trade_analysis_joins_predictions_and_flags_failures(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=5, freq="min")

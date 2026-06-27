@@ -1899,23 +1899,41 @@ def summarize_sweep_frames(
     )
 
     grouped = metrics.groupby(SWEEP_KEY_COLUMNS, dropna=False)
+    aggregations: dict[str, tuple[str, str]] = {
+        "fold_count": ("sweep_source", "nunique"),
+        "eligible_fold_count": ("fold_eligible", "sum"),
+        "total_adjusted_pnl_mean": ("total_adjusted_pnl", "mean"),
+        "total_adjusted_pnl_median": ("total_adjusted_pnl", "median"),
+        "total_adjusted_pnl_min": ("total_adjusted_pnl", "min"),
+        "total_adjusted_pnl_sum": ("total_adjusted_pnl", "sum"),
+        "total_raw_pnl_mean": ("total_raw_pnl", "mean"),
+        "total_raw_pnl_min": ("total_raw_pnl", "min"),
+        "trade_count_mean": ("trade_count", "mean"),
+        "trade_count_min": ("trade_count", "min"),
+        "win_rate_mean": ("win_rate", "mean"),
+        "max_drawdown_mean": ("max_drawdown", "mean"),
+        "max_drawdown_max": ("max_drawdown", "max"),
+        "forced_exit_rate_mean": ("forced_exit_rate", "mean"),
+        "forced_exit_rate_max": ("forced_exit_rate", "max"),
+        "forced_exit_count_sum": ("forced_exit_count", "sum"),
+    }
+    optional_metric_columns = [
+        "long_adjusted_pnl",
+        "short_adjusted_pnl",
+        "long_trade_count",
+        "short_trade_count",
+        "spread_points",
+        "slippage_points",
+        "execution_delay_bars",
+    ]
+    for column in optional_metric_columns:
+        if column in metrics.columns:
+            aggregations[f"{column}_mean"] = (column, "mean")
+            aggregations[f"{column}_min"] = (column, "min")
+            aggregations[f"{column}_max"] = (column, "max")
+
     summary = grouped.agg(
-        fold_count=("sweep_source", "nunique"),
-        eligible_fold_count=("fold_eligible", "sum"),
-        total_adjusted_pnl_mean=("total_adjusted_pnl", "mean"),
-        total_adjusted_pnl_median=("total_adjusted_pnl", "median"),
-        total_adjusted_pnl_min=("total_adjusted_pnl", "min"),
-        total_adjusted_pnl_sum=("total_adjusted_pnl", "sum"),
-        total_raw_pnl_mean=("total_raw_pnl", "mean"),
-        total_raw_pnl_min=("total_raw_pnl", "min"),
-        trade_count_mean=("trade_count", "mean"),
-        trade_count_min=("trade_count", "min"),
-        win_rate_mean=("win_rate", "mean"),
-        max_drawdown_mean=("max_drawdown", "mean"),
-        max_drawdown_max=("max_drawdown", "max"),
-        forced_exit_rate_mean=("forced_exit_rate", "mean"),
-        forced_exit_rate_max=("forced_exit_rate", "max"),
-        forced_exit_count_sum=("forced_exit_count", "sum"),
+        **aggregations,
     ).reset_index()
     summary["eligible"] = (
         (summary["fold_count"] >= min_folds)
@@ -1934,6 +1952,145 @@ def summarize_sweep_frames(
         ascending=[False, False, False],
     ).reset_index(drop=True)
     return summary
+
+
+def prefixed_summary(summary: pd.DataFrame, suffix: str) -> pd.DataFrame:
+    rename = {
+        column: f"{column}_{suffix}"
+        for column in summary.columns
+        if column not in SWEEP_KEY_COLUMNS
+    }
+    return summary.rename(columns=rename)
+
+
+def row_min_or_default(frame: pd.DataFrame, columns: list[str], default: float) -> pd.Series:
+    existing = [column for column in columns if column in frame.columns]
+    if not existing:
+        return pd.Series(default, index=frame.index, dtype="float64")
+    return frame[existing].min(axis=1)
+
+
+def plateau_support_counts(
+    frame: pd.DataFrame,
+    plateau_column: str,
+    plateau_radius: float,
+    eligible_column: str,
+) -> pd.Series:
+    if plateau_column not in SWEEP_KEY_COLUMNS:
+        raise ValueError(f"plateau column must be a sweep key: {plateau_column}")
+    if plateau_radius < 0:
+        raise ValueError("plateau_radius must be non-negative")
+    if frame.empty:
+        return pd.Series(dtype="int64")
+
+    support = pd.Series(0, index=frame.index, dtype="int64")
+    group_columns = [column for column in SWEEP_KEY_COLUMNS if column != plateau_column]
+    plateau_values = pd.to_numeric(frame[plateau_column])
+    for _, group in frame.groupby(group_columns, dropna=False):
+        eligible_indices = group.index[frame.loc[group.index, eligible_column].to_numpy()]
+        if len(eligible_indices) == 0:
+            continue
+        eligible_values = plateau_values.loc[eligible_indices]
+        for index in group.index:
+            distance = (eligible_values - plateau_values.loc[index]).abs()
+            support.loc[index] = int(((distance > 0) & (distance <= plateau_radius)).sum())
+    return support
+
+
+def summarize_candidate_selection(
+    base_frames: list[pd.DataFrame],
+    cost_frames: list[pd.DataFrame],
+    min_folds: int,
+    min_trades_per_fold: int,
+    max_forced_exit_rate: float,
+    max_drawdown: float,
+    min_base_adjusted_pnl_per_fold: float,
+    min_cost_adjusted_pnl_per_fold: float,
+    max_cost_pnl_drop: float,
+    max_side_loss_per_fold: float,
+    plateau_column: str,
+    plateau_radius: float,
+    min_plateau_neighbors: int,
+) -> pd.DataFrame:
+    if max_cost_pnl_drop < 0:
+        raise ValueError("max_cost_pnl_drop must be non-negative")
+    if max_side_loss_per_fold < 0:
+        raise ValueError("max_side_loss_per_fold must be non-negative")
+    if min_plateau_neighbors < 0:
+        raise ValueError("min_plateau_neighbors must be non-negative")
+
+    base_summary = summarize_sweep_frames(
+        frames=base_frames,
+        min_folds=min_folds,
+        min_trades_per_fold=min_trades_per_fold,
+        max_forced_exit_rate=max_forced_exit_rate,
+        max_drawdown=max_drawdown,
+        min_adjusted_pnl_per_fold=min_base_adjusted_pnl_per_fold,
+        sort_by="min_pnl",
+    )
+    cost_summary = summarize_sweep_frames(
+        frames=cost_frames,
+        min_folds=min_folds,
+        min_trades_per_fold=min_trades_per_fold,
+        max_forced_exit_rate=max_forced_exit_rate,
+        max_drawdown=max_drawdown,
+        min_adjusted_pnl_per_fold=min_cost_adjusted_pnl_per_fold,
+        sort_by="min_pnl",
+    )
+    merged = prefixed_summary(base_summary, "base").merge(
+        prefixed_summary(cost_summary, "cost"),
+        on=SWEEP_KEY_COLUMNS,
+        how="inner",
+    )
+    if merged.empty:
+        return merged
+
+    merged["cost_pnl_drop_min"] = (
+        merged["total_adjusted_pnl_min_base"] - merged["total_adjusted_pnl_min_cost"]
+    )
+    base_abs = merged["total_adjusted_pnl_min_base"].abs().replace(0, np.nan)
+    merged["cost_pnl_retention_min"] = merged["total_adjusted_pnl_min_cost"] / base_abs
+    merged["long_adjusted_pnl_min_all"] = row_min_or_default(
+        merged,
+        ["long_adjusted_pnl_min_base", "long_adjusted_pnl_min_cost"],
+        float("inf"),
+    )
+    merged["short_adjusted_pnl_min_all"] = row_min_or_default(
+        merged,
+        ["short_adjusted_pnl_min_base", "short_adjusted_pnl_min_cost"],
+        float("inf"),
+    )
+    merged["side_adjusted_pnl_min_all"] = merged[
+        ["long_adjusted_pnl_min_all", "short_adjusted_pnl_min_all"]
+    ].min(axis=1)
+    merged["side_loss_ok"] = merged["side_adjusted_pnl_min_all"] >= -max_side_loss_per_fold
+    merged["cost_drop_ok"] = merged["cost_pnl_drop_min"] <= max_cost_pnl_drop
+    merged["pre_plateau_eligible"] = (
+        merged["eligible_base"].astype(bool)
+        & merged["eligible_cost"].astype(bool)
+        & merged["side_loss_ok"]
+        & merged["cost_drop_ok"]
+    )
+    merged["plateau_support_count"] = plateau_support_counts(
+        merged,
+        plateau_column=plateau_column,
+        plateau_radius=plateau_radius,
+        eligible_column="pre_plateau_eligible",
+    )
+    merged["plateau_ok"] = merged["plateau_support_count"] >= min_plateau_neighbors
+    merged["eligible"] = merged["pre_plateau_eligible"] & merged["plateau_ok"]
+
+    return merged.sort_values(
+        [
+            "eligible",
+            "total_adjusted_pnl_min_cost",
+            "total_adjusted_pnl_min_base",
+            "plateau_support_count",
+            "side_adjusted_pnl_min_all",
+            "cost_pnl_drop_min",
+        ],
+        ascending=[False, False, False, False, False, True],
+    ).reset_index(drop=True)
 
 
 def read_sweep_frames(paths: list[Path]) -> list[pd.DataFrame]:
@@ -1966,6 +2123,50 @@ def handle_model_sweep_summary(args: argparse.Namespace) -> int:
         "max_drawdown": args.max_drawdown,
         "min_adjusted_pnl_per_fold": args.min_adjusted_pnl_per_fold,
         "sort_by": args.sort_by,
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2)
+    print(summary.head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def handle_model_candidate_selection(args: argparse.Namespace) -> int:
+    base_paths = parse_csv_paths(args.base_sweeps)
+    cost_paths = parse_csv_paths(args.cost_sweeps)
+    base_frames = read_sweep_frames(base_paths)
+    cost_frames = read_sweep_frames(cost_paths)
+    summary = summarize_candidate_selection(
+        base_frames=base_frames,
+        cost_frames=cost_frames,
+        min_folds=args.min_folds,
+        min_trades_per_fold=args.min_trades_per_fold,
+        max_forced_exit_rate=args.max_forced_exit_rate,
+        max_drawdown=args.max_drawdown,
+        min_base_adjusted_pnl_per_fold=args.min_base_adjusted_pnl_per_fold,
+        min_cost_adjusted_pnl_per_fold=args.min_cost_adjusted_pnl_per_fold,
+        max_cost_pnl_drop=args.max_cost_pnl_drop,
+        max_side_loss_per_fold=args.max_side_loss_per_fold,
+        plateau_column=args.plateau_column,
+        plateau_radius=args.plateau_radius,
+        min_plateau_neighbors=args.min_plateau_neighbors,
+    )
+    run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
+    summary.to_csv(run_dir / "metrics.csv", index=False)
+    metadata = {
+        "base_sweeps": [str(path) for path in base_paths],
+        "cost_sweeps": [str(path) for path in cost_paths],
+        "min_folds": args.min_folds,
+        "min_trades_per_fold": args.min_trades_per_fold,
+        "max_forced_exit_rate": args.max_forced_exit_rate,
+        "max_drawdown": args.max_drawdown,
+        "min_base_adjusted_pnl_per_fold": args.min_base_adjusted_pnl_per_fold,
+        "min_cost_adjusted_pnl_per_fold": args.min_cost_adjusted_pnl_per_fold,
+        "max_cost_pnl_drop": args.max_cost_pnl_drop,
+        "max_side_loss_per_fold": args.max_side_loss_per_fold,
+        "plateau_column": args.plateau_column,
+        "plateau_radius": args.plateau_radius,
+        "min_plateau_neighbors": args.min_plateau_neighbors,
     }
     with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
         json.dump(metadata, handle, ensure_ascii=False, indent=2)
@@ -2198,6 +2399,43 @@ def build_parser() -> argparse.ArgumentParser:
     )
     model_sweep_summary.add_argument("--top-n", type=int, default=10)
     model_sweep_summary.set_defaults(func=handle_model_sweep_summary)
+
+    model_candidate_selection = subparsers.add_parser(
+        "model-candidate-selection",
+        help="combine no-cost and cost-aware sweep summaries with robustness gates",
+    )
+    model_candidate_selection.add_argument(
+        "--base-sweeps",
+        required=True,
+        help="comma-separated no-cost model-sweep metrics.csv files",
+    )
+    model_candidate_selection.add_argument(
+        "--cost-sweeps",
+        required=True,
+        help="comma-separated cost-aware model-sweep metrics.csv files",
+    )
+    model_candidate_selection.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_candidate_selection.add_argument("--min-folds", type=int, default=2)
+    model_candidate_selection.add_argument("--min-trades-per-fold", type=int, default=30)
+    model_candidate_selection.add_argument("--max-forced-exit-rate", type=float, default=0.0)
+    model_candidate_selection.add_argument("--max-drawdown", type=float, default=100.0)
+    model_candidate_selection.add_argument("--min-base-adjusted-pnl-per-fold", type=float, default=0.0)
+    model_candidate_selection.add_argument("--min-cost-adjusted-pnl-per-fold", type=float, default=0.0)
+    model_candidate_selection.add_argument("--max-cost-pnl-drop", type=float, default=1e100)
+    model_candidate_selection.add_argument("--max-side-loss-per-fold", type=float, default=1e100)
+    model_candidate_selection.add_argument(
+        "--plateau-column",
+        default="short_entry_threshold_offset",
+        choices=SWEEP_KEY_COLUMNS,
+    )
+    model_candidate_selection.add_argument("--plateau-radius", type=float, default=0.0)
+    model_candidate_selection.add_argument("--min-plateau-neighbors", type=int, default=0)
+    model_candidate_selection.add_argument("--top-n", type=int, default=10)
+    model_candidate_selection.set_defaults(func=handle_model_candidate_selection)
 
     analyze_trades = subparsers.add_parser(
         "analyze-trades",

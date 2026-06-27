@@ -1185,3 +1185,36 @@ Artifacts:
 - `short offset=8` はfixed test上では良いが、testを見てからの採用になるため本採用しない。
 - 次は事前登録した選択基準として、cost-aware validation、周辺offsetの台地、side/regime別PnL、max drawdown、execution delay感度を組み込む。
 - 新しいblind holdout月を追加し、2024-12/2025-02を見すぎない。
+
+### 2026-06-28 08:53 JST Blind Holdout Candidate Selection
+
+作業:
+
+- `model-candidate-selection` を追加し、no-cost/cost-aware validation、cost drop、side loss、short offset plateauを同時に評価できるようにした。
+- 2025-03 の p1/l1.2 fixed horizon datasetを追加生成した。
+- 前回fixed horizon modelと同じtrain/validationで、testだけ2025-03にしたHGB 80iter full modelを学習した。
+- report: `docs/reports/2026-06-28_blind_holdout_candidate_selection.md`
+
+Artifacts:
+
+- dataset: `data/processed/datasets/xauusd_m1_p1_l1p2/xauusd_m1_2025-03_h24_edge15.parquet`
+- model: `experiments/20260627_235034_full_fixed_horizon_blind_2025_03_p1_l1p2/`
+- candidate selection: `data/reports/backtests/20260627_235220_model_candidate_selection/`
+- blind test: `data/reports/backtests/20260627_235231_model_fixed_horizon_ev_2025-03/`
+- cost sensitivity: `data/reports/backtests/20260627_235330_model_cost_sensitivity_2025-03/`
+
+結果:
+
+- candidate selection条件は `max_forced_exit_rate=0.04`, `max_side_loss_per_fold=45`, cost drop max `20`, short offset plateau radius `4`。
+- validation選択候補は `fixed_horizon_ev`, entry `0`, short offset `8`, side margin `1`。
+- 2025-03 blind holdoutは adjusted pnl `-49.7004`, raw pnl `-24.2030`, 63 trades, profit factor `0.6751`, max DD `73.8334`。
+- long pnl `-0.3766`、short pnl `-49.3238`。short 5 tradesのうち、2025-03-31 01:28 UTC の1 tradeが `-49.3248`。
+- 最大損失tradeは `range / low_vol / asia`、actual best sideはlong、predicted short fixed EVは `9.5934`、predicted short profit barrier hitは `0`。
+- cost sensitivityは全条件でマイナス。spread `0.2` / slippage `0.10` / delay `1` では adjusted pnl `-75.9388`。
+
+判断:
+
+- short offsetとcost-aware validationだけでは汎化不足。
+- 2024-12/2025-02で良く見えたshort offset候補は、2025-03でNoTradeに負けたため採用しない。
+- 最大損失は predicted profit barrier hitが0のshortを許したこと、かつ721分まで保有したことが中心。
+- 次は profit barrier probability calibration、`asia / range / low_vol` shortの抑制、hazard-like close probability / stop-loss timing targetを優先する。
