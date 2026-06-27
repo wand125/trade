@@ -43,6 +43,19 @@ SWEEP_KEY_COLUMNS = [
     "max_wait_regret",
     "min_entry_rank",
     "require_profit_barrier",
+    "block_trend_regimes",
+    "block_volatility_regimes",
+    "block_session_regimes",
+    "block_gap_regimes",
+    "block_combined_regimes",
+]
+
+REGIME_BLOCK_FIELDS = [
+    ("block_trend_regimes", "trend_regime"),
+    ("block_volatility_regimes", "volatility_regime"),
+    ("block_session_regimes", "session_regime"),
+    ("block_gap_regimes", "gap_regime"),
+    ("block_combined_regimes", "combined_regime"),
 ]
 
 ANALYSIS_PREDICTION_COLUMNS = [
@@ -152,6 +165,11 @@ class ModelPolicyConfig:
     max_wait_regret: float = float("inf")
     min_entry_rank: float = 0.0
     require_profit_barrier: bool = False
+    block_trend_regimes: tuple[str, ...] = ()
+    block_volatility_regimes: tuple[str, ...] = ()
+    block_session_regimes: tuple[str, ...] = ()
+    block_gap_regimes: tuple[str, ...] = ()
+    block_combined_regimes: tuple[str, ...] = ()
 
 
 @dataclass
@@ -371,6 +389,7 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         columns.extend([config.long_entry_rank_column, config.short_entry_rank_column])
     if config.require_profit_barrier:
         columns.extend([config.long_profit_barrier_column, config.short_profit_barrier_column])
+    columns.extend([column for column, _ in blocked_regime_columns(config)])
     columns = list(dict.fromkeys(columns))
     predictions = pd.read_parquet(path, columns=columns)
     missing = sorted(set(columns) - set(predictions.columns))
@@ -386,6 +405,14 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         duplicated_count = int(duplicated.sum())
         raise ValueError(f"{path} has duplicated decision_timestamp values: {duplicated_count}")
     return predictions.reset_index(drop=True)
+
+
+def blocked_regime_columns(config: ModelPolicyConfig) -> list[tuple[str, tuple[str, ...]]]:
+    return [
+        (column, tuple(getattr(config, field)))
+        for field, column in REGIME_BLOCK_FIELDS
+        if getattr(config, field)
+    ]
 
 
 def model_signal_from_predictions(
@@ -451,6 +478,13 @@ def model_signal_from_predictions(
         short_barrier = barrier_aligned[config.short_profit_barrier_column].reset_index(drop=True).astype(float)
         side_barrier = pd.Series(np.where(best_side == 1, long_barrier, short_barrier), index=df.index)
         quality_ok &= side_barrier.notna() & (side_barrier >= 0.5)
+    for column, blocked_values in blocked_regime_columns(config):
+        regime_aligned = prediction_index[[column]].reindex(df["timestamp"])
+        regime_values = pd.Series(
+            regime_aligned[column].reset_index(drop=True).astype("string").to_numpy(),
+            index=df.index,
+        )
+        quality_ok &= regime_values.notna() & ~regime_values.isin(set(blocked_values))
 
     if config.policy == "stateless_ev":
         enter = (
@@ -836,6 +870,30 @@ def parse_csv_strings(value: str) -> list[str]:
     if not values:
         raise argparse.ArgumentTypeError("at least one value is required")
     return values
+
+
+def parse_optional_csv_strings(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    return tuple(dict.fromkeys(part.strip() for part in value.split(",") if part.strip()))
+
+
+def regime_values_to_string(values: Iterable[str]) -> str:
+    return ",".join(values)
+
+
+def regime_blocks_from_args(args: argparse.Namespace) -> dict[str, tuple[str, ...]]:
+    return {
+        field: parse_optional_csv_strings(getattr(args, field))
+        for field, _ in REGIME_BLOCK_FIELDS
+    }
+
+
+def regime_block_metric_columns(config: ModelPolicyConfig) -> dict[str, str]:
+    return {
+        field: regime_values_to_string(getattr(config, field))
+        for field, _ in REGIME_BLOCK_FIELDS
+    }
 
 
 def parse_csv_bools(value: str) -> list[bool]:
@@ -1233,6 +1291,7 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         max_wait_regret=args.max_wait_regret,
         min_entry_rank=args.min_entry_rank,
         require_profit_barrier=args.require_profit_barrier,
+        **regime_blocks_from_args(args),
     )
 
 
@@ -1376,6 +1435,34 @@ def handle_model_policy(args: argparse.Namespace) -> int:
     return 0
 
 
+def add_regime_gate_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--block-trend-regimes",
+        default="",
+        help="comma-separated trend_regime values that may not open new positions",
+    )
+    parser.add_argument(
+        "--block-volatility-regimes",
+        default="",
+        help="comma-separated volatility_regime values that may not open new positions",
+    )
+    parser.add_argument(
+        "--block-session-regimes",
+        default="",
+        help="comma-separated session_regime values that may not open new positions",
+    )
+    parser.add_argument(
+        "--block-gap-regimes",
+        default="",
+        help="comma-separated gap_regime values that may not open new positions",
+    )
+    parser.add_argument(
+        "--block-combined-regimes",
+        default="",
+        help="comma-separated combined_regime values that may not open new positions",
+    )
+
+
 def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--policy", choices=available_model_policies(), default="stateful_ev")
@@ -1400,6 +1487,7 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-wait-regret", type=float, default=float("inf"))
     parser.add_argument("--min-entry-rank", type=float, default=0.0)
     parser.add_argument("--require-profit-barrier", action="store_true")
+    add_regime_gate_args(parser)
 
 
 def handle_model_sweep(args: argparse.Namespace) -> int:
@@ -1415,6 +1503,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     max_wait_regrets = parse_csv_floats(args.max_wait_regrets)
     min_entry_ranks = parse_csv_floats(args.min_entry_ranks)
     require_profit_barriers = parse_csv_bools(args.require_profit_barriers)
+    regime_blocks = regime_blocks_from_args(args)
 
     run_dir = make_run_dir(args.output_dir, f"model_sweep_{args.month}")
     rows: list[dict[str, object]] = []
@@ -1451,6 +1540,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                                         max_wait_regret=max_wait_regret,
                                         min_entry_rank=min_entry_rank,
                                         require_profit_barrier=require_profit_barrier,
+                                        **regime_blocks,
                                     )
                                     metrics, _, _, _ = run_model_policy(
                                         df,
@@ -1476,6 +1566,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                                         "max_wait_regret": max_wait_regret,
                                         "min_entry_rank": min_entry_rank,
                                         "require_profit_barrier": require_profit_barrier,
+                                        **regime_block_metric_columns(model_policy_config),
                                         "forced_exit_rate": forced_exit_rate,
                                         "eligible": bool(eligible),
                                         **metrics,
@@ -1498,6 +1589,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "max_wait_regrets": max_wait_regrets,
         "min_entry_ranks": min_entry_ranks,
         "require_profit_barriers": require_profit_barriers,
+        **{field: list(values) for field, values in regime_blocks.items()},
         "min_trades": args.min_trades,
         "max_forced_exit_rate": args.max_forced_exit_rate,
         "max_drawdown": args.max_drawdown,
@@ -1533,6 +1625,9 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["min_entry_rank"] = 0.0
     if "require_profit_barrier" not in output.columns:
         output["require_profit_barrier"] = False
+    for field, _ in REGIME_BLOCK_FIELDS:
+        if field not in output.columns:
+            output[field] = ""
     if "forced_exit_rate" not in output.columns:
         trade_count = output["trade_count"].replace(0, np.nan)
         output["forced_exit_rate"] = (output["forced_exit_count"] / trade_count).fillna(0.0)
@@ -1574,6 +1669,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         )
     else:
         output["require_profit_barrier"] = output["require_profit_barrier"].astype(bool)
+    for field, _ in REGIME_BLOCK_FIELDS:
+        output[field] = output[field].fillna("").astype(str)
     return output
 
 
@@ -1854,6 +1951,7 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
     model_sweep.add_argument("--long-profit-barrier-column", default="pred_long_profit_barrier_hit")
     model_sweep.add_argument("--short-profit-barrier-column", default="pred_short_profit_barrier_hit")
+    add_regime_gate_args(model_sweep)
     model_sweep.add_argument("--top-n", type=int, default=10)
     model_sweep.set_defaults(func=handle_model_sweep)
 

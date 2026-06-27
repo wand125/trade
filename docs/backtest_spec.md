@@ -105,6 +105,32 @@ short exit  = open + cost_per_side
 
 固定policyのstress testには `model-cost-sensitivity` を使う。
 
+### Model policy regime gate
+
+モデル予測policyでは、特定regimeで新規entryを禁止できる。
+
+CLI:
+
+```bash
+python -m trade_data.backtest model-policy \
+  --month 2025-02 \
+  --predictions path/to/predictions.parquet \
+  --policy timed_ev \
+  --block-session-regimes asia,rollover
+```
+
+指定できるgate:
+
+- `--block-trend-regimes`
+- `--block-volatility-regimes`
+- `--block-session-regimes`
+- `--block-gap-regimes`
+- `--block-combined-regimes`
+
+gateはflat状態からの新規entryだけに効く。保有中のexit判定と強制決済は通常通り扱う。
+
+`model-sweep-summary` ではgate条件もpolicy keyに含め、gateあり/なしを別候補として集計する。
+
 ## 初期実装
 
 実装ファイル:

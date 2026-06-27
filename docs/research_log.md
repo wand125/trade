@@ -955,3 +955,41 @@ Artifact:
 - regime/cost/purgeの基盤は有効だが、HGB 80iterの汎化成績はまだ改善していない。
 - NoTradeに負けているため採用不可。
 - 次は低ボラ・asia・rolloverでentryを抑えるregime gate、direction/regime別calibration、profit barrier確率化を試す。
+
+### Regime Gate Experiment
+
+作業:
+
+- `model-policy` / `model-sweep` に hard regime gate を追加した。
+- `--block-trend-regimes`, `--block-volatility-regimes`, `--block-session-regimes`, `--block-gap-regimes`, `--block-combined-regimes` を追加。
+- gate条件は `quality_ok` に合成し、新規entryだけを抑制する。保有中のexitや強制決済は変えない。
+- `model-sweep-summary` では block条件もpolicy keyに含め、gateあり/なしを別候補として集計する。
+- report: `docs/reports/2026-06-28_regime_gate_experiment.md`
+
+検証:
+
+- `python3 -m unittest discover tests`: 41 tests OK。
+- `git diff --check`: OK。
+
+Validation:
+
+- 対象モデル: `experiments/20260627_215123_policy_iter80_p1_l1p2_regime_purge_e24_v2/`
+- validation: 2024-07, 2024-09, 2024-11, 2025-01。
+- `asia,rollover` gate top: mean pnl `31.3258`, min pnl `21.4868`, min trades `16`。
+- `asia` gate top: mean pnl `40.0143`, min pnl `16.6970`, min trades `17`。
+- `rollover` gate top: mean pnl `62.6525`, min pnl `38.4034`, min trades `15`。
+
+Fixed test:
+
+- `asia,rollover` validation top: 2024-12 `-121.9240`, 2025-02 `+58.5242`。
+- `asia` validation top: 2024-12 `-127.9708`, 2025-02 `+63.3104`。
+- `rollover` validation top: 2024-12 `-37.5214`, 2025-02 `-38.0992`。
+- 前回候補に `asia,rollover` を足した場合: 2024-12 `+5.8384`、2025-02 `+24.0720`。ただし 7 trades / 3 trades と薄い。
+
+判断:
+
+- hard gateは損失回避のablationとして有用。
+- ただし、採用policyとしては月間regime差に弱い。
+- `asia` / `asia,rollover` は 2025-02を改善するが2024-12を悪化させる。
+- `rollover` はvalidationでは強いがtestではNoTradeに負ける。
+- 本流は hard block ではなく、side/regime別EV calibration、予測EV shrinkage、regime別threshold offsetへ進める。
