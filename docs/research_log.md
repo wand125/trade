@@ -377,6 +377,81 @@ model:
 - ただし signal は long 側に偏っており、上昇局面依存の疑いが残る。
 - 次は short 優勢またはレンジ相場を含むfoldを追加し、direction bias を評価する。
 
+### Short/Down-Regime 確認
+
+目的:
+
+- 2024-10 test で標準候補の signal が long 側に偏っていた。
+- short 優勢または下落局面で、標準候補が維持できるか確認する。
+
+split:
+
+- train: 2023-01 から 2024-10
+- valid: 2024-11
+- test: 2024-12
+
+月次価格変化:
+
+- 2024-11: -3.517%
+- 2024-12: -1.090%
+
+model:
+
+- artifacts: `experiments/20260627_183919_hgb_multitask_edge15/`
+
+2024-11 valid sweep:
+
+- artifacts: `data/reports/backtests/20260627_183932_model_sweep_2024-11/`
+- 単月上位は short を多く取る stateful 系だった。
+- 従来候補 `timed_ev entry=15 side_margin=5 risk=0` は adjusted pnl -21.0065、max drawdown 199.0998、forced exit rate 0.0208 で、このfoldでは崩れた。
+
+4fold strict summary:
+
+- artifacts: `data/reports/backtests/20260627_184136_model_sweep_summary/`
+- folds: 2024-07, 2024-09, 2024-11, 2025-01
+- constraints: min trades 30, forced exit rate 0, max drawdown 100, min adjusted pnl per fold 0
+- result: eligible candidate なし
+
+4fold relaxed summary:
+
+- artifacts: `data/reports/backtests/20260627_184150_model_sweep_summary/`
+- constraints: min trades 30, forced exit rate 0.5, max drawdown 150, min adjusted pnl per fold 0
+- top eligible: `stateful_ev`, entry 5, exit 10, side margin 5, risk penalty 0.1
+- validation mean adjusted pnl: 113.5546
+- validation min adjusted pnl: 100.7555
+- forced exit rate max: 0.5000
+
+2024-12 test:
+
+- standard candidate artifact: `data/reports/backtests/20260627_184333_model_timed_ev_2024-12/`
+- standard candidate adjusted pnl: -175.6668
+- raw pnl: -107.4190
+- trades: 44
+- win rate: 0.3636
+- profit factor: 0.4852
+- max drawdown: 206.9538
+- forced exits: 0
+- long adjusted pnl: -110.5037
+- short adjusted pnl: -65.1630
+- long trades: 12
+- short trades: 32
+
+2024-12 baseline:
+
+- rsi_reversal: +41.0018
+- random: +0.8950
+- no_trade: 0.0000
+- ma_cross: -34.3620
+- breakout: -158.6600
+
+判断:
+
+- 下落/short寄りfoldを入れると、従来の標準候補は棄却される。
+- 2024-12では short signal が多いにもかかわらず short trades も損失なので、単純な long bias ではない。
+- 失敗は、下落/レンジ局面での entry timing、exit timing、EV calibration の崩れと見る。
+- 次は `model-sweep-summary` に方向別P/L、long/short exposure、regime別評価を入れる。
+- モデル側では regime feature、volatility/trend classifier、side-specific calibration を検討する。
+
 ### 評価倍率の緩和
 
 会話上の判断:

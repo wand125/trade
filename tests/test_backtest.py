@@ -9,6 +9,7 @@ from trade_data.backtest import (
     model_signal_from_predictions,
     normalize_sweep_metrics,
     run_backtest,
+    summarize_trades,
     summarize_sweep_frames,
     trades_to_frame,
 )
@@ -83,6 +84,26 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(trades.iloc[0]["exit_timestamp"], df["timestamp"].iloc[2])
         self.assertEqual(trades.iloc[1]["direction"], "short")
         self.assertEqual(trades.iloc[1]["entry_timestamp"], df["timestamp"].iloc[3])
+
+    def test_trade_summary_includes_direction_pnl(self):
+        df = frame_with_opens([100, 101, 103, 104, 102, 97])
+        signal = pd.Series([1, 1, 0, -1, -1, 0])
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+        trades = trades_to_frame(run_backtest(df, signal, config))
+
+        metrics = summarize_trades(trades, config, "test")
+
+        self.assertEqual(metrics["long_trade_count"], 1)
+        self.assertEqual(metrics["short_trade_count"], 1)
+        self.assertAlmostEqual(metrics["long_raw_pnl"], 3.0)
+        self.assertAlmostEqual(metrics["short_raw_pnl"], 5.0)
+        self.assertAlmostEqual(metrics["long_adjusted_pnl"], 2.7)
+        self.assertAlmostEqual(metrics["short_adjusted_pnl"], 4.5)
+        self.assertAlmostEqual(metrics["long_win_rate"], 1.0)
+        self.assertAlmostEqual(metrics["short_win_rate"], 1.0)
 
     def test_stateless_model_signal_uses_entry_threshold(self):
         df = frame_with_opens([100, 101, 102, 103, 104, 105])

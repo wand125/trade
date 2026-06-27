@@ -60,6 +60,8 @@
 
 同じ候補を追加foldの 2024-10 test に固定適用すると adjusted pnl `+48.9555`、raw pnl `+99.6620`、43 trades、profit factor `1.1931`、max drawdown `77.1468`、forced exits 0 だった。2024-10 の no_trade `0.0` と random `+43.9895` を上回った。ただし signal は long 側に偏ったため、short 優勢相場での確認が必要。
 
+short/down-regime 確認として、train 2023-01..2024-10、valid 2024-11、test 2024-12 のfoldを追加した。4fold strict summary では eligible candidate が消え、従来候補 `timed_ev`, entry 15, side margin 5, risk 0 は validation min pnl `-21.0065` まで悪化した。2024-12 test では adjusted pnl `-175.6668`、max drawdown `206.9538`、long adjusted pnl `-110.5037`、short adjusted pnl `-65.1630`。short signal は多かったため、問題は単純な long bias ではなく、下落/レンジ局面での entry/exit timing と EV calibration の崩れ。
+
 ## 直近の実験
 
 - `docs/reports/2026-06-28_baseline_backtest_2025-01.md`
@@ -79,3 +81,7 @@
 - `data/reports/backtests/20260627_183050_model_sweep_2024-09/`
 - `data/reports/backtests/20260627_183241_model_sweep_summary/`
 - `data/reports/backtests/20260627_183253_model_timed_ev_2024-10/`
+- `experiments/20260627_183919_hgb_multitask_edge15/`
+- `data/reports/backtests/20260627_183932_model_sweep_2024-11/`
+- `data/reports/backtests/20260627_184136_model_sweep_summary/`
+- `data/reports/backtests/20260627_184333_model_timed_ev_2024-12/`

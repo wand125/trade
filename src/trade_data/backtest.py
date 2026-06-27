@@ -540,6 +540,12 @@ def summarize_trades(
             "exposure_hours": 0.0,
             "long_trade_count": 0,
             "short_trade_count": 0,
+            "long_adjusted_pnl": 0.0,
+            "short_adjusted_pnl": 0.0,
+            "long_raw_pnl": 0.0,
+            "short_raw_pnl": 0.0,
+            "long_win_rate": 0.0,
+            "short_win_rate": 0.0,
             "forced_exit_count": 0,
             "avg_holding_minutes": 0.0,
             "median_holding_minutes": 0.0,
@@ -553,6 +559,12 @@ def summarize_trades(
     running_max = curve["equity"].cummax()
     drawdowns = running_max - curve["equity"]
     profit_factor = None if gross_loss == 0 else gross_profit / gross_loss
+    long_mask = trades["direction"] == "long"
+    short_mask = trades["direction"] == "short"
+    long_adjusted = adjusted[long_mask]
+    short_adjusted = adjusted[short_mask]
+    long_raw = raw[long_mask]
+    short_raw = raw[short_mask]
 
     return {
         "strategy": strategy,
@@ -568,6 +580,12 @@ def summarize_trades(
         "exposure_hours": float(trades["holding_minutes"].sum() / 60),
         "long_trade_count": int((trades["direction"] == "long").sum()),
         "short_trade_count": int((trades["direction"] == "short").sum()),
+        "long_adjusted_pnl": float(long_adjusted.sum()),
+        "short_adjusted_pnl": float(short_adjusted.sum()),
+        "long_raw_pnl": float(long_raw.sum()),
+        "short_raw_pnl": float(short_raw.sum()),
+        "long_win_rate": float((long_adjusted > 0).mean()) if len(long_adjusted) else 0.0,
+        "short_win_rate": float((short_adjusted > 0).mean()) if len(short_adjusted) else 0.0,
         "forced_exit_count": int((trades["exit_reason"] == "forced_exit").sum()),
         "avg_holding_minutes": float(trades["holding_minutes"].mean()),
         "median_holding_minutes": float(trades["holding_minutes"].median()),

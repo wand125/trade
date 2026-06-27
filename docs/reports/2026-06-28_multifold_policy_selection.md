@@ -155,3 +155,78 @@ Artifacts:
 - 3fold集計で候補が変わらなかったため、`timed_ev entry=15 side_margin=5 risk=0` は現時点の標準候補として維持する。
 - 2024-10 test では no_trade と random を上回った。
 - ただし signal は long 側に強く偏った。上昇局面依存の可能性があるため、次は short が優勢なfoldを含める。
+
+## Short/Down-Regime Fold
+
+direction bias を確認するため、連続下落月を含むfoldを追加した。
+
+| split | period |
+|---|---|
+| train | 2023-01 to 2024-10 |
+| valid | 2024-11 |
+| test | 2024-12 |
+
+月次価格変化:
+
+| month | change |
+|---|---:|
+| 2024-11 | -3.517% |
+| 2024-12 | -1.090% |
+
+Artifacts:
+
+- model: `experiments/20260627_183919_hgb_multitask_edge15/`
+- valid sweep: `data/reports/backtests/20260627_183932_model_sweep_2024-11/`
+- strict 4fold summary: `data/reports/backtests/20260627_184136_model_sweep_summary/`
+- relaxed 4fold summary: `data/reports/backtests/20260627_184150_model_sweep_summary/`
+- standard test rerun: `data/reports/backtests/20260627_184333_model_timed_ev_2024-12/`
+- benchmark: `data/reports/backtests/20260627_184206_benchmark_2024-12/`
+
+4fold strict summary:
+
+- folds: 2024-07, 2024-09, 2024-11, 2025-01
+- constraints: min trades 30, max forced exit rate 0, max drawdown 100, min adjusted pnl per fold 0
+- result: eligible candidate なし
+
+従来の標準候補 `timed_ev entry=15 side_margin=5 risk=0` は、4foldで以下に悪化した。
+
+| metric | value |
+|---|---:|
+| validation mean pnl | 89.5481 |
+| validation min pnl | -21.0065 |
+| eligible folds | 3 / 4 |
+| max drawdown | 199.0998 |
+| forced exit max rate | 0.0208 |
+
+2024-12 test に標準候補を固定適用した結果:
+
+| metric | value |
+|---|---:|
+| adjusted pnl | -175.6668 |
+| raw pnl | -107.4190 |
+| trades | 44 |
+| win rate | 0.3636 |
+| profit factor | 0.4852 |
+| max drawdown | 206.9538 |
+| forced exits | 0 |
+| long adjusted pnl | -110.5037 |
+| short adjusted pnl | -65.1630 |
+| long trades | 12 |
+| short trades | 32 |
+
+2024-12 baseline:
+
+| strategy | adjusted pnl |
+|---|---:|
+| rsi_reversal | 41.0018 |
+| random | 0.8950 |
+| no_trade | 0.0000 |
+| ma_cross | -34.3620 |
+| breakout | -158.6600 |
+
+判断:
+
+- 下落/short寄りfoldを入れると、これまでの標準候補は維持できない。
+- 2024-12 test では short signal が long signal より多いにもかかわらず、long/short 両方で損失になった。
+- 問題は単純な long bias だけではなく、下落/レンジ局面での entry timing、exit timing、EV calibration の崩れ。
+- 次は regime feature と direction exposure constraint を導入し、validation summary に方向別P/Lと方向偏りを入れる。
