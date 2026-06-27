@@ -869,3 +869,30 @@ Artifacts:
   - side/regime別EV calibration。
   - exit timing target強化。
   - shared representationを持つ小型MLP/TCN。
+
+### 汎化原則レビューと失敗trade分析
+
+作業:
+
+- トレードMLの汎化原則を `docs/trading_ml_generalization_principles.md` に整理した。
+- 現状がその原則を守れているかを `docs/reports/2026-06-28_generalization_principles_review.md` にレビューした。
+- 低LR1280モデルの固定test負けを分解する `trade-backtest analyze-trades` を追加した。
+- 失敗trade分析レポートを `docs/reports/2026-06-28_trade_failure_analysis.md` に作成した。
+
+判断:
+
+- NoTrade比較、月別validation/test、次足open約定、executable backtest、失敗trade分析は守れている。
+- purging / embargo、regime別標準評価、spread/slippage/delay感度、validationを見すぎない運用は未整備。
+- 2024-12/2025-02は何度も見たため、今後の最終holdoutとしては弱い。
+- 低LR1280のtest失敗では、予測EVが実現PnLに対して平均約22ドル過大だった。
+- actual barrier miss、direction error、exit regretが損失の中心。
+- predicted barrierは今回の全tradeを通しており、filterとして弱い。
+- `min_entry_rank=0.5` focused sweepは損失を抑えたが、NoTradeには届かなかった。
+
+次の行動:
+
+1. analyzerを今後の候補診断に必須化する。
+2. regime labelをdataset/backtest reportへ追加する。
+3. spread/slippage/delay sensitivityをbacktestへ追加する。
+4. purged/embargo walk-forward splitを実装する。
+5. OOF predictionsとside/regime別EV calibrationへ進む。

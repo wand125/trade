@@ -17,6 +17,8 @@
 - backtest specification
 - random seed
 
+実験開始前に `docs/trading_ml_generalization_principles.md` のチェックリストを確認する。特に、時系列分割、未来情報の混入、NoTrade比較、コスト感度、regime別評価の有無を明示する。
+
 ## ディレクトリ案
 
 将来の実装では、実験成果物を以下に保存する。
@@ -70,6 +72,21 @@ experiments/
 
 比較は同一期間、同一バックテスト仕様、同一データで行う。
 
+## 汎化レビュー
+
+採用候補は、単月の最高スコアではなく、未知regimeへの壊れにくさで判断する。
+
+最低限、以下を確認する。
+
+- train / validation / test が時系列順で分離されている。
+- ラベルの未来窓が重なる場合は purging / embargo の必要性を記録している。
+- test結果を見てpolicy thresholdを選び直していない。
+- NoTrade、random、previous bestを上回るか確認している。
+- long/short、regime、時間帯、volatility、holding bucket別の損益を見ている。
+- spread / slippage / execution delayを悪化させたときの感度を確認する予定または結果がある。
+- 周辺パラメータでも成績が残るかを確認している。
+- 失敗trade分析でdirection error、exit regret、EV overestimateを確認している。
+
 ## モデル保存
 
 保存ルール:
@@ -97,4 +114,3 @@ experiments/
 - 特定月だけ異常に良い。
 - gap 周辺で損失が集中する。
 - 損失補正 1.3 倍に弱い。
-

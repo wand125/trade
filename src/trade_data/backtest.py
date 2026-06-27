@@ -43,6 +43,51 @@ SWEEP_KEY_COLUMNS = [
     "require_profit_barrier",
 ]
 
+ANALYSIS_PREDICTION_COLUMNS = [
+    "decision_timestamp",
+    "long_best_adjusted_pnl",
+    "short_best_adjusted_pnl",
+    "long_best_holding_minutes",
+    "short_best_holding_minutes",
+    "long_max_adverse_pnl",
+    "short_max_adverse_pnl",
+    "long_profit_barrier_hit",
+    "short_profit_barrier_hit",
+    "long_wait_regret",
+    "short_wait_regret",
+    "long_entry_local_rank",
+    "short_entry_local_rank",
+    "pred_long_best_adjusted_pnl",
+    "pred_short_best_adjusted_pnl",
+    "pred_long_best_holding_minutes",
+    "pred_short_best_holding_minutes",
+    "pred_long_max_adverse_pnl",
+    "pred_short_max_adverse_pnl",
+    "pred_long_wait_regret",
+    "pred_short_wait_regret",
+    "pred_long_entry_local_rank",
+    "pred_short_entry_local_rank",
+    "pred_long_profit_barrier_hit",
+    "pred_short_profit_barrier_hit",
+]
+
+ANALYSIS_GROUP_COLUMNS = [
+    "direction",
+    "exit_reason",
+    "entry_hour",
+    "holding_bucket",
+    "predicted_best_side",
+    "actual_best_side",
+    "actual_taken_profit_barrier_hit",
+    "pred_taken_profit_barrier_hit",
+    "actual_taken_best_bucket",
+    "pred_taken_ev_bucket",
+    "actual_taken_wait_regret_bucket",
+    "pred_taken_wait_regret_bucket",
+    "actual_taken_entry_rank_bucket",
+    "pred_taken_entry_rank_bucket",
+]
+
 
 @dataclass(frozen=True)
 class BacktestConfig:
@@ -647,6 +692,12 @@ def summarize_trades(
 def json_default(value: object) -> str:
     if isinstance(value, pd.Timestamp):
         return value.isoformat()
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
     raise TypeError(f"cannot serialize {type(value).__name__}")
 
 
@@ -745,6 +796,338 @@ def parse_csv_paths(value: str) -> list[Path]:
     if not values:
         raise argparse.ArgumentTypeError("at least one path is required")
     return values
+
+
+def read_trades_csv(path: Path) -> pd.DataFrame:
+    trades = pd.read_csv(path)
+    missing = sorted(set(TRADE_COLUMNS) - set(trades.columns))
+    if missing:
+        raise ValueError(f"{path} is missing columns: {', '.join(missing)}")
+    for column in ["entry_timestamp", "exit_timestamp", "entry_decision_timestamp", "exit_decision_timestamp"]:
+        trades[column] = pd.to_datetime(trades[column], utc=True)
+    return trades
+
+
+def read_analysis_predictions(path: Path) -> pd.DataFrame:
+    predictions = pd.read_parquet(path)
+    required = [
+        "decision_timestamp",
+        "long_best_adjusted_pnl",
+        "short_best_adjusted_pnl",
+        "pred_long_best_adjusted_pnl",
+        "pred_short_best_adjusted_pnl",
+    ]
+    missing = sorted(set(required) - set(predictions.columns))
+    if missing:
+        raise ValueError(f"{path} is missing columns: {', '.join(missing)}")
+    columns = [column for column in ANALYSIS_PREDICTION_COLUMNS if column in predictions.columns]
+    predictions = predictions[columns].copy()
+    predictions["decision_timestamp"] = pd.to_datetime(predictions["decision_timestamp"], utc=True)
+    duplicated = predictions["decision_timestamp"].duplicated()
+    if duplicated.any():
+        duplicated_count = int(duplicated.sum())
+        raise ValueError(f"{path} has duplicated decision_timestamp values: {duplicated_count}")
+    return predictions.sort_values("decision_timestamp").reset_index(drop=True)
+
+
+def side_values(
+    frame: pd.DataFrame,
+    direction: pd.Series,
+    long_column: str,
+    short_column: str,
+) -> pd.Series:
+    values = np.where(direction.eq("long"), frame[long_column], frame[short_column])
+    return pd.Series(values, index=frame.index)
+
+
+def opposite_side_values(
+    frame: pd.DataFrame,
+    direction: pd.Series,
+    long_column: str,
+    short_column: str,
+) -> pd.Series:
+    values = np.where(direction.eq("long"), frame[short_column], frame[long_column])
+    return pd.Series(values, index=frame.index)
+
+
+def numeric_indicator(series: pd.Series) -> pd.Series:
+    return series.fillna(False).astype(float)
+
+
+def bucket_series(values: pd.Series, bins: list[float], labels: list[str]) -> pd.Series:
+    return pd.cut(values.astype(float), bins=bins, labels=labels, include_lowest=True)
+
+
+def add_trade_analysis_buckets(enriched: pd.DataFrame) -> pd.DataFrame:
+    output = enriched.copy()
+    output["entry_hour"] = output["entry_timestamp"].dt.hour
+    output["holding_bucket"] = bucket_series(
+        output["holding_minutes"],
+        [-float("inf"), 5, 30, 120, 360, 720, 1440, float("inf")],
+        ["<=5m", "5-30m", "30-120m", "2-6h", "6-12h", "12-24h", ">24h"],
+    )
+    pnl_bins = [-float("inf"), 0, 5, 15, 30, float("inf")]
+    pnl_labels = ["<=0", "0-5", "5-15", "15-30", ">30"]
+    output["actual_taken_best_bucket"] = bucket_series(
+        output["actual_taken_best_adjusted_pnl"], pnl_bins, pnl_labels
+    )
+    output["pred_taken_ev_bucket"] = bucket_series(output["pred_taken_ev"], pnl_bins, pnl_labels)
+    wait_bins = [-float("inf"), 0, 2, 4, 10, float("inf")]
+    wait_labels = ["<=0", "0-2", "2-4", "4-10", ">10"]
+    output["actual_taken_wait_regret_bucket"] = bucket_series(
+        output["actual_taken_wait_regret"], wait_bins, wait_labels
+    )
+    output["pred_taken_wait_regret_bucket"] = bucket_series(
+        output["pred_taken_wait_regret"], wait_bins, wait_labels
+    )
+    rank_bins = [-float("inf"), 0.25, 0.5, 0.75, 1.0, float("inf")]
+    rank_labels = ["<=0.25", "0.25-0.5", "0.5-0.75", "0.75-1.0", ">1.0"]
+    output["actual_taken_entry_rank_bucket"] = bucket_series(
+        output["actual_taken_entry_local_rank"], rank_bins, rank_labels
+    )
+    output["pred_taken_entry_rank_bucket"] = bucket_series(
+        output["pred_taken_entry_local_rank"], rank_bins, rank_labels
+    )
+    return output
+
+
+def enrich_trades_with_predictions(trades: pd.DataFrame, predictions: pd.DataFrame) -> pd.DataFrame:
+    if trades.empty:
+        output = trades.copy()
+        for column in [
+            "matched_prediction",
+            "direction_error",
+            "no_edge_entry",
+            "predicted_side_error",
+            "exit_regret",
+            "best_side_regret",
+            "ev_overestimate_vs_oracle",
+            "ev_overestimate_vs_realized",
+            "is_win",
+            "is_long",
+            "is_short",
+            "is_forced_exit",
+            "is_loss",
+        ]:
+            output[column] = pd.Series(dtype="float64")
+        return output
+
+    output = trades.copy()
+    for column in ["entry_timestamp", "exit_timestamp", "entry_decision_timestamp", "exit_decision_timestamp"]:
+        output[column] = pd.to_datetime(output[column], utc=True)
+
+    prediction_columns = [column for column in ANALYSIS_PREDICTION_COLUMNS if column in predictions.columns]
+    prediction_frame = predictions[prediction_columns].copy()
+    prediction_frame["decision_timestamp"] = pd.to_datetime(
+        prediction_frame["decision_timestamp"], utc=True
+    )
+    output = output.merge(
+        prediction_frame,
+        left_on="entry_decision_timestamp",
+        right_on="decision_timestamp",
+        how="left",
+        validate="many_to_one",
+    )
+    output["matched_prediction"] = output["decision_timestamp"].notna()
+
+    for column in ANALYSIS_PREDICTION_COLUMNS:
+        if column != "decision_timestamp" and column not in output.columns:
+            output[column] = np.nan
+
+    direction = output["direction"].astype(str).str.lower()
+    output["direction_sign"] = direction.map({"long": 1, "short": -1}).fillna(0).astype(int)
+    output["actual_taken_best_adjusted_pnl"] = side_values(
+        output, direction, "long_best_adjusted_pnl", "short_best_adjusted_pnl"
+    )
+    output["actual_opposite_best_adjusted_pnl"] = opposite_side_values(
+        output, direction, "long_best_adjusted_pnl", "short_best_adjusted_pnl"
+    )
+    output["actual_best_adjusted_pnl"] = output[
+        ["long_best_adjusted_pnl", "short_best_adjusted_pnl"]
+    ].max(axis=1)
+    output["actual_best_side"] = np.where(
+        output["long_best_adjusted_pnl"] >= output["short_best_adjusted_pnl"], "long", "short"
+    )
+    output["actual_best_side"] = pd.Series(output["actual_best_side"], index=output.index).where(
+        output["matched_prediction"], pd.NA
+    )
+
+    output["actual_taken_best_holding_minutes"] = side_values(
+        output, direction, "long_best_holding_minutes", "short_best_holding_minutes"
+    )
+    output["actual_taken_max_adverse_pnl"] = side_values(
+        output, direction, "long_max_adverse_pnl", "short_max_adverse_pnl"
+    )
+    output["actual_taken_profit_barrier_hit"] = side_values(
+        output, direction, "long_profit_barrier_hit", "short_profit_barrier_hit"
+    )
+    output["actual_taken_wait_regret"] = side_values(
+        output, direction, "long_wait_regret", "short_wait_regret"
+    )
+    output["actual_taken_entry_local_rank"] = side_values(
+        output, direction, "long_entry_local_rank", "short_entry_local_rank"
+    )
+
+    output["pred_taken_ev"] = side_values(
+        output, direction, "pred_long_best_adjusted_pnl", "pred_short_best_adjusted_pnl"
+    )
+    output["pred_opposite_ev"] = opposite_side_values(
+        output, direction, "pred_long_best_adjusted_pnl", "pred_short_best_adjusted_pnl"
+    )
+    output["pred_best_ev"] = output[
+        ["pred_long_best_adjusted_pnl", "pred_short_best_adjusted_pnl"]
+    ].max(axis=1)
+    output["predicted_best_side"] = np.where(
+        output["pred_long_best_adjusted_pnl"] >= output["pred_short_best_adjusted_pnl"],
+        "long",
+        "short",
+    )
+    output["predicted_best_side"] = pd.Series(
+        output["predicted_best_side"], index=output.index
+    ).where(output["matched_prediction"], pd.NA)
+    output["pred_taken_best_holding_minutes"] = side_values(
+        output, direction, "pred_long_best_holding_minutes", "pred_short_best_holding_minutes"
+    )
+    output["pred_taken_max_adverse_pnl"] = side_values(
+        output, direction, "pred_long_max_adverse_pnl", "pred_short_max_adverse_pnl"
+    )
+    output["pred_taken_wait_regret"] = side_values(
+        output, direction, "pred_long_wait_regret", "pred_short_wait_regret"
+    )
+    output["pred_taken_entry_local_rank"] = side_values(
+        output, direction, "pred_long_entry_local_rank", "pred_short_entry_local_rank"
+    )
+    output["pred_taken_profit_barrier_hit"] = side_values(
+        output, direction, "pred_long_profit_barrier_hit", "pred_short_profit_barrier_hit"
+    )
+
+    output["direction_error"] = (
+        output["actual_opposite_best_adjusted_pnl"] > output["actual_taken_best_adjusted_pnl"]
+    )
+    output["no_edge_entry"] = output["actual_taken_best_adjusted_pnl"] <= 0
+    output["predicted_side_error"] = output["predicted_best_side"] != output["actual_best_side"]
+    output["predicted_side_matches_trade"] = output["predicted_best_side"] == direction
+    output["actual_side_matches_trade"] = output["actual_best_side"] == direction
+    output["exit_regret"] = (
+        output["actual_taken_best_adjusted_pnl"] - output["adjusted_pnl"].astype(float)
+    ).clip(lower=0)
+    output["best_side_regret"] = (
+        output["actual_best_adjusted_pnl"] - output["adjusted_pnl"].astype(float)
+    ).clip(lower=0)
+    output["ev_overestimate_vs_oracle"] = (
+        output["pred_taken_ev"] - output["actual_taken_best_adjusted_pnl"]
+    )
+    output["ev_overestimate_vs_realized"] = output["pred_taken_ev"] - output["adjusted_pnl"].astype(float)
+    output["holding_error_minutes"] = (
+        output["pred_taken_best_holding_minutes"] - output["holding_minutes"].astype(float)
+    )
+    output["oracle_holding_gap_minutes"] = (
+        output["actual_taken_best_holding_minutes"] - output["holding_minutes"].astype(float)
+    )
+
+    output["is_win"] = output["adjusted_pnl"].astype(float) > 0
+    output["is_long"] = direction.eq("long")
+    output["is_short"] = direction.eq("short")
+    output["is_forced_exit"] = output["exit_reason"].eq("forced_exit")
+    output["is_loss"] = output["adjusted_pnl"].astype(float) < 0
+    return add_trade_analysis_buckets(output)
+
+
+def trade_group_summary(frame: pd.DataFrame, group_column: str) -> pd.DataFrame:
+    if frame.empty or group_column not in frame.columns:
+        return pd.DataFrame()
+    working = frame.copy()
+    working["_wins"] = numeric_indicator(working["is_win"])
+    working["_longs"] = numeric_indicator(working["is_long"])
+    working["_shorts"] = numeric_indicator(working["is_short"])
+    working["_forced"] = numeric_indicator(working["is_forced_exit"])
+    working["_direction_errors"] = numeric_indicator(working["direction_error"])
+    working["_no_edge"] = numeric_indicator(working["no_edge_entry"])
+    working["_pred_side_errors"] = numeric_indicator(working["predicted_side_error"])
+
+    grouped = working.groupby(group_column, dropna=False, observed=True)
+    summary = grouped.agg(
+        trade_count=("adjusted_pnl", "size"),
+        total_adjusted_pnl=("adjusted_pnl", "sum"),
+        total_raw_pnl=("raw_pnl", "sum"),
+        avg_adjusted_pnl=("adjusted_pnl", "mean"),
+        win_rate=("_wins", "mean"),
+        long_trade_count=("_longs", "sum"),
+        short_trade_count=("_shorts", "sum"),
+        forced_exit_count=("_forced", "sum"),
+        direction_error_rate=("_direction_errors", "mean"),
+        no_edge_rate=("_no_edge", "mean"),
+        predicted_side_error_rate=("_pred_side_errors", "mean"),
+        exit_regret_sum=("exit_regret", "sum"),
+        exit_regret_mean=("exit_regret", "mean"),
+        best_side_regret_sum=("best_side_regret", "sum"),
+        ev_overestimate_vs_oracle_mean=("ev_overestimate_vs_oracle", "mean"),
+        ev_overestimate_vs_realized_mean=("ev_overestimate_vs_realized", "mean"),
+        avg_holding_minutes=("holding_minutes", "mean"),
+    ).reset_index()
+    return summary.sort_values(["total_adjusted_pnl", "trade_count"], ascending=[True, False])
+
+
+def trade_failure_flags(enriched: pd.DataFrame) -> pd.DataFrame:
+    flag_masks = {
+        "losing_trade": enriched["adjusted_pnl"].astype(float) < 0,
+        "direction_error": enriched["direction_error"],
+        "no_edge_entry": enriched["no_edge_entry"],
+        "predicted_side_error": enriched["predicted_side_error"],
+        "exit_regret_positive": enriched["exit_regret"] > 0,
+        "ev_overestimated_oracle": enriched["ev_overestimate_vs_oracle"] > 0,
+        "ev_overestimated_realized": enriched["ev_overestimate_vs_realized"] > 0,
+        "profit_barrier_miss": enriched["actual_taken_profit_barrier_hit"] < 0.5,
+        "forced_exit": enriched["is_forced_exit"],
+    }
+    rows: list[dict[str, object]] = []
+    for name, mask in flag_masks.items():
+        selected = enriched[mask.fillna(False)]
+        losing = selected[selected["adjusted_pnl"].astype(float) < 0]
+        rows.append(
+            {
+                "flag": name,
+                "trade_count": int(len(selected)),
+                "losing_trade_count": int(len(losing)),
+                "total_adjusted_pnl": float(selected["adjusted_pnl"].sum()) if len(selected) else 0.0,
+                "avg_adjusted_pnl": float(selected["adjusted_pnl"].mean()) if len(selected) else 0.0,
+                "loss_adjusted_pnl": float(losing["adjusted_pnl"].sum()) if len(losing) else 0.0,
+                "exit_regret_sum": float(selected["exit_regret"].sum()) if len(selected) else 0.0,
+                "ev_overestimate_vs_realized_mean": (
+                    float(selected["ev_overestimate_vs_realized"].mean()) if len(selected) else 0.0
+                ),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["loss_adjusted_pnl", "trade_count"])
+
+
+def trade_analysis_summary(enriched: pd.DataFrame) -> dict[str, object]:
+    if enriched.empty:
+        return {
+            "trade_count": 0,
+            "matched_prediction_count": 0,
+            "total_adjusted_pnl": 0.0,
+            "total_raw_pnl": 0.0,
+        }
+    adjusted = enriched["adjusted_pnl"].astype(float)
+    raw = enriched["raw_pnl"].astype(float)
+    return {
+        "trade_count": int(len(enriched)),
+        "matched_prediction_count": int(enriched["matched_prediction"].sum()),
+        "total_adjusted_pnl": float(adjusted.sum()),
+        "total_raw_pnl": float(raw.sum()),
+        "win_rate": float((adjusted > 0).mean()),
+        "long_adjusted_pnl": float(enriched.loc[enriched["is_long"], "adjusted_pnl"].sum()),
+        "short_adjusted_pnl": float(enriched.loc[enriched["is_short"], "adjusted_pnl"].sum()),
+        "direction_error_rate": float(numeric_indicator(enriched["direction_error"]).mean()),
+        "no_edge_rate": float(numeric_indicator(enriched["no_edge_entry"]).mean()),
+        "predicted_side_error_rate": float(numeric_indicator(enriched["predicted_side_error"]).mean()),
+        "exit_regret_sum": float(enriched["exit_regret"].sum()),
+        "best_side_regret_sum": float(enriched["best_side_regret"].sum()),
+        "ev_overestimate_vs_oracle_mean": float(enriched["ev_overestimate_vs_oracle"].mean()),
+        "ev_overestimate_vs_realized_mean": float(enriched["ev_overestimate_vs_realized"].mean()),
+        "avg_holding_minutes": float(enriched["holding_minutes"].mean()),
+    }
 
 
 def strategy_config_from_args(args: argparse.Namespace, strategy: str | None = None) -> StrategyConfig:
@@ -1159,6 +1542,47 @@ def handle_model_sweep_summary(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_analyze_trades(args: argparse.Namespace) -> int:
+    trades = read_trades_csv(args.trades)
+    predictions = read_analysis_predictions(args.predictions)
+    enriched = enrich_trades_with_predictions(trades, predictions)
+    flags = trade_failure_flags(enriched)
+    summary = trade_analysis_summary(enriched)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    enriched.to_csv(run_dir / "enriched_trades.csv", index=False)
+    flags.to_csv(run_dir / "failure_flags.csv", index=False)
+    enriched.sort_values("adjusted_pnl").head(args.top_n).to_csv(
+        run_dir / "worst_trades.csv",
+        index=False,
+    )
+    for column in ANALYSIS_GROUP_COLUMNS:
+        group = trade_group_summary(enriched, column)
+        if not group.empty:
+            group.to_csv(run_dir / f"group_by_{column}.csv", index=False)
+
+    metadata = {
+        "trades": str(args.trades),
+        "predictions": str(args.predictions),
+        "label": args.label,
+        "top_n": args.top_n,
+        "summary": summary,
+    }
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2, default=json_default)
+
+    print("summary:")
+    for key, value in summary.items():
+        if isinstance(value, float):
+            print(f"{key}: {value:.6f}")
+        else:
+            print(f"{key}: {value}")
+    print("failure flags:")
+    print(flags.head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def handle_benchmark(args: argparse.Namespace) -> int:
     df, backtest_config = prepare_data_and_config(args)
     strategies = args.strategies.split(",") if args.strategies else available_strategies()
@@ -1313,6 +1737,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     model_sweep_summary.add_argument("--top-n", type=int, default=10)
     model_sweep_summary.set_defaults(func=handle_model_sweep_summary)
+
+    analyze_trades = subparsers.add_parser(
+        "analyze-trades",
+        help="join trades.csv with saved predictions and diagnose failure modes",
+    )
+    analyze_trades.add_argument("--trades", type=Path, required=True)
+    analyze_trades.add_argument("--predictions", type=Path, required=True)
+    analyze_trades.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
+    analyze_trades.add_argument("--label", default="trade_analysis")
+    analyze_trades.add_argument("--top-n", type=int, default=20)
+    analyze_trades.set_defaults(func=handle_analyze_trades)
     return parser
 
 

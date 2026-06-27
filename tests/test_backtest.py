@@ -6,11 +6,15 @@ import pandas as pd
 from trade_data.backtest import (
     BacktestConfig,
     ModelPolicyConfig,
+    enrich_trades_with_predictions,
     model_signal_from_predictions,
     normalize_sweep_metrics,
     run_backtest,
     summarize_trades,
     summarize_sweep_frames,
+    trade_analysis_summary,
+    trade_failure_flags,
+    trade_group_summary,
     trades_to_frame,
 )
 
@@ -293,6 +297,75 @@ class BacktestTests(unittest.TestCase):
         self.assertTrue(bool(top["eligible"]))
         stateful = summary[summary["policy"] == "stateful_ev"].iloc[0]
         self.assertFalse(bool(stateful["eligible"]))
+
+    def test_trade_analysis_joins_predictions_and_flags_failures(self):
+        timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=5, freq="min")
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "short"],
+                "entry_timestamp": [timestamps[1], timestamps[2]],
+                "exit_timestamp": [timestamps[3], timestamps[4]],
+                "entry_price": [100.0, 105.0],
+                "exit_price": [102.0, 107.0],
+                "raw_pnl": [2.0, -2.0],
+                "adjusted_pnl": [2.0, -2.4],
+                "holding_minutes": [2.0, 2.0],
+                "exit_reason": ["signal_close", "signal_close"],
+                "entry_decision_timestamp": [timestamps[0], timestamps[1]],
+                "exit_decision_timestamp": [timestamps[2], timestamps[3]],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": [timestamps[0], timestamps[1]],
+                "long_best_adjusted_pnl": [10.0, 5.0],
+                "short_best_adjusted_pnl": [3.0, -1.0],
+                "long_best_holding_minutes": [5.0, 4.0],
+                "short_best_holding_minutes": [6.0, 3.0],
+                "long_max_adverse_pnl": [-1.0, -2.0],
+                "short_max_adverse_pnl": [-2.0, -3.0],
+                "long_profit_barrier_hit": [1, 1],
+                "short_profit_barrier_hit": [0, 0],
+                "long_wait_regret": [0.0, 1.0],
+                "short_wait_regret": [2.0, 4.0],
+                "long_entry_local_rank": [0.9, 0.8],
+                "short_entry_local_rank": [0.1, 0.2],
+                "pred_long_best_adjusted_pnl": [12.0, 4.0],
+                "pred_short_best_adjusted_pnl": [2.0, 15.0],
+                "pred_long_best_holding_minutes": [4.0, 4.0],
+                "pred_short_best_holding_minutes": [6.0, 3.0],
+                "pred_long_max_adverse_pnl": [-1.0, -2.0],
+                "pred_short_max_adverse_pnl": [-2.0, -3.0],
+                "pred_long_wait_regret": [0.0, 2.0],
+                "pred_short_wait_regret": [1.0, 2.0],
+                "pred_long_entry_local_rank": [0.9, 0.7],
+                "pred_short_entry_local_rank": [0.3, 0.4],
+                "pred_long_profit_barrier_hit": [1, 1],
+                "pred_short_profit_barrier_hit": [0, 1],
+            }
+        )
+
+        enriched = enrich_trades_with_predictions(trades, predictions)
+
+        self.assertEqual(len(enriched), 2)
+        self.assertAlmostEqual(enriched.iloc[0]["actual_taken_best_adjusted_pnl"], 10.0)
+        self.assertAlmostEqual(enriched.iloc[0]["exit_regret"], 8.0)
+        self.assertFalse(bool(enriched.iloc[0]["direction_error"]))
+        self.assertTrue(bool(enriched.iloc[1]["direction_error"]))
+        self.assertTrue(bool(enriched.iloc[1]["no_edge_entry"]))
+        self.assertAlmostEqual(enriched.iloc[1]["ev_overestimate_vs_oracle"], 16.0)
+
+        summary = trade_analysis_summary(enriched)
+        self.assertEqual(summary["trade_count"], 2)
+        self.assertEqual(summary["matched_prediction_count"], 2)
+        self.assertAlmostEqual(summary["total_adjusted_pnl"], -0.4)
+
+        flags = trade_failure_flags(enriched)
+        direction_row = flags[flags["flag"] == "direction_error"].iloc[0]
+        self.assertEqual(direction_row["trade_count"], 1)
+
+        grouped = trade_group_summary(enriched, "direction")
+        self.assertEqual(set(grouped["direction"]), {"long", "short"})
 
 
 if __name__ == "__main__":

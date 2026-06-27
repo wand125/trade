@@ -4,52 +4,58 @@
 
 ## 最初に読むもの
 
-1. `../GOAL.md`  
+1. `../GOAL.md`
    研究目的、取引ルール、評価方針。
 
-2. `status.md`  
+2. `status.md`
    現在の到達点、利用可能なデータ、次の作業。
 
-3. `research_log.md`  
+3. `trading_ml_generalization_principles.md`
+   トレードMLで守るべき汎化・検証・リーク防止の原則。
+
+4. `research_log.md`
    時系列の作業記録。
 
-4. `research_plan.md`  
+5. `research_plan.md`
    体系的な研究ロードマップ。
 
 ## 仕様と方針
 
-- `backtest_spec.md`  
+- `backtest_spec.md`
   取引ルール、損益計算、強制決済、評価指標の仕様。
 
-- `data_strategy.md`  
+- `data_strategy.md`
   データ、欠損、ノイズ、前処理、分割方針。
 
-- `modeling_strategy.md`  
+- `modeling_strategy.md`
   ベースライン、深層学習、強化学習、ハイパーパラメータ探索の方針。
 
-- `experiment_protocol.md`  
+- `experiment_protocol.md`
   実験管理、ログ、チェックポイント、レポート、再現性のルール。
 
-- `ideas.md`  
+- `trading_ml_generalization_principles.md`
+  過去成績への過適合を避け、未知regimeへ壊れにくくするための原則とチェックリスト。
+
+- `ideas.md`
   未検証アイデア、特徴量案、モデル案、リスク。
 
 ## 記録場所
 
-- `reports/`  
+- `reports/`
   実験ごとのレポートを置く。
 
-- `templates/`  
+- `templates/`
   実験レポートやログ追記用のテンプレート。
 
-- `decisions/`  
+- `decisions/`
   仕様変更や重要な設計判断を残す。
 
 ## 再開手順
 
 1. `GOAL.md` で目的と取引ルールを確認する。
 2. `docs/status.md` の「現在の状態」と「次の作業」を読む。
-3. `docs/research_log.md` の最新エントリを読む。
-4. 直近の実験がある場合は `docs/reports/` の最新レポートを読む。
-5. 作業前に、変更する仕様や新しい仮説を `docs/research_log.md` に記録する。
-6. 作業後に、結果、スコア、失敗、次の一手を記録する。
-
+3. `docs/trading_ml_generalization_principles.md` のチェックリストを読む。
+4. `docs/research_log.md` の最新エントリを読む。
+5. 直近の実験がある場合は `docs/reports/` の最新レポートを読む。
+6. 作業前に、変更する仕様や新しい仮説を `docs/research_log.md` に記録する。
+7. 作業後に、結果、スコア、失敗、次の一手を記録する。
