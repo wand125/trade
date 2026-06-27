@@ -45,6 +45,8 @@ TRADE_COLUMNS = [
 SWEEP_KEY_COLUMNS = [
     "policy",
     "entry_threshold",
+    "long_entry_threshold_offset",
+    "short_entry_threshold_offset",
     "exit_threshold",
     "side_margin",
     "risk_penalty",
@@ -154,6 +156,8 @@ class ModelPolicyConfig:
     predictions: Path
     policy: str = "stateful_ev"
     entry_threshold: float = 15.0
+    long_entry_threshold_offset: float = 0.0
+    short_entry_threshold_offset: float = 0.0
     exit_threshold: float = 0.0
     side_margin: float = 0.0
     long_column: str = "pred_long_best_adjusted_pnl"
@@ -505,6 +509,12 @@ def model_signal_from_predictions(
     valid_prediction = long_ev.notna() & short_ev.notna()
     best_side.iloc[(valid_prediction & (long_ev >= short_ev)).to_numpy()] = 1
     best_side.iloc[(valid_prediction & (long_ev < short_ev)).to_numpy()] = -1
+    long_entry_threshold = config.entry_threshold + config.long_entry_threshold_offset
+    short_entry_threshold = config.entry_threshold + config.short_entry_threshold_offset
+    required_entry_threshold = pd.Series(
+        np.where(best_side == 1, long_entry_threshold, short_entry_threshold),
+        index=df.index,
+    )
     quality_ok = pd.Series(True, index=df.index)
     extra_side_margin = pd.Series(0.0, index=df.index)
     if np.isfinite(config.max_wait_regret):
@@ -551,7 +561,7 @@ def model_signal_from_predictions(
         enter = (
             valid_prediction
             & quality_ok
-            & (best_score > config.entry_threshold)
+            & (best_score > required_entry_threshold)
             & (side_gap >= required_side_margin)
         )
         signal = pd.Series(0, index=df.index, dtype="int8")
@@ -568,6 +578,7 @@ def model_signal_from_predictions(
     short_holding_values = [] if short_holding is None else short_holding.tolist()
     quality_ok_values = quality_ok.tolist()
     required_side_margin_values = required_side_margin.tolist()
+    required_entry_threshold_values = required_entry_threshold.tolist()
     for idx, has_prediction in enumerate(valid_prediction.tolist()):
         if not has_prediction:
             current = 0
@@ -593,11 +604,12 @@ def model_signal_from_predictions(
             candidate_side = -1
             candidate_score = short_value
             candidate_gap = short_value - long_value
+        candidate_entry_threshold = required_entry_threshold_values[idx]
 
         if current == 0:
             if (
                 quality_ok_values[idx]
-                and candidate_score > config.entry_threshold
+                and candidate_score > candidate_entry_threshold
                 and candidate_gap >= required_side_margin_values[idx]
             ):
                 current = candidate_side
@@ -618,9 +630,12 @@ def model_signal_from_predictions(
         else:
             current_score = long_value if current == 1 else short_value
             opposite_score = short_value if current == 1 else long_value
+            opposite_entry_threshold = (
+                short_entry_threshold if current == 1 else long_entry_threshold
+            )
             should_exit = current_score < config.exit_threshold
             should_flip = (
-                opposite_score > config.entry_threshold
+                opposite_score > opposite_entry_threshold
                 and opposite_score > current_score + required_side_margin_values[idx]
             )
             if should_exit or should_flip:
@@ -1393,6 +1408,8 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         predictions=args.predictions,
         policy=args.policy,
         entry_threshold=args.entry_threshold,
+        long_entry_threshold_offset=args.long_entry_threshold_offset,
+        short_entry_threshold_offset=args.short_entry_threshold_offset,
         exit_threshold=args.exit_threshold,
         side_margin=args.side_margin,
         long_column=args.long_column,
@@ -1593,6 +1610,8 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--policy", choices=available_model_policies(), default="stateful_ev")
     parser.add_argument("--entry-threshold", type=float, default=15.0)
+    parser.add_argument("--long-entry-threshold-offset", type=float, default=0.0)
+    parser.add_argument("--short-entry-threshold-offset", type=float, default=0.0)
     parser.add_argument("--exit-threshold", type=float, default=0.0)
     parser.add_argument("--side-margin", type=float, default=0.0)
     parser.add_argument("--long-column", default="pred_long_best_adjusted_pnl")
@@ -1640,6 +1659,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     if unknown:
         raise SystemExit(f"unknown model policies: {', '.join(unknown)}")
     entry_thresholds = parse_csv_floats(args.entry_thresholds)
+    long_entry_threshold_offsets = parse_csv_floats(args.long_entry_threshold_offsets)
+    short_entry_threshold_offsets = parse_csv_floats(args.short_entry_threshold_offsets)
     exit_thresholds = parse_csv_floats(args.exit_thresholds)
     side_margins = parse_csv_floats(args.side_margins)
     risk_penalties = parse_csv_floats(args.risk_penalties)
@@ -1653,81 +1674,89 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     for policy in policies:
         policy_exit_thresholds = exit_thresholds if policy == "stateful_ev" else [0.0]
         for entry_threshold in entry_thresholds:
-            for exit_threshold in policy_exit_thresholds:
-                for side_margin in side_margins:
-                    for risk_penalty in risk_penalties:
-                        for max_wait_regret in max_wait_regrets:
-                            for min_entry_rank in min_entry_ranks:
-                                for require_profit_barrier in require_profit_barriers:
-                                    model_policy_config = ModelPolicyConfig(
-                                        predictions=args.predictions,
-                                        policy=policy,
-                                        entry_threshold=entry_threshold,
-                                        exit_threshold=exit_threshold,
-                                        side_margin=side_margin,
-                                        long_column=args.long_column,
-                                        short_column=args.short_column,
-                                        long_risk_column=args.long_risk_column,
-                                        short_risk_column=args.short_risk_column,
-                                        risk_penalty=risk_penalty,
-                                        long_holding_column=args.long_holding_column,
-                                        short_holding_column=args.short_holding_column,
-                                        min_predicted_hold_minutes=args.min_predicted_hold_minutes,
-                                        max_predicted_hold_minutes=args.max_predicted_hold_minutes,
-                                        fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
-                                        long_fixed_horizon_columns=parse_csv_string_tuple(
-                                            args.long_fixed_horizon_columns
-                                        ),
-                                        short_fixed_horizon_columns=parse_csv_string_tuple(
-                                            args.short_fixed_horizon_columns
-                                        ),
-                                        long_wait_regret_column=args.long_wait_regret_column,
-                                        short_wait_regret_column=args.short_wait_regret_column,
-                                        long_entry_rank_column=args.long_entry_rank_column,
-                                        short_entry_rank_column=args.short_entry_rank_column,
-                                        long_profit_barrier_column=args.long_profit_barrier_column,
-                                        short_profit_barrier_column=args.short_profit_barrier_column,
-                                        max_wait_regret=max_wait_regret,
-                                        min_entry_rank=min_entry_rank,
-                                        require_profit_barrier=require_profit_barrier,
-                                        extra_side_margin_rules=parse_optional_csv_strings(
-                                            args.extra_side_margin_rules
-                                        ),
-                                        **regime_blocks,
-                                    )
-                                    metrics, _, _, _ = run_model_policy(
-                                        df,
-                                        backtest_config,
-                                        model_policy_config,
-                                    )
-                                    forced_exit_rate = (
-                                        0.0
-                                        if metrics["trade_count"] == 0
-                                        else float(metrics["forced_exit_count"] / metrics["trade_count"])
-                                    )
-                                    eligible = (
-                                        metrics["trade_count"] >= args.min_trades
-                                        and forced_exit_rate <= args.max_forced_exit_rate
-                                        and metrics["max_drawdown"] <= args.max_drawdown
-                                    )
-                                    row = {
-                                        "policy": policy,
-                                        "entry_threshold": entry_threshold,
-                                        "exit_threshold": exit_threshold,
-                                        "side_margin": side_margin,
-                                        "risk_penalty": risk_penalty,
-                                        "max_wait_regret": max_wait_regret,
-                                        "min_entry_rank": min_entry_rank,
-                                        "require_profit_barrier": require_profit_barrier,
-                                        "extra_side_margin_rules": regime_values_to_string(
-                                            model_policy_config.extra_side_margin_rules
-                                        ),
-                                        **regime_block_metric_columns(model_policy_config),
-                                        "forced_exit_rate": forced_exit_rate,
-                                        "eligible": bool(eligible),
-                                        **metrics,
-                                    }
-                                    rows.append(row)
+            for long_entry_threshold_offset in long_entry_threshold_offsets:
+                for short_entry_threshold_offset in short_entry_threshold_offsets:
+                    for exit_threshold in policy_exit_thresholds:
+                        for side_margin in side_margins:
+                            for risk_penalty in risk_penalties:
+                                for max_wait_regret in max_wait_regrets:
+                                    for min_entry_rank in min_entry_ranks:
+                                        for require_profit_barrier in require_profit_barriers:
+                                            model_policy_config = ModelPolicyConfig(
+                                                predictions=args.predictions,
+                                                policy=policy,
+                                                entry_threshold=entry_threshold,
+                                                long_entry_threshold_offset=long_entry_threshold_offset,
+                                                short_entry_threshold_offset=short_entry_threshold_offset,
+                                                exit_threshold=exit_threshold,
+                                                side_margin=side_margin,
+                                                long_column=args.long_column,
+                                                short_column=args.short_column,
+                                                long_risk_column=args.long_risk_column,
+                                                short_risk_column=args.short_risk_column,
+                                                risk_penalty=risk_penalty,
+                                                long_holding_column=args.long_holding_column,
+                                                short_holding_column=args.short_holding_column,
+                                                min_predicted_hold_minutes=args.min_predicted_hold_minutes,
+                                                max_predicted_hold_minutes=args.max_predicted_hold_minutes,
+                                                fixed_horizon_minutes=parse_csv_float_tuple(
+                                                    args.fixed_horizon_minutes
+                                                ),
+                                                long_fixed_horizon_columns=parse_csv_string_tuple(
+                                                    args.long_fixed_horizon_columns
+                                                ),
+                                                short_fixed_horizon_columns=parse_csv_string_tuple(
+                                                    args.short_fixed_horizon_columns
+                                                ),
+                                                long_wait_regret_column=args.long_wait_regret_column,
+                                                short_wait_regret_column=args.short_wait_regret_column,
+                                                long_entry_rank_column=args.long_entry_rank_column,
+                                                short_entry_rank_column=args.short_entry_rank_column,
+                                                long_profit_barrier_column=args.long_profit_barrier_column,
+                                                short_profit_barrier_column=args.short_profit_barrier_column,
+                                                max_wait_regret=max_wait_regret,
+                                                min_entry_rank=min_entry_rank,
+                                                require_profit_barrier=require_profit_barrier,
+                                                extra_side_margin_rules=parse_optional_csv_strings(
+                                                    args.extra_side_margin_rules
+                                                ),
+                                                **regime_blocks,
+                                            )
+                                            metrics, _, _, _ = run_model_policy(
+                                                df,
+                                                backtest_config,
+                                                model_policy_config,
+                                            )
+                                            forced_exit_rate = (
+                                                0.0
+                                                if metrics["trade_count"] == 0
+                                                else float(metrics["forced_exit_count"] / metrics["trade_count"])
+                                            )
+                                            eligible = (
+                                                metrics["trade_count"] >= args.min_trades
+                                                and forced_exit_rate <= args.max_forced_exit_rate
+                                                and metrics["max_drawdown"] <= args.max_drawdown
+                                            )
+                                            row = {
+                                                "policy": policy,
+                                                "entry_threshold": entry_threshold,
+                                                "long_entry_threshold_offset": long_entry_threshold_offset,
+                                                "short_entry_threshold_offset": short_entry_threshold_offset,
+                                                "exit_threshold": exit_threshold,
+                                                "side_margin": side_margin,
+                                                "risk_penalty": risk_penalty,
+                                                "max_wait_regret": max_wait_regret,
+                                                "min_entry_rank": min_entry_rank,
+                                                "require_profit_barrier": require_profit_barrier,
+                                                "extra_side_margin_rules": regime_values_to_string(
+                                                    model_policy_config.extra_side_margin_rules
+                                                ),
+                                                **regime_block_metric_columns(model_policy_config),
+                                                "forced_exit_rate": forced_exit_rate,
+                                                "eligible": bool(eligible),
+                                                **metrics,
+                                            }
+                                            rows.append(row)
 
     metrics_frame = pd.DataFrame(rows).sort_values(
         ["eligible", "total_adjusted_pnl"],
@@ -1739,6 +1768,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "month": args.month,
         "policies": policies,
         "entry_thresholds": entry_thresholds,
+        "long_entry_threshold_offsets": long_entry_threshold_offsets,
+        "short_entry_threshold_offsets": short_entry_threshold_offsets,
         "exit_thresholds": exit_thresholds,
         "side_margins": side_margins,
         "risk_penalties": risk_penalties,
@@ -1779,6 +1810,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output = frame.copy()
     if "risk_penalty" not in output.columns:
         output["risk_penalty"] = 0.0
+    if "long_entry_threshold_offset" not in output.columns:
+        output["long_entry_threshold_offset"] = 0.0
+    if "short_entry_threshold_offset" not in output.columns:
+        output["short_entry_threshold_offset"] = 0.0
     if "max_wait_regret" not in output.columns:
         output["max_wait_regret"] = float("inf")
     if "min_entry_rank" not in output.columns:
@@ -1810,6 +1845,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         raise ValueError(f"sweep metrics missing columns: {', '.join(missing)}")
     numeric_columns = [
         "entry_threshold",
+        "long_entry_threshold_offset",
+        "short_entry_threshold_offset",
         "exit_threshold",
         "side_margin",
         "risk_penalty",
@@ -2093,6 +2130,8 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--predictions", type=Path, required=True)
     model_sweep.add_argument("--policies", default="stateful_ev,stateless_ev")
     model_sweep.add_argument("--entry-thresholds", default="5,10,15,20,25")
+    model_sweep.add_argument("--long-entry-threshold-offsets", default="0")
+    model_sweep.add_argument("--short-entry-threshold-offsets", default="0")
     model_sweep.add_argument("--exit-thresholds", default="-5,0,5,10")
     model_sweep.add_argument("--side-margins", default="0,5,10")
     model_sweep.add_argument("--risk-penalties", default="0")

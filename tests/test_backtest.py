@@ -258,6 +258,26 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [0, 1, 0])
 
+    def test_model_signal_can_apply_side_specific_entry_offsets(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [15.0, 20.0, 15.0],
+                "pred_short_best_adjusted_pnl": [20.0, 1.0, 20.0],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            short_entry_threshold_offset=15,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, 1, 0])
+
     def test_stateful_model_signal_holds_until_exit_threshold(self):
         df = frame_with_opens([100, 101, 102, 103, 104, 105])
         predictions = pd.DataFrame(
@@ -370,6 +390,8 @@ class BacktestTests(unittest.TestCase):
         normalized = normalize_sweep_metrics(frame, "fold_a")
 
         self.assertEqual(normalized["risk_penalty"].tolist(), [0.0])
+        self.assertEqual(normalized["long_entry_threshold_offset"].tolist(), [0.0])
+        self.assertEqual(normalized["short_entry_threshold_offset"].tolist(), [0.0])
         self.assertEqual(normalized["max_wait_regret"].tolist(), [float("inf")])
         self.assertEqual(normalized["min_entry_rank"].tolist(), [0.0])
         self.assertEqual(normalized["require_profit_barrier"].tolist(), [False])

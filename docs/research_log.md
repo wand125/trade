@@ -1151,3 +1151,37 @@ Artifacts:
 - ただし2025-02のedgeは薄く、slippageやspreadで消える。
 - 2025-02はlong pnl `+17.6144`、short pnl `-12.9246` で、short側の弱さは残る。
 - 次は short専用entry threshold / side margin、barrier hit probability calibration、コスト込みvalidation選択を優先する。
+
+### 2026-06-28 08:38 JST Side-Specific Entry Offsets
+
+作業:
+
+- `model-policy` / `model-sweep` に `long_entry_threshold_offset` と `short_entry_threshold_offset` を追加した。
+- `SWEEP_KEY_COLUMNS` と `model-sweep-summary` 正規化にoffset列を追加した。
+- `stateless_ev`, `stateful_ev`, `timed_ev`, `fixed_horizon_ev` のentry判定とflip判定にside別thresholdを適用した。
+- レポート時刻を `YYYY-MM-DD HH:MM JST` で記録する方針を再確認し、既存fixed horizonレポートにも更新時刻を追記した。
+- report: `docs/reports/2026-06-28_side_specific_entry_offsets.md`
+
+実験:
+
+- model: `experiments/20260627_231921_full_fixed_horizon_targets_p1_l1p2/`
+- validation months: 2024-07, 2024-09, 2024-11, 2025-01
+- grid: entry `0,2,4`, long offset `0`, short offset `0,2,4,6,8`, side margin `1,2,3`
+- no-cost summary: `data/reports/backtests/20260627_233509_model_sweep_summary/`
+- cost-aware summary: `data/reports/backtests/20260627_233552_model_sweep_summary/`
+
+結果:
+
+- no-cost / cost-aware validation top-minはともに `entry=0`, `short offset=4`, `side margin=2`。
+- top-min候補のfixed testは 2024-12 `+22.7102`、2025-02 `+0.3502`。前回候補より2025-02が薄くなった。
+- validation rank-3の `entry=0`, `short offset=8`, `side margin=2` は診断比較で 2024-12 `+27.4184`、2025-02 `+26.8074`。
+- `short offset=8` のcost sensitivityは 2024-12で spread `0.2` / slippage `0.10` / delay `1` が `-7.0904`、2025-02で同条件が `+16.8146`。
+- trade failure分析では、2024-12 direction error rate `0.6034`、2025-02 `0.4754`。2025-02のexit regret sumは `1189.8406` で依然大きい。
+
+判断:
+
+- short専用entry threshold offsetは有効な調整軸。
+- validation top-minだけでは未知月の安定性を選び切れていない。
+- `short offset=8` はfixed test上では良いが、testを見てからの採用になるため本採用しない。
+- 次は事前登録した選択基準として、cost-aware validation、周辺offsetの台地、side/regime別PnL、max drawdown、execution delay感度を組み込む。
+- 新しいblind holdout月を追加し、2024-12/2025-02を見すぎない。

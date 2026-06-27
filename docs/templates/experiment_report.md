@@ -3,7 +3,7 @@
 ## Summary
 
 - Experiment ID:
-- Datetime:
+- Datetime: YYYY-MM-DD HH:MM JST
 - Owner:
 - Status:
 - Main result:

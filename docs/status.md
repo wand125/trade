@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 JST
+最終更新: 2026-06-28 08:38 JST
 
 ## 現在の状態
 
@@ -22,6 +22,8 @@ entry quality を密に学習するための追加教師targetは実装済み。
 
 トレードMLの汎化原則と現状レビューを追加済み。
 
+short/long別のentry threshold offsetを `model-policy` / `model-sweep` に追加済み。short専用offsetは有効な調整軸だが、fixed testを見た後の候補採用は避ける方針。
+
 利用可能なデータ:
 
 - M1: `data/processed/histdata/xauusd/xauusd_m1.parquet`
@@ -41,13 +43,13 @@ entry quality を密に学習するための追加教師targetは実装済み。
 
 ## 次の作業
 
-1. 2025-02 のshort失敗tradeを regime/session/entry timing/exit timing で分解する。
-2. exit timing targetを fixed horizon、barrier time、hazard-like close probability へ拡張する。
-3. profit barrierを0/1予測ではなく確率として保存し、閾値をcalibrateする。
-4. calibration採用基準にentry数上限、fold間trade分布、side別/regime別direction accuracyを追加する。
-5. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
-6. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
-7. 追加holdout月を用意し、2024-12/2025-02に過剰適合しない評価へ移る。
+1. 新しいblind holdout月を追加し、2024-12/2025-02に合わせ込まない評価へ移る。
+2. 候補選択基準に cost-aware validation、周辺offsetの台地、side/regime別PnL、max drawdown、execution delay感度を入れる。
+3. exit timing targetを fixed horizon、barrier time、hazard-like close probability へ拡張する。
+4. profit barrierを0/1予測ではなく確率として保存し、閾値をcalibrateする。
+5. calibration採用基準にentry数上限、fold間trade分布、side別/regime別direction accuracyを追加する。
+6. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
+7. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項
 
@@ -103,9 +105,16 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 
 固定horizon target入りdatasetを 2023-01 から 2025-02 まで再生成し、`fixed_horizon_ev` policyと `extra-side-margin-rules` を追加した。`target-set full` のHGB 80iterで固定horizon EVを予測し、validation上は `entry=2`, `side_margin=2`, `max_wait_regret=4`, `min_entry_rank=0.5`, `asia/rollover +5` が top-min候補。validation mean pnl `27.2219`, min pnl `19.1398`, min trades `45`。fixed testは 2024-12 `+30.2662`, 2025-02 `+4.6898` と、同一候補で両test月NoTradeを上回った。ただし2025-02のedgeは薄く、slippage/spread込みでは崩れやすい。次はshort専用margin/threshold、barrier hit probability calibration、コスト込みvalidation選択へ進む。
 
+2026-06-28 08:38 JST 更新: short/long別entry threshold offsetを実装し、short offset gridをvalidation 4ヶ月で検証した。no-cost / cost-aware validationのtop-minは `entry=0`, `short offset=4`, `side_margin=2` で一致したが、fixed testは 2024-12 `+22.7102`, 2025-02 `+0.3502` と前回候補より2025-02が薄くなった。validation rank-3の `short offset=8` は診断比較で 2024-12 `+27.4184`, 2025-02 `+26.8074` と良いが、testを見た後の採用は不可。次はcost-aware validation、周辺offsetの台地、side/regime別損益、drawdownを含む事前登録の選択基準と、新しいblind holdoutを用意する。
+
 ## 直近の実験
 
 - `docs/reports/2026-06-28_fixed_horizon_exit_policy.md`
+- `docs/reports/2026-06-28_side_specific_entry_offsets.md`
+- `data/reports/backtests/20260627_233509_model_sweep_summary/`
+- `data/reports/backtests/20260627_233552_model_sweep_summary/`
+- `data/reports/backtests/20260627_233636_model_fixed_horizon_ev_2024-12/`
+- `data/reports/backtests/20260627_233637_model_fixed_horizon_ev_2025-02_1/`
 - `docs/reports/2026-06-28_calibrated_trade_failure_exit_targets.md`
 - `docs/reports/2026-06-28_baseline_backtest_2025-01.md`
 - `data/reports/backtests/20260627_165623_benchmark_2025-01/`

@@ -1,6 +1,7 @@
 # Fixed Horizon Exit Policy
 
 日時: 2026-06-28 08:26 JST
+更新日時: 2026-06-28 08:38 JST
 
 ## 目的
 
@@ -221,3 +222,25 @@ Artifacts:
 2. actual barrier missを避けるため、barrier hit probabilityを確率として保存・calibrationする。
 3. fixed horizon EVにcalibrationを入れる。
 4. cost/slippage込みをvalidation選択条件に入れる。
+
+## 追記: Short Entry Offset
+
+更新日時: 2026-06-28 08:38 JST
+
+short専用entry threshold offsetを実装し、no-cost validationと spread `0.1` / slippage `0.05` 込みvalidationを比較した。
+
+詳細レポート:
+
+- `docs/reports/2026-06-28_side_specific_entry_offsets.md`
+
+結果:
+
+- validation top-minは no-cost / cost-aware ともに `entry=0`, `short offset=4`, `side margin=2`。
+- このtop-min候補のfixed testは 2024-12 `+22.7102`、2025-02 `+0.3502`。前回候補より2025-02が薄くなった。
+- validation 3位の `short offset=8` は診断比較でfixed test 2024-12 `+27.4184`、2025-02 `+26.8074`。
+- ただし `short offset=8` はtestを見た後の診断候補であり、採用候補として扱うには、次回以降の事前登録されたvalidation基準または新しいblind holdoutが必要。
+
+判断:
+
+- short offsetは有効な調整軸だが、validation top-minだけでは未知月の安定性を選び切れていない。
+- 次は「最高min pnl」ではなく、コスト込み、周辺offsetの台地、side別損益、drawdownを含む選択基準を導入する。
