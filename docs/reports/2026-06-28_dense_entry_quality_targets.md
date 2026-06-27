@@ -198,3 +198,85 @@ Test with stronger filter `entry=20 risk=0.2 max_wait_regret=4 min_entry_rank=0.
 - validation内でも walk-forward meta validation を行い、同じ月でfitとpolicy選択をしない。
 - regime featureをmeta model入力へ追加する。
 - shared representationの深層学習へ進む前に、meta modelの過学習を月別に可視化する。
+
+## Validation-internal OOF Meta
+
+同じvalidation月でmeta modelのfitとpolicy選択を行うと過学習するため、validation 4ヶ月の中で leave-one-month-out を実施した。
+
+方法:
+
+- holdout月以外の3ヶ月でmeta modelをfitする。
+- holdout月へmeta予測を付与する。
+- holdout月だけでpolicy sweepする。
+- 4つのholdout sweepを横断集計し、全foldで損益プラスになるpolicyだけを候補にする。
+
+OOF meta artifacts:
+
+- `experiments/20260627_194501_meta_oof_2024-07/`
+- `experiments/20260627_194501_meta_oof_2024-09/`
+- `experiments/20260627_194501_meta_oof_2024-11/`
+- `experiments/20260627_194501_meta_oof_2025-01/`
+
+OOF regression:
+
+| holdout | long r2 | short r2 | selected side acc |
+|---|---:|---:|---:|
+| 2024-07 | 0.0286 | 0.0066 | 0.6395 |
+| 2024-09 | 0.1403 | -0.1304 | 0.6231 |
+| 2024-11 | 0.0615 | -0.0734 | 0.5462 |
+| 2025-01 | 0.1715 | -0.5451 | 0.7515 |
+
+Summary:
+
+- strict summary: `data/reports/backtests/20260627_194724_model_sweep_summary_1/`
+- constraints: min folds 4, min trades per fold 10, max forced exit rate 0.1, max drawdown 100, min pnl per fold 0
+- min trades per fold 30 では eligible candidate なし。
+
+Selected OOF candidate:
+
+| policy | entry | exit | side margin | risk | max wait regret | min entry rank | barrier | mean pnl | min pnl | min trades | max DD | forced max |
+|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| timed_ev | 10 | 0 | 5 | 0.2 | 2 | 0.5 | false | 72.4758 | 3.0118 | 28 | 83.2353 | 0.0000 |
+
+この候補を固定し、全validation月でfitしたmeta modelをtestへ適用した。
+
+Final meta artifact:
+
+- `experiments/20260627_194740_meta_all_valid_to_test_oof_selected/`
+
+Final meta regression:
+
+| split | long r2 | short r2 | selected side acc |
+|---|---:|---:|---:|
+| validation-fit | 0.1837 | 0.1980 | 0.6967 |
+| test-apply | -0.0652 | -0.1921 | 0.4288 |
+
+Test with OOF-selected meta policy:
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -97.3488 | -54.9980 | 31 | 0.5161 | 0.5403 | 143.0608 | 2 |
+| 2025-02 | -0.4358 | 29.5100 | 21 | 0.5714 | 0.9971 | 72.8378 | 0 |
+
+同じpolicyをmetaなしのbase predictionsへ適用した比較:
+
+| test month | adjusted pnl | raw pnl | trades | win rate | profit factor | max DD | forced exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2024-12 | -130.3193 | -91.0640 | 14 | 0.5000 | 0.3360 | 130.3193 | 0 |
+| 2025-02 | -47.2025 | -21.8350 | 13 | 0.3846 | 0.6279 | 66.4515 | 0 |
+
+判断:
+
+- OOFにより、同じvalidation月でfitとpolicy選択を行う過学習は抑えられた。
+- 同一policy比較では、meta EVはtest合計を `-177.5218` から `-97.7845` へ改善した。
+- ただし no_trade `0.0` にはまだ負けている。
+- test-apply のR2はlong/shortともマイナスであり、EV calibrationの汎化は未達。
+- 2024-12ではmax drawdownも大きく、regime shift時のentry/exit判定がまだ壊れる。
+
+次の修正:
+
+- validationだけでmetaをfitせず、train期間にもOOF predictionsを作り、meta学習量を増やす。
+- OOF metaを標準のpolicy選択手順にし、fit月と選択月の混同を禁止する。
+- regime特徴量、月次volatility、trend/downtrend特徴量をmeta入力へ追加する。
+- EV予測をそのまま信じず、calibration shrinkageやquantile calibrationで過大評価を抑える。
+- 2024-12の失敗tradeを分解し、entry方向の誤りかexit遅れかを別々に診断する。

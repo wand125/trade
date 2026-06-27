@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -72,6 +73,8 @@ BASE_FEATURE_COLUMNS = [
     "pred_label",
 ]
 
+MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
 
 @dataclass(frozen=True)
 class MetaModelConfig:
@@ -102,6 +105,39 @@ def optional_column(df: pd.DataFrame, primary: str, fallback: str) -> pd.Series:
     if primary in df.columns:
         return df[primary]
     return df[fallback]
+
+
+def parse_csv_months(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    months = [part.strip() for part in value.split(",") if part.strip()]
+    if not months:
+        raise argparse.ArgumentTypeError("at least one month is required")
+    for month in months:
+        if not MONTH_PATTERN.match(month):
+            raise argparse.ArgumentTypeError("months must be in YYYY-MM format")
+    return months
+
+
+def filter_months(df: pd.DataFrame, months: list[str] | None, label: str) -> pd.DataFrame:
+    if months is None:
+        return df
+    if "dataset_month" not in df.columns:
+        raise ValueError(f"{label} predictions do not include dataset_month")
+    filtered = df[df["dataset_month"].isin(months)].copy()
+    missing = sorted(set(months) - set(filtered["dataset_month"].dropna().unique()))
+    if missing:
+        raise ValueError(f"{label} predictions missing months: {', '.join(missing)}")
+    if filtered.empty:
+        raise ValueError(f"{label} predictions are empty after month filtering")
+    return filtered
+
+
+def month_counts(df: pd.DataFrame) -> dict[str, int]:
+    if "dataset_month" not in df.columns:
+        return {}
+    counts = df["dataset_month"].value_counts().sort_index()
+    return {str(month): int(count) for month, count in counts.items()}
 
 
 def side_examples(df: pd.DataFrame, side_name: str) -> pd.DataFrame:
@@ -223,8 +259,18 @@ def fit(args: argparse.Namespace) -> int:
         target_clip_quantile=args.target_clip_quantile,
         entry_threshold=args.entry_threshold,
     )
-    train_predictions = pd.read_parquet(args.train_predictions)
-    apply_predictions = pd.read_parquet(args.apply_predictions)
+    train_months = parse_csv_months(args.train_months)
+    apply_months = parse_csv_months(args.apply_months)
+    train_predictions = filter_months(
+        pd.read_parquet(args.train_predictions),
+        train_months,
+        "train",
+    )
+    apply_predictions = filter_months(
+        pd.read_parquet(args.apply_predictions),
+        apply_months,
+        "apply",
+    )
     train_frame = build_training_frame(train_predictions)
     model = train_model(train_frame, config)
     train_output = add_meta_predictions(train_predictions, model)
@@ -238,10 +284,16 @@ def fit(args: argparse.Namespace) -> int:
         "config": asdict(config),
         "train_predictions": str(args.train_predictions),
         "apply_predictions": str(args.apply_predictions),
+        "train_months": train_months,
+        "apply_months": apply_months,
         "rows": {
             "train_predictions": int(len(train_predictions)),
             "train_side_examples": int(len(train_frame)),
             "apply_predictions": int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "train": month_counts(train_predictions),
+            "apply": month_counts(apply_predictions),
         },
         "feature_columns": BASE_FEATURE_COLUMNS,
         "train": split_meta_metrics(train_output, args.entry_threshold),
@@ -262,6 +314,8 @@ def build_parser() -> argparse.ArgumentParser:
     fit_parser = subparsers.add_parser("fit", help="fit a meta EV model and apply it")
     fit_parser.add_argument("--train-predictions", type=Path, required=True)
     fit_parser.add_argument("--apply-predictions", type=Path, required=True)
+    fit_parser.add_argument("--train-months", help="comma-separated dataset months to fit on")
+    fit_parser.add_argument("--apply-months", help="comma-separated dataset months to apply to")
     fit_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
     fit_parser.add_argument("--label", default="meta_ev")
     fit_parser.add_argument("--max-iter", type=int, default=80)

@@ -653,3 +653,53 @@ test:
 - validationにfitしたmeta modelは、testでは再過学習している。
 - 2025-02は一部改善するが、2024-12で崩れるため採用しない。
 - 次は meta fit 月と policy selection 月を分ける。validation内walk-forwardでmeta modelを評価する。
+
+### Validation-internal OOF Meta
+
+作業:
+
+- `meta_model fit` に `--train-months` / `--apply-months` を追加し、同じprediction fileから月を分けてfit/applyできるようにした。
+- validation 4ヶ月で leave-one-month-out meta を実施。
+- 各holdout月のmeta予測でpolicy sweepし、4fold summaryで候補を選択した。
+
+OOF artifacts:
+
+- `experiments/20260627_194501_meta_oof_2024-07/`
+- `experiments/20260627_194501_meta_oof_2024-09/`
+- `experiments/20260627_194501_meta_oof_2024-11/`
+- `experiments/20260627_194501_meta_oof_2025-01/`
+- summary: `data/reports/backtests/20260627_194724_model_sweep_summary_1/`
+
+選択:
+
+- policy: `timed_ev`
+- entry threshold: 10
+- side margin: 5
+- risk penalty: 0.2
+- max wait regret: 2
+- min entry rank: 0.5
+- require profit barrier: false
+- validation OOF mean adjusted pnl: +72.4758
+- validation OOF min adjusted pnl: +3.0118
+- min trades per fold: 28
+- max drawdown: 83.2353
+- forced exit max: 0
+
+test:
+
+- final meta artifact: `experiments/20260627_194740_meta_all_valid_to_test_oof_selected/`
+- 2024-12: adjusted pnl -97.3488, 31 trades, profit factor 0.5403, max drawdown 143.0608
+- 2025-02: adjusted pnl -0.4358, 21 trades, profit factor 0.9971, max drawdown 72.8378
+
+比較:
+
+- 同じpolicyのmetaなしbase予測は 2024-12 -130.3193 / 2025-02 -47.2025。
+- OOF選択metaはbaseよりtest合計を改善したが、no_trade 0.0 にはまだ負ける。
+- final metaのtest R2は long -0.0652 / short -0.1921 で、EV calibration自体の汎化はまだできていない。
+
+判断:
+
+- 過学習は悪化していない。fit月と選択月を分けたことで、同月fit/同月選択の漏れは抑えられた。
+- ただしtestでNoTradeに勝てていないため、過学習は解消していない。
+- 次はvalidationだけでmetaを学習するのをやめ、train期間にもOOF predictionsを作ってmeta学習量を増やす。
+- 2024-12の失敗tradeをentry方向、exit遅れ、EV過大評価に分けて診断する。

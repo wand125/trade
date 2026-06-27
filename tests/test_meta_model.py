@@ -1,3 +1,4 @@
+import argparse
 import unittest
 
 import pandas as pd
@@ -6,6 +7,8 @@ from trade_data.meta_model import (
     MetaModelConfig,
     add_meta_predictions,
     build_training_frame,
+    filter_months,
+    parse_csv_months,
     train_model,
 )
 
@@ -41,6 +44,31 @@ def prediction_frame():
 
 
 class MetaModelTests(unittest.TestCase):
+    def test_parse_csv_months(self):
+        self.assertEqual(parse_csv_months("2024-07,2024-09"), ["2024-07", "2024-09"])
+        self.assertIsNone(parse_csv_months(None))
+
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_csv_months("2024-13")
+
+    def test_filter_months_uses_dataset_month(self):
+        df = pd.DataFrame(
+            {
+                "dataset_month": ["2024-07", "2024-09", "2024-09"],
+                "value": [1, 2, 3],
+            }
+        )
+
+        filtered = filter_months(df, ["2024-09"], "test")
+
+        self.assertEqual(filtered["value"].tolist(), [2, 3])
+
+    def test_filter_months_rejects_missing_month(self):
+        df = pd.DataFrame({"dataset_month": ["2024-07"], "value": [1]})
+
+        with self.assertRaises(ValueError):
+            filter_months(df, ["2024-09"], "test")
+
     def test_build_training_frame_expands_long_and_short_examples(self):
         frame = build_training_frame(prediction_frame())
 

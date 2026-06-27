@@ -39,12 +39,12 @@ entry quality を密に学習するための追加教師targetは実装済み。
 
 ## 次の作業
 
-1. meta fit 月と policy selection 月を分ける validation内walk-forwardを作る。
+1. train期間にもOOF predictionsを作り、meta modelの学習量を増やす。
 2. regime featureをmeta model入力へ追加する。
-3. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
-4. `timed_ev` の exit timing を、best holding minutes 予測だけでなく exit probability / trailing logic と比較する。
-5. direction/regime別 calibration を追加する。
-6. 小型 MLP / TCN / CNN+GRU の最初の深層学習実験を作る。
+3. direction/regime別 calibration と予測EVのshrinkageを追加する。
+4. 2024-12の失敗tradeを entry方向、exit遅れ、EV過大評価に分解して診断する。
+5. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+6. `timed_ev` の exit timing を、best holding minutes 予測だけでなく exit probability / trailing logic と比較する。
 
 ## 未決定事項
 
@@ -71,6 +71,8 @@ entry timing を `long / short / stay_flat` に潰さず、`profit_barrier_hit`,
 dense entry quality target込みでHGBを再学習し、quality filter付きpolicyを追加した。validationでは `timed_ev entry=5 side_margin=5 risk=0.1 min_entry_rank=0.5` が4fold eligible になったが、testでは 2024-12 `-135.9573`、2025-02 `-101.0583` と no_trade に負けた。強く絞る候補は2024-12を `-9.5233` まで抑えたが、取引数が少なくedgeとはみなせない。独立HGBでは追加targetがEV予測を直接改善しないため、次は二段階meta modelまたはshared representationの深層学習に進む。
 
 二段階meta EV modelを追加した。validation predictionsでfitするとvalidation上のR2は long `0.1837` / short `0.1980` まで上がるが、test適用では long `-0.0652` / short `-0.1921` と悪化。標準quality候補では 2025-02 は `+23.7068` へ戻る一方、2024-12 は `-240.5445` と大きく崩れた。meta modelも同じvalidationでfitと選択を行うと過学習するため、次はvalidation内walk-forwardでfit月と選択月を分ける。
+
+validation内 leave-one-month-out meta を実施した。各holdout月では、残り3ヶ月でmetaをfitし、holdout月へmeta予測を付与してpolicy sweepした。4fold summaryでは `timed_ev entry=10 side_margin=5 risk=0.2 max_wait_regret=2 min_entry_rank=0.5` が、各fold10 trades以上、各fold pnl 0以上、max drawdown 100以下、forced exit 0の条件を満たした。OOF選択により同月fit/同月選択の漏れは減ったが、全validationでfitした最終metaをtestへ当てるとR2は引き続き long `-0.0652` / short `-0.1921`。固定policyのtestは 2024-12 `-97.3488`、2025-02 `-0.4358`。同じpolicyのmetaなしbase予測 2024-12 `-130.3193`、2025-02 `-47.2025` よりは改善したが、no_tradeにはまだ負ける。過学習は「悪化は抑えたが、解消していない」状態。
 
 ## 直近の実験
 
@@ -108,3 +110,11 @@ dense entry quality target込みでHGBを再学習し、quality filter付きpoli
 - `experiments/20260627_193559_meta_ev_dense_entry_quality/`
 - `data/reports/backtests/20260627_193642_model_timed_ev_2024-12/`
 - `data/reports/backtests/20260627_193655_model_timed_ev_2025-02/`
+- `experiments/20260627_194501_meta_oof_2024-07/`
+- `experiments/20260627_194501_meta_oof_2024-09/`
+- `experiments/20260627_194501_meta_oof_2024-11/`
+- `experiments/20260627_194501_meta_oof_2025-01/`
+- `data/reports/backtests/20260627_194724_model_sweep_summary_1/`
+- `experiments/20260627_194740_meta_all_valid_to_test_oof_selected/`
+- `data/reports/backtests/20260627_194758_model_timed_ev_2024-12/`
+- `data/reports/backtests/20260627_194758_model_timed_ev_2025-02/`
