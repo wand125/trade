@@ -20,6 +20,14 @@ DIRECTION_LABELS = {
     -1: "short",
 }
 
+DEFAULT_FIXED_HORIZON_MINUTES = (60.0, 240.0, 720.0)
+DEFAULT_LONG_FIXED_HORIZON_COLUMNS = tuple(
+    f"pred_long_fixed_{int(minutes)}m_adjusted_pnl" for minutes in DEFAULT_FIXED_HORIZON_MINUTES
+)
+DEFAULT_SHORT_FIXED_HORIZON_COLUMNS = tuple(
+    f"pred_short_fixed_{int(minutes)}m_adjusted_pnl" for minutes in DEFAULT_FIXED_HORIZON_MINUTES
+)
+
 TRADE_COLUMNS = [
     "direction",
     "entry_timestamp",
@@ -43,6 +51,7 @@ SWEEP_KEY_COLUMNS = [
     "max_wait_regret",
     "min_entry_rank",
     "require_profit_barrier",
+    "extra_side_margin_rules",
     "block_trend_regimes",
     "block_volatility_regimes",
     "block_session_regimes",
@@ -156,6 +165,9 @@ class ModelPolicyConfig:
     short_holding_column: str = "pred_short_best_holding_minutes"
     min_predicted_hold_minutes: float = 1.0
     max_predicted_hold_minutes: float = 1440.0
+    fixed_horizon_minutes: tuple[float, ...] = DEFAULT_FIXED_HORIZON_MINUTES
+    long_fixed_horizon_columns: tuple[str, ...] = DEFAULT_LONG_FIXED_HORIZON_COLUMNS
+    short_fixed_horizon_columns: tuple[str, ...] = DEFAULT_SHORT_FIXED_HORIZON_COLUMNS
     long_wait_regret_column: str = "pred_long_wait_regret"
     short_wait_regret_column: str = "pred_short_wait_regret"
     long_entry_rank_column: str = "pred_long_entry_local_rank"
@@ -165,6 +177,7 @@ class ModelPolicyConfig:
     max_wait_regret: float = float("inf")
     min_entry_rank: float = 0.0
     require_profit_barrier: bool = False
+    extra_side_margin_rules: tuple[str, ...] = ()
     block_trend_regimes: tuple[str, ...] = ()
     block_volatility_regimes: tuple[str, ...] = ()
     block_session_regimes: tuple[str, ...] = ()
@@ -292,7 +305,7 @@ def available_strategies() -> list[str]:
 
 
 def available_model_policies() -> list[str]:
-    return ["stateful_ev", "stateless_ev", "timed_ev"]
+    return ["stateful_ev", "stateless_ev", "timed_ev", "fixed_horizon_ev"]
 
 
 def random_signal(df: pd.DataFrame, config: StrategyConfig) -> pd.Series:
@@ -378,17 +391,22 @@ def breakout_signal(df: pd.DataFrame, window: int) -> pd.Series:
 
 
 def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame:
+    if config.policy == "fixed_horizon_ev":
+        validate_fixed_horizon_config(config)
     columns = ["decision_timestamp", config.long_column, config.short_column]
     if config.risk_penalty > 0:
         columns.extend([config.long_risk_column, config.short_risk_column])
     if config.policy == "timed_ev":
         columns.extend([config.long_holding_column, config.short_holding_column])
+    if config.policy == "fixed_horizon_ev":
+        columns.extend([*config.long_fixed_horizon_columns, *config.short_fixed_horizon_columns])
     if np.isfinite(config.max_wait_regret):
         columns.extend([config.long_wait_regret_column, config.short_wait_regret_column])
     if config.min_entry_rank > 0:
         columns.extend([config.long_entry_rank_column, config.short_entry_rank_column])
     if config.require_profit_barrier:
         columns.extend([config.long_profit_barrier_column, config.short_profit_barrier_column])
+    columns.extend(extra_side_margin_rule_columns(config))
     columns.extend([column for column, _ in blocked_regime_columns(config)])
     columns = list(dict.fromkeys(columns))
     predictions = pd.read_parquet(path, columns=columns)
@@ -415,6 +433,28 @@ def blocked_regime_columns(config: ModelPolicyConfig) -> list[tuple[str, tuple[s
     ]
 
 
+def fixed_horizon_scores(
+    horizon_frame: pd.DataFrame,
+    minutes: tuple[float, ...],
+) -> tuple[pd.Series, pd.Series]:
+    if horizon_frame.shape[1] != len(minutes):
+        raise ValueError("horizon_frame column count must match fixed horizon minutes")
+    values = horizon_frame.to_numpy(dtype=float)
+    finite = np.isfinite(values)
+    filled = np.where(finite, values, -np.inf)
+    best_indices = filled.argmax(axis=1)
+    rows = np.arange(len(horizon_frame))
+    best_scores = filled[rows, best_indices]
+    best_minutes = np.asarray(minutes, dtype=float)[best_indices]
+    no_valid_horizon = ~finite.any(axis=1)
+    best_scores[no_valid_horizon] = np.nan
+    best_minutes[no_valid_horizon] = np.nan
+    return (
+        pd.Series(best_scores, index=horizon_frame.index),
+        pd.Series(best_minutes, index=horizon_frame.index),
+    )
+
+
 def model_signal_from_predictions(
     df: pd.DataFrame,
     predictions: pd.DataFrame,
@@ -431,6 +471,20 @@ def model_signal_from_predictions(
     aligned = prediction_index[[config.long_column, config.short_column]].reindex(df["timestamp"])
     long_ev = aligned[config.long_column].reset_index(drop=True).astype(float)
     short_ev = aligned[config.short_column].reset_index(drop=True).astype(float)
+    long_holding = None
+    short_holding = None
+    if config.policy == "fixed_horizon_ev":
+        validate_fixed_horizon_config(config)
+        long_fixed_aligned = prediction_index[list(config.long_fixed_horizon_columns)].reindex(df["timestamp"])
+        short_fixed_aligned = prediction_index[list(config.short_fixed_horizon_columns)].reindex(df["timestamp"])
+        long_ev, long_holding = fixed_horizon_scores(
+            long_fixed_aligned.reset_index(drop=True),
+            config.fixed_horizon_minutes,
+        )
+        short_ev, short_holding = fixed_horizon_scores(
+            short_fixed_aligned.reset_index(drop=True),
+            config.fixed_horizon_minutes,
+        )
     if config.risk_penalty > 0:
         risk_aligned = prediction_index[[config.long_risk_column, config.short_risk_column]].reindex(
             df["timestamp"]
@@ -439,8 +493,6 @@ def model_signal_from_predictions(
         short_risk = risk_aligned[config.short_risk_column].reset_index(drop=True).astype(float)
         long_ev = long_ev - config.risk_penalty * (-long_risk).clip(lower=0)
         short_ev = short_ev - config.risk_penalty * (-short_risk).clip(lower=0)
-    long_holding = None
-    short_holding = None
     if config.policy == "timed_ev":
         holding_aligned = prediction_index[[config.long_holding_column, config.short_holding_column]].reindex(
             df["timestamp"]
@@ -454,6 +506,7 @@ def model_signal_from_predictions(
     best_side.iloc[(valid_prediction & (long_ev >= short_ev)).to_numpy()] = 1
     best_side.iloc[(valid_prediction & (long_ev < short_ev)).to_numpy()] = -1
     quality_ok = pd.Series(True, index=df.index)
+    extra_side_margin = pd.Series(0.0, index=df.index)
     if np.isfinite(config.max_wait_regret):
         wait_aligned = prediction_index[
             [config.long_wait_regret_column, config.short_wait_regret_column]
@@ -485,13 +538,21 @@ def model_signal_from_predictions(
             index=df.index,
         )
         quality_ok &= regime_values.notna() & ~regime_values.isin(set(blocked_values))
+    for column, value, margin in parsed_extra_side_margin_rules(config):
+        rule_aligned = prediction_index[[column]].reindex(df["timestamp"])
+        rule_values = pd.Series(
+            rule_aligned[column].reset_index(drop=True).astype("string").to_numpy(),
+            index=df.index,
+        )
+        extra_side_margin += np.where((rule_values == value).fillna(False).to_numpy(), margin, 0.0)
+    required_side_margin = config.side_margin + extra_side_margin
 
     if config.policy == "stateless_ev":
         enter = (
             valid_prediction
             & quality_ok
             & (best_score > config.entry_threshold)
-            & (side_gap >= config.side_margin)
+            & (side_gap >= required_side_margin)
         )
         signal = pd.Series(0, index=df.index, dtype="int8")
         signal.iloc[enter.to_numpy()] = best_side.iloc[enter.to_numpy()]
@@ -506,6 +567,7 @@ def model_signal_from_predictions(
     long_holding_values = [] if long_holding is None else long_holding.tolist()
     short_holding_values = [] if short_holding is None else short_holding.tolist()
     quality_ok_values = quality_ok.tolist()
+    required_side_margin_values = required_side_margin.tolist()
     for idx, has_prediction in enumerate(valid_prediction.tolist()):
         if not has_prediction:
             current = 0
@@ -514,7 +576,7 @@ def model_signal_from_predictions(
             continue
 
         decision_timestamp = timestamps[idx]
-        if config.policy == "timed_ev" and current != 0 and planned_exit_timestamp is not None:
+        if config.policy in {"timed_ev", "fixed_horizon_ev"} and current != 0 and planned_exit_timestamp is not None:
             if decision_timestamp >= planned_exit_timestamp:
                 current = 0
                 planned_exit_timestamp = None
@@ -536,10 +598,10 @@ def model_signal_from_predictions(
             if (
                 quality_ok_values[idx]
                 and candidate_score > config.entry_threshold
-                and candidate_gap >= config.side_margin
+                and candidate_gap >= required_side_margin_values[idx]
             ):
                 current = candidate_side
-                if config.policy == "timed_ev":
+                if config.policy in {"timed_ev", "fixed_horizon_ev"}:
                     holding_value = (
                         long_holding_values[idx] if current == 1 else short_holding_values[idx]
                     )
@@ -559,7 +621,7 @@ def model_signal_from_predictions(
             should_exit = current_score < config.exit_threshold
             should_flip = (
                 opposite_score > config.entry_threshold
-                and opposite_score > current_score + config.side_margin
+                and opposite_score > current_score + required_side_margin_values[idx]
             )
             if should_exit or should_flip:
                 current = 0
@@ -870,6 +932,55 @@ def parse_csv_strings(value: str) -> list[str]:
     if not values:
         raise argparse.ArgumentTypeError("at least one value is required")
     return values
+
+
+def parse_csv_float_tuple(value: str) -> tuple[float, ...]:
+    return tuple(parse_csv_floats(value))
+
+
+def parse_csv_string_tuple(value: str) -> tuple[str, ...]:
+    return tuple(parse_csv_strings(value))
+
+
+def validate_fixed_horizon_config(config: ModelPolicyConfig) -> None:
+    lengths = {
+        "fixed_horizon_minutes": len(config.fixed_horizon_minutes),
+        "long_fixed_horizon_columns": len(config.long_fixed_horizon_columns),
+        "short_fixed_horizon_columns": len(config.short_fixed_horizon_columns),
+    }
+    if len(set(lengths.values())) != 1:
+        detail = ", ".join(f"{key}={value}" for key, value in lengths.items())
+        raise ValueError(f"fixed horizon config lengths must match: {detail}")
+    if not config.fixed_horizon_minutes:
+        raise ValueError("at least one fixed horizon must be configured")
+    if any(minutes <= 0 for minutes in config.fixed_horizon_minutes):
+        raise ValueError("fixed horizon minutes must be positive")
+
+
+def parse_extra_side_margin_rule(rule: str) -> tuple[str, str, float]:
+    try:
+        condition, margin_text = rule.split(":", maxsplit=1)
+        column, value = condition.split("=", maxsplit=1)
+    except ValueError as exc:
+        raise ValueError(
+            f"extra side margin rule must use column=value:margin syntax: {rule}"
+        ) from exc
+    column = column.strip()
+    value = value.strip()
+    if not column or not value:
+        raise ValueError(f"extra side margin rule must include column and value: {rule}")
+    margin = float(margin_text.strip())
+    if margin < 0:
+        raise ValueError("extra side margin must be non-negative")
+    return column, value, margin
+
+
+def parsed_extra_side_margin_rules(config: ModelPolicyConfig) -> list[tuple[str, str, float]]:
+    return [parse_extra_side_margin_rule(rule) for rule in config.extra_side_margin_rules]
+
+
+def extra_side_margin_rule_columns(config: ModelPolicyConfig) -> list[str]:
+    return list(dict.fromkeys(column for column, _, _ in parsed_extra_side_margin_rules(config)))
 
 
 def parse_optional_csv_strings(value: str | None) -> tuple[str, ...]:
@@ -1293,6 +1404,9 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         short_holding_column=args.short_holding_column,
         min_predicted_hold_minutes=args.min_predicted_hold_minutes,
         max_predicted_hold_minutes=args.max_predicted_hold_minutes,
+        fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
+        long_fixed_horizon_columns=parse_csv_string_tuple(args.long_fixed_horizon_columns),
+        short_fixed_horizon_columns=parse_csv_string_tuple(args.short_fixed_horizon_columns),
         long_wait_regret_column=args.long_wait_regret_column,
         short_wait_regret_column=args.short_wait_regret_column,
         long_entry_rank_column=args.long_entry_rank_column,
@@ -1302,6 +1416,7 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         max_wait_regret=args.max_wait_regret,
         min_entry_rank=args.min_entry_rank,
         require_profit_barrier=args.require_profit_barrier,
+        extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
         **regime_blocks_from_args(args),
     )
 
@@ -1489,6 +1604,18 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--short-holding-column", default="pred_short_best_holding_minutes")
     parser.add_argument("--min-predicted-hold-minutes", type=float, default=1.0)
     parser.add_argument("--max-predicted-hold-minutes", type=float, default=1440.0)
+    parser.add_argument(
+        "--fixed-horizon-minutes",
+        default=",".join(str(int(minutes)) for minutes in DEFAULT_FIXED_HORIZON_MINUTES),
+    )
+    parser.add_argument(
+        "--long-fixed-horizon-columns",
+        default=",".join(DEFAULT_LONG_FIXED_HORIZON_COLUMNS),
+    )
+    parser.add_argument(
+        "--short-fixed-horizon-columns",
+        default=",".join(DEFAULT_SHORT_FIXED_HORIZON_COLUMNS),
+    )
     parser.add_argument("--long-wait-regret-column", default="pred_long_wait_regret")
     parser.add_argument("--short-wait-regret-column", default="pred_short_wait_regret")
     parser.add_argument("--long-entry-rank-column", default="pred_long_entry_local_rank")
@@ -1498,6 +1625,11 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-wait-regret", type=float, default=float("inf"))
     parser.add_argument("--min-entry-rank", type=float, default=0.0)
     parser.add_argument("--require-profit-barrier", action="store_true")
+    parser.add_argument(
+        "--extra-side-margin-rules",
+        default="",
+        help="comma-separated column=value:margin rules that add side-margin in matching regimes",
+    )
     add_regime_gate_args(parser)
 
 
@@ -1542,6 +1674,13 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                                         short_holding_column=args.short_holding_column,
                                         min_predicted_hold_minutes=args.min_predicted_hold_minutes,
                                         max_predicted_hold_minutes=args.max_predicted_hold_minutes,
+                                        fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
+                                        long_fixed_horizon_columns=parse_csv_string_tuple(
+                                            args.long_fixed_horizon_columns
+                                        ),
+                                        short_fixed_horizon_columns=parse_csv_string_tuple(
+                                            args.short_fixed_horizon_columns
+                                        ),
                                         long_wait_regret_column=args.long_wait_regret_column,
                                         short_wait_regret_column=args.short_wait_regret_column,
                                         long_entry_rank_column=args.long_entry_rank_column,
@@ -1551,6 +1690,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                                         max_wait_regret=max_wait_regret,
                                         min_entry_rank=min_entry_rank,
                                         require_profit_barrier=require_profit_barrier,
+                                        extra_side_margin_rules=parse_optional_csv_strings(
+                                            args.extra_side_margin_rules
+                                        ),
                                         **regime_blocks,
                                     )
                                     metrics, _, _, _ = run_model_policy(
@@ -1577,6 +1719,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                                         "max_wait_regret": max_wait_regret,
                                         "min_entry_rank": min_entry_rank,
                                         "require_profit_barrier": require_profit_barrier,
+                                        "extra_side_margin_rules": regime_values_to_string(
+                                            model_policy_config.extra_side_margin_rules
+                                        ),
                                         **regime_block_metric_columns(model_policy_config),
                                         "forced_exit_rate": forced_exit_rate,
                                         "eligible": bool(eligible),
@@ -1600,6 +1745,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "max_wait_regrets": max_wait_regrets,
         "min_entry_ranks": min_entry_ranks,
         "require_profit_barriers": require_profit_barriers,
+        "extra_side_margin_rules": parse_optional_csv_strings(args.extra_side_margin_rules),
         **{field: list(values) for field, values in regime_blocks.items()},
         "min_trades": args.min_trades,
         "max_forced_exit_rate": args.max_forced_exit_rate,
@@ -1612,6 +1758,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "short_holding_column": args.short_holding_column,
         "min_predicted_hold_minutes": args.min_predicted_hold_minutes,
         "max_predicted_hold_minutes": args.max_predicted_hold_minutes,
+        "fixed_horizon_minutes": parse_csv_floats(args.fixed_horizon_minutes),
+        "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+        "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
         "long_wait_regret_column": args.long_wait_regret_column,
         "short_wait_regret_column": args.short_wait_regret_column,
         "long_entry_rank_column": args.long_entry_rank_column,
@@ -1636,6 +1785,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["min_entry_rank"] = 0.0
     if "require_profit_barrier" not in output.columns:
         output["require_profit_barrier"] = False
+    if "extra_side_margin_rules" not in output.columns:
+        output["extra_side_margin_rules"] = ""
     for field, _ in REGIME_BLOCK_FIELDS:
         if field not in output.columns:
             output[field] = ""
@@ -1680,6 +1831,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         )
     else:
         output["require_profit_barrier"] = output["require_profit_barrier"].astype(bool)
+    output["extra_side_margin_rules"] = output["extra_side_margin_rules"].fillna("").astype(str)
     for field, _ in REGIME_BLOCK_FIELDS:
         output[field] = output[field].fillna("").astype(str)
     return output
@@ -1947,6 +2099,11 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--max-wait-regrets", default="inf")
     model_sweep.add_argument("--min-entry-ranks", default="0")
     model_sweep.add_argument("--require-profit-barriers", default="false")
+    model_sweep.add_argument(
+        "--extra-side-margin-rules",
+        default="",
+        help="comma-separated column=value:margin rules that add side-margin in matching regimes",
+    )
     model_sweep.add_argument("--min-trades", type=int, default=0)
     model_sweep.add_argument("--max-forced-exit-rate", type=float, default=1.0)
     model_sweep.add_argument("--max-drawdown", type=float, default=float("inf"))
@@ -1958,6 +2115,18 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--short-holding-column", default="pred_short_best_holding_minutes")
     model_sweep.add_argument("--min-predicted-hold-minutes", type=float, default=1.0)
     model_sweep.add_argument("--max-predicted-hold-minutes", type=float, default=1440.0)
+    model_sweep.add_argument(
+        "--fixed-horizon-minutes",
+        default=",".join(str(int(minutes)) for minutes in DEFAULT_FIXED_HORIZON_MINUTES),
+    )
+    model_sweep.add_argument(
+        "--long-fixed-horizon-columns",
+        default=",".join(DEFAULT_LONG_FIXED_HORIZON_COLUMNS),
+    )
+    model_sweep.add_argument(
+        "--short-fixed-horizon-columns",
+        default=",".join(DEFAULT_SHORT_FIXED_HORIZON_COLUMNS),
+    )
     model_sweep.add_argument("--long-wait-regret-column", default="pred_long_wait_regret")
     model_sweep.add_argument("--short-wait-regret-column", default="pred_short_wait_regret")
     model_sweep.add_argument("--long-entry-rank-column", default="pred_long_entry_local_rank")

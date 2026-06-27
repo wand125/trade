@@ -8,6 +8,7 @@ from trade_data.backtest import (
     ModelPolicyConfig,
     apply_execution_cost,
     enrich_trades_with_predictions,
+    fixed_horizon_scores,
     model_signal_from_predictions,
     normalize_sweep_metrics,
     prepare_analysis_predictions,
@@ -235,6 +236,28 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [0, 1, 0])
 
+    def test_model_signal_can_add_side_margin_in_specific_regimes(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [17.0, 17.0, 17.0],
+                "session_regime": ["asia", "ny_late", "asia"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            side_margin=0,
+            extra_side_margin_rules=("session_regime=asia:5",),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, 1, 0])
+
     def test_stateful_model_signal_holds_until_exit_threshold(self):
         df = frame_with_opens([100, 101, 102, 103, 104, 105])
         predictions = pd.DataFrame(
@@ -276,6 +299,57 @@ class BacktestTests(unittest.TestCase):
         signal = model_signal_from_predictions(df, predictions, config)
 
         self.assertEqual(signal.tolist(), [1, 1, 1, 0, 1, 1])
+
+    def test_fixed_horizon_scores_select_best_available_horizon(self):
+        frame = pd.DataFrame(
+            {
+                "h60": [1.0, float("nan")],
+                "h240": [3.0, float("nan")],
+                "h720": [2.0, float("nan")],
+            }
+        )
+
+        scores, minutes = fixed_horizon_scores(frame, (60.0, 240.0, 720.0))
+
+        self.assertEqual(scores.iloc[0], 3.0)
+        self.assertEqual(minutes.iloc[0], 240.0)
+        self.assertTrue(pd.isna(scores.iloc[1]))
+        self.assertTrue(pd.isna(minutes.iloc[1]))
+
+    def test_fixed_horizon_model_signal_uses_best_horizon_as_exit_time(self):
+        df = frame_with_opens(
+            [100, 101, 102, 103, 104, 105],
+            start="2025-01-01 00:00:00+00:00",
+        )
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [0, 0, 0, 0, 0, 0],
+                "pred_short_best_adjusted_pnl": [0, 0, 0, 0, 0, 0],
+                "pred_long_fixed_1m_adjusted_pnl": [20, 20, 20, 20, 20, 20],
+                "pred_long_fixed_3m_adjusted_pnl": [30, 30, 30, 30, 30, 30],
+                "pred_short_fixed_1m_adjusted_pnl": [1, 1, 1, 1, 1, 1],
+                "pred_short_fixed_3m_adjusted_pnl": [2, 2, 2, 2, 2, 2],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="fixed_horizon_ev",
+            entry_threshold=10,
+            fixed_horizon_minutes=(1.0, 3.0),
+            long_fixed_horizon_columns=(
+                "pred_long_fixed_1m_adjusted_pnl",
+                "pred_long_fixed_3m_adjusted_pnl",
+            ),
+            short_fixed_horizon_columns=(
+                "pred_short_fixed_1m_adjusted_pnl",
+                "pred_short_fixed_3m_adjusted_pnl",
+            ),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [1, 1, 1, 1, 0, 1])
 
     def test_sweep_metrics_normalization_adds_missing_risk_penalty(self):
         frame = pd.DataFrame(

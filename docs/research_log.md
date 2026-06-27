@@ -1120,3 +1120,34 @@ Residual offset:
 - 問題は単純な「shortが多すぎる」ではなく、calibrated EVの方向選択が未知月で壊れていること。
 - 全tradeでexit regretが正で、勝ちtradeも含めて手放し方に改善余地がある。
 - 固定horizon targetはまずfull target setの研究用targetとして追加し、policy target setにはまだ入れない。
+
+### 2026-06-28 08:26 JST Fixed Horizon Exit Policy
+
+作業:
+
+- `data/processed/datasets/xauusd_m1_p1_l1p2/` を 2023-01 から 2025-02 まで再生成し、固定保有 60/240/720 分targetを実データに反映した。
+- `trade_data.backtest` に `fixed_horizon_ev` policyを追加した。
+- `--extra-side-margin-rules` を追加し、`session_regime=asia:5,session_regime=rollover:5` のようなregime別追加side marginを指定できるようにした。
+- `target-set full` のHGB 80iterモデルを学習した。
+- report: `docs/reports/2026-06-28_fixed_horizon_exit_policy.md`
+
+Artifacts:
+
+- model: `experiments/20260627_231921_full_fixed_horizon_targets_p1_l1p2/`
+- no extra margin validation summary: `data/reports/backtests/20260627_232147_model_sweep_summary/`
+- asia/rollover +5 validation summary: `data/reports/backtests/20260627_232445_model_sweep_summary/`
+- fixed test: `data/reports/backtests/20260627_232459_model_fixed_horizon_ev_2024-12/`, `data/reports/backtests/20260627_232459_model_fixed_horizon_ev_2025-02/`
+
+結果:
+
+- validation top-min候補: `fixed_horizon_ev`, entry `2`, side margin `2`, max wait regret `4`, min entry rank `0.5`, barrierなし, `asia/rollover +5`。
+- validation: mean pnl `27.2219`, min pnl `19.1398`, min trades `45`, max DD `50.3740`。
+- fixed test 2024-12: adjusted pnl `+30.2662`, 58 trades, max DD `25.2926`。
+- fixed test 2025-02: adjusted pnl `+4.6898`, 71 trades, max DD `99.4746`。
+
+判断:
+
+- validationで選んだ同一候補が 2024-12 / 2025-02 の両test月でNoTradeを上回った。
+- ただし2025-02のedgeは薄く、slippageやspreadで消える。
+- 2025-02はlong pnl `+17.6144`、short pnl `-12.9246` で、short側の弱さは残る。
+- 次は short専用entry threshold / side margin、barrier hit probability calibration、コスト込みvalidation選択を優先する。
