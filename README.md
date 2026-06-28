@@ -264,6 +264,23 @@ parquet, set `--prediction-prefix`. For example,
 short/lower/risk columns instead of overwriting the default
 `pred_candidate_quality_long_adjusted_pnl` columns.
 
+Prefixed component outputs can be combined into one candidate-quality column set
+before a backtest sweep:
+
+```bash
+python -m trade_data.meta_model combine-candidate-quality-components \
+  --predictions data/reports/modeling/<run>/predictions_validation_oof_candidate_quality_model.parquet \
+  --output-path data/reports/modeling/<run>/predictions_component_fixed_weighted.parquet \
+  --component-prefixes timed_component,fixed_component,clipped_best \
+  --output-prefix component_fixed_weighted \
+  --mode weighted_mean \
+  --weights 0.25,0.5,0.25
+```
+
+This writes `pred_candidate_quality_component_fixed_weighted_<side>_*`
+columns that can be passed to `model-sweep --long-trade-quality-column` and
+`--short-trade-quality-column`.
+
 If a saved prediction parquet was produced before actual forced-exit target
 columns were preserved, enrich it from the dataset files before training
 barrier-event targets:

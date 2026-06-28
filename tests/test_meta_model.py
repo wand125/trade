@@ -36,25 +36,26 @@ from trade_data.meta_model import (
     add_trade_quality_columns,
     add_trade_source_ev_columns,
     available_feature_columns,
-    build_training_frame,
-    build_sample_weights,
     build_candidate_failure_training_frame,
     build_candidate_quality_training_frame,
+    build_sample_weights,
+    build_training_frame,
     candidate_entry_side_masks,
     candidate_failure_prob_column,
     candidate_failure_risk_column,
     candidate_failure_taken_prob_column,
     candidate_failure_target_column,
     combine_fit_predictions,
+    combine_candidate_quality_component_columns,
     fit_candidate_failure_model_from_frame,
     fit_candidate_quality_model_from_frame,
-    fit_group_target_calibrator,
     fit_group_ev_calibrator,
+    fit_group_target_calibrator,
     fit_residual_penalty_calibrator,
     fit_trade_failure_model,
     fit_trade_failure_probability_calibrator,
-    fit_trade_quality_model,
     fit_trade_quality_calibrator,
+    fit_trade_quality_model,
     filter_months,
     fixed_horizon_target_specs,
     parse_csv_ints,
@@ -807,6 +808,71 @@ class MetaModelTests(unittest.TestCase):
             self.assertIn(column, output.columns)
             self.assertFalse(output[column].isna().any())
         self.assertNotIn(CANDIDATE_QUALITY_LONG_COLUMN, output.columns)
+
+    def test_candidate_quality_component_columns_can_be_combined(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        component_values = {
+            "timed": (
+                [1.0, 2.0, 3.0],
+                [0.0, 1.0, 2.0],
+                [2.0, 4.0, 6.0],
+                [1.0, 3.0, 5.0],
+            ),
+            "fixed": (
+                [3.0, 4.0, 5.0],
+                [2.0, 3.0, 4.0],
+                [6.0, 8.0, 10.0],
+                [5.0, 7.0, 9.0],
+            ),
+            "clipped": (
+                [5.0, 6.0, 7.0],
+                [4.0, 5.0, 6.0],
+                [10.0, 12.0, 14.0],
+                [9.0, 11.0, 13.0],
+            ),
+        }
+        for prefix, (long_mean, long_lower, short_mean, short_lower) in component_values.items():
+            predictions[f"pred_candidate_quality_{prefix}_long_adjusted_pnl"] = long_mean
+            predictions[f"pred_candidate_quality_{prefix}_long_lower_adjusted_pnl"] = long_lower
+            predictions[f"pred_candidate_quality_{prefix}_short_adjusted_pnl"] = short_mean
+            predictions[f"pred_candidate_quality_{prefix}_short_lower_adjusted_pnl"] = short_lower
+
+        output = combine_candidate_quality_component_columns(
+            predictions,
+            component_prefixes=["timed", "fixed", "clipped"],
+            output_prefix="component_stack",
+            mode="weighted_mean",
+            weights=[1.0, 2.0, 1.0],
+        )
+
+        self.assertEqual(
+            output["pred_candidate_quality_component_stack_long_adjusted_pnl"].tolist(),
+            [3.0, 4.0, 5.0],
+        )
+        self.assertEqual(
+            output["pred_candidate_quality_component_stack_short_adjusted_pnl"].tolist(),
+            [6.0, 8.0, 10.0],
+        )
+        self.assertEqual(
+            output["pred_candidate_quality_component_stack_long_lower_adjusted_pnl"].tolist(),
+            [2.0, 3.0, 4.0],
+        )
+        self.assertEqual(
+            output["pred_candidate_quality_component_stack_long_overestimate_risk"].tolist(),
+            [-6.0, -14.0, -1.0],
+        )
+        self.assertEqual(
+            output["pred_candidate_quality_component_stack_short_overestimate_risk"].tolist(),
+            [-0.0, -0.0, -4.0],
+        )
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):
         predictions = add_trade_source_ev_columns(

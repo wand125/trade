@@ -3746,3 +3746,37 @@ Artifacts:
 - component meanの単独quality gateは標準採用しない。
 - fixed component gateはforced exitを減らすが、PnL改善へ変換できていない。
 - 次はcomponent列をhard gateではなく、diagnostic/tie-break/multi-feature stackingの説明変数として使う。
+
+### 2026-06-29 03:10 JST Candidate quality component composite
+
+作業:
+
+- `combine-candidate-quality-components` を追加した。
+- prefixed candidate quality component列を `mean`, `min`, `max`, `weighted_mean` で合成できる。
+- 出力は `pred_candidate_quality_<output_prefix>_<side>_*` なので、既存 `model-sweep` のquality columnとして使える。
+- timed / fixed / clipped best componentを `mean`, `min`, `weighted_mean(0.25,0.5,0.25)` で合成し、validation 4foldで比較した。
+- report: `docs/reports/00088_2026-06-29_candidate_quality_component_composite.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- composite predictions: `data/reports/modeling/20260629_candidate_quality_component_composites/`
+- mean summary: `data/reports/backtests/candidate_quality_component_mean_stack_summary/20260628_180940_model_sweep_summary/`
+- min summary: `data/reports/backtests/candidate_quality_component_min_stack_summary/20260628_180940_model_sweep_summary/`
+- fixed weighted summary: `data/reports/backtests/candidate_quality_component_fixed_weighted_stack_summary/20260628_180940_model_sweep_summary/`
+
+結果:
+
+| variant | best finite gate | min pnl | sum pnl | min trades | forced exit max | EV overestimate mean |
+|---|---|---:|---:|---:|---:|---:|
+| baseline | no gate | `82.7176` | `406.6546` | `24` | `0.0370` | `15.5226` |
+| component_mean | quality `0` | `82.7176` | `406.1976` | `24` | `0.0370` | `15.5271` |
+| component_min | quality `0` | `34.5604` | `315.1544` | `18` | `0.0000` | `16.4648` |
+| component_fixed_weighted | quality `0` | `82.7176` | `410.7146` | `24` | `0.0370` | `15.4567` |
+
+判断:
+
+- `component_fixed_weighted quality>=0` はbaselineと同じfold最低PnLを保ち、sumとEV過大評価を小さく改善した。
+- 改善幅は小さく、fixed holdout未確認なので標準採用しない。
+- `component_min` は絞りすぎてtrade数とPnLを壊すため採用しない。
+- 次はprefixed applyを生成し、2024-12 / 2025-02と追加holdoutへ固定適用する。

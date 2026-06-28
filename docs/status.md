@@ -152,6 +152,8 @@ candidate-entry qualityのjoint成分を個別targetへ分解済み。`timed_bar
 
 candidate-entry quality出力に `--prediction-prefix` を追加済み。timed/fixed/clipped component列を同じprediction parquetへ共存できる。prefix列を使い、各component meanを `min_trade_quality` gateとしてvalidation 4foldで試したが、baseline `min pnl=82.7176`, `sum=406.6546` を超えない。fixed component gate `quality>=0` はforced exit maxを `0` にできるが、min pnl `71.1944`、sum `367.3486` で標準採用不可。prefix列は診断・multi-feature stacking基盤として残す。詳細は `docs/reports/00087_2026-06-29_candidate_quality_prefixed_component_gates.md`。
 
+prefixed candidate quality componentを合成する `combine-candidate-quality-components` を追加済み。`mean`, `min`, fixed成分重視 `weighted_mean(0.25,0.5,0.25)` をvalidation 4foldで試した。`component_fixed_weighted quality>=0` はbaselineと同じfold最低PnL `82.7176` を保ち、sum `406.6546 -> 410.7146`、EV overestimate mean `15.5226 -> 15.4567` と小改善。ただし改善幅は小さく、fixed holdout未適用のため標準採用はしない。tie-break候補として残し、次はprefixed applyを作って複数holdoutで確認する。詳細は `docs/reports/00088_2026-06-29_candidate_quality_component_composite.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -208,6 +210,7 @@ candidate-entry quality出力に `--prediction-prefix` を追加済み。timed/f
 33. joint exit targetはOOF回帰指標を改善したが、単一scalar risk penaltyとしては実行policyを改善しない。
 34. joint成分をtimed barrier、fixed horizon、clipped bestへ分解しても、scalar risk penaltyではvalidation baselineを超えない。次はcomponentを潰さず、exit class、time-to-event、fixed horizon成分、side/regime別residualを別々の特徴またはmulti-output診断として扱う。
 35. component meanを単独quality gateとして使ってもbaselineを超えない。prefix付きcomponent列は残し、今後はhard gateではなく、diagnostic/tie-break/multi-feature stackingの入力として扱う。
+36. deterministic component ensembleでは `component_fixed_weighted quality>=0` だけがbaselineを小幅改善した。ただしfold最低PnLは同じで、fixed holdout未確認。標準採用せず、tie-break候補として複数holdoutへ進める。
 
 ## 未決定事項
 
@@ -218,6 +221,8 @@ candidate-entry quality出力に `--prediction-prefix` を追加済み。timed/f
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 03:10 JST 更新: `combine-candidate-quality-components` を追加し、timed/fixed/clipped component列を `mean`, `min`, `weighted_mean` で合成できるようにした。validation 4foldでは `component_fixed_weighted quality>=0` がbaselineと同じ min pnl `82.7176` を維持しつつ、sum `410.7146`、EV overestimate mean `15.4567` に小改善。`component_min` はtrade数とPnLを壊す。標準採用せず、次はprefixed applyを生成して2024-12/2025-02と追加holdoutへ固定適用する。
 
 2026-06-29 02:57 JST 更新: `oof-candidate-quality-model --prediction-prefix` を追加し、timed/fixed/clipped component列を同じOOF parquetへ共存できるようにした。component meanを `min_trade_quality` gateとして試したが、timed/fixed/clippedいずれもbaseline `min pnl=82.7176`, `sum=406.6546` を超えない。fixed component `quality>=0` はforced exitを0にするがmin pnl `71.1944` で弱い。標準採用せず、prefix列は診断・tie-break・multi-feature stacking基盤として残す。
 

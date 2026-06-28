@@ -493,6 +493,21 @@ def parse_csv_ints(value: str | None) -> list[int]:
     return output
 
 
+def parse_csv_floats(value: str | None) -> list[float]:
+    if value is None:
+        return []
+    output: list[float] = []
+    for part in value.split(","):
+        stripped = part.strip()
+        if not stripped:
+            continue
+        try:
+            output.append(float(stripped))
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("CSV values must be floats") from exc
+    return output
+
+
 def parse_csv_paths(value: str | None) -> list[Path]:
     if value is None:
         return []
@@ -2593,6 +2608,109 @@ def candidate_quality_columns_for_side(
     )
 
 
+def combine_candidate_quality_values(
+    values: pd.DataFrame,
+    mode: str,
+    weights: list[float] | None = None,
+) -> pd.Series:
+    numeric = values.astype(float)
+    complete_rows = ~numeric.isna().any(axis=1)
+    if mode == "mean":
+        combined = numeric.mean(axis=1)
+    elif mode == "min":
+        combined = numeric.min(axis=1)
+    elif mode == "max":
+        combined = numeric.max(axis=1)
+    elif mode == "weighted_mean":
+        if weights is None:
+            raise ValueError("weights are required for weighted_mean")
+        if len(weights) != numeric.shape[1]:
+            raise ValueError("weights length must match component count")
+        weight_array = np.asarray(weights, dtype=float)
+        if (weight_array < 0).any() or weight_array.sum() <= 0:
+            raise ValueError("weights must be non-negative and sum to a positive value")
+        normalized_weights = weight_array / weight_array.sum()
+        combined = pd.Series(
+            numeric.to_numpy(dtype=float) @ normalized_weights,
+            index=numeric.index,
+        )
+    else:
+        raise ValueError(f"unknown candidate quality component combine mode: {mode}")
+    return combined.where(complete_rows)
+
+
+def combine_candidate_quality_component_columns(
+    predictions: pd.DataFrame,
+    component_prefixes: list[str],
+    output_prefix: str,
+    mode: str = "mean",
+    weights: list[float] | None = None,
+) -> pd.DataFrame:
+    prefixes = [
+        validate_candidate_quality_prediction_prefix(prefix) for prefix in component_prefixes
+    ]
+    if not prefixes:
+        raise ValueError("at least one component prefix is required")
+    if any(not prefix for prefix in prefixes):
+        raise ValueError("component prefixes must be non-empty")
+    normalized_output_prefix = validate_candidate_quality_prediction_prefix(output_prefix)
+    if not normalized_output_prefix:
+        raise ValueError("output prefix must be non-empty")
+
+    missing = sorted(
+        {TRADE_SOURCE_LONG_EV_COLUMN, TRADE_SOURCE_SHORT_EV_COLUMN} - set(predictions.columns)
+    )
+    for side_name in ("long", "short"):
+        for prefix in prefixes:
+            missing.extend(
+                column
+                for column in candidate_quality_columns_for_side(side_name, prefix)[:2]
+                if column not in predictions.columns
+            )
+    if missing:
+        raise ValueError(
+            "predictions missing candidate quality component columns: "
+            f"{', '.join(sorted(set(missing)))}"
+        )
+
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        quality_column, lower_column, risk_column, lower_risk_column = candidate_quality_columns_for_side(
+            side_name,
+            normalized_output_prefix,
+        )
+        component_quality_columns = [
+            candidate_quality_columns_for_side(side_name, prefix)[0] for prefix in prefixes
+        ]
+        component_lower_columns = [
+            candidate_quality_columns_for_side(side_name, prefix)[1] for prefix in prefixes
+        ]
+        output[quality_column] = combine_candidate_quality_values(
+            output[component_quality_columns],
+            mode,
+            weights,
+        )
+        output[lower_column] = combine_candidate_quality_values(
+            output[component_lower_columns],
+            mode,
+            weights,
+        )
+        source_column = (
+            TRADE_SOURCE_LONG_EV_COLUMN
+            if side_name == "long"
+            else TRADE_SOURCE_SHORT_EV_COLUMN
+        )
+        overestimate = (
+            output[source_column].astype(float) - output[quality_column].astype(float)
+        ).clip(lower=0.0)
+        lower_overestimate = (
+            output[source_column].astype(float) - output[lower_column].astype(float)
+        ).clip(lower=0.0)
+        output[risk_column] = -overestimate
+        output[lower_risk_column] = -lower_overestimate
+    return output
+
+
 def add_candidate_quality_model_columns(
     predictions: pd.DataFrame,
     bundle: CandidateQualityModelBundle,
@@ -4521,6 +4639,54 @@ def oof_candidate_quality_model(args: argparse.Namespace) -> int:
     return 0
 
 
+def combine_candidate_quality_components_cli(args: argparse.Namespace) -> int:
+    component_prefixes = parse_csv_strings(args.component_prefixes)
+    weights = parse_csv_floats(args.weights)
+    if args.mode != "weighted_mean" and weights:
+        raise ValueError("--weights can only be used with --mode weighted_mean")
+    if args.mode == "weighted_mean" and not weights:
+        raise ValueError("--weights is required with --mode weighted_mean")
+
+    predictions = pd.read_parquet(args.predictions)
+    output = combine_candidate_quality_component_columns(
+        predictions,
+        component_prefixes=component_prefixes,
+        output_prefix=args.output_prefix,
+        mode=args.mode,
+        weights=weights or None,
+    )
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    output.to_parquet(args.output_path, index=False)
+
+    output_columns: dict[str, list[str]] = {}
+    missing_counts: dict[str, int] = {}
+    means: dict[str, float] = {}
+    for side_name in ("long", "short"):
+        columns = list(candidate_quality_columns_for_side(side_name, args.output_prefix))
+        output_columns[side_name] = columns
+        for column in columns:
+            missing_counts[column] = int(output[column].isna().sum())
+            means[column] = float(output[column].mean()) if output[column].notna().any() else float("nan")
+    metrics = {
+        "mode": "candidate_quality_component_composite",
+        "predictions": str(args.predictions),
+        "output_path": str(args.output_path),
+        "component_prefixes": component_prefixes,
+        "output_prefix": validate_candidate_quality_prediction_prefix(args.output_prefix),
+        "combine_mode": args.mode,
+        "weights": weights,
+        "rows": int(len(output)),
+        "output_columns": output_columns,
+        "missing_counts": missing_counts,
+        "means": means,
+    }
+    metrics_path = args.output_path.with_suffix(".metrics.json")
+    with metrics_path.open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics, indent=2, default=str))
+    return 0
+
+
 def oof_trade_failure_model(args: argparse.Namespace) -> int:
     validation_months = parse_csv_months(args.validation_months)
     apply_months = parse_csv_months(args.apply_months)
@@ -5342,6 +5508,34 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_quality_model_args(candidate_quality_model_parser)
     add_candidate_entry_filter_args(candidate_quality_model_parser)
     candidate_quality_model_parser.set_defaults(func=oof_candidate_quality_model)
+
+    combine_candidate_quality_parser = subparsers.add_parser(
+        "combine-candidate-quality-components",
+        help="combine prefixed candidate-quality component columns into one prefixed column set",
+    )
+    combine_candidate_quality_parser.add_argument("--predictions", type=Path, required=True)
+    combine_candidate_quality_parser.add_argument("--output-path", type=Path, required=True)
+    combine_candidate_quality_parser.add_argument(
+        "--component-prefixes",
+        required=True,
+        help="comma-separated candidate-quality prediction prefixes to combine",
+    )
+    combine_candidate_quality_parser.add_argument(
+        "--output-prefix",
+        required=True,
+        help="output prediction prefix for pred_candidate_quality_<prefix>_<side>_* columns",
+    )
+    combine_candidate_quality_parser.add_argument(
+        "--mode",
+        choices=("mean", "min", "max", "weighted_mean"),
+        default="mean",
+    )
+    combine_candidate_quality_parser.add_argument(
+        "--weights",
+        default="",
+        help="comma-separated non-negative weights, required for weighted_mean",
+    )
+    combine_candidate_quality_parser.set_defaults(func=combine_candidate_quality_components_cli)
 
     trade_failure_calibration_parser = subparsers.add_parser(
         "oof-trade-failure-calibration",
