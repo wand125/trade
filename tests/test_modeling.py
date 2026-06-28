@@ -524,6 +524,8 @@ class ModelingTests(unittest.TestCase):
         predictions = {
             "long_best_adjusted_pnl": [1.5, 2.5],
             "short_best_adjusted_pnl": [2.5, 1.5],
+            "long_exit_event_log_minutes": [np.log1p(60.0), -2.0],
+            "short_exit_event_log_minutes": [np.log1p(3000.0), np.log1p(15.0)],
         }
 
         output = prediction_frame(df, predictions)
@@ -534,6 +536,10 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(output["long_forced_adjusted_pnl"].tolist(), [1.5, -3.0])
         self.assertEqual(output["short_forced_adjusted_pnl"].tolist(), [-1.8, 2.5])
         self.assertIn("pred_long_best_adjusted_pnl", output.columns)
+        self.assertAlmostEqual(output["pred_long_exit_event_minutes_from_log"].iloc[0], 60.0)
+        self.assertAlmostEqual(output["pred_long_exit_event_minutes_from_log"].iloc[1], 0.0)
+        self.assertAlmostEqual(output["pred_short_exit_event_minutes_from_log"].iloc[0], 1440.0)
+        self.assertAlmostEqual(output["pred_short_exit_event_minutes_from_log"].iloc[1], 15.0)
 
     def test_enrich_predictions_with_dataset_targets_adds_missing_context_columns(self):
         predictions = pd.DataFrame(

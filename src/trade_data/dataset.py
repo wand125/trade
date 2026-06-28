@@ -44,6 +44,10 @@ PROFIT_BARRIER_HORIZON_MINUTES = EXIT_FIXED_HORIZON_MINUTES
 EXIT_EVENT_TIME = 0
 EXIT_EVENT_PROFIT = 1
 EXIT_EVENT_LOSS = 2
+EXIT_EVENT_LOG_MINUTE_TARGETS = [
+    "long_exit_event_log_minutes",
+    "short_exit_event_log_minutes",
+]
 
 
 @dataclass(frozen=True)
@@ -382,6 +386,8 @@ def future_best_labels(
             "short_exit_event": short_exit_event,
             "long_exit_event_minutes": long_exit_event_minutes,
             "short_exit_event_minutes": short_exit_event_minutes,
+            "long_exit_event_log_minutes": np.log1p(long_exit_event_minutes),
+            "short_exit_event_log_minutes": np.log1p(short_exit_event_minutes),
             **profit_barrier_horizon_targets,
             **fixed_horizon_targets,
             "long_best_exit_idx": long_best_exit_idx,
@@ -643,6 +649,7 @@ def build_month_dataset(
         "short_max_adverse_pnl",
         "long_exit_event_minutes",
         "short_exit_event_minutes",
+        *EXIT_EVENT_LOG_MINUTE_TARGETS,
         "long_wait_regret",
         "short_wait_regret",
         "long_entry_local_rank",
@@ -674,6 +681,7 @@ def build_month_dataset(
             "short_exit_event",
             "long_exit_event_minutes",
             "short_exit_event_minutes",
+            *EXIT_EVENT_LOG_MINUTE_TARGETS,
             *profit_barrier_horizon_target_columns,
             *fixed_horizon_target_columns,
             *timing_target_columns,

@@ -49,6 +49,8 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(labels.loc[0, "short_exit_event"], 2)
         self.assertAlmostEqual(labels.loc[0, "long_exit_event_minutes"], 1.0)
         self.assertAlmostEqual(labels.loc[0, "short_exit_event_minutes"], 1.0)
+        self.assertAlmostEqual(labels.loc[0, "long_exit_event_log_minutes"], np.log1p(1.0))
+        self.assertAlmostEqual(labels.loc[0, "short_exit_event_log_minutes"], np.log1p(1.0))
         self.assertEqual(labels.loc[0, "long_profit_barrier_hit_60m"], 1)
         self.assertEqual(labels.loc[0, "short_profit_barrier_hit_60m"], 0)
 
@@ -75,6 +77,8 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(labels.loc[0, "short_exit_event"], 0)
         self.assertAlmostEqual(labels.loc[0, "long_exit_event_minutes"], 3.0)
         self.assertAlmostEqual(labels.loc[0, "short_exit_event_minutes"], 3.0)
+        self.assertAlmostEqual(labels.loc[0, "long_exit_event_log_minutes"], np.log1p(3.0))
+        self.assertAlmostEqual(labels.loc[0, "short_exit_event_log_minutes"], np.log1p(3.0))
 
     def test_future_best_labels_adds_time_limited_profit_barrier_targets(self):
         opens = [100.0] * 200
@@ -134,6 +138,8 @@ class DatasetTests(unittest.TestCase):
         self.assertIn("short_exit_event", dataset.columns)
         self.assertIn("long_exit_event_minutes", dataset.columns)
         self.assertIn("short_exit_event_minutes", dataset.columns)
+        self.assertIn("long_exit_event_log_minutes", dataset.columns)
+        self.assertIn("short_exit_event_log_minutes", dataset.columns)
         self.assertIn("long_exit_event_time_bin", dataset.columns)
         self.assertIn("short_exit_event_time_bin", dataset.columns)
         self.assertIn("long_profit_barrier_hit_60m", dataset.columns)
@@ -156,6 +162,7 @@ class DatasetTests(unittest.TestCase):
         self.assertIn("long_profit_barrier_hit", summary["target_columns"])
         self.assertIn("long_exit_event", summary["target_columns"])
         self.assertIn("long_exit_event_minutes", summary["target_columns"])
+        self.assertIn("long_exit_event_log_minutes", summary["target_columns"])
         self.assertIn("long_profit_barrier_hit_60m", summary["target_columns"])
         self.assertIn("long_fixed_60m_adjusted_pnl", summary["target_columns"])
         self.assertEqual(summary["exit_event_meanings"]["0"], "time_exit")

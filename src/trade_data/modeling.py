@@ -27,6 +27,7 @@ from sklearn.preprocessing import StandardScaler
 
 from trade_data.dataset import (
     EXIT_FIXED_HORIZON_MINUTES,
+    EXIT_EVENT_LOG_MINUTE_TARGETS,
     PROFIT_BARRIER_HORIZON_MINUTES,
     iter_months,
     output_stem,
@@ -55,6 +56,7 @@ PROFIT_BARRIER_HORIZON_TARGETS = [
     for minutes in PROFIT_BARRIER_HORIZON_MINUTES
     for side in ["long", "short"]
 ]
+EXIT_EVENT_MAX_HOLD_MINUTES = 24.0 * 60.0
 
 REGRESSION_TARGETS = [
     *EV_TARGETS,
@@ -64,6 +66,7 @@ REGRESSION_TARGETS = [
     "short_best_holding_minutes",
     "long_exit_event_minutes",
     "short_exit_event_minutes",
+    *EXIT_EVENT_LOG_MINUTE_TARGETS,
     "long_max_adverse_pnl",
     "short_max_adverse_pnl",
     "long_wait_regret",
@@ -103,6 +106,7 @@ POLICY_REGRESSION_TARGETS = [
     "short_best_holding_minutes",
     "long_exit_event_minutes",
     "short_exit_event_minutes",
+    *EXIT_EVENT_LOG_MINUTE_TARGETS,
     "long_max_adverse_pnl",
     "short_max_adverse_pnl",
     "long_wait_regret",
@@ -750,6 +754,7 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "short_exit_event",
         "long_exit_event_minutes",
         "short_exit_event_minutes",
+        *EXIT_EVENT_LOG_MINUTE_TARGETS,
         "long_exit_event_time_bin",
         "short_exit_event_time_bin",
         "long_max_adverse_pnl",
@@ -773,6 +778,13 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
     output = df[columns].copy()
     for name, values in predictions.items():
         output[f"pred_{name}"] = values
+    for side in ["long", "short"]:
+        log_target = f"{side}_exit_event_log_minutes"
+        if log_target in predictions:
+            log_predictions = np.asarray(predictions[log_target], dtype="float64")
+            output[f"pred_{side}_exit_event_minutes_from_log"] = np.expm1(
+                np.clip(log_predictions, 0.0, np.log1p(EXIT_EVENT_MAX_HOLD_MINUTES))
+            )
     return output
 
 

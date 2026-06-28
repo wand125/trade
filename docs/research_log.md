@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 05:09 Log exit event minutes target
+
+- `long_exit_event_log_minutes` / `short_exit_event_log_minutes` をdataset targetへ追加し、`policy` / `full` regression target setにも入れた。
+- prediction artifactには `pred_long_exit_event_minutes_from_log` / `pred_short_exit_event_minutes_from_log` を保存する。`expm1(clip(log_pred, 0, log1p(1440)))` で `0..1440` 分に閉じる。
+- 2025-01 train、2025-02 validation、2025-04 testの小型MLP smokeでは、log target自体のR2はvalid/testとも負で、モデル候補としては使わない。
+- ただし raw minutes回帰が `-54145.92` や `351152.22` を出す一方で、log派生holdingは `0..1440` に収まり、policyへ渡す出力制約としては機能した。
+- 2025-04 backtest smokeは base `-28.4370`, high cost `-57.1444`。NoTradeには届かないため採用候補ではないが、`00095` の負値holdingによる高回転破綻は止まった。
+- 判断: log exit minutes targetとbounded派生列は安全なexit timing表現として採用する。次はbin分類/hazard targetと複数fold validationへ戻す。
+- report: `docs/reports/00097_2026-06-29_log_exit_event_minutes_target.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 04:57 Timed EV holding guard
 
 - `timed_ev` に raw holding predictionのfail-close/fallback guardを追加した。
