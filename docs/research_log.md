@@ -2326,3 +2326,33 @@ Artifacts:
 
 - `更新日時` は追記・修正履歴を見るための補助情報であり、採番・直近判定・再採番の基準には使わない。
 - `tests/test_docs_reports.py` は本文 `日時` を抽出して番号順を検証しているため、mtime依存の検証にはなっていない。
+
+### 2026-06-28 17:30 JST Group Loss Penalty Ranking
+
+作業:
+
+- `model-candidate-selection` に `--group-loss-penalty-weight` を追加した。
+- `group_loss_penalty`, `robust_total_adjusted_pnl_min_cost`, `robust_total_adjusted_pnl_min_base` をcandidate summaryへ追加した。
+- delay `1` 4fold sweepで、weight `0.0` と `1.0` を比較した。
+- weight `1.0` topを2024-12 holdoutへ固定適用した。
+- report: `docs/reports/00047_2026-06-28_group_loss_penalty_ranking.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- weight `0.0`: `data/reports/backtests/20260628_082937_model_candidate_selection/`
+- weight `1.0`: `data/reports/backtests/20260628_082923_model_candidate_selection/`
+- 2024-12 holdout: `data/reports/backtests/20260628_083021_model_timed_ev_2024-12/`
+
+結果:
+
+| candidate | adjusted pnl | trades | profit factor | max drawdown |
+|---|---:|---:|---:|---:|
+| previous combined-gate top | `-149.7354` | `33` | `0.3820` | `176.6504` |
+| group-loss penalty top | `-126.0770` | `33` | `0.4731` | `165.9662` |
+
+判断:
+
+- group-loss soft rankingは、validation内で深いgroup損失を持つ候補の順位を下げられる。
+- 2024-12 holdout損失は縮んだが、NoTradeには大きく負けるため採用しない。
+- 引き続き、中心課題はentry/side calibrationとprofit-barrier hit calibration。group-loss penaltyは候補比較の補助軸に留める。

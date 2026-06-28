@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 17:24 JST
+最終更新: 2026-06-28 17:30 JST
 
 ## 現在の状態
 
@@ -74,6 +74,8 @@ delay `1` full-gridを新しいcombined regime診断付きで再生成し、`com
 
 regime-aware side-confidence penalty ruleを追加済み。`--side-confidence-penalty-rules` は matching regimeで `penalty * (1 - confidence)`、`--side-confidence-overfit-penalty-rules` は `penalty * confidence` をEVから引く。ただし2024-12 smokeでは prior global confidence gate `-109.8978` に対し、low-confidence rule `-222.3816`、overfit rule `-249.2666` と悪化したため採用しない。詳細は `docs/reports/00046_2026-06-28_regime_side_confidence_penalty_smoke.md`。
 
+candidate selectionへ group-loss soft ranking penaltyを追加済み。`--group-loss-penalty-weight` は side / direction-session / combined-regime / direction-combined-regime の最悪損失深さを合算し、eligible候補の `robust_total_adjusted_pnl_min_cost` を下げて順位付けする。delay `1` 4fold smokeではtopが `entry=5, short offset=12, max hold=720` から `entry=5, short offset=20, max hold=720` へ変わり、2024-12 holdoutは `-149.7354` から `-126.0770` へ改善したがNoTradeには大きく負けた。採用ではなく診断/tie-break軸に留める。詳細は `docs/reports/00047_2026-06-28_group_loss_penalty_ranking.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなく本文内の `日時` と通し番号を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -104,7 +106,7 @@ regime-aware side-confidence penalty ruleを追加済み。`--side-confidence-pe
 7. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
 8. `side-confidence-report` をより広いwalk-forward OOF予測へ適用し、representative smokeの過大確信が安定して出るか確認する。
 9. side-confidence penalty tuningは、まずviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。
-10. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
+10. diagnostic gateとgroup-loss penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。
 11. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
 12. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 

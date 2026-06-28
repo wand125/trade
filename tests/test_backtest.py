@@ -962,6 +962,78 @@ class BacktestTests(unittest.TestCase):
         self.assertTrue(bool(offset8["eligible"]))
         self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
 
+    def test_candidate_selection_can_rank_by_group_loss_penalty(self):
+        def fold(values):
+            rows = []
+            for offset, pnl, direction_session_pnl in values:
+                rows.append(
+                    {
+                        "policy": "fixed_horizon_ev",
+                        "entry_threshold": 0,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 1,
+                        "risk_penalty": 0,
+                        "max_wait_regret": 4,
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "True",
+                        "profit_barrier_threshold": 0.4,
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": 40,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "long_adjusted_pnl": 20,
+                        "short_adjusted_pnl": 10,
+                        "direction_session_adjusted_pnl_min": direction_session_pnl,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_a = fold([(6, 80, -50), (8, 50, -5)])
+        base_b = fold([(6, 78, -48), (8, 48, -4)])
+        cost_a = fold([(6, 60, -50), (8, 35, -5)])
+        cost_b = fold([(6, 58, -48), (8, 34, -4)])
+
+        summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=30.0,
+            max_side_loss_per_fold=20.0,
+            max_direction_session_loss_per_fold=100.0,
+            group_loss_penalty_weight=1.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+
+        offset6 = summary[summary["short_entry_threshold_offset"] == 6].iloc[0]
+        offset8 = summary[summary["short_entry_threshold_offset"] == 8].iloc[0]
+        self.assertTrue(bool(offset6["eligible"]))
+        self.assertTrue(bool(offset8["eligible"]))
+        self.assertEqual(offset6["group_loss_penalty"], 50)
+        self.assertEqual(offset8["group_loss_penalty"], 5)
+        self.assertEqual(offset6["robust_total_adjusted_pnl_min_cost"], 8)
+        self.assertEqual(offset8["robust_total_adjusted_pnl_min_cost"], 29)
+        self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
+
     def test_candidate_selection_can_gate_combined_regime_loss(self):
         def fold(values):
             rows = []

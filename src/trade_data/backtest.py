@@ -3166,6 +3166,11 @@ def row_max_or_default(frame: pd.DataFrame, columns: list[str], default: float) 
     return frame[existing].max(axis=1)
 
 
+def loss_depth(series: pd.Series) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce").replace(np.inf, np.nan)
+    return (-values.fillna(0.0)).clip(lower=0.0)
+
+
 def plateau_support_counts(
     frame: pd.DataFrame,
     plateau_column: str,
@@ -3222,6 +3227,7 @@ def summarize_candidate_selection(
     max_no_edge_rate: float = 1.0,
     max_exit_regret_mean: float = 1e100,
     max_ev_overestimate_vs_realized_mean: float = 1e100,
+    group_loss_penalty_weight: float = 0.0,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -3259,6 +3265,8 @@ def summarize_candidate_selection(
         raise ValueError("max_exit_regret_mean must be non-negative")
     if max_ev_overestimate_vs_realized_mean < 0:
         raise ValueError("max_ev_overestimate_vs_realized_mean must be non-negative")
+    if group_loss_penalty_weight < 0:
+        raise ValueError("group_loss_penalty_weight must be non-negative")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -3329,6 +3337,30 @@ def summarize_candidate_selection(
             "direction_combined_regime_adjusted_pnl_min_min_cost",
         ],
         float("inf"),
+    )
+    merged["side_loss_depth_all"] = loss_depth(merged["side_adjusted_pnl_min_all"])
+    merged["direction_session_loss_depth_all"] = loss_depth(
+        merged["direction_session_adjusted_pnl_min_all"]
+    )
+    merged["combined_regime_loss_depth_all"] = loss_depth(
+        merged["combined_regime_adjusted_pnl_min_all"]
+    )
+    merged["direction_combined_regime_loss_depth_all"] = loss_depth(
+        merged["direction_combined_regime_adjusted_pnl_min_all"]
+    )
+    merged["group_loss_penalty"] = (
+        merged["side_loss_depth_all"]
+        + merged["direction_session_loss_depth_all"]
+        + merged["combined_regime_loss_depth_all"]
+        + merged["direction_combined_regime_loss_depth_all"]
+    )
+    merged["robust_total_adjusted_pnl_min_cost"] = (
+        merged["total_adjusted_pnl_min_cost"]
+        - group_loss_penalty_weight * merged["group_loss_penalty"]
+    )
+    merged["robust_total_adjusted_pnl_min_base"] = (
+        merged["total_adjusted_pnl_min_base"]
+        - group_loss_penalty_weight * merged["group_loss_penalty"]
     )
     merged["short_trade_share_max_all"] = row_max_or_default(
         merged,
@@ -3485,6 +3517,8 @@ def summarize_candidate_selection(
     return merged.sort_values(
         [
             "eligible",
+            "robust_total_adjusted_pnl_min_cost",
+            "robust_total_adjusted_pnl_min_base",
             "total_adjusted_pnl_min_cost",
             "total_adjusted_pnl_min_base",
             "plateau_support_count",
@@ -3507,6 +3541,8 @@ def summarize_candidate_selection(
             "cost_pnl_drop_min",
         ],
         ascending=[
+            False,
+            False,
             False,
             False,
             False,
@@ -3610,6 +3646,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         max_no_edge_rate=args.max_no_edge_rate,
         max_exit_regret_mean=args.max_exit_regret_mean,
         max_ev_overestimate_vs_realized_mean=args.max_ev_overestimate_vs_realized_mean,
+        group_loss_penalty_weight=args.group_loss_penalty_weight,
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -3645,6 +3682,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "max_no_edge_rate": args.max_no_edge_rate,
         "max_exit_regret_mean": args.max_exit_regret_mean,
         "max_ev_overestimate_vs_realized_mean": args.max_ev_overestimate_vs_realized_mean,
+        "group_loss_penalty_weight": args.group_loss_penalty_weight,
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -4051,6 +4089,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1e100,
         help="maximum allowed mean predicted EV over realized adjusted PnL in any fold",
+    )
+    model_candidate_selection.add_argument(
+        "--group-loss-penalty-weight",
+        type=float,
+        default=0.0,
+        help=(
+            "soft ranking penalty weight applied to the summed worst side/regime loss depth; "
+            "0 keeps the historical ranking"
+        ),
     )
     model_candidate_selection.add_argument(
         "--plateau-column",
