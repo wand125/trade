@@ -13,6 +13,7 @@ from trade_data.backtest import (
     model_signal_from_predictions,
     normalize_sweep_metrics,
     prepare_analysis_predictions,
+    profit_barrier_calibration_diagnostics,
     profit_barrier_diagnostics,
     run_backtest,
     summarize_candidate_selection,
@@ -482,6 +483,8 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["actual_profit_barrier_miss_rate"].tolist(), [0.0])
         self.assertEqual(normalized["predicted_profit_barrier_miss_count"].tolist(), [0.0])
         self.assertEqual(normalized["actual_profit_barrier_miss_count"].tolist(), [0.0])
+        self.assertEqual(normalized["profit_barrier_calibration_overestimate_max"].tolist(), [0.0])
+        self.assertEqual(normalized["worst_profit_barrier_calibration_bucket"].tolist(), [""])
         self.assertEqual(normalized["block_trend_regimes"].tolist(), [""])
         self.assertEqual(normalized["block_volatility_regimes"].tolist(), [""])
         self.assertEqual(normalized["block_session_regimes"].tolist(), [""])
@@ -754,6 +757,82 @@ class BacktestTests(unittest.TestCase):
         self.assertTrue(bool(offset8["eligible"]))
         self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
 
+    def test_candidate_selection_can_gate_profit_barrier_calibration_overestimate(self):
+        def fold(values):
+            rows = []
+            for offset, pnl, overestimate in values:
+                rows.append(
+                    {
+                        "policy": "fixed_horizon_ev",
+                        "entry_threshold": 0,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 1,
+                        "risk_penalty": 0,
+                        "max_wait_regret": 4,
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "True",
+                        "profit_barrier_threshold": 0.4,
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": 40,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "long_adjusted_pnl": 20,
+                        "short_adjusted_pnl": 10,
+                        "profit_barrier_calibration_observed_count": 30,
+                        "profit_barrier_calibration_bucket_count": 2,
+                        "profit_barrier_calibration_overestimate_max": overestimate,
+                        "profit_barrier_calibration_abs_error_max": overestimate,
+                        "worst_profit_barrier_calibration_bucket": "0.6-0.8",
+                        "worst_profit_barrier_calibration_bucket_count": 10,
+                        "worst_profit_barrier_calibration_predicted_mean": 0.7,
+                        "worst_profit_barrier_calibration_actual_hit_rate": 0.7 - overestimate,
+                        "worst_profit_barrier_calibration_overestimate": overestimate,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_a = fold([(6, 40, 0.45), (8, 32, 0.10)])
+        base_b = fold([(6, 38, 0.42), (8, 30, 0.12)])
+        cost_a = fold([(6, 30, 0.46), (8, 24, 0.13)])
+        cost_b = fold([(6, 29, 0.44), (8, 23, 0.11)])
+
+        summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=20.0,
+            max_profit_barrier_calibration_overestimate=0.2,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+
+        offset6 = summary[summary["short_entry_threshold_offset"] == 6].iloc[0]
+        offset8 = summary[summary["short_entry_threshold_offset"] == 8].iloc[0]
+        self.assertFalse(bool(offset6["eligible"]))
+        self.assertFalse(bool(offset6["profit_barrier_calibration_ok"]))
+        self.assertTrue(bool(offset8["eligible"]))
+        self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
+
     def test_direction_session_diagnostics_reports_worst_group(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=3, freq="min")
         trades = pd.DataFrame(
@@ -811,6 +890,52 @@ class BacktestTests(unittest.TestCase):
         self.assertAlmostEqual(diagnostics["actual_profit_barrier_miss_rate"], 1 / 3)
         self.assertAlmostEqual(diagnostics["predicted_profit_barrier_miss_adjusted_pnl"], -15.0)
         self.assertAlmostEqual(diagnostics["actual_profit_barrier_miss_adjusted_pnl"], -15.0)
+
+    def test_profit_barrier_calibration_diagnostics_reports_worst_bucket(self):
+        timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=4, freq="min")
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "short", "short", "long"],
+                "entry_decision_timestamp": [timestamps[0], timestamps[1], timestamps[2], timestamps[3]],
+                "adjusted_pnl": [12.0, -15.0, -5.0, 8.0],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "pred_long_profit_barrier_hit_prob": [0.9, 0.2, 0.1, 0.55],
+                "pred_short_profit_barrier_hit_prob": [0.2, 0.75, 0.55, 0.1],
+                "long_profit_barrier_hit": [1, 1, 1, 0],
+                "short_profit_barrier_hit": [1, 0, 0, 1],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused.parquet"),
+            long_profit_barrier_column="pred_long_profit_barrier_hit_prob",
+            short_profit_barrier_column="pred_short_profit_barrier_hit_prob",
+        )
+
+        diagnostics = profit_barrier_calibration_diagnostics(trades, predictions, config)
+
+        self.assertEqual(diagnostics["profit_barrier_calibration_observed_count"], 4)
+        self.assertEqual(diagnostics["profit_barrier_calibration_bucket_count"], 3)
+        self.assertEqual(diagnostics["worst_profit_barrier_calibration_bucket"], "0.6-0.8")
+        self.assertEqual(diagnostics["worst_profit_barrier_calibration_bucket_count"], 1)
+        self.assertAlmostEqual(
+            diagnostics["worst_profit_barrier_calibration_predicted_mean"], 0.75
+        )
+        self.assertAlmostEqual(
+            diagnostics["worst_profit_barrier_calibration_actual_hit_rate"], 0.0
+        )
+        self.assertAlmostEqual(
+            diagnostics["profit_barrier_calibration_overestimate_max"], 0.75
+        )
+        self.assertAlmostEqual(
+            diagnostics["profit_barrier_calibration_0p4_0p6_predicted_mean"], 0.55
+        )
+        self.assertAlmostEqual(
+            diagnostics["profit_barrier_calibration_0p4_0p6_actual_hit_rate"], 0.0
+        )
 
     def test_trade_analysis_joins_predictions_and_flags_failures(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=5, freq="min")

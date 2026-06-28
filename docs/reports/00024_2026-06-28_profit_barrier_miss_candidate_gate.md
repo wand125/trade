@@ -1,7 +1,7 @@
 # Profit Barrier Miss Candidate Gate
 
 日時: 2026-06-28 10:06 JST
-更新日時: 2026-06-28 10:06 JST
+更新日時: 2026-06-28 10:21 JST
 
 ## 目的
 
@@ -107,3 +107,17 @@ predicted miss率は今回 `0.0` だった。これは barrier threshold `0.40` 
 - `python3 -m unittest discover tests`: 64 tests OK
 - `model-candidate-selection --help`: OK
 - `model-sweep --help`: OK
+
+## 更新: 2026-06-28 10:21 JST
+
+次アクションとして、predicted probability bucket別actual hit rateを標準metricsへ追加した。
+
+Report:
+
+- `docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
+
+主な結果:
+
+- `model-sweep` metricsへ probability bucket別calibration列を追加した。
+- `model-candidate-selection` に `--max-profit-barrier-calibration-overestimate` を追加した。
+- 2025-05 smokeでは、blockあり候補の0.6-0.8 bucketが predicted mean `0.676661` に対してactual hit rate `0.428571` で、calibration overestimate `0.248089`。PnLは良いがbarrier probabilityは過大評価しているため、このgateは当面診断軸として扱う。

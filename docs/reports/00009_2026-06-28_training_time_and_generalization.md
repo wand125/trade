@@ -391,7 +391,7 @@ Test sweep診断:
 
 長時間学習中にdocsを再読し、方向性レビューを作成した。
 
-- report: `docs/reports/2026-06-28_research_direction_review.md`
+- report: `docs/reports/00008_2026-06-28_research_direction_review.md`
 
 要点:
 

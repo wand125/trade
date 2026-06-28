@@ -1,5 +1,6 @@
 # Experiment Report Template
 
+ファイル名: NNNNN_YYYY-MM-DD_slug.md
 日時: YYYY-MM-DD HH:MM JST
 更新日時: YYYY-MM-DD HH:MM JST
 

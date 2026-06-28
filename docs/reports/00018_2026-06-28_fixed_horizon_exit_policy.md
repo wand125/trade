@@ -231,7 +231,7 @@ short専用entry threshold offsetを実装し、no-cost validationと spread `0.
 
 詳細レポート:
 
-- `docs/reports/2026-06-28_side_specific_entry_offsets.md`
+- `docs/reports/00019_2026-06-28_side_specific_entry_offsets.md`
 
 結果:
 

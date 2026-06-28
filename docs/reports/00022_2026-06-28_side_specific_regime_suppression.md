@@ -356,7 +356,7 @@ Next Actions 1 に対応し、`model-candidate-selection` へ `direction x sessi
 
 Report:
 
-- `docs/reports/2026-06-28_direction_session_candidate_gate.md`
+- `docs/reports/00023_2026-06-28_direction_session_candidate_gate.md`
 
 主な結果:
 

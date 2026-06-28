@@ -20,10 +20,10 @@
 - `docs/decisions/0003_overfitting_and_walk_forward.md`
 - `docs/decisions/0004_relaxed_adjusted_pnl.md`
 - `docs/decisions/0005_dense_entry_quality_targets.md`
-- `docs/reports/2026-06-28_multifold_policy_selection.md`
-- `docs/reports/2026-06-28_mixed_regime_weighted_training.md`
-- `docs/reports/2026-06-28_dense_entry_quality_targets.md`
-- `docs/reports/2026-06-28_training_time_and_generalization.md`
+- `docs/reports/00005_2026-06-28_multifold_policy_selection.md`
+- `docs/reports/00006_2026-06-28_mixed_regime_weighted_training.md`
+- `docs/reports/00007_2026-06-28_dense_entry_quality_targets.md`
+- `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 
 ## 結論
 

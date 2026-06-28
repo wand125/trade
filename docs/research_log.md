@@ -160,7 +160,7 @@ split:
 
 - command: `python3 -m trade_data.modeling train --train-start 2024-01 --train-end 2024-06 --valid-start 2024-07 --valid-end 2024-07 --test-start 2025-01 --test-end 2025-01 --min-adjusted-edge 15 --max-iter 80 --learning-rate 0.05 --entry-threshold 15`
 - artifacts: `experiments/20260627_171852_hgb_multitask_edge15/`
-- report: `docs/reports/2026-06-28_hgb_multitask_initial.md`
+- report: `docs/reports/00003_2026-06-28_hgb_multitask_initial.md`
 
 主要結果:
 
@@ -469,7 +469,7 @@ model:
 
 実験:
 
-- report: `docs/reports/2026-06-28_mixed_regime_weighted_training.md`
+- report: `docs/reports/00006_2026-06-28_mixed_regime_weighted_training.md`
 - model: `experiments/20260627_185200_hgb_multitask_edge15/`
 - train: 2023-01..2023-12, 2024-01..2024-06, 2024-08, 2024-10
 - valid: 2024-07, 2024-09, 2024-11, 2025-01
@@ -595,7 +595,7 @@ final test: new multipliers 1.0 / 1.25
 
 実験:
 
-- report: `docs/reports/2026-06-28_dense_entry_quality_targets.md`
+- report: `docs/reports/00007_2026-06-28_dense_entry_quality_targets.md`
 - model: `experiments/20260627_192112_hgb_multitask_edge15/`
 - validation quality summary: `data/reports/backtests/20260627_192904_model_sweep_summary/`
 
@@ -731,7 +731,7 @@ test:
 
 実験:
 
-- report: `docs/reports/2026-06-28_training_time_and_generalization.md`
+- report: `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 - iter80: `experiments/20260627_201301_policy_iter80_base_train/`
 - iter320: `experiments/20260627_201455_policy_iter320_base_train/`
 - train rows: 546,537
@@ -801,7 +801,7 @@ test:
 
 - iter80: `experiments/20260627_203932_policy_iter80_p1_l1p2/`
 - iter320: `experiments/20260627_204140_policy_iter320_p1_l1p2/`
-- report: `docs/reports/2026-06-28_training_time_and_generalization.md`
+- report: `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 
 結果:
 
@@ -834,13 +834,13 @@ test:
 - same LR: `max_iter=1280`, `learning_rate=0.03`
 - low LR: `max_iter=1280`, `learning_rate=0.01`
 - 実験中にdocsを再読し、方向性レビューを作成した。
-- report: `docs/reports/2026-06-28_research_direction_review.md`
+- report: `docs/reports/00008_2026-06-28_research_direction_review.md`
 
 Artifacts:
 
 - same LR: `experiments/20260627_205602_policy_iter1280_p1_l1p2/`
 - low LR: `experiments/20260627_210612_policy_iter1280_lr001_p1_l1p2/`
-- training report: `docs/reports/2026-06-28_training_time_and_generalization.md`
+- training report: `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 
 結果:
 
@@ -875,9 +875,9 @@ Artifacts:
 作業:
 
 - トレードMLの汎化原則を `docs/trading_ml_generalization_principles.md` に整理した。
-- 現状がその原則を守れているかを `docs/reports/2026-06-28_generalization_principles_review.md` にレビューした。
+- 現状がその原則を守れているかを `docs/reports/00011_2026-06-28_generalization_principles_review.md` にレビューした。
 - 低LR1280モデルの固定test負けを分解する `trade-backtest analyze-trades` を追加した。
-- 失敗trade分析レポートを `docs/reports/2026-06-28_trade_failure_analysis.md` に作成した。
+- 失敗trade分析レポートを `docs/reports/00010_2026-06-28_trade_failure_analysis.md` に作成した。
 
 判断:
 
@@ -907,7 +907,7 @@ Artifacts:
 - backtestに `spread_points`, `slippage_points`, `execution_delay_bars` を追加した。
 - 固定policyのコスト感度を見る `model-cost-sensitivity` を追加した。
 - `trade_data.modeling train` に `--purge-label-overlap` と `--embargo-hours` を追加した。デフォルトでラベル期間が後続valid/testに重なるtrain/valid行をpurgeする。
-- report: `docs/reports/2026-06-28_regime_cost_purge_controls.md`
+- report: `docs/reports/00012_2026-06-28_regime_cost_purge_controls.md`
 
 検証:
 
@@ -964,7 +964,7 @@ Artifact:
 - `--block-trend-regimes`, `--block-volatility-regimes`, `--block-session-regimes`, `--block-gap-regimes`, `--block-combined-regimes` を追加。
 - gate条件は `quality_ok` に合成し、新規entryだけを抑制する。保有中のexitや強制決済は変えない。
 - `model-sweep-summary` では block条件もpolicy keyに含め、gateあり/なしを別候補として集計する。
-- report: `docs/reports/2026-06-28_regime_gate_experiment.md`
+- report: `docs/reports/00013_2026-06-28_regime_gate_experiment.md`
 
 検証:
 
@@ -1003,7 +1003,7 @@ Fixed test:
 - 出力列は `pred_regime_calibrated_long_best_adjusted_pnl` / `pred_regime_calibrated_short_best_adjusted_pnl`。
 - validation内OOFでは、各validation月をholdoutし、残りvalidation月でcalibratorをfitする。
 - testにはvalidation全体でfitしたcalibratorを固定適用する。
-- report: `docs/reports/2026-06-28_side_regime_ev_calibration.md`
+- report: `docs/reports/00014_2026-06-28_side_regime_ev_calibration.md`
 
 検証:
 
@@ -1049,7 +1049,7 @@ Residual offset:
 - 指定したOOF対象月を `--fold-month-count` ごとのholdout foldに分ける。
 - 各foldでholdout月を学習から外し、必要なら `--purge-label-overlap` と `--embargo-hours` でlabel overlapを削除する。
 - 予測は `predictions_oof.parquet` に保存する。
-- report: `docs/reports/2026-06-28_train_oof_predictions_infra.md`
+- report: `docs/reports/00015_2026-06-28_train_oof_predictions_infra.md`
 
 検証:
 
@@ -1073,7 +1073,7 @@ Residual offset:
 - 各validation holdoutのcalibration fitを `train OOF + 他validation月` に変更できるようにした。
 - `trade_data.dataset` と `trade_data.backtest` のデフォルト倍率を profit 1.0 / loss 1.20 に変更した。
 - ADR `docs/decisions/0006_loss_multiplier_120_standard.md` を追加した。
-- report: `docs/reports/2026-06-28_train_oof_calibration_loss120.md`
+- report: `docs/reports/00017_2026-06-28_train_oof_calibration_loss120.md`
 
 実験:
 
@@ -1106,7 +1106,7 @@ Residual offset:
 - 既存 `docs/reports/*.md` はファイル更新時刻を基準に時刻付きへ補正した。
 - `future_best_labels` に固定保有 60/240/720 分のlong/short adjusted pnl targetを追加した。
 - `modeling` は古いdatasetにも対応できるよう、存在しない研究用targetを自動的に落とし、missing targetsをmetricsへ記録するようにした。
-- report: `docs/reports/2026-06-28_calibrated_trade_failure_exit_targets.md`
+- report: `docs/reports/00016_2026-06-28_calibrated_trade_failure_exit_targets.md`
 
 結果:
 
@@ -1129,7 +1129,7 @@ Residual offset:
 - `trade_data.backtest` に `fixed_horizon_ev` policyを追加した。
 - `--extra-side-margin-rules` を追加し、`session_regime=asia:5,session_regime=rollover:5` のようなregime別追加side marginを指定できるようにした。
 - `target-set full` のHGB 80iterモデルを学習した。
-- report: `docs/reports/2026-06-28_fixed_horizon_exit_policy.md`
+- report: `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
 
 Artifacts:
 
@@ -1160,7 +1160,7 @@ Artifacts:
 - `SWEEP_KEY_COLUMNS` と `model-sweep-summary` 正規化にoffset列を追加した。
 - `stateless_ev`, `stateful_ev`, `timed_ev`, `fixed_horizon_ev` のentry判定とflip判定にside別thresholdを適用した。
 - レポート時刻を `YYYY-MM-DD HH:MM JST` で記録する方針を再確認し、既存fixed horizonレポートにも更新時刻を追記した。
-- report: `docs/reports/2026-06-28_side_specific_entry_offsets.md`
+- report: `docs/reports/00019_2026-06-28_side_specific_entry_offsets.md`
 
 実験:
 
@@ -1193,7 +1193,7 @@ Artifacts:
 - `model-candidate-selection` を追加し、no-cost/cost-aware validation、cost drop、side loss、short offset plateauを同時に評価できるようにした。
 - 2025-03 の p1/l1.2 fixed horizon datasetを追加生成した。
 - 前回fixed horizon modelと同じtrain/validationで、testだけ2025-03にしたHGB 80iter full modelを学習した。
-- report: `docs/reports/2026-06-28_blind_holdout_candidate_selection.md`
+- report: `docs/reports/00020_2026-06-28_blind_holdout_candidate_selection.md`
 
 Artifacts:
 
@@ -1227,7 +1227,7 @@ Artifacts:
 - `model-policy` に `--profit-barrier-threshold`、`model-sweep` に `--profit-barrier-thresholds` を追加した。
 - `SWEEP_KEY_COLUMNS` とsummary正規化へ `profit_barrier_threshold` を追加し、閾値違いの候補が混ざらないようにした。
 - 既存 `docs/reports/*.md` はファイル更新時刻を基準に `更新日時` / `Updated` を補正した。
-- report: `docs/reports/2026-06-28_profit_barrier_probability_gate.md`
+- report: `docs/reports/00021_2026-06-28_profit_barrier_probability_gate.md`
 
 Artifacts:
 
@@ -1263,8 +1263,8 @@ Artifacts:
 - `model-policy` / `model-sweep` に `--side-block-rules` と `--side-extra-margin-rules` を追加した。
 - rule形式は `short:session_regime=asia`、`short:trend_regime=range+volatility_regime=low_vol+session_regime=asia`、`short:session_regime=asia:5`。
 - `model-candidate-selection` の集計keyへ `side_extra_margin_rules` / `side_block_rules` を追加した。
-- 既存レポート `docs/reports/2026-06-28_profit_barrier_probability_gate.md` は更新時刻 `2026-06-28 09:26 JST` で追記した。
-- report: `docs/reports/2026-06-28_side_specific_regime_suppression.md`
+- 既存レポート `docs/reports/00021_2026-06-28_profit_barrier_probability_gate.md` は更新時刻 `2026-06-28 09:26 JST` で追記した。
+- report: `docs/reports/00022_2026-06-28_side_specific_regime_suppression.md`
 
 Artifacts:
 
@@ -1300,7 +1300,7 @@ Artifacts:
 - 2025-04 / 2025-05 の p1/l1.2 fixed horizon datasetを生成した。
 - 同じtrain/validation条件で、testだけ2025-04 / 2025-05にしたHGB 80iter full modelを学習した。
 - 2025-03後に事前登録した `short:session_regime=asia` 候補を固定適用した。
-- 既存レポート `docs/reports/2026-06-28_side_specific_regime_suppression.md` は更新時刻 `2026-06-28 09:39 JST` で追記した。
+- 既存レポート `docs/reports/00022_2026-06-28_side_specific_regime_suppression.md` は更新時刻 `2026-06-28 09:39 JST` で追記した。
 
 Artifacts:
 
@@ -1340,7 +1340,7 @@ Artifacts:
 - `model-sweep` metricsへ `direction_session_adjusted_pnl_min`, `worst_direction_session`, `worst_direction_session_trade_count` を追加した。
 - `model-candidate-selection` に `--max-direction-session-loss-per-fold` を追加した。
 - 古いsweep CSVは新列なしでも読めるよう、normalize時は `direction_session_adjusted_pnl_min=inf` として扱う。
-- report: `docs/reports/2026-06-28_direction_session_candidate_gate.md`
+- report: `docs/reports/00023_2026-06-28_direction_session_candidate_gate.md`
 
 Artifacts:
 
@@ -1389,7 +1389,7 @@ Artifacts:
 - `model-policy` / `model-sweep` metricsへ predicted/actual profit barrier miss率を追加した。
 - `model-candidate-selection` に `--max-predicted-profit-barrier-miss-rate` と `--max-actual-profit-barrier-miss-rate` を追加した。
 - `require_profit_barrier=false` でも、prediction parquetにbarrier列が存在すれば predicted miss を測れるよう、barrier列を任意読み込みにした。
-- report: `docs/reports/2026-06-28_profit_barrier_miss_candidate_gate.md`
+- report: `docs/reports/00024_2026-06-28_profit_barrier_miss_candidate_gate.md`
 
 Artifacts:
 
@@ -1420,3 +1420,54 @@ Artifacts:
 - actual barrier miss率は候補選択の追加gateとして機能する。
 - 閾値 `0.48` はsmoke用であり、採用するにはvalidation fold全体で台地を見る。
 - 次は predicted probability bucket別のactual hit rateを標準診断に入れ、calibrationの過大評価を直接見る。
+
+### 2026-06-28 10:19 JST Report Sequence Numbers
+
+作業:
+
+- `docs/reports` の既存24本を `00001_YYYY-MM-DD_slug.md` 形式へリネームした。
+- 通し番号はファイルシステムの更新時刻ではなく、各レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決めた。
+- docs内の既存レポート参照を通し番号付きパスへ更新した。
+- `GOAL.md`, `docs/README.md`, `docs/experiment_protocol.md`, `docs/templates/experiment_report.md` に命名ルールを追加した。
+
+判断:
+
+- 新規 `docs/reports` レポートは、既存最大番号の次を使う。
+- 採番順を判断するときは、必ずレポート本文の `日時` を見る。`更新日時` やファイル更新時刻は採番基準にしない。
+
+### 2026-06-28 10:21 JST Profit Barrier Calibration Candidate Gate
+
+作業:
+
+- predicted profit barrier probability bucket別のactual hit rateを `model-policy` / `model-sweep` metricsへ追加した。
+- bucketは `0.0-0.2`, `0.2-0.4`, `0.4-0.6`, `0.6-0.8`, `0.8-1.0`。
+- `model-candidate-selection` に `--max-profit-barrier-calibration-overestimate` を追加した。
+- candidate selectionのsummaryは横に広くなりすぎないよう、bucket詳細は `model-sweep` metricsに残し、candidate selectionではsummary列だけを集計する。
+- report: `docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
+
+Artifacts:
+
+- no-cost no block sweep: `data/reports/backtests/20260628_011416_model_sweep_2025-05_2/`
+- no-cost asia short block sweep: `data/reports/backtests/20260628_011416_model_sweep_2025-05_1/`
+- cost no block sweep: `data/reports/backtests/20260628_011416_model_sweep_2025-05_3/`
+- cost asia short block sweep: `data/reports/backtests/20260628_011416_model_sweep_2025-05/`
+- candidate selection: `data/reports/backtests/20260628_011509_model_candidate_selection/`
+
+結果:
+
+- 2025-05 no blockは calibration overestimate max `0.054305`。worst bucketは `0.6-0.8`, count `5`, predicted mean `0.654305`, actual hit rate `0.600000`。
+- 2025-05 asia short blockは calibration overestimate max `0.248089`。worst bucketは `0.6-0.8`, count `7`, predicted mean `0.676661`, actual hit rate `0.428571`。
+- `--max-profit-barrier-calibration-overestimate 0.2` では、no blockは `profit_barrier_calibration_ok=True`、blockありは `False`。
+
+検証:
+
+- `python3 -m py_compile src/trade_data/backtest.py`: OK。
+- `python3 -m unittest tests.test_backtest`: 30 tests OK。
+- `python3 -m unittest discover tests`: 66 tests OK。
+- `model-candidate-selection --help`, `model-sweep --help`: OK。
+
+判断:
+
+- calibration overestimateは、barrier threshold通過後の過大評価を検出する診断軸として有効。
+- ただし今回のsmokeでは、PnLが良いblockあり候補のほうがcalibration overestimateは悪い。
+- したがって `--max-profit-barrier-calibration-overestimate 0.2` は採用閾値にしない。validation fold全体で台地を見るまでhard gateではなく診断値として扱う。

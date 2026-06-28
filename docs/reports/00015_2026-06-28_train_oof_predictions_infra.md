@@ -143,6 +143,6 @@ python3 -m trade_data.modeling oof \
 4ヶ月holdout単位のtrain OOFを実行し、side/regime calibrationへ接続した。
 
 - OOF artifact: `experiments/20260627_223559_policy_train_oof_4m_p1_l1p2_regime_purge_e24/`
-- calibration report: `docs/reports/2026-06-28_train_oof_calibration_loss120.md`
+- calibration report: `docs/reports/00017_2026-06-28_train_oof_calibration_loss120.md`
 
 月単位OOFはまだ未実施。今回の4ヶ月blocked OOFはcalibration fit母集団を増やす初期実験として扱う。

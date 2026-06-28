@@ -147,10 +147,54 @@ PROFIT_BARRIER_DIAGNOSTIC_COLUMNS = [
     "actual_profit_barrier_miss_adjusted_pnl",
 ]
 
+PROFIT_BARRIER_CALIBRATION_BUCKETS = (
+    (0.0, 0.2),
+    (0.2, 0.4),
+    (0.4, 0.6),
+    (0.6, 0.8),
+    (0.8, 1.0),
+)
+
+PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS = [
+    "profit_barrier_calibration_observed_count",
+    "profit_barrier_calibration_bucket_count",
+    "profit_barrier_calibration_overestimate_max",
+    "profit_barrier_calibration_abs_error_max",
+    "worst_profit_barrier_calibration_bucket_count",
+    "worst_profit_barrier_calibration_predicted_mean",
+    "worst_profit_barrier_calibration_actual_hit_rate",
+    "worst_profit_barrier_calibration_overestimate",
+]
+
+PROFIT_BARRIER_CALIBRATION_STRING_COLUMNS = [
+    "worst_profit_barrier_calibration_bucket",
+]
+
+
+def probability_bucket_key(lower: float, upper: float) -> str:
+    return f"{lower:.1f}_{upper:.1f}".replace(".", "p")
+
+
+def probability_bucket_label(lower: float, upper: float) -> str:
+    return f"{lower:.1f}-{upper:.1f}"
+
+
+PROFIT_BARRIER_CALIBRATION_BUCKET_COLUMNS = [
+    f"profit_barrier_calibration_{probability_bucket_key(lower, upper)}_{field}"
+    for lower, upper in PROFIT_BARRIER_CALIBRATION_BUCKETS
+    for field in ("count", "predicted_mean", "actual_hit_rate", "overestimate")
+]
+
+PROFIT_BARRIER_CALIBRATION_COLUMNS = [
+    *PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS,
+    *PROFIT_BARRIER_CALIBRATION_BUCKET_COLUMNS,
+]
+
 COERCED_NUMERIC_DIAGNOSTIC_COLUMNS = {
     "direction_session_adjusted_pnl_min",
     "worst_direction_session_trade_count",
     *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
+    *PROFIT_BARRIER_CALIBRATION_COLUMNS,
 }
 
 
@@ -1100,6 +1144,128 @@ def profit_barrier_diagnostics(
     return output
 
 
+def empty_profit_barrier_calibration_diagnostics() -> dict[str, object]:
+    output: dict[str, object] = {
+        "profit_barrier_calibration_observed_count": 0,
+        "profit_barrier_calibration_bucket_count": 0,
+        "profit_barrier_calibration_overestimate_max": 0.0,
+        "profit_barrier_calibration_abs_error_max": 0.0,
+        "worst_profit_barrier_calibration_bucket": "",
+        "worst_profit_barrier_calibration_bucket_count": 0,
+        "worst_profit_barrier_calibration_predicted_mean": 0.0,
+        "worst_profit_barrier_calibration_actual_hit_rate": 0.0,
+        "worst_profit_barrier_calibration_overestimate": 0.0,
+    }
+    for lower, upper in PROFIT_BARRIER_CALIBRATION_BUCKETS:
+        prefix = f"profit_barrier_calibration_{probability_bucket_key(lower, upper)}"
+        output[f"{prefix}_count"] = 0
+        output[f"{prefix}_predicted_mean"] = 0.0
+        output[f"{prefix}_actual_hit_rate"] = 0.0
+        output[f"{prefix}_overestimate"] = 0.0
+    return output
+
+
+def profit_barrier_calibration_diagnostics(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+    config: ModelPolicyConfig,
+) -> dict[str, object]:
+    output = empty_profit_barrier_calibration_diagnostics()
+    if trades.empty:
+        return output
+
+    prediction_columns = [config.long_profit_barrier_column, config.short_profit_barrier_column]
+    label_columns = PROFIT_BARRIER_LABEL_COLUMNS
+    enriched = attach_trade_prediction_columns(trades, predictions, [*prediction_columns, *label_columns])
+    if not all(column in enriched.columns for column in [*prediction_columns, *label_columns]):
+        return output
+
+    direction = enriched["direction"].astype(str).str.lower()
+    predicted_values = side_values(
+        enriched,
+        direction,
+        config.long_profit_barrier_column,
+        config.short_profit_barrier_column,
+    ).astype(float)
+    actual_values = side_values(
+        enriched,
+        direction,
+        "long_profit_barrier_hit",
+        "short_profit_barrier_hit",
+    ).astype(float)
+    observed = predicted_values.notna() & actual_values.notna()
+    output["profit_barrier_calibration_observed_count"] = int(observed.sum())
+    if not observed.any():
+        return output
+
+    actual_hits = (actual_values >= 0.5).astype(float)
+    bucket_rows: list[dict[str, object]] = []
+    for lower, upper in PROFIT_BARRIER_CALIBRATION_BUCKETS:
+        bucket_key = probability_bucket_key(lower, upper)
+        bucket_label = probability_bucket_label(lower, upper)
+        if lower == 0.0:
+            in_bucket = observed & (predicted_values >= lower) & (predicted_values <= upper)
+        else:
+            in_bucket = observed & (predicted_values > lower) & (predicted_values <= upper)
+        count = int(in_bucket.sum())
+        prefix = f"profit_barrier_calibration_{bucket_key}"
+        output[f"{prefix}_count"] = count
+        if count == 0:
+            bucket_rows.append(
+                {
+                    "bucket": bucket_label,
+                    "count": 0,
+                    "predicted_mean": 0.0,
+                    "actual_hit_rate": 0.0,
+                    "overestimate": 0.0,
+                    "abs_error": 0.0,
+                }
+            )
+            continue
+        predicted_mean = float(predicted_values.loc[in_bucket].mean())
+        actual_hit_rate = float(actual_hits.loc[in_bucket].mean())
+        overestimate = max(0.0, predicted_mean - actual_hit_rate)
+        abs_error = abs(predicted_mean - actual_hit_rate)
+        output[f"{prefix}_predicted_mean"] = predicted_mean
+        output[f"{prefix}_actual_hit_rate"] = actual_hit_rate
+        output[f"{prefix}_overestimate"] = overestimate
+        bucket_rows.append(
+            {
+                "bucket": bucket_label,
+                "count": count,
+                "predicted_mean": predicted_mean,
+                "actual_hit_rate": actual_hit_rate,
+                "overestimate": overestimate,
+                "abs_error": abs_error,
+            }
+        )
+
+    non_empty_buckets = [row for row in bucket_rows if row["count"] > 0]
+    output["profit_barrier_calibration_bucket_count"] = int(len(non_empty_buckets))
+    output["profit_barrier_calibration_overestimate_max"] = float(
+        max((row["overestimate"] for row in non_empty_buckets), default=0.0)
+    )
+    output["profit_barrier_calibration_abs_error_max"] = float(
+        max((row["abs_error"] for row in non_empty_buckets), default=0.0)
+    )
+    if non_empty_buckets:
+        worst = sorted(
+            non_empty_buckets,
+            key=lambda row: (row["overestimate"], row["abs_error"], row["count"]),
+            reverse=True,
+        )[0]
+        output["worst_profit_barrier_calibration_bucket"] = str(worst["bucket"])
+        output["worst_profit_barrier_calibration_bucket_count"] = int(worst["count"])
+        output["worst_profit_barrier_calibration_predicted_mean"] = float(
+            worst["predicted_mean"]
+        )
+        output["worst_profit_barrier_calibration_actual_hit_rate"] = float(
+            worst["actual_hit_rate"]
+        )
+        output["worst_profit_barrier_calibration_overestimate"] = float(worst["overestimate"])
+    return output
+
+
 def json_default(value: object) -> str:
     if isinstance(value, pd.Timestamp):
         return value.isoformat()
@@ -1816,6 +1982,7 @@ def run_model_policy(
     metrics["signal_flat_count"] = int((signal == 0).sum())
     metrics.update(direction_session_diagnostics(trades, predictions))
     metrics.update(profit_barrier_diagnostics(trades, predictions, model_policy_config))
+    metrics.update(profit_barrier_calibration_diagnostics(trades, predictions, model_policy_config))
     curve = equity_curve(trades, backtest_config.evaluation_start)
     return metrics, trades, curve, signal
 
@@ -2203,6 +2370,12 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
         if column not in output.columns:
             output[column] = 0.0
+    for column in PROFIT_BARRIER_CALIBRATION_COLUMNS:
+        if column not in output.columns:
+            output[column] = 0.0
+    for column in PROFIT_BARRIER_CALIBRATION_STRING_COLUMNS:
+        if column not in output.columns:
+            output[column] = ""
     for field, _ in REGIME_BLOCK_FIELDS:
         if field not in output.columns:
             output[field] = ""
@@ -2244,6 +2417,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
         *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
+        *PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS,
     ]
     for column in numeric_columns:
         errors = "coerce" if column in COERCED_NUMERIC_DIAGNOSTIC_COLUMNS else "raise"
@@ -2256,6 +2430,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     ].fillna(0)
     for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
         output[column] = output[column].fillna(0.0)
+    for column in PROFIT_BARRIER_CALIBRATION_COLUMNS:
+        output[column] = output[column].fillna(0.0)
     if output["require_profit_barrier"].dtype == object:
         output["require_profit_barrier"] = output["require_profit_barrier"].map(
             lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"}
@@ -2266,6 +2442,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output["side_extra_margin_rules"] = output["side_extra_margin_rules"].fillna("").astype(str)
     output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
     output["worst_direction_session"] = output["worst_direction_session"].fillna("").astype(str)
+    for column in PROFIT_BARRIER_CALIBRATION_STRING_COLUMNS:
+        output[column] = output[column].fillna("").astype(str)
     for field, _ in REGIME_BLOCK_FIELDS:
         output[field] = output[field].fillna("").astype(str)
     return output
@@ -2325,6 +2503,7 @@ def summarize_sweep_frames(
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
         *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
+        *PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS,
     ]
     for column in optional_metric_columns:
         if column in metrics.columns:
@@ -2421,6 +2600,7 @@ def summarize_candidate_selection(
     max_direction_session_loss_per_fold: float = 1e100,
     max_predicted_profit_barrier_miss_rate: float = 1.0,
     max_actual_profit_barrier_miss_rate: float = 1.0,
+    max_profit_barrier_calibration_overestimate: float = 1.0,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -2432,6 +2612,8 @@ def summarize_candidate_selection(
         raise ValueError("max_predicted_profit_barrier_miss_rate must be between 0 and 1")
     if not 0 <= max_actual_profit_barrier_miss_rate <= 1:
         raise ValueError("max_actual_profit_barrier_miss_rate must be between 0 and 1")
+    if not 0 <= max_profit_barrier_calibration_overestimate <= 1:
+        raise ValueError("max_profit_barrier_calibration_overestimate must be between 0 and 1")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -2503,6 +2685,14 @@ def summarize_candidate_selection(
         ],
         0.0,
     )
+    merged["profit_barrier_calibration_overestimate_max_all"] = row_max_or_default(
+        merged,
+        [
+            "profit_barrier_calibration_overestimate_max_max_base",
+            "profit_barrier_calibration_overestimate_max_max_cost",
+        ],
+        0.0,
+    )
     merged["side_loss_ok"] = merged["side_adjusted_pnl_min_all"] >= -max_side_loss_per_fold
     merged["direction_session_loss_ok"] = (
         merged["direction_session_adjusted_pnl_min_all"] >= -max_direction_session_loss_per_fold
@@ -2513,6 +2703,10 @@ def summarize_candidate_selection(
     merged["actual_profit_barrier_miss_ok"] = (
         merged["actual_profit_barrier_miss_rate_max_all"] <= max_actual_profit_barrier_miss_rate
     )
+    merged["profit_barrier_calibration_ok"] = (
+        merged["profit_barrier_calibration_overestimate_max_all"]
+        <= max_profit_barrier_calibration_overestimate
+    )
     merged["cost_drop_ok"] = merged["cost_pnl_drop_min"] <= max_cost_pnl_drop
     merged["pre_plateau_eligible"] = (
         merged["eligible_base"].astype(bool)
@@ -2521,6 +2715,7 @@ def summarize_candidate_selection(
         & merged["direction_session_loss_ok"]
         & merged["predicted_profit_barrier_miss_ok"]
         & merged["actual_profit_barrier_miss_ok"]
+        & merged["profit_barrier_calibration_ok"]
         & merged["cost_drop_ok"]
     )
     merged["plateau_support_count"] = plateau_support_counts(
@@ -2542,9 +2737,10 @@ def summarize_candidate_selection(
             "direction_session_adjusted_pnl_min_all",
             "actual_profit_barrier_miss_rate_max_all",
             "predicted_profit_barrier_miss_rate_max_all",
+            "profit_barrier_calibration_overestimate_max_all",
             "cost_pnl_drop_min",
         ],
-        ascending=[False, False, False, False, False, False, True, True, True],
+        ascending=[False, False, False, False, False, False, True, True, True, True],
     ).reset_index(drop=True)
 
 
@@ -2608,6 +2804,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         max_direction_session_loss_per_fold=args.max_direction_session_loss_per_fold,
         max_predicted_profit_barrier_miss_rate=args.max_predicted_profit_barrier_miss_rate,
         max_actual_profit_barrier_miss_rate=args.max_actual_profit_barrier_miss_rate,
+        max_profit_barrier_calibration_overestimate=args.max_profit_barrier_calibration_overestimate,
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -2625,6 +2822,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "max_direction_session_loss_per_fold": args.max_direction_session_loss_per_fold,
         "max_predicted_profit_barrier_miss_rate": args.max_predicted_profit_barrier_miss_rate,
         "max_actual_profit_barrier_miss_rate": args.max_actual_profit_barrier_miss_rate,
+        "max_profit_barrier_calibration_overestimate": args.max_profit_barrier_calibration_overestimate,
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -2922,6 +3120,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="maximum allowed share of trades whose actual side profit barrier was missed",
+    )
+    model_candidate_selection.add_argument(
+        "--max-profit-barrier-calibration-overestimate",
+        type=float,
+        default=1.0,
+        help="maximum allowed predicted-minus-actual hit rate in any profit-barrier probability bucket",
     )
     model_candidate_selection.add_argument(
         "--plateau-column",

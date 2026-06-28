@@ -100,7 +100,9 @@ experiments/
 
 実験ごとに `docs/reports/` または `experiments/.../report.md` にレポートを書く。
 
-各レポートの冒頭には、日付だけでなく時刻まで含めた `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を記録する。既存レポートを時刻付きへ補正する場合は、ファイル更新時刻または既存の `Updated` 記録を基準にする。
+`docs/reports/` に置くレポートのファイル名は `00001_YYYY-MM-DD_slug.md` の通し番号形式にする。通し番号はファイルシステムの更新時刻ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。新規レポートは既存レポートの最大番号の次を使う。
+
+各レポートの冒頭には、日付だけでなく時刻まで含めた `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を記録する。`日時` は作成時刻、`更新日時` は最終更新時刻として扱う。
 
 テンプレート:
 
