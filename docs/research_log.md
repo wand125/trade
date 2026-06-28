@@ -3820,3 +3820,42 @@ Artifacts:
 - `quality>=2` は2024-12/2025-02を改善したが、validationでfold最低PnLとsumを落とす。採用ではなく、次のblind holdoutでの事前登録候補にする。
 - `quality>=5` はpost-hoc overfitの形なので採用しない。
 - 追加holdout 2025-03は、同一HGB entry + MLP exit hybrid prediction frameが現時点で存在しない。別モデルの2025-03 predictionを流用すると比較条件が変わるため、まず同一形式のprediction生成から行う。
+
+### 2026-06-29 03:38 JST Candidate quality component 2025-03 apply
+
+作業:
+
+- `xauusd_m1_p1_l1p2_policy_combined` に2025-03 datasetを生成した。
+- 同一split/settingsで HGB entry/side と shared MLP exit timing を2025-03 testとして学習/推論した。
+- HGB predictionへMLP exit timingをmergeし、forced PnL列を付与した。
+- timed / fixed / clipped best componentをapplyへ生成し、`component_fixed_weighted = weighted_mean(0.25,0.5,0.25)` を作った。
+- 2024-12 / 2025-02で診断上改善していた `quality>=2` を、事前登録候補として2025-03追加holdoutへ固定適用した。
+- report: `docs/reports/00090_2026-06-29_candidate_quality_component_2025_03_apply.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- 2025-03 dataset: `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined/xauusd_m1_2025-03_h24_edge15.parquet`
+- HGB 2025-03: `experiments/20260628_183132_policy_combined_side_exit_test_2025_03/`
+- MLP 2025-03: `experiments/20260628_182929_shared_mlp_hgb_split_test_2025_03/`
+- hybrid predictions: `data/reports/modeling/20260629_hgb_mlp_exit_hybrid_2025_03/`
+- component apply predictions: `data/reports/modeling/20260629_candidate_quality_component_fixed_weighted_apply/predictions_component_fixed_weighted_2025_03.parquet`
+- fixed holdout sweep: `data/reports/backtests/candidate_quality_component_fixed_weighted_apply_quality_sweep/20260628_183650_model_sweep_2025-03/`
+
+結果:
+
+| min quality | adjusted pnl | trades | forced exit rate | profit factor | direction error | note |
+|---:|---:|---:|---:|---:|---:|---|
+| `-inf` | `-48.6826` | `112` | `0.0089` | `0.8285` | `0.7679` | baseline |
+| `0` | `-48.6826` | `112` | `0.0089` | `0.8285` | `0.7679` | baseline同一 |
+| `2` | `-55.7516` | `104` | `0.0096` | `0.8107` | `0.7788` | 事前登録候補だが悪化 |
+| `5` | `-45.2572` | `42` | `0.0238` | `0.6815` | `0.6667` | 2025-03単月post-hocでは小改善 |
+| `8` | `0.0000` | `0` | `0.0000` | - | `0.0000` | NoTrade化 |
+
+判断:
+
+- `component_fixed_weighted quality>=2` は標準採用しない。2024-12/2025-02での改善が2025-03で再現しなかった。
+- 2025-03はHGB side/entryが崩れており、direction error `0.7679`、short偏重、`short:asia` 損失集中が主因。
+- `quality>=5` は単月post-hocで、validation/2025-02を壊すため採用しない。
+- `quality>=8` 以上は月10trades条件を満たさず、実質NoTradeなので採用しない。
+- 次はquality hard gateではなく、side/entry calibration、short exposure concentration、direction/session別risk検知、component列のmulti-feature stackingへ戻る。
