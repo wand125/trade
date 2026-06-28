@@ -1,13 +1,13 @@
 # Dynamic Exit Probability Thresholds
 
 日時: 2026-06-28 19:01 JST
-更新日時: 2026-06-28 19:01 JST
+更新日時: 2026-06-28 19:25 JST
 
 ## Summary
 
 - Experiment ID: `dynamic_exit_probability`
 - Status: validated, not promoted
-- Main result: 保有中に `time_exit` / `loss_first` probabilityを再評価し、閾値を超えたら途中決済するdynamic / hazard-like exitを追加した。validation 4foldではbasic eligible候補が増え、top-minは entry penalty + holding shrink referenceの min pnl `80.0648` を `81.1178` へ少し改善した。ただしstrict eligibleは0件で、2024-12反証月ではdynamic topが adjusted pnl `-162.9304` とNoTradeに大きく負け、no-dynamic combo `-159.0158` よりもわずかに悪い。標準policyには昇格しない。
+- Main result: 保有中に `time_exit` / `loss_first` probabilityを再評価し、閾値を超えたら途中決済するdynamic / hazard-like exitを追加した。validation 4foldではbasic eligible候補が増え、top-minは entry penalty + holding shrink referenceの min pnl `80.0648` を `81.1178` へ少し改善した。`actual_profit_barrier_miss_rate_smoothed` 基準のstrict eligibleは残るが、`predicted_profit_barrier_miss_rate_smoothed` は高く、2024-12反証月ではdynamic topが adjusted pnl `-162.9304` とNoTradeに大きく負け、no-dynamic combo `-159.0158` よりもわずかに悪い。標準policyには昇格しない。
 - Report numbering note: this file is numbered from the internal file `日時`, not filesystem mtime or `更新日時`.
 
 ## Implementation
@@ -71,7 +71,9 @@ Eligibility definition:
 
 ## Validation 4fold
 
-Strict eligible count: `0`
+Strict eligible count using actual miss: `40`
+
+Strict eligible count using predicted miss as an additional diagnostic gate: `0`
 
 Basic eligible count: `96`
 
@@ -90,7 +92,7 @@ Interpretation:
 
 - Dynamic exit thresholdは、entry penalty + holding shrinkのvalidation min pnlを `80.0648` から `81.1178` へ微改善した。
 - total pnlでは `time_exit_exit_threshold=0.90` が entry penalty referenceの `531.6246` を `543.3552` へ上げた。
-- ただし全候補の smoothed miss max が `0.55` を大きく超え、strict eligibleは0件。これは利益barrier到達確率の悪さがまだ残っていることを示す。
+- ただし多くの候補で predicted miss max が `0.55` を大きく超える。これはモデル側のprofit-barrier確信が弱く、predicted missをhard gateにすると過剰に候補を落とすことを示す。
 - no-penalty dynamicは取引数を増やしつつbasic gateに残ったが、side shareとsmoothed missが悪く、安定したedgeとは見なしにくい。
 
 ## 2024-12 Diagnostic
@@ -116,7 +118,7 @@ Key diagnostics:
 ## Decision
 
 - `time_exit_exit_threshold` / `loss_first_exit_threshold` は実装として残す。
-- validation-onlyで選ぶとbasic改善は見えるが、strict診断と2024-12反証に耐えないため標準policyへ昇格しない。
+- validation-onlyで選ぶとactual miss基準のstrict候補は残るが、predicted miss診断と2024-12反証に耐えないため標準policyへ昇格しない。
 - 今回の結果は「exit timingだけではなく、entry side calibrationとprofit-barrier miss calibrationを同時に扱う必要がある」という反証として扱う。
 - 次はdynamic exit単独の深掘りではなく、side/entry calibration、group-loss soft ranking、profit-barrier/exit-event signalの組み合わせを、NoTradeへ近づけすぎない範囲で比較する。
 

@@ -2674,7 +2674,45 @@ Artifacts:
 
 判断:
 
-- dynamic exit thresholdはvalidation basic条件ではわずかに改善したが、smoothed miss maxが高くstrict eligibleは0件。
+- dynamic exit thresholdはvalidation basic条件ではわずかに改善した。`actual_profit_barrier_miss_rate_smoothed` 基準ならstrict候補は残るが、`predicted_profit_barrier_miss_rate_smoothed` を追加警告gateにすると0件になる。
 - 2024-12ではpenalty込みdynamic topがno-dynamic comboよりわずかに悪化し、NoTradeにも大きく負けた。
 - no-penalty dynamic high-turnoverは2024-12損失を `-104.0014` まで縮めたが、direction error `0.6316`、smoothed miss `0.9075` で汎化候補としては弱い。
 - dynamic exitは探索軸として残すが、標準policyには昇格しない。次はexit制御単独ではなく、side/entry calibrationとprofit-barrier missの同時制御へ戻る。
+
+### 2026-06-28 19:25 JST Combined Side Confidence And Miss Control
+
+作業:
+
+- 現行dataset生成コードで `best_side` とexit-event/profit-barrier targetsを同居させた `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined/` を生成した。
+- `target-set policy` で `experiments/20260628_101740_policy_combined_side_exit_p1_l1p2/` を学習した。
+- side-confidence reportを実行し、overall accuracy `0.4750`, balanced accuracy `0.4856`, confidence mean `0.5404`, overconfidence `0.0654` を確認した。
+- validation 4foldで profit-barrier miss penalty、exit-event penalty、time-exit holding shrink、side-confidence penalty、min side confidenceをjoint sweepした。
+- validation代表候補を2024-12反証月へ固定適用した。
+- report: `docs/reports/00057_2026-06-28_combined_side_miss_joint.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- dataset: `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined/`
+- model: `experiments/20260628_101740_policy_combined_side_exit_p1_l1p2/`
+- side-confidence report: `data/reports/modeling/20260628_101811_combined_side_exit_side_confidence_report/`
+- validation sweeps: `data/reports/backtests/combined_side_miss_joint/`
+- validation summary: `data/reports/backtests/20260628_combined_side_miss_joint_summary.csv`
+- 2024-12 fixed summary: `data/reports/backtests/20260628_combined_side_miss_joint_2024_12_fixed.csv`
+
+結果:
+
+| policy | validation strict | min pnl | total pnl | 2024-12 adjusted pnl | trades | profit factor |
+|---|---|---:|---:|---:|---:|---:|
+| prior combo `penalty=6/6`, time shrink `0.25` | `true` | `80.0648` | `513.3876` | `-159.0158` | `46` | `0.5211` |
+| min side confidence `0.55`, `penalty=6/6` | `true` | `65.0410` | `375.9450` | `-91.9786` | `33` | `0.5963` |
+| loss penalty `6` + side penalty `4` | `true` | `55.0364` | `520.2350` | `-126.5046` | `43` | `0.5788` |
+| profit miss penalty `4` + min side confidence `0.60` | `true` | `41.5250` | `331.6830` | `-92.1928` | `22` | `0.4199` |
+| no-penalty reference | `false` | `12.5636` | `287.8596` | `-227.4118` | `63` | `0.4507` |
+
+判断:
+
+- combined policy modelのbest_side probabilityは弱く、標準のhard gateやglobal penaltyに昇格しない。
+- `min_side_confidence=0.55` は2024-12損失を縮めたが、validation min/total pnlを削り、NoTradeにも届かない。単月反証月を見た後の採用はしない。
+- profit-barrier miss penaltyもtrade throttleとしては効くが、miss問題自体は残る。
+- 次はbest_sideをpolicy multi-taskに混ぜるより、別建て `target-set side_confidence` やblocked OOF calibrationで信頼度そのものを改善する。

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 19:01 JST
+最終更新: 2026-06-28 19:25 JST
 
 ## 現在の状態
 
@@ -92,7 +92,9 @@ exit-event probabilityによるholding shrinkを追加済み。`time_exit_holdin
 
 entry penalty + holding shrink小gridをvalidation 4foldで比較済み。`time_exit_penalty=6`, `loss_first_penalty=6`, `time_exit_holding_shrink=0.50`, max hold `720` はstrict eligibleで min pnl `85.1886` とentry penalty単独 `75.1682` を上回ったが、total pnlは `493.4848` でentry penalty単独 `531.6246` より低い。2024-12反証月では validation 2位の `time_exit_holding_shrink=0.25` が adjusted pnl `-159.0158`, profit factor `0.5211` でentry penalty単独 `-172.7944` より改善したが、NoTradeには大きく負ける。標準policyには昇格しない。詳細は `docs/reports/00055_2026-06-28_entry_penalty_holding_shrink_combo.md`。
 
-dynamic / hazard-like exit thresholdを追加済み。保有中に現在sideの `time_exit` / `loss_first` probabilityを再評価し、`time_exit_exit_threshold` / `loss_first_exit_threshold` 以上なら途中決済signalへ切り替える。validation 4foldでは `penalty=6/6`, `time_exit_holding_shrink=0.25`, `time_exit_exit_threshold=0.90`, `loss_first_exit_threshold=0.75`, max hold `720` がbasic eligibleで min pnl `81.1178`, total pnl `528.8282`。no-dynamic comboの min pnl `80.0648`, total pnl `513.3876` は少し上回ったが、smoothed miss max `0.928571` によりstrict eligibleは0件。2024-12反証月では adjusted pnl `-162.9304` でNoTradeに大きく負け、no-dynamic combo `-159.0158` よりわずかに悪い。標準policyには昇格しない。詳細は `docs/reports/00056_2026-06-28_dynamic_exit_probability.md`。
+dynamic / hazard-like exit thresholdを追加済み。保有中に現在sideの `time_exit` / `loss_first` probabilityを再評価し、`time_exit_exit_threshold` / `loss_first_exit_threshold` 以上なら途中決済signalへ切り替える。validation 4foldでは `penalty=6/6`, `time_exit_holding_shrink=0.25`, `time_exit_exit_threshold=0.90`, `loss_first_exit_threshold=0.75`, max hold `720` がbasic eligibleで min pnl `81.1178`, total pnl `528.8282`。`actual_profit_barrier_miss_rate_smoothed` 基準のstrict候補は残るが、`predicted_profit_barrier_miss_rate_smoothed` は `0.928571` と高い。2024-12反証月では adjusted pnl `-162.9304` でNoTradeに大きく負け、no-dynamic combo `-159.0158` よりわずかに悪い。標準policyには昇格しない。詳細は `docs/reports/00056_2026-06-28_dynamic_exit_probability.md`。
+
+combined side-confidence / miss controlを検証済み。現行dataset生成コードで `best_side` とexit-event/profit-barrier targetsを同居させた `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined/` を生成し、`experiments/20260628_101740_policy_combined_side_exit_p1_l1p2/` を学習した。best_side confidenceはoverall accuracy `0.4750`, balanced accuracy `0.4856`, confidence mean `0.5404` と弱い。joint sweepではvalidation topは前回同様 `penalty=6/6 + time_shrink=0.25` で、side-confidenceやprofit-barrier miss penaltyを足さない候補。`min_side_confidence=0.55` は2024-12を `-91.9786` まで改善したが、validation min pnlは `65.0410` に下がり、NoTradeにも届かない。標準policyには昇格しない。詳細は `docs/reports/00057_2026-06-28_combined_side_miss_joint.md`。
 
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
@@ -121,9 +123,9 @@ dynamic / hazard-like exit thresholdを追加済み。保有中に現在sideの 
 4. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。
 5. exit-event datasetを2025-02以降にも拡張し、候補固定後に複数blind月へ適用する。
 6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。profit barrierは全体平均ではなくside別・bucket別actual hit rateとsupportを必ず確認する。
-7. exit-event probability penalty、holding shrink単独、両者の小grid、dynamic / hazard-like exit thresholdはいずれも標準採用しない。探索軸として残す。
-8. `side-confidence-report` をより広いwalk-forward OOF予測へ適用し、representative smokeの過大確信が安定して出るか確認する。
-9. side-confidence penalty tuningは、まずviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。
+7. exit-event probability penalty、holding shrink単独、両者の小grid、dynamic / hazard-like exit threshold、side-confidence hard/min gateはいずれも標準採用しない。探索軸として残す。
+8. `side-confidence-report` をより広いwalk-forward OOF予測へ適用し、representative smokeの過大確信が安定して出るか確認する。特にcombined policy HGBのbest_sideは弱いため、別建て `target-set side_confidence` との同一月比較を優先する。
+9. side-confidence penalty tuningは、calibration改善後にviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。
 10. diagnostic gateとgroup-loss penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。
 11. profit-barrier probability単独のhard gate/global linear penalty探索は打ち切る。今後はdirection/sessionやcombined regimeのrisk penaltyと同時に扱う場合だけ再評価する。
 12. 次はside/entry calibrationとprofit-barrier missの同時制御へ戻る。exit timingだけで負け月を救う方向には寄せすぎない。
