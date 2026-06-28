@@ -2716,3 +2716,46 @@ Artifacts:
 - `min_side_confidence=0.55` は2024-12損失を縮めたが、validation min/total pnlを削り、NoTradeにも届かない。単月反証月を見た後の採用はしない。
 - profit-barrier miss penaltyもtrade throttleとしては効くが、miss問題自体は残る。
 - 次はbest_sideをpolicy multi-taskに混ぜるより、別建て `target-set side_confidence` やblocked OOF calibrationで信頼度そのものを改善する。
+
+### 2026-06-28 19:39 JST Side Confidence Target Weighting
+
+作業:
+
+- `trade_data.modeling` に `--sample-weighting target` / `month_target` を追加した。
+- classification targetでは各target自身のclass labelでsample weightを作る。`month_target` は `dataset_month x target class` を均す。
+- `target-set side_confidence` を同一splitで `month_label` と `month_target` の2条件で学習した。
+- policy combined予測のentry/exit列は維持し、`pred_best_side_prob_*` だけを `month_target` side modelに差し替えたparquetを作った。
+- validation 4foldと2024-12 fixedで、side confidenceだけ差し替えた影響を確認した。
+- report: `docs/reports/00058_2026-06-28_side_confidence_target_weighting.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- dedicated side model, `month_label`: `experiments/20260628_103304_side_confidence_dedicated_p1_l1p2/`
+- target-weighted side model, `month_target`: `experiments/20260628_103541_side_confidence_month_target_p1_l1p2/`
+- side-confidence report: `data/reports/modeling/20260628_103557_side_confidence_month_target_report/`
+- merged predictions: `data/reports/modeling/20260628_103557_side_confidence_month_target_report/policy_predictions_valid_month_target_side.parquet`
+- validation rows: `data/reports/backtests/20260628_side_confidence_month_target_validation_rows.csv`
+- validation summary: `data/reports/backtests/20260628_side_confidence_month_target_summary.csv`
+- 2024-12 fixed run: `data/reports/backtests/side_confidence_month_target_fixed_2024_12/20260628_103731_model_timed_ev_2024-12/`
+
+結果:
+
+| model | accuracy | balanced accuracy | confidence mean | overconfidence |
+|---|---:|---:|---:|---:|
+| policy combined reference | `0.4750` | `0.4856` | `0.5404` | `0.0654` |
+| dedicated side, `month_label` | `0.4750` | `0.4856` | `0.5404` | `0.0654` |
+| dedicated side, `month_target` | `0.4748` | `0.4896` | `0.5353` | `0.0605` |
+
+| policy side confidence | min side conf | validation min pnl | validation total pnl | validation total trades | 2024-12 adjusted pnl | 2024-12 trades |
+|---|---:|---:|---:|---:|---:|---:|
+| disabled reference | `0.00` | `75.1682` | `531.6246` | `157` | n/a | n/a |
+| prior policy side | `0.55` | `65.0410` | `375.9450` | n/a | `-91.9786` | `33` |
+| month-target side | `0.55` | `-15.2120` | `178.8212` | `95` | `-88.1826` | `32` |
+
+判断:
+
+- `target-set side_confidence` の `month_label` 結果はpolicy combined内の `best_side` と完全一致した。現行HGBはtargetごと独立fitであり、multi-task crowdingは主因ではない。
+- `month_target` はbalanced accuracyとoverconfidenceを少し改善したが、validation 4foldのtrade selectionを壊した。
+- 2024-12だけの小改善は採用理由にしない。side-confidence hard/min gateは標準採用しない。
+- target-aware weightingは実装として残すが、次はside confidenceのhard gateではなくOOF calibration/diagnosticまたはshared representation modelへ進む。

@@ -119,6 +119,8 @@ TARGET_SETS = {
     "profit_barrier": ([], ["long_profit_barrier_hit", "short_profit_barrier_hit"]),
 }
 
+SAMPLE_WEIGHTING_CHOICES = ["none", "month", "label", "month_label", "target", "month_target"]
+
 SELECTION_COLUMNS = {
     "pred_long_best_adjusted_pnl",
     "pred_short_best_adjusted_pnl",
@@ -429,7 +431,7 @@ def split_months_from_args(args: argparse.Namespace) -> tuple[list[str], list[st
     return train_months, valid_months, test_months
 
 
-def build_sample_weights(df: pd.DataFrame, weighting: str) -> np.ndarray | None:
+def build_sample_weights(df: pd.DataFrame, weighting: str, target_column: str = "label") -> np.ndarray | None:
     if weighting == "none":
         return None
     weights = pd.Series(1.0, index=df.index, dtype="float64")
@@ -442,10 +444,37 @@ def build_sample_weights(df: pd.DataFrame, weighting: str) -> np.ndarray | None:
     elif weighting == "month_label":
         group_counts = df.groupby(["dataset_month", "label"])["label"].transform("size")
         weights *= 1.0 / group_counts
+    elif weighting == "target":
+        if target_column not in df.columns:
+            raise ValueError(f"target column not found for sample weighting: {target_column}")
+        target_counts = df[target_column].value_counts()
+        weights *= df[target_column].map(1.0 / target_counts)
+    elif weighting == "month_target":
+        if target_column not in df.columns:
+            raise ValueError(f"target column not found for sample weighting: {target_column}")
+        group_counts = df.groupby(["dataset_month", target_column])[target_column].transform("size")
+        weights *= 1.0 / group_counts
     elif weighting != "none":
         raise ValueError(f"unknown sample weighting: {weighting}")
     weights = weights / weights.mean()
     return weights.to_numpy(dtype="float64")
+
+
+def build_model_sample_weights(
+    df: pd.DataFrame,
+    weighting: str,
+    target_column: str,
+    is_classification: bool,
+) -> np.ndarray | None:
+    if weighting == "target":
+        if not is_classification:
+            return None
+        return build_sample_weights(df, "target", target_column=target_column)
+    if weighting == "month_target":
+        if not is_classification:
+            return build_sample_weights(df, "month")
+        return build_sample_weights(df, "month_target", target_column=target_column)
+    return build_sample_weights(df, weighting)
 
 
 def split_summary(df: pd.DataFrame) -> dict[str, object]:
@@ -1637,13 +1666,18 @@ def fit_models(
     classification_targets: list[str],
     log_prefix: str = "",
 ) -> dict[str, object]:
-    sample_weight = build_sample_weights(train_df, config.sample_weighting)
     x_train = as_matrix(train_df, feature_columns)
     models: dict[str, object] = {}
     prefix = f"{log_prefix} " if log_prefix else ""
     for target in regression_targets:
         print(f"{prefix}train regressor: {target}")
         model = train_regressor(config)
+        sample_weight = build_model_sample_weights(
+            train_df,
+            config.sample_weighting,
+            target,
+            is_classification=False,
+        )
         model.fit(
             x_train,
             regression_training_values(train_df[target], config.target_clip_quantile),
@@ -1653,6 +1687,12 @@ def fit_models(
     for target in classification_targets:
         print(f"{prefix}train classifier: {target}")
         model = train_classifier(config)
+        sample_weight = build_model_sample_weights(
+            train_df,
+            config.sample_weighting,
+            target,
+            is_classification=True,
+        )
         model.fit(x_train, train_df[target].astype(int).to_numpy(), sample_weight=sample_weight)
         models[target] = model
     return models
@@ -2100,9 +2140,12 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--target-clip-quantile", type=float, default=0.99)
     train_parser.add_argument(
         "--sample-weighting",
-        choices=["none", "month", "label", "month_label"],
+        choices=SAMPLE_WEIGHTING_CHOICES,
         default="month_label",
-        help="training sample weighting scheme",
+        help=(
+            "training sample weighting scheme; target/month_target balance each classification "
+            "target by its own class labels"
+        ),
     )
     train_parser.add_argument(
         "--target-set",
@@ -2159,9 +2202,12 @@ def build_parser() -> argparse.ArgumentParser:
     oof_parser.add_argument("--target-clip-quantile", type=float, default=0.99)
     oof_parser.add_argument(
         "--sample-weighting",
-        choices=["none", "month", "label", "month_label"],
+        choices=SAMPLE_WEIGHTING_CHOICES,
         default="month_label",
-        help="training sample weighting scheme",
+        help=(
+            "training sample weighting scheme; target/month_target balance each classification "
+            "target by its own class labels"
+        ),
     )
     oof_parser.add_argument(
         "--target-set",

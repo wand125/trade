@@ -381,6 +381,22 @@ class ModelingTests(unittest.TestCase):
         self.assertAlmostEqual(weighted.loc[("2024-01", -1)], weighted.loc[("2024-02", 1)])
         self.assertAlmostEqual(float(weights.mean()), 1.0)
 
+    def test_month_target_sample_weighting_balances_target_cells(self):
+        df = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01", "2024-01", "2024-01", "2024-02", "2024-02"],
+                "label": [1, 1, 1, -1, -1],
+                "best_side": [1, 1, -1, 1, -1],
+            }
+        )
+
+        weights = pd.Series(build_sample_weights(df, "month_target", target_column="best_side"))
+        weighted = df.assign(weight=weights).groupby(["dataset_month", "best_side"])["weight"].sum()
+
+        self.assertAlmostEqual(weighted.loc[("2024-01", 1)], weighted.loc[("2024-01", -1)])
+        self.assertAlmostEqual(weighted.loc[("2024-01", -1)], weighted.loc[("2024-02", 1)])
+        self.assertAlmostEqual(float(weights.mean()), 1.0)
+
     def test_prediction_frame_keeps_regime_features_when_present(self):
         df = pd.DataFrame(
             {
