@@ -148,6 +148,8 @@ prediction artifactのforced PnL欠落を修正済み。`prediction_frame` は `
 
 candidate-entry qualityにjoint exit targetを追加済み。`oof-candidate-quality-model --target-mode joint_exit_adjusted_pnl` はtimed barrier成分、fixed horizon実現PnL、clipped best PnLを混合する。candidate `9091` 件のOOFではforced barrier targetよりmean MAEが `14.6941` から `10.7047`、mean RMSEが `15.5222` から `11.4542` へ改善した。ただし実行policyではvalidation topがrisk `0` のままで、mean/lower overestimate riskはforced barrier riskを超えない。fixed smokeでも2024-12と2025-02の改善が両立しないため標準採用しない。詳細は `docs/reports/00085_2026-06-29_joint_exit_candidate_quality_target.md`。
 
+candidate-entry qualityのjoint成分を個別targetへ分解済み。`timed_barrier_component_adjusted_pnl`, `fixed_horizon_component_adjusted_pnl`, `clipped_best_adjusted_pnl` を追加し、component別のOOF回帰とvalidation 4fold risk penaltyを比較した。OOFではfixed horizon componentが最もましなR2 `-0.0895`、clipped bestが最小MAE `4.9377` だが、実行policyでは全targetのvalidation topが `risk_penalty=0` のまま。best positive-risk候補でもfold最低PnLはtimed `62.5366`, fixed `43.6626`, clipped `41.7588` でbaseline `82.7176` を下回る。component分解は診断として残すが、scalar risk penaltyとして標準採用しない。詳細は `docs/reports/00086_2026-06-29_candidate_quality_component_targets.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -201,7 +203,8 @@ candidate-entry qualityにjoint exit targetを追加済み。`oof-candidate-qual
 30. candidate-entry qualityの平均/下方分位は、直接EV置換でもsoft riskでもvalidationを改善しなかった。
 31. barrier event targetはraw EV過大評価の診断には有効だが、mean/lower/risk policyはいずれも標準採用できない。
 32. forced PnL列はprediction artifactへ残せるようになった。forced target単独のriskは標準採用しない。
-33. joint exit targetはOOF回帰指標を改善したが、単一scalar risk penaltyとしては実行policyを改善しない。次はjoint成分を潰さず、exit event class、time-to-event、fixed horizon成分、side/regime別EV residualに分解して校正する。
+33. joint exit targetはOOF回帰指標を改善したが、単一scalar risk penaltyとしては実行policyを改善しない。
+34. joint成分をtimed barrier、fixed horizon、clipped bestへ分解しても、scalar risk penaltyではvalidation baselineを超えない。次はcomponentを潰さず、exit class、time-to-event、fixed horizon成分、side/regime別residualを別々の特徴またはmulti-output診断として扱う。
 
 ## 未決定事項
 
@@ -212,6 +215,8 @@ candidate-entry qualityにjoint exit targetを追加済み。`oof-candidate-qual
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 02:43 JST 更新: `oof-candidate-quality-model` に `timed_barrier_component_adjusted_pnl`, `fixed_horizon_component_adjusted_pnl`, `clipped_best_adjusted_pnl` を追加した。OOFではfixed horizon componentのR2が `-0.0895` と最もましだが、validation 4foldでは全targetのtopが `risk_penalty=0` に戻る。best positive-riskでもmin pnlはtimed `62.5366`, fixed `43.6626`, clipped `41.7588` でbaseline `82.7176` を下回り、EV過大評価も改善しない。標準採用せず、次はcomponentをscalar penaltyにせず別特徴/別targetとして扱う。レポート採番と最新判断はファイル更新時刻や `更新日時` ではなく、本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 02:28 JST 更新: `oof-candidate-quality-model --target-mode joint_exit_adjusted_pnl` を追加した。OOF上はforced barrier targetよりmean MAE `14.6941 -> 10.7047`、RMSE `15.5222 -> 11.4542` と改善したが、実行policyではvalidation topがrisk `0` のまま。mean-riskもlower-riskもfixed smokeで2024-12と2025-02を両立できない。標準採用せず、次はjoint成分をexit class/time-to-event/fixed horizon/side-regime residualへ分解する。
 

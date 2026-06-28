@@ -226,7 +226,11 @@ that passes the entry candidate filter. The default target is hindsight best
 adjusted PnL; use `barrier_event_adjusted_pnl` when the target should respect
 profit/loss barrier order and time-exit PnL. Use
 `joint_exit_adjusted_pnl` when the target should blend timed barrier outcome,
-fixed-horizon realized PnL, and clipped hindsight best PnL:
+fixed-horizon realized PnL, and clipped hindsight best PnL. The joint pieces
+can also be trained separately with
+`timed_barrier_component_adjusted_pnl`,
+`fixed_horizon_component_adjusted_pnl`, or `clipped_best_adjusted_pnl` when the
+scalar blend hides too much information:
 
 ```bash
 python -m trade_data.meta_model oof-candidate-quality-model \

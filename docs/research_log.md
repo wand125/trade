@@ -3668,3 +3668,43 @@ Artifacts:
 - ただし実行policyではrisk `0` がvalidation最良のままで、risk penalty化するとfold最低PnLが下がる。
 - fixed smokeでは2024-12改善と2025-02悪化が両立せず、月依存の挙動。
 - 標準採用しない。joint targetはtarget familyとして残し、次はscalar penaltyではなくexit class、time-to-event、fixed horizon成分、side/regime別residualへ分解して扱う。
+
+### 2026-06-29 02:43 JST Candidate quality component target split
+
+作業:
+
+- `oof-candidate-quality-model --target-mode` に `timed_barrier_component_adjusted_pnl`, `fixed_horizon_component_adjusted_pnl`, `clipped_best_adjusted_pnl` を追加した。
+- 既存 `joint_exit_adjusted_pnl` はcomponent helperを再利用する形へ整理した。
+- component targetの分離を `tests/test_meta_model.py` へ追加した。
+- validation 4foldでcomponent別のoverestimate risk penaltyを比較した。
+- report: `docs/reports/00086_2026-06-29_candidate_quality_component_targets.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- timed component OOF/apply: `data/reports/modeling/20260628_173832_candidate_quality_timed_barrier_component_2024_12/`
+- fixed component OOF/apply: `data/reports/modeling/20260628_173832_candidate_quality_fixed_horizon_component_2024_12/`
+- clipped component OOF/apply: `data/reports/modeling/20260628_173831_candidate_quality_clipped_best_component_2024_12/`
+- timed summary: `data/reports/backtests/candidate_quality_timed_barrier_component_overestimate_risk_summary/20260628_174249_model_sweep_summary/`
+- fixed summary: `data/reports/backtests/candidate_quality_fixed_horizon_component_overestimate_risk_summary/20260628_174249_model_sweep_summary/`
+- clipped summary: `data/reports/backtests/candidate_quality_clipped_best_component_overestimate_risk_summary/20260628_174249_model_sweep_summary/`
+
+結果:
+
+| item | timed component | fixed component | clipped best |
+|---|---:|---:|---:|
+| candidate count | `9091` | `9091` | `9091` |
+| target mean | `1.4816` | `1.2754` | `11.0714` |
+| mean bias | `0.7989` | `0.2982` | `0.0182` |
+| mean MAE | `12.7850` | `7.9169` | `4.9377` |
+| mean RMSE | `13.5326` | `9.4811` | `5.6107` |
+| mean R2 | `-0.1667` | `-0.0895` | `-0.1309` |
+| no-risk validation min pnl | `82.7176` | `82.7176` | `82.7176` |
+| best positive-risk validation min pnl | `62.5366` | `43.6626` | `41.7588` |
+
+判断:
+
+- component分解は診断として有益だが、単一のoverestimate risk penaltyへ変換するとbaselineに負ける。
+- fixed horizon componentはOOF R2が相対的にましだが、実行policyではentry `15`, risk `0.05` でもmin pnl `43.6626` に落ちる。
+- clipped bestはOOF MAEが小さいが、実行policyではEV過大評価を下げない。
+- 標準採用しない。次はcomponentをscalar penaltyにせず、別特徴/別target/multi-output診断として扱う。

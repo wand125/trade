@@ -942,6 +942,74 @@ class MetaModelTests(unittest.TestCase):
             [11.25, -11.25, -6.0],
         )
 
+    def test_candidate_quality_component_target_modes_keep_joint_parts_separate(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions["long_exit_event"] = [1, 2, 0]
+        predictions["short_exit_event"] = [2, 1, 0]
+        predictions["long_exit_event_minutes"] = [100.0, 100.0, 100.0]
+        predictions["short_exit_event_minutes"] = [100.0, 100.0, 100.0]
+        predictions["long_forced_adjusted_pnl"] = [3.0, -4.0, 5.0]
+        predictions["short_forced_adjusted_pnl"] = [-3.0, 4.0, -6.0]
+        predictions["long_fixed_240m_adjusted_pnl"] = [5.0, 6.0, 7.0]
+        predictions["long_fixed_720m_adjusted_pnl"] = [9.0, 12.0, 15.0]
+        predictions["short_fixed_240m_adjusted_pnl"] = [6.0, 5.0, 8.0]
+        predictions["short_fixed_720m_adjusted_pnl"] = [10.0, 9.0, 14.0]
+        base_config = dict(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            lower_quantile=0.25,
+            entry_threshold=7.0,
+            long_entry_threshold_offset=0.0,
+            short_entry_threshold_offset=0.0,
+            side_margin=1.0,
+            min_entry_rank=0.0,
+            min_adjusted_edge=15.0,
+            time_exit_target_minutes=100,
+            joint_time_decay=0.25,
+            joint_component_clip_multiple=1.0,
+            joint_fixed_horizon_minutes=(60, 240, 720),
+        )
+
+        expected_by_mode = {
+            "timed_barrier_component_adjusted_pnl": [11.25, -11.25, -6.0],
+            "fixed_horizon_component_adjusted_pnl": [5.0, 7.0, 8.0],
+            "clipped_best_adjusted_pnl": [10.0, 15.0, 15.0],
+        }
+        for target_mode, expected_targets in expected_by_mode.items():
+            with self.subTest(target_mode=target_mode):
+                config = CandidateQualityModelConfig(**base_config, target_mode=target_mode)
+                examples = build_candidate_quality_training_frame(
+                    predictions,
+                    config,
+                    long_column="pred_trade_source_long_ev",
+                    short_column="pred_trade_source_short_ev",
+                )
+
+                self.assertEqual(len(examples), 3)
+                for actual, expected in zip(examples["target"].tolist(), expected_targets, strict=True):
+                    self.assertAlmostEqual(actual, expected)
+
     def test_trade_failure_probability_calibration_adds_side_prob_and_risk_columns(self):
         predictions = prediction_frame().copy()
         predictions[trade_failure_prob_column("large_loss", "long")] = [0.2, 0.9, 0.1]
