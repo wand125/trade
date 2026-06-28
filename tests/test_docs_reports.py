@@ -9,6 +9,16 @@ REPORT_TIME_PATTERN = re.compile(r"^日時: (?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{
 REPORT_UPDATED_PATTERN = re.compile(r"^更新日時: \d{4}-\d{2}-\d{2} \d{2}:\d{2} JST$", re.MULTILINE)
 
 
+def read_internal_report_time(path: Path) -> datetime:
+    text = path.read_text(encoding="utf-8")
+    time_match = REPORT_TIME_PATTERN.search(text)
+    if time_match is None:
+        raise AssertionError(f"missing internal report time: {path.name}")
+    if REPORT_UPDATED_PATTERN.search(text) is None:
+        raise AssertionError(f"missing updated report time: {path.name}")
+    return datetime.strptime(time_match.group("time"), "%Y-%m-%d %H:%M")
+
+
 class DocsReportTests(unittest.TestCase):
     def test_report_numbers_follow_internal_report_time(self):
         report_paths = sorted(Path("docs/reports").glob("*.md"))
@@ -18,15 +28,11 @@ class DocsReportTests(unittest.TestCase):
         for path in report_paths:
             name_match = REPORT_NAME_PATTERN.match(path.name)
             self.assertIsNotNone(name_match, path.name)
-            text = path.read_text(encoding="utf-8")
-            time_match = REPORT_TIME_PATTERN.search(text)
-            self.assertIsNotNone(time_match, path.name)
-            self.assertRegex(text, REPORT_UPDATED_PATTERN)
             rows.append(
                 {
                     "path": path,
                     "number": int(name_match.group("number")),
-                    "report_time": datetime.strptime(time_match.group("time"), "%Y-%m-%d %H:%M"),
+                    "report_time": read_internal_report_time(path),
                 }
             )
 

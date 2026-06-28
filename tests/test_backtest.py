@@ -395,6 +395,28 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [0, -1, 1])
 
+    def test_model_signal_can_subtract_side_specific_ev_penalty_before_selection(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [17.0, 17.0, 17.0],
+                "session_regime": ["ny_late", "london", "ny_late"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            side_margin=0,
+            side_ev_penalty_rules=("long:session_regime=ny_late:5",),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [-1, 1, -1])
+
     def test_model_signal_can_apply_side_specific_entry_offsets(self):
         df = frame_with_opens([100, 101, 102])
         predictions = pd.DataFrame(
@@ -874,6 +896,7 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["min_entry_rank"].tolist(), [0.0])
         self.assertEqual(normalized["require_profit_barrier"].tolist(), [False])
         self.assertEqual(normalized["profit_barrier_threshold"].tolist(), [0.5])
+        self.assertEqual(normalized["side_ev_penalty_rules"].tolist(), [""])
         self.assertEqual(normalized["side_extra_margin_rules"].tolist(), [""])
         self.assertEqual(normalized["side_block_rules"].tolist(), [""])
         self.assertTrue(pd.isna(normalized["direction_session_adjusted_pnl_min"]).sum() == 0)

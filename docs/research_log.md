@@ -3080,3 +3080,40 @@ Artifacts:
 - `long:ny_late` はnear-topには残るが、group loss、EV overestimate、exit regret、side concentrationが悪化するため保守候補として選ばれない。
 - drawdown-onlyなら `long:ny_late` を選べるが、max DD改善が小さく、他のrisk proxyを悪化させるため標準基準にしない。
 - 次は `long:ny_late` をhard ruleで塞ぐのではなく、side/regime別EV calibrationまたはregime-conditioned risk targetとして扱う。
+
+### 2026-06-28 21:43 JST Side Regime EV Penalty
+
+作業:
+
+- `model-policy` / `model-sweep` に `--side-ev-penalty-rules` を追加した。
+- `model-sweep` に `--side-ev-penalty-rule-sets` を追加し、side/regime別EV減点幅をvalidation gridへ入れられるようにした。
+- docs reportの検証コードは、ファイル更新時刻ではなく本文内の `日時` を読む意図が分かるよう `read_internal_report_time` へ整理した。
+- HGB entry/side + MLP exit hybridで `long:session_regime=ny_late:2/5/10/15` をvalidation 4fold評価した。
+- report: `docs/reports/00067_2026-06-28_side_regime_ev_penalty.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- validation sweeps: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_sweep/`
+- PnL selection: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_selection/20260628_124130_model_candidate_selection/`
+- near-top risk selection: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_selection_risk/20260628_124241_model_candidate_selection/`
+- 2024-12 fixed tests: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_2024_12/`
+
+結果:
+
+| item | value |
+|---|---:|
+| ruleなし validation min pnl | `81.5352` |
+| `long:ny_late:15` PnL top validation min pnl | `93.8904` |
+| `long:ny_late:15` PnL top validation sum pnl | `424.0446` |
+| `long:ny_late:15` risk top validation min pnl | `85.7834` |
+| `long:ny_late:15` risk top validation sum pnl | `440.0672` |
+| ruleなし 2024-12 | `-54.6032` |
+| `long:ny_late:15` PnL top 2024-12 | `-15.0538` |
+| `long:ny_late:15` risk top 2024-12 | `-5.4938` |
+
+判断:
+
+- side/regime EV penaltyはhard blockよりも滑らかなrisk controlとして有効な探索軸。
+- 今回はvalidationと2024-12の両方でruleなしより改善したが、NoTrade `0` を超えないため標準policyへは昇格しない。
+- 次は別holdout月、コスト/遅延ストレス、penalty幅の周辺台地を確認する。

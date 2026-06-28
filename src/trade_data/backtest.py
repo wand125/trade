@@ -72,6 +72,7 @@ SWEEP_KEY_COLUMNS = [
     "min_side_confidence",
     "require_profit_barrier",
     "profit_barrier_threshold",
+    "side_ev_penalty_rules",
     "extra_side_margin_rules",
     "side_extra_margin_rules",
     "side_block_rules",
@@ -342,6 +343,7 @@ class ModelPolicyConfig:
     min_side_confidence: float = 0.0
     require_profit_barrier: bool = False
     profit_barrier_threshold: float = 0.5
+    side_ev_penalty_rules: tuple[str, ...] = ()
     extra_side_margin_rules: tuple[str, ...] = ()
     side_extra_margin_rules: tuple[str, ...] = ()
     side_block_rules: tuple[str, ...] = ()
@@ -881,6 +883,21 @@ def model_signal_from_predictions(
     if config.loss_first_penalty > 0:
         long_ev = long_ev - config.loss_first_penalty * long_loss_first.clip(0.0, 1.0)
         short_ev = short_ev - config.loss_first_penalty * short_loss_first.clip(0.0, 1.0)
+    for side, conditions, penalty in parsed_side_ev_penalty_rules(config):
+        condition_mask = side_rule_condition_mask(
+            prediction_index,
+            df["timestamp"],
+            df.index,
+            conditions,
+        )
+        side_penalty = pd.Series(
+            np.where(condition_mask.to_numpy(), penalty, 0.0),
+            index=df.index,
+        )
+        if side == 1:
+            long_ev = long_ev - side_penalty
+        else:
+            short_ev = short_ev - side_penalty
     long_side_confidence = None
     short_side_confidence = None
     if (
@@ -1954,6 +1971,20 @@ def parse_side_extra_margin_rule(rule: str) -> tuple[int, tuple[tuple[str, str],
     return parse_side_name(side_text), parse_condition_parts(condition_text, rule), margin
 
 
+def parse_side_ev_penalty_rule(rule: str) -> tuple[int, tuple[tuple[str, str], ...], float]:
+    try:
+        side_and_conditions, penalty_text = rule.rsplit(":", maxsplit=1)
+        side_text, condition_text = side_and_conditions.split(":", maxsplit=1)
+    except ValueError as exc:
+        raise ValueError(
+            f"side EV penalty rule must use side:column=value+...:penalty syntax: {rule}"
+        ) from exc
+    penalty = float(penalty_text.strip())
+    if penalty < 0:
+        raise ValueError("side EV penalty must be non-negative")
+    return parse_side_name(side_text), parse_condition_parts(condition_text, rule), penalty
+
+
 def parse_side_confidence_penalty_rule(rule: str) -> tuple[tuple[tuple[str, str], ...], float]:
     try:
         condition_text, penalty_text = rule.rsplit(":", maxsplit=1)
@@ -1981,6 +2012,12 @@ def parsed_side_extra_margin_rules(
     return [parse_side_extra_margin_rule(rule) for rule in config.side_extra_margin_rules]
 
 
+def parsed_side_ev_penalty_rules(
+    config: ModelPolicyConfig,
+) -> list[tuple[int, tuple[tuple[str, str], ...], float]]:
+    return [parse_side_ev_penalty_rule(rule) for rule in config.side_ev_penalty_rules]
+
+
 def parsed_side_confidence_penalty_rules(
     config: ModelPolicyConfig,
 ) -> list[tuple[tuple[tuple[str, str], ...], float]]:
@@ -2005,6 +2042,8 @@ def side_rule_columns(config: ModelPolicyConfig) -> list[str]:
     for _, conditions in parsed_side_block_rules(config):
         columns.extend(column for column, _ in conditions)
     for _, conditions, _ in parsed_side_extra_margin_rules(config):
+        columns.extend(column for column, _ in conditions)
+    for _, conditions, _ in parsed_side_ev_penalty_rules(config):
         columns.extend(column for column, _ in conditions)
     for conditions, _ in parsed_side_confidence_penalty_rules(config):
         columns.extend(column for column, _ in conditions)
@@ -2542,6 +2581,7 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         min_side_confidence=args.min_side_confidence,
         require_profit_barrier=args.require_profit_barrier,
         profit_barrier_threshold=args.profit_barrier_threshold,
+        side_ev_penalty_rules=parse_optional_csv_strings(args.side_ev_penalty_rules),
         extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
         side_extra_margin_rules=parse_optional_csv_strings(args.side_extra_margin_rules),
         side_block_rules=parse_optional_csv_strings(args.side_block_rules),
@@ -2862,6 +2902,14 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--require-profit-barrier", action="store_true")
     parser.add_argument("--profit-barrier-threshold", type=float, default=0.5)
     parser.add_argument(
+        "--side-ev-penalty-rules",
+        default="",
+        help=(
+            "comma-separated side:column=value+...:penalty rules that subtract EV from "
+            "the matching side before side selection"
+        ),
+    )
+    parser.add_argument(
         "--extra-side-margin-rules",
         default="",
         help="comma-separated column=value:margin rules that add side-margin in matching regimes",
@@ -2923,6 +2971,10 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     require_profit_barriers = parse_csv_bools(args.require_profit_barriers)
     profit_barrier_thresholds = parse_csv_floats(args.profit_barrier_thresholds)
     regime_blocks = regime_blocks_from_args(args)
+    side_ev_penalty_rule_sets = parse_optional_rule_sets(
+        args.side_ev_penalty_rule_sets,
+        parse_optional_csv_strings(args.side_ev_penalty_rules),
+    )
     side_extra_margin_rule_sets = parse_optional_rule_sets(
         args.side_extra_margin_rule_sets,
         parse_optional_csv_strings(args.side_extra_margin_rules),
@@ -2998,6 +3050,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
             ),
             min_side_confidence=max(min_side_confidences),
             require_profit_barrier=any(require_profit_barriers),
+            side_ev_penalty_rules=flatten_rule_sets(side_ev_penalty_rule_sets),
             extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
             side_extra_margin_rules=flatten_rule_sets(side_extra_margin_rule_sets),
             side_block_rules=flatten_rule_sets(side_block_rule_sets),
@@ -3032,6 +3085,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_confidence_penalties,
         min_side_confidences,
         require_profit_barriers,
+        side_ev_penalty_rule_sets,
         side_extra_margin_rule_sets,
         side_block_rule_sets,
     )
@@ -3058,6 +3112,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_confidence_penalty,
         min_side_confidence,
         require_profit_barrier,
+        side_ev_penalty_rules,
         side_extra_margin_rules,
         side_block_rules,
     ) in base_grid:
@@ -3131,6 +3186,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     min_side_confidence=min_side_confidence,
                     require_profit_barrier=require_profit_barrier,
                     profit_barrier_threshold=profit_barrier_threshold,
+                    side_ev_penalty_rules=side_ev_penalty_rules,
                     extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
                     side_extra_margin_rules=side_extra_margin_rules,
                     side_block_rules=side_block_rules,
@@ -3183,6 +3239,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "min_side_confidence": min_side_confidence,
                     "require_profit_barrier": require_profit_barrier,
                     "profit_barrier_threshold": profit_barrier_threshold,
+                    "side_ev_penalty_rules": regime_values_to_string(
+                        model_policy_config.side_ev_penalty_rules
+                    ),
                     "extra_side_margin_rules": regime_values_to_string(
                         model_policy_config.extra_side_margin_rules
                     ),
@@ -3237,6 +3296,10 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "min_side_confidences": min_side_confidences,
         "require_profit_barriers": require_profit_barriers,
         "profit_barrier_thresholds": profit_barrier_thresholds,
+        "side_ev_penalty_rules": parse_optional_csv_strings(args.side_ev_penalty_rules),
+        "side_ev_penalty_rule_sets": [
+            regime_values_to_string(values) for values in side_ev_penalty_rule_sets
+        ],
         "extra_side_margin_rules": parse_optional_csv_strings(args.extra_side_margin_rules),
         "side_extra_margin_rules": parse_optional_csv_strings(args.side_extra_margin_rules),
         "side_extra_margin_rule_sets": [
@@ -3327,6 +3390,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["require_profit_barrier"] = False
     if "profit_barrier_threshold" not in output.columns:
         output["profit_barrier_threshold"] = 0.5
+    if "side_ev_penalty_rules" not in output.columns:
+        output["side_ev_penalty_rules"] = ""
     if "extra_side_margin_rules" not in output.columns:
         output["extra_side_margin_rules"] = ""
     if "side_extra_margin_rules" not in output.columns:
@@ -3478,6 +3543,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     else:
         output["require_profit_barrier"] = output["require_profit_barrier"].astype(bool)
     output["extra_side_margin_rules"] = output["extra_side_margin_rules"].fillna("").astype(str)
+    output["side_ev_penalty_rules"] = output["side_ev_penalty_rules"].fillna("").astype(str)
     output["side_extra_margin_rules"] = output["side_extra_margin_rules"].fillna("").astype(str)
     output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
     output["side_confidence_penalty_rules"] = (
@@ -4570,6 +4636,22 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--min-side-confidences", default="0")
     model_sweep.add_argument("--require-profit-barriers", default="false")
     model_sweep.add_argument("--profit-barrier-thresholds", default="0.5")
+    model_sweep.add_argument(
+        "--side-ev-penalty-rules",
+        default="",
+        help=(
+            "comma-separated side:column=value+...:penalty rules that subtract EV from "
+            "the matching side before side selection"
+        ),
+    )
+    model_sweep.add_argument(
+        "--side-ev-penalty-rule-sets",
+        default=None,
+        help=(
+            "semicolon-separated side-EV-penalty rule sets; each set uses comma-separated "
+            "side:column=value+...:penalty rules, with none/empty/- for no rules"
+        ),
+    )
     model_sweep.add_argument(
         "--extra-side-margin-rules",
         default="",

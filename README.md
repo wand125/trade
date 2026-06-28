@@ -259,6 +259,19 @@ python -m trade_data.backtest model-sweep \
   --loss-multiplier 1.20
 ```
 
+Regime-conditioned side EV penalties can be swept with rule sets. These rules
+subtract EV from the matching side before side selection, instead of hard
+blocking a trade:
+
+```bash
+python -m trade_data.backtest model-sweep \
+  --month 2024-07 \
+  --predictions data/reports/modeling/<run>/predictions_oof.parquet \
+  --policies timed_ev \
+  --entry-thresholds 10,15 \
+  --side-ev-penalty-rule-sets "none;long:session_regime=ny_late:5;long:session_regime=ny_late:15"
+```
+
 Aggregate multiple validation sweeps by identical policy parameters:
 
 ```bash
