@@ -2534,3 +2534,40 @@ Artifacts:
 - raw penaltyは2024-12損失を縮めたが、`-141.9282` で採用水準ではない。
 - calibrated/lowerの2024-12 selected tradesでは `0.4-0.6` bucketが actual hit `0.24` / predicted mean 約 `0.52` と強く過大評価した。
 - profit-barrier probability単独のhard gate/global linear penalty探索はいったん打ち切る。次は exit timing、time-exit probability penalty、hazard-like exit policyへ進む。
+
+### 2026-06-28 18:28 JST Exit Event Probability Penalties
+
+作業:
+
+- `time_exit_penalty` と `loss_first_penalty` を `ModelPolicyConfig`, `model-policy`, `model-sweep` に追加した。
+- default列は `pred_long_exit_event_prob_0`, `pred_short_exit_event_prob_0`, `pred_long_exit_event_prob_2`, `pred_short_exit_event_prob_2`。
+- score adjustmentは `EV -= penalty * probability`。
+- validation 4foldで `time_exit_penalty=0,2,4,6`, `loss_first_penalty=0,2,4,6` を比較した。
+- validation topとno-penalty/time-only/loss-onlyを2024-12反証月へ固定適用した。
+- report: `docs/reports/00053_2026-06-28_exit_event_probability_penalties.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- validation sweeps: `data/reports/backtests/exit_event_penalty_soft/`
+- validation summary: `data/reports/backtests/20260628_exit_event_penalty_soft_validation_summary.csv`
+- 2024-12 validation top: `data/reports/backtests/20260628_092737_model_timed_ev_2024-12/`
+- 2024-12 no-penalty reference: `data/reports/backtests/20260628_092737_model_timed_ev_2024-12_1/`
+- 2024-12 time-only: `data/reports/backtests/20260628_092737_model_timed_ev_2024-12_2/`
+- 2024-12 loss-only: `data/reports/backtests/20260628_092737_model_timed_ev_2024-12_3/`
+
+結果:
+
+| policy | validation strict | min pnl | total pnl | 2024-12 adjusted pnl | trades | profit factor |
+|---|---|---:|---:|---:|---:|---:|
+| time `6` + loss `6`, max hold `720` | `true` | `75.1682` | `531.6246` | `-172.7944` | `46` | `0.4960` |
+| no penalty reference | `false` | `12.5636` | `287.8596` | `-227.4118` | `63` | `0.4507` |
+| time-only `6` | - | - | - | `-178.2488` | `57` | `0.5235` |
+| loss-only `6` | - | - | - | `-175.3652` | `50` | `0.5222` |
+
+判断:
+
+- time/loss soft penaltyはvalidation上ではprofit-barrier penaltyより強い候補を作った。
+- 2024-12では損失とdrawdownを縮めたが、NoTradeには大きく負ける。
+- direction errorとactual barrier missは依然高く、entry score penaltyだけでは方向選択やtail lossを直せない。
+- 実装は探索軸として残すが標準policyへ昇格しない。次はevent probabilityで予定保有時間を短縮するhazard-like policyへ進む。

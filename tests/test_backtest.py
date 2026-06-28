@@ -554,6 +554,46 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(unpenalized_signal.tolist(), [1, 1])
         self.assertEqual(penalized_signal.tolist(), [-1, 1])
 
+    def test_exit_event_probability_penalties_reduce_risky_side_ev(self):
+        df = frame_with_opens([100, 101])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [18.0, 18.0],
+                "pred_long_exit_event_prob_0": [1.0, 0.0],
+                "pred_short_exit_event_prob_0": [0.0, 0.0],
+                "pred_long_exit_event_prob_2": [0.0, 1.0],
+                "pred_short_exit_event_prob_2": [0.0, 0.0],
+            }
+        )
+        common_config = {
+            "predictions": Path("unused"),
+            "policy": "stateless_ev",
+            "entry_threshold": 10.0,
+            "side_margin": 0.1,
+        }
+
+        unpenalized_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config),
+        )
+        time_penalized_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config, time_exit_penalty=5.0),
+        )
+        loss_penalized_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config, loss_first_penalty=5.0),
+        )
+
+        self.assertEqual(unpenalized_signal.tolist(), [1, 1])
+        self.assertEqual(time_penalized_signal.tolist(), [-1, 1])
+        self.assertEqual(loss_penalized_signal.tolist(), [1, -1])
+
     def test_side_confidence_penalty_reduces_low_confidence_side_ev(self):
         df = frame_with_opens([100, 101])
         predictions = pd.DataFrame(
@@ -698,6 +738,8 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(normalized["risk_penalty"].tolist(), [0.0])
         self.assertEqual(normalized["profit_barrier_miss_penalty"].tolist(), [0.0])
+        self.assertEqual(normalized["time_exit_penalty"].tolist(), [0.0])
+        self.assertEqual(normalized["loss_first_penalty"].tolist(), [0.0])
         self.assertEqual(normalized["min_trade_quality"].tolist(), [-float("inf")])
         self.assertEqual(normalized["fixed_horizon_score_mode"].tolist(), ["max"])
         self.assertEqual(normalized["long_entry_threshold_offset"].tolist(), [0.0])
