@@ -3473,6 +3473,13 @@ def summarize_candidate_selection(
     max_exit_regret_mean: float = 1e100,
     max_ev_overestimate_vs_realized_mean: float = 1e100,
     group_loss_penalty_weight: float = 0.0,
+    diagnostic_penalty_weight: float = 0.0,
+    diagnostic_direction_error_rate_threshold: float = 1.0,
+    diagnostic_actual_profit_barrier_miss_rate_threshold: float = 1.0,
+    diagnostic_ev_overestimate_vs_realized_mean_threshold: float = 1e100,
+    diagnostic_direction_error_rate_scale: float = 100.0,
+    diagnostic_actual_profit_barrier_miss_rate_scale: float = 100.0,
+    diagnostic_ev_overestimate_vs_realized_mean_scale: float = 1.0,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -3512,6 +3519,26 @@ def summarize_candidate_selection(
         raise ValueError("max_ev_overestimate_vs_realized_mean must be non-negative")
     if group_loss_penalty_weight < 0:
         raise ValueError("group_loss_penalty_weight must be non-negative")
+    if diagnostic_penalty_weight < 0:
+        raise ValueError("diagnostic_penalty_weight must be non-negative")
+    if not 0 <= diagnostic_direction_error_rate_threshold <= 1:
+        raise ValueError("diagnostic_direction_error_rate_threshold must be between 0 and 1")
+    if not 0 <= diagnostic_actual_profit_barrier_miss_rate_threshold <= 1:
+        raise ValueError(
+            "diagnostic_actual_profit_barrier_miss_rate_threshold must be between 0 and 1"
+        )
+    if diagnostic_ev_overestimate_vs_realized_mean_threshold < 0:
+        raise ValueError(
+            "diagnostic_ev_overestimate_vs_realized_mean_threshold must be non-negative"
+        )
+    if diagnostic_direction_error_rate_scale < 0:
+        raise ValueError("diagnostic_direction_error_rate_scale must be non-negative")
+    if diagnostic_actual_profit_barrier_miss_rate_scale < 0:
+        raise ValueError("diagnostic_actual_profit_barrier_miss_rate_scale must be non-negative")
+    if diagnostic_ev_overestimate_vs_realized_mean_scale < 0:
+        raise ValueError(
+            "diagnostic_ev_overestimate_vs_realized_mean_scale must be non-negative"
+        )
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -3599,14 +3626,6 @@ def summarize_candidate_selection(
         + merged["combined_regime_loss_depth_all"]
         + merged["direction_combined_regime_loss_depth_all"]
     )
-    merged["robust_total_adjusted_pnl_min_cost"] = (
-        merged["total_adjusted_pnl_min_cost"]
-        - group_loss_penalty_weight * merged["group_loss_penalty"]
-    )
-    merged["robust_total_adjusted_pnl_min_base"] = (
-        merged["total_adjusted_pnl_min_base"]
-        - group_loss_penalty_weight * merged["group_loss_penalty"]
-    )
     merged["short_trade_share_max_all"] = row_max_or_default(
         merged,
         ["short_trade_share_max_base", "short_trade_share_max_cost"],
@@ -3684,6 +3703,34 @@ def summarize_candidate_selection(
             "profit_barrier_calibration_overestimate_smoothed_max_max_cost",
         ],
         0.0,
+    )
+    merged["diagnostic_direction_error_rate_excess"] = (
+        merged["direction_error_rate_max_all"] - diagnostic_direction_error_rate_threshold
+    ).clip(lower=0.0)
+    merged["diagnostic_actual_profit_barrier_miss_rate_excess"] = (
+        merged["actual_profit_barrier_miss_rate_smoothed_max_all"]
+        - diagnostic_actual_profit_barrier_miss_rate_threshold
+    ).clip(lower=0.0)
+    merged["diagnostic_ev_overestimate_vs_realized_mean_excess"] = (
+        merged["ev_overestimate_vs_realized_mean_max_all"]
+        - diagnostic_ev_overestimate_vs_realized_mean_threshold
+    ).clip(lower=0.0)
+    merged["diagnostic_penalty"] = (
+        diagnostic_direction_error_rate_scale * merged["diagnostic_direction_error_rate_excess"]
+        + diagnostic_actual_profit_barrier_miss_rate_scale
+        * merged["diagnostic_actual_profit_barrier_miss_rate_excess"]
+        + diagnostic_ev_overestimate_vs_realized_mean_scale
+        * merged["diagnostic_ev_overestimate_vs_realized_mean_excess"]
+    )
+    total_soft_penalty = (
+        group_loss_penalty_weight * merged["group_loss_penalty"]
+        + diagnostic_penalty_weight * merged["diagnostic_penalty"]
+    )
+    merged["robust_total_adjusted_pnl_min_cost"] = (
+        merged["total_adjusted_pnl_min_cost"] - total_soft_penalty
+    )
+    merged["robust_total_adjusted_pnl_min_base"] = (
+        merged["total_adjusted_pnl_min_base"] - total_soft_penalty
     )
     merged["side_loss_ok"] = merged["side_adjusted_pnl_min_all"] >= -max_side_loss_per_fold
     merged["direction_session_loss_ok"] = (
@@ -3892,6 +3939,23 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         max_exit_regret_mean=args.max_exit_regret_mean,
         max_ev_overestimate_vs_realized_mean=args.max_ev_overestimate_vs_realized_mean,
         group_loss_penalty_weight=args.group_loss_penalty_weight,
+        diagnostic_penalty_weight=args.diagnostic_penalty_weight,
+        diagnostic_direction_error_rate_threshold=(
+            args.diagnostic_direction_error_rate_threshold
+        ),
+        diagnostic_actual_profit_barrier_miss_rate_threshold=(
+            args.diagnostic_actual_profit_barrier_miss_rate_threshold
+        ),
+        diagnostic_ev_overestimate_vs_realized_mean_threshold=(
+            args.diagnostic_ev_overestimate_vs_realized_mean_threshold
+        ),
+        diagnostic_direction_error_rate_scale=args.diagnostic_direction_error_rate_scale,
+        diagnostic_actual_profit_barrier_miss_rate_scale=(
+            args.diagnostic_actual_profit_barrier_miss_rate_scale
+        ),
+        diagnostic_ev_overestimate_vs_realized_mean_scale=(
+            args.diagnostic_ev_overestimate_vs_realized_mean_scale
+        ),
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -3928,6 +3992,23 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "max_exit_regret_mean": args.max_exit_regret_mean,
         "max_ev_overestimate_vs_realized_mean": args.max_ev_overestimate_vs_realized_mean,
         "group_loss_penalty_weight": args.group_loss_penalty_weight,
+        "diagnostic_penalty_weight": args.diagnostic_penalty_weight,
+        "diagnostic_direction_error_rate_threshold": (
+            args.diagnostic_direction_error_rate_threshold
+        ),
+        "diagnostic_actual_profit_barrier_miss_rate_threshold": (
+            args.diagnostic_actual_profit_barrier_miss_rate_threshold
+        ),
+        "diagnostic_ev_overestimate_vs_realized_mean_threshold": (
+            args.diagnostic_ev_overestimate_vs_realized_mean_threshold
+        ),
+        "diagnostic_direction_error_rate_scale": args.diagnostic_direction_error_rate_scale,
+        "diagnostic_actual_profit_barrier_miss_rate_scale": (
+            args.diagnostic_actual_profit_barrier_miss_rate_scale
+        ),
+        "diagnostic_ev_overestimate_vs_realized_mean_scale": (
+            args.diagnostic_ev_overestimate_vs_realized_mean_scale
+        ),
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -4377,6 +4458,51 @@ def build_parser() -> argparse.ArgumentParser:
             "soft ranking penalty weight applied to the summed worst side/regime loss depth; "
             "0 keeps the historical ranking"
         ),
+    )
+    model_candidate_selection.add_argument(
+        "--diagnostic-penalty-weight",
+        type=float,
+        default=0.0,
+        help=(
+            "soft ranking penalty weight for excess direction error, smoothed actual profit-barrier "
+            "miss rate, and EV overestimate diagnostics"
+        ),
+    )
+    model_candidate_selection.add_argument(
+        "--diagnostic-direction-error-rate-threshold",
+        type=float,
+        default=1.0,
+        help="direction error rate allowed before diagnostic soft penalty applies",
+    )
+    model_candidate_selection.add_argument(
+        "--diagnostic-actual-profit-barrier-miss-rate-threshold",
+        type=float,
+        default=1.0,
+        help="smoothed actual profit-barrier miss rate allowed before diagnostic soft penalty applies",
+    )
+    model_candidate_selection.add_argument(
+        "--diagnostic-ev-overestimate-vs-realized-mean-threshold",
+        type=float,
+        default=1e100,
+        help="mean EV overestimate allowed before diagnostic soft penalty applies",
+    )
+    model_candidate_selection.add_argument(
+        "--diagnostic-direction-error-rate-scale",
+        type=float,
+        default=100.0,
+        help="scale applied to excess direction error rate before diagnostic penalty weight",
+    )
+    model_candidate_selection.add_argument(
+        "--diagnostic-actual-profit-barrier-miss-rate-scale",
+        type=float,
+        default=100.0,
+        help="scale applied to excess smoothed actual profit-barrier miss rate",
+    )
+    model_candidate_selection.add_argument(
+        "--diagnostic-ev-overestimate-vs-realized-mean-scale",
+        type=float,
+        default=1.0,
+        help="scale applied to excess mean EV overestimate",
     )
     model_candidate_selection.add_argument(
         "--plateau-column",

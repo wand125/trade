@@ -2759,3 +2759,34 @@ Artifacts:
 - `month_target` はbalanced accuracyとoverconfidenceを少し改善したが、validation 4foldのtrade selectionを壊した。
 - 2024-12だけの小改善は採用理由にしない。side-confidence hard/min gateは標準採用しない。
 - target-aware weightingは実装として残すが、次はside confidenceのhard gateではなくOOF calibration/diagnosticまたはshared representation modelへ進む。
+
+### 2026-06-28 19:52 JST Diagnostic Soft Penalty Ranking
+
+作業:
+
+- `model-candidate-selection` に複合diagnostic soft penaltyを追加した。
+- direction error、actual profit barrier miss、EV overestimateが閾値を超えた分をpenalty化し、eligible候補のrobust scoreを下げる。
+- `combined_side_miss_joint` の4fold sweepを再利用し、base/cost同一入力でdiagnostic rankingの影響だけを切り分けた。
+- diagnostic ranking topを2024-12反証月へ固定適用した。
+- report: `docs/reports/00059_2026-06-28_diagnostic_soft_penalty_ranking.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- baseline selection: `data/reports/backtests/diagnostic_soft_penalty_baseline/20260628_104916_model_candidate_selection/`
+- diagnostic selection: `data/reports/backtests/diagnostic_soft_penalty_validation/20260628_104938_model_candidate_selection/`
+- diagnostic top fixed 2024-12: `data/reports/backtests/diagnostic_soft_penalty_validation/fixed_2024_12/20260628_105024_model_timed_ev_2024-12/`
+
+結果:
+
+| candidate | validation min pnl | validation total pnl | diagnostic penalty | robust min pnl | 2024-12 adjusted pnl | profit factor |
+|---|---:|---:|---:|---:|---:|---:|
+| diagnostic top, no shrink | `75.1682` | `531.6246` | `5.8683` | `69.2999` | `-172.7944` | `0.4960` |
+| prior holding shrink combo | `80.0648` | `513.3876` | `11.3607` | `68.7041` | `-159.0158` | `0.5211` |
+| min side confidence diagnostic | `65.0410` | `375.9450` | `2.9922` | `62.0488` | `-91.9786` | `0.5963` |
+
+判断:
+
+- soft penaltyによりvalidation順位は変わったが、2024-12反証月では悪化した。
+- diagnostic soft penaltyはtie-break/診断基盤として残す。
+- 今回のrankingは標準policyへ昇格しない。post-hoc診断値の改善だけで候補を採用しない。
