@@ -1984,3 +1984,41 @@ Artifacts:
 - `1.0` 以上はtrade数とfold最低PnLを大きく削る。
 - selected-trade quality modelは診断・探索基盤として残すが、標準候補には採用しない。標準は引き続き `min_trade_quality=-inf`。
 - 次はtrade後品質の単発gateより、exit timing targetを直接増やす。特に利確/損切り/時間切れの時刻をhazard/survival型またはtime-bucket classificationで扱う。
+
+### 2026-06-28 15:21 JST Exit Event Timing Targets
+
+作業:
+
+- side別に `time_exit/profit_first/loss_first` を表す `long_exit_event` / `short_exit_event` をdatasetに追加した。
+- side別に最初のexit eventまでの `long_exit_event_minutes` / `short_exit_event_minutes` を追加した。
+- `long_exit_event_time_bin` / `short_exit_event_time_bin` を追加した。
+- `trade_data.modeling` の `policy` / `full` target setへexit event targetを追加した。
+- report: `docs/reports/00039_2026-06-28_exit_event_timing_targets.md`
+- 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- smoke datasets: `data/processed/datasets/xauusd_m1_exit_event_smoke/`
+- smoke model: `experiments/20260628_062101_exit_event_target_smoke/`
+- smoke backtest: `data/reports/backtests/20260628_062138_model_timed_ev_2024-09/`
+
+結果:
+
+| split | target | MAE | RMSE | R2 |
+|---|---|---:|---:|---:|
+| valid | `long_exit_event_minutes` | `537.5728` | `676.4928` | `0.1628` |
+| valid | `short_exit_event_minutes` | `524.9559` | `656.6593` | `0.1565` |
+| test | `long_exit_event_minutes` | `600.3732` | `854.8331` | `0.1306` |
+| test | `short_exit_event_minutes` | `611.3872` | `876.4042` | `0.1450` |
+
+接続確認:
+
+- `pred_long_exit_event_minutes` / `pred_short_exit_event_minutes` は保存された。
+- 既存 `timed_ev` policyの `--long-holding-column` / `--short-holding-column` に渡してbacktestが実行できた。
+- smoke backtestは `2024-09` で adjusted pnl `-118.8852`, 47 trades。これは軽量1ヶ月trainの接続確認であり、採用判断には使わない。
+
+判断:
+
+- exit event timing targetは本流の次実験軸へ昇格する。
+- 次はvalidation 4fold用に新target入りdatasetを再生成し、従来 `pred_*_best_holding_minutes` と `pred_*_exit_event_minutes` をholding columnとして比較する。
+- 多クラス `exit_event` のprobability出力を追加し、profit/loss/time確率をgateやpenaltyに使えるようにする。

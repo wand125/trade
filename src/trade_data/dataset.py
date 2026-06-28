@@ -41,6 +41,9 @@ ROLLING_WINDOWS = [15, 60, 240]
 FFT_WINDOWS = [64, 256]
 EXIT_FIXED_HORIZON_MINUTES = [60, 240, 720]
 PROFIT_BARRIER_HORIZON_MINUTES = EXIT_FIXED_HORIZON_MINUTES
+EXIT_EVENT_TIME = 0
+EXIT_EVENT_PROFIT = 1
+EXIT_EVENT_LOSS = 2
 
 
 @dataclass(frozen=True)
@@ -187,6 +190,10 @@ def future_best_labels(
     short_adverse = np.full(n, np.nan)
     long_profit_barrier_hit = np.full(n, np.nan)
     short_profit_barrier_hit = np.full(n, np.nan)
+    long_exit_event = np.full(n, np.nan)
+    short_exit_event = np.full(n, np.nan)
+    long_exit_event_minutes = np.full(n, np.nan)
+    short_exit_event_minutes = np.full(n, np.nan)
     profit_barrier_horizon_targets: dict[str, np.ndarray] = {}
     for minutes in PROFIT_BARRIER_HORIZON_MINUTES:
         profit_barrier_horizon_targets[f"long_profit_barrier_hit_{minutes}m"] = np.full(n, np.nan)
@@ -250,16 +257,28 @@ def future_best_labels(
         )
         long_adverse_value = float(np.min(future_prices - entry_price))
         short_adverse_value = float(np.min(entry_price - future_prices))
-        long_profit_barrier_hit[decision_idx] = profit_barrier_hit_before_loss(
+        long_event, long_event_relative_idx = barrier_exit_event(
             future_prices - entry_price,
             profit_barrier_raw,
             loss_barrier_raw,
         )
-        short_profit_barrier_hit[decision_idx] = profit_barrier_hit_before_loss(
+        short_event, short_event_relative_idx = barrier_exit_event(
             entry_price - future_prices,
             profit_barrier_raw,
             loss_barrier_raw,
         )
+        long_event_idx = exit_start + long_event_relative_idx
+        short_event_idx = exit_start + short_event_relative_idx
+        long_exit_event[decision_idx] = long_event
+        short_exit_event[decision_idx] = short_event
+        long_exit_event_minutes[decision_idx] = (
+            timestamps.iloc[long_event_idx] - timestamps.iloc[entry_idx]
+        ) / pd.Timedelta(minutes=1)
+        short_exit_event_minutes[decision_idx] = (
+            timestamps.iloc[short_event_idx] - timestamps.iloc[entry_idx]
+        ) / pd.Timedelta(minutes=1)
+        long_profit_barrier_hit[decision_idx] = int(long_event == EXIT_EVENT_PROFIT)
+        short_profit_barrier_hit[decision_idx] = int(short_event == EXIT_EVENT_PROFIT)
         for minutes in PROFIT_BARRIER_HORIZON_MINUTES:
             fixed_ns = fixed_horizon_ns[minutes]
             fixed_exit_idx = int(np.searchsorted(ts_ns, ts_ns[entry_idx] + fixed_ns, side="left"))
@@ -354,6 +373,10 @@ def future_best_labels(
             "short_max_adverse_pnl": short_adverse,
             "long_profit_barrier_hit": long_profit_barrier_hit,
             "short_profit_barrier_hit": short_profit_barrier_hit,
+            "long_exit_event": long_exit_event,
+            "short_exit_event": short_exit_event,
+            "long_exit_event_minutes": long_exit_event_minutes,
+            "short_exit_event_minutes": short_exit_event_minutes,
             **profit_barrier_horizon_targets,
             **fixed_horizon_targets,
             "long_best_exit_idx": long_best_exit_idx,
@@ -380,13 +403,26 @@ def profit_barrier_hit_before_loss(
     profit_barrier_raw: float,
     loss_barrier_raw: float,
 ) -> int:
+    event, _ = barrier_exit_event(side_path, profit_barrier_raw, loss_barrier_raw)
+    return int(event == EXIT_EVENT_PROFIT)
+
+
+def barrier_exit_event(
+    side_path: np.ndarray,
+    profit_barrier_raw: float,
+    loss_barrier_raw: float,
+) -> tuple[int, int]:
     profit_hits = np.flatnonzero(side_path >= profit_barrier_raw)
     loss_hits = np.flatnonzero(side_path <= -loss_barrier_raw)
+    if len(profit_hits) == 0 and len(loss_hits) == 0:
+        return EXIT_EVENT_TIME, max(0, len(side_path) - 1)
     if len(profit_hits) == 0:
-        return 0
+        return EXIT_EVENT_LOSS, int(loss_hits[0])
     if len(loss_hits) == 0:
-        return 1
-    return int(profit_hits[0] <= loss_hits[0])
+        return EXIT_EVENT_PROFIT, int(profit_hits[0])
+    if profit_hits[0] <= loss_hits[0]:
+        return EXIT_EVENT_PROFIT, int(profit_hits[0])
+    return EXIT_EVENT_LOSS, int(loss_hits[0])
 
 
 def add_entry_timing_targets(dataset: pd.DataFrame, lookahead_minutes: int) -> list[str]:
@@ -473,6 +509,8 @@ def add_quantized_targets(dataset: pd.DataFrame, bins: int) -> list[str]:
         "best_holding_time_bin",
         "long_best_holding_time_bin",
         "short_best_holding_time_bin",
+        "long_exit_event_time_bin",
+        "short_exit_event_time_bin",
     ]
     dataset["best_adjusted_pnl_quantile"] = quantile_codes(dataset["best_adjusted_pnl"], bins)
     dataset["side_score_quantile"] = quantile_codes(dataset["side_score"], bins)
@@ -483,6 +521,8 @@ def add_quantized_targets(dataset: pd.DataFrame, bins: int) -> list[str]:
     dataset["best_holding_time_bin"] = holding_time_bins(dataset["best_holding_minutes"])
     dataset["long_best_holding_time_bin"] = holding_time_bins(dataset["long_best_holding_minutes"])
     dataset["short_best_holding_time_bin"] = holding_time_bins(dataset["short_best_holding_minutes"])
+    dataset["long_exit_event_time_bin"] = holding_time_bins(dataset["long_exit_event_minutes"])
+    dataset["short_exit_event_time_bin"] = holding_time_bins(dataset["short_exit_event_minutes"])
     return target_columns
 
 
@@ -546,6 +586,8 @@ def build_month_dataset(
     output["short_best_exit_idx"] = output["short_best_exit_idx"].astype("int64")
     output["long_profit_barrier_hit"] = output["long_profit_barrier_hit"].astype("int8")
     output["short_profit_barrier_hit"] = output["short_profit_barrier_hit"].astype("int8")
+    output["long_exit_event"] = output["long_exit_event"].astype("int8")
+    output["short_exit_event"] = output["short_exit_event"].astype("int8")
     profit_barrier_horizon_target_columns = [
         f"{side}_profit_barrier_hit_{minutes}m"
         for minutes in PROFIT_BARRIER_HORIZON_MINUTES
@@ -572,6 +614,8 @@ def build_month_dataset(
         *quantized_target_columns,
         "long_profit_barrier_hit",
         "short_profit_barrier_hit",
+        "long_exit_event",
+        "short_exit_event",
         *profit_barrier_horizon_target_columns,
         *fixed_horizon_target_columns,
         "open",
@@ -590,6 +634,8 @@ def build_month_dataset(
         "short_forced_raw_pnl",
         "long_max_adverse_pnl",
         "short_max_adverse_pnl",
+        "long_exit_event_minutes",
+        "short_exit_event_minutes",
         "long_wait_regret",
         "short_wait_regret",
         "long_entry_local_rank",
@@ -616,6 +662,10 @@ def build_month_dataset(
         [
             "long_profit_barrier_hit",
             "short_profit_barrier_hit",
+            "long_exit_event",
+            "short_exit_event",
+            "long_exit_event_minutes",
+            "short_exit_event_minutes",
             *profit_barrier_horizon_target_columns,
             *fixed_horizon_target_columns,
             *timing_target_columns,
@@ -670,6 +720,11 @@ def dataset_summary(
         else dataset["decision_timestamp"].max().isoformat(),
         "label_counts": label_counts,
         "label_meanings": {"-1": "short", "0": "stay_flat", "1": "long"},
+        "exit_event_meanings": {
+            str(EXIT_EVENT_TIME): "time_exit",
+            str(EXIT_EVENT_PROFIT): "profit_first",
+            str(EXIT_EVENT_LOSS): "loss_first",
+        },
         "quantized_target_counts": quantile_counts,
         "regime_counts": regime_counts,
         "best_adjusted_pnl": {
