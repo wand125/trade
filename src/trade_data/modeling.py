@@ -79,6 +79,7 @@ CLASSIFICATION_TARGETS = [
 
 POLICY_REGRESSION_TARGETS = [
     *EV_TARGETS,
+    *EXIT_FIXED_HORIZON_TARGETS,
     "side_score",
     "long_best_holding_minutes",
     "short_best_holding_minutes",

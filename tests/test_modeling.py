@@ -104,6 +104,8 @@ class ModelingTests(unittest.TestCase):
 
         self.assertIn("long_best_adjusted_pnl", regression_targets)
         self.assertIn("short_best_adjusted_pnl", regression_targets)
+        self.assertIn("long_fixed_60m_adjusted_pnl", regression_targets)
+        self.assertIn("short_fixed_720m_adjusted_pnl", regression_targets)
         self.assertIn("long_wait_regret", regression_targets)
         self.assertIn("short_entry_local_rank", regression_targets)
         self.assertIn("long_profit_barrier_hit", classification_targets)

@@ -1102,7 +1102,7 @@ Residual offset:
 
 - `analyze-trades` に `--long-column` / `--short-column` を追加し、calibrated EV列を指定してtrade failure分析できるようにした。
 - 既存レポートに日付だけでなく時刻を入れる運用へ変更した。
-- 既存 `docs/reports/*.md` はファイル更新時刻を基準に時刻付きへ補正した。
+- 既存 `docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
 - `future_best_labels` に固定保有 60/240/720 分のlong/short adjusted pnl targetを追加した。
 - `modeling` は古いdatasetにも対応できるよう、存在しない研究用targetを自動的に落とし、missing targetsをmetricsへ記録するようにした。
 - report: `docs/reports/00016_2026-06-28_calibrated_trade_failure_exit_targets.md`
@@ -1225,7 +1225,7 @@ Artifacts:
 - binary classifierのclass `1` probabilityを `pred_<target>_prob` として保存するようにした。
 - `model-policy` に `--profit-barrier-threshold`、`model-sweep` に `--profit-barrier-thresholds` を追加した。
 - `SWEEP_KEY_COLUMNS` とsummary正規化へ `profit_barrier_threshold` を追加し、閾値違いの候補が混ざらないようにした。
-- 既存 `docs/reports/*.md` はファイル更新時刻を基準に `更新日時` / `Updated` を補正した。
+- 既存 `docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
 - report: `docs/reports/00021_2026-06-28_profit_barrier_probability_gate.md`
 
 Artifacts:
@@ -1379,7 +1379,7 @@ Artifacts:
 判断:
 
 - レポート作成時刻と更新時刻は、以後 `YYYY-MM-DD HH:MM JST` で明示する。
-- 既存レポートの補正値は、ファイル更新時刻または既存の `Updated` 記録を基準にした。
+- 既存レポートの補正では、既存の `Datetime` / `Updated` 記録を優先し、不足分だけ確認可能な時刻情報で補った。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
 
 ### 2026-06-28 10:06 JST Profit Barrier Miss Candidate Gate
 
@@ -1774,3 +1774,45 @@ Smoke:
 - `python3 -m unittest tests.test_dataset tests.test_modeling`: 25 tests OK。
 - `python3 -m unittest discover tests`: 71 tests OK。
 - `git diff --check`: OK。
+
+### 2026-06-28 13:53 JST Timebarrier Validation Sweep
+
+作業:
+
+- 主dataset `data/processed/datasets/xauusd_m1_p1_l1p2/` を、時間別profit barrier target込みで 2023-01 から 2025-07 まで再生成した。
+- `target-set policy` に固定horizon回帰targetが不足していたため、`EXIT_FIXED_HORIZON_TARGETS` を追加した。
+- policy HGBを再学習し、`fixed_horizon_ev` と 24h/240m/720m profit barrier probabilityを同時に使える prediction frameを作成した。
+- 24h, 240m, 720m probabilityのvalidation 4fold sweepを比較した。
+- 240m / 720m はfine thresholdも追加で検証した。
+- report: `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`
+
+Artifacts:
+
+- model: `experiments/20260628_040828_policy_timebarrier_p1_l1p2/`
+- broad summary: `data/reports/backtests/20260628_timebarrier_candidate_selection_summary.csv`
+- fine summary: `data/reports/backtests/20260628_timebarrier_fine_candidate_selection_summary.csv`
+- 240m fine candidate selection: `data/reports/backtests/20260628_045220_barrier240_fine_candidate_selection/`
+- 720m fine candidate selection: `data/reports/backtests/20260628_045221_barrier720_fine_candidate_selection/`
+
+結果:
+
+| variant | eligible | top threshold | cost min pnl | min trades | forced exit max | worst dir/session | smoothed miss max |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 24h broad | 12 | `0.2` | `27.2158` | 47 | `0.0000` | `-39.1342` | `0.454545` |
+| 240m broad | 5 | `0.0` | `20.6606` | 56 | `0.035714` | `-51.5902` | `0.500000` |
+| 720m broad | 5 | `0.0` | `20.6606` | 56 | `0.035714` | `-51.5902` | `0.500000` |
+| 240m fine | 8 | `0.0` | `20.6606` | 56 | `0.035714` | `-51.5902` | `0.500000` |
+| 720m fine | 8 | `0.0` | `20.6606` | 56 | `0.035714` | `-51.5902` | `0.500000` |
+
+classifier診断:
+
+- time-limited barrier classifierのvalidation balanced accuracyはほぼ `0.5`。
+- 60m targetは希少で、現HGBではhard gateに向かない。
+- 240m / 720m probabilityは候補を絞れるが、現在のtop候補ではthreshold `0.0` が勝っており、filterとして強く機能していない。
+
+判断:
+
+- 240m / 720m probabilityはhard gateへ昇格しない。
+- 24h profit barrier probability threshold `0.2` は、現validation上ではまだ上位候補。
+- 次はtime-limited binary probabilityよりも、exit regret / EV overestimateを直接下げるtarget、またはhazard / survival形式のexit timing targetを優先する。
+- レポート採番は、引き続きファイル更新時刻や `更新日時` ではなく、ファイル本文の `日時` を基準にする。

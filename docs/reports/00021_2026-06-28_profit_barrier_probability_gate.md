@@ -14,7 +14,7 @@
 - `model-policy` に `--profit-barrier-threshold` を追加した。
 - `model-sweep` に `--profit-barrier-thresholds` を追加した。
 - `SWEEP_KEY_COLUMNS` とsummary正規化へ `profit_barrier_threshold` を追加し、閾値違いの候補が混ざらないようにした。
-- 既存 `docs/reports/*.md` は、ファイル更新時刻を基準に `更新日時` / `Updated` を補正した。
+- 既存 `docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
 
 ## Model
 

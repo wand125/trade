@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 12:58 JST
+最終更新: 2026-06-28 13:57 JST
 
 ## 現在の状態
 
@@ -46,7 +46,7 @@ trade-analysis diagnostic gateを追加済み。`model-sweep` metricsに `direct
 
 validation 4foldのhigh-turnover gridを新diagnostic列入りで再生成し、diagnostic gateの閾値台地を確認済み。2025-07 smoke-like gate (`exit_regret_mean<=15`, `EV overestimate<=10`) はvalidation候補を0件にするためhard採用しない。`balanced` gateは候補5件を維持するが選別力は弱く、`focused` / `strict` は2件/1件に縮むため台地が弱い。現時点ではdiagnosticを主hard gateにせず、tie-breakと失敗分析に使う。詳細は `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md` と `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`。
 
-時間別profit barrier targetを追加済み。`long_profit_barrier_hit_60m/240m/720m` と `short_profit_barrier_hit_60m/240m/720m` をdatasetに生成し、`target-set policy` / `full` のclassification targetへ追加した。2025-01のsmokeでは60m targetは希少、240m/720mは正例が十分ある。主datasetはまだ再生成していない。詳細は `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`。
+時間別profit barrier targetを追加済み。`long_profit_barrier_hit_60m/240m/720m` と `short_profit_barrier_hit_60m/240m/720m` をdatasetに生成し、`target-set policy` / `full` のclassification targetへ追加した。主datasetを 2023-01 から 2025-07 まで再生成し、policy HGBを再学習した。240m/720m probabilityのvalidation sweepでは候補は残ったが、topはthreshold `0.0` のままで、24h probability threshold `0.2` 候補のcost-aware validationを超えなかった。現時点ではtime-limited barrierをhard gateへ昇格しない。詳細は `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md` と `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`。
 
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
@@ -69,10 +69,10 @@ validation 4foldのhigh-turnover gridを新diagnostic列入りで再生成し、
 
 ## 次の作業
 
-1. 主dataset `data/processed/datasets/xauusd_m1_p1_l1p2/` を時間別profit barrier target込みで再生成する。
-2. `target-set policy` のHGBを再学習し、`pred_*_profit_barrier_hit_240m_prob` / `720m_prob` をprofit barrier columnに使ったvalidation sweepを比較する。
-3. 次のblindを見る前に、cost-aware評価を主目的にした候補選定基準を再固定する。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
-4. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
+1. 次のblindを見る前に、24h profit barrier probability threshold `0.2` を含む候補を再固定するか、exit timing targetをもう一段改善してから固定するかを決める。
+2. cost-aware評価を主目的にした候補選定基準を再固定する。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
+3. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
+4. time-limited barrier probabilityは採用保留にし、exit regret / EV overestimate を直接下げるtargetを優先する。
 5. PnL, trade count, side/session loss, short share, smoothed barrier miss, cost-aware成績を同時に満たす候補を固定する。
 6. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
 7. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
@@ -169,6 +169,8 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 
 2026-06-28 12:58 JST 更新: 時間別profit barrier targetを追加した。`long/short_profit_barrier_hit_60m/240m/720m` は既存policyのprofit barrier columnに差し替え可能。2025-01 smokeでは60m targetは正例が少なすぎるためまず診断扱い、240m/720m targetを次のvalidation sweep候補にする。詳細は `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`。
 
+2026-06-28 13:53 JST 更新: 主dataset `data/processed/datasets/xauusd_m1_p1_l1p2/` を時間別profit barrier target込みで 2023-01 から 2025-07 まで再生成し、policy HGBを再学習した。`target-set policy` に固定horizon回帰targetが不足していたため、`EXIT_FIXED_HORIZON_TARGETS` を追加した。240m/720m probabilityをprofit barrier columnに使ったvalidation sweepではeligible候補は残ったが、topはthreshold `0.0` のまま。fine thresholdでも 240m `0.02` / 720m `0.1` が少数残るだけで、24h probability threshold `0.2` のcost min pnl `27.2158` を超えなかった。time-limited barrier probabilityはhard gateへ昇格せず、診断・tie-breakに留める。詳細は `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`。
+
 ## 直近の実験
 
 - `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
@@ -186,8 +188,14 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`
 - `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`
 - `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`
+- `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
+- `experiments/20260628_040828_policy_timebarrier_p1_l1p2/`
+- `data/reports/backtests/20260628_timebarrier_candidate_selection_summary.csv`
+- `data/reports/backtests/20260628_timebarrier_fine_candidate_selection_summary.csv`
+- `data/reports/backtests/20260628_045220_barrier240_fine_candidate_selection/`
+- `data/reports/backtests/20260628_045221_barrier720_fine_candidate_selection/`
 - `experiments/20260628_035801_exit_target_smoke/`
 - `data/reports/backtests/20260628_034513_model_candidate_selection/`
 - `data/reports/backtests/20260628_124813_diagnostic_gate_threshold_comparison.csv`
