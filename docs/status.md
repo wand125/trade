@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 05:09 JST
+最終更新: 2026-06-29 05:18 JST
 
 ## 現在の状態
 
@@ -172,6 +172,8 @@ stress-aware rankingとして `model-candidate-selection --candidate-rank-mode s
 
 exit event minutesのlog targetを追加済み。`long_exit_event_log_minutes` / `short_exit_event_log_minutes` を学習し、予測時に `pred_long_exit_event_minutes_from_log` / `pred_short_exit_event_minutes_from_log` として `0..1440` 分へ戻す。小型MLP smokeではlog targetのR2は負でモデル候補にはならないが、raw minutes回帰の負値・異常大値をpolicy holdingへ直結しない配線は確認できた。2025-04 backtest smokeは base `-28.4370`, high cost `-57.1444` でNoTrade未満。詳細は `docs/reports/00097_2026-06-29_log_exit_event_minutes_target.md`。
 
+exit time-bin classifier由来のholding派生列を追加済み。`pred_*_exit_event_time_bin_minutes` はclass labelをbin上限分へ、`pred_*_exit_event_time_bin_expected_minutes` はclass probabilityの期待分へ変換する。小型HGB smokeでは2025-04のtime-bin分類balanced accuracyがlong `0.2765`, short `0.2439` と弱くモデル候補にはしないが、time-bin expected holdingを `timed_ev` に渡す配線は確認できた。詳細は `docs/reports/00098_2026-06-29_exit_time_bin_holding_columns.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -200,7 +202,7 @@ exit event minutesのlog targetを追加済み。`long_exit_event_log_minutes` /
 5. exit-event datasetとlog exit minutes targetを複数foldへ拡張し、候補固定後に複数blind月へ適用する。
 6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。profit barrierは全体平均ではなくside別・bucket別actual hit rateとsupportを必ず確認する。
 7. exit-event probability penalty、holding shrink単独、両者の小grid、dynamic / hazard-like exit threshold、side-confidence hard/min gateはいずれも標準採用しない。探索軸として残す。
-8. exit timingは連続minutes回帰だけに依存せず、bin分類とhazard/event probability targetを追加して比較する。
+8. exit timingは連続minutes回帰だけに依存せず、log-derived / time-bin upper / time-bin expected / hazard-event probabilityを同じ複数fold gridで比較する。
 9. `target-set side_confidence` との同一月比較は完了。専用化だけでは改善せず、`month_target` もvalidationを壊したため、side-confidence hard/min gate探索は止めてOOF calibration/diagnosticへ戻す。
 10. side-confidence penalty tuningは、calibration改善後にviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。shared representationを持つMLP/TCNを試す場合は、HGBのtarget独立fitでは得られない表現共有が本当に効くかを検証点にする。
 11. diagnostic gate、group-loss penalty、diagnostic soft penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。diagnostic soft penaltyの今回topは2024-12で悪化したため、標準policyへ昇格しない。
@@ -238,7 +240,7 @@ exit event minutesのlog targetを追加済み。`long_exit_event_log_minutes` /
 43. high-stress validation selectionでも固定holdout stressへ外挿できなかった。holdout結果を直接最適化せず、validation fold内で cost scenario合計、drawdown max、group損失、EV overestimateを含むstress-aware rankingを定義し、未使用holdout月で確認する。
 44. `stress_score` rankingは実装済みだが、既存holdout stressでは全候補に負けcaseが残る。既存holdoutに合わせたweight調整はpost-hocになるため、次は2025-04以降の `xauusd_m1_p1_l1p2_policy_combined` datasetと同一HGB+MLP+component predictionを生成して未使用holdoutで確認する。
 45. 2025-04未使用holdoutでは、MLP exit minutesが負方向へ外挿破綻して高回転化した。HGB holding fallbackでもNoTradeに負けるため、exit timing targetとentry/side EVの両方に月外汎化問題がある。
-46. `timed_ev` holding guardとlog exit minutes targetは実装済み。2025-04ではlog派生holdingの小型smokeもNoTradeには届かないため、連続minutes回帰だけに寄せず、次はbin分類とhazard/event probability型へ分解して比較する。
+46. `timed_ev` holding guard、log exit minutes target、time-bin由来holding列は実装済み。2025-04の小型smokeは採用候補にせず、次は複数foldでlog/bin/hazardを同じgridに並べる。
 
 ## 未決定事項
 
@@ -249,6 +251,8 @@ exit event minutesのlog targetを追加済み。`long_exit_event_log_minutes` /
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 05:18 JST 更新: `long_exit_event_time_bin` / `short_exit_event_time_bin` classifier出力から、`pred_*_exit_event_time_bin_minutes` と `pred_*_exit_event_time_bin_expected_minutes` を生成するようにした。2025-04小型HGB smokeではtime-bin分類balanced accuracyがlong `0.2765`, short `0.2439` と弱く、単月のbase/high costは採用根拠にしない。次は複数foldでlog-derived / time-bin upper / time-bin expected / hazard-event probabilityを同じgridで比較する。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の `日時` を基準にする。
 
 2026-06-29 05:09 JST 更新: exit event minutesに `log1p(minutes)` targetを追加し、prediction artifactに `0..1440` 分へclip済みの `pred_*_exit_event_minutes_from_log` を保存するようにした。小型MLP smokeではlog targetのR2は負で採用候補ではないが、raw minutes回帰の負値・異常大値をpolicy holdingへ直結しない配線は確認できた。2025-04 backtest smokeは base `-28.4370`, high cost `-57.1444` でNoTrade未満。次は複数fold validationへ戻し、bin分類とhazard/event probability targetを比較する。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の `日時` を基準にする。
 

@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 05:18 Exit time bin holding columns
+
+- 既存の `long_exit_event_time_bin` / `short_exit_event_time_bin` classifier出力から、`timed_ev` に渡せるholding派生列を追加した。
+- `pred_*_exit_event_time_bin_minutes` は予測classをbin上限 `[15,60,240,720,1440,1440]` 分へ変換する。
+- `pred_*_exit_event_time_bin_expected_minutes` はclass probabilityと代表値 `[7.5,37.5,150,480,1080,1440]` の期待値で作る。
+- 2025-01 train、2025-02 validation、2025-04 testの小型HGB smokeでは、time-bin分類指標は弱い。2025-04 testのbalanced accuracyはlong `0.2765`, short `0.2439`。
+- ただし派生列は保存でき、time-bin expected holdingでbacktestへ接続できた。2025-04 smokeは base `32.6798`, high cost `13.4170`。
+- 同じHGB smoke内のlog-derived holdingも同じtrade集合になったため、今回の数字を採用根拠にしない。holding cap `480` で差が消えている可能性がある。
+- 判断: bin分類由来holding列は採用するが、モデル候補ではなく表現・接続基盤として扱う。次は複数foldでlog/bin/hazardを同じgrid比較する。
+- report: `docs/reports/00098_2026-06-29_exit_time_bin_holding_columns.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 05:09 Log exit event minutes target
 
 - `long_exit_event_log_minutes` / `short_exit_event_log_minutes` をdataset targetへ追加し、`policy` / `full` regression target setにも入れた。

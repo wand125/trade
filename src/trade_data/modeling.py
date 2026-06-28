@@ -57,6 +57,8 @@ PROFIT_BARRIER_HORIZON_TARGETS = [
     for side in ["long", "short"]
 ]
 EXIT_EVENT_MAX_HOLD_MINUTES = 24.0 * 60.0
+EXIT_EVENT_TIME_BIN_UPPER_MINUTES = np.array([15.0, 60.0, 240.0, 720.0, 1440.0, 1440.0])
+EXIT_EVENT_TIME_BIN_REPRESENTATIVE_MINUTES = np.array([7.5, 37.5, 150.0, 480.0, 1080.0, 1440.0])
 
 REGRESSION_TARGETS = [
     *EV_TARGETS,
@@ -734,6 +736,54 @@ def classifier_probability_predictions(
     return predictions
 
 
+def time_bin_label_to_minutes(values: np.ndarray) -> np.ndarray:
+    labels = np.asarray(values, dtype="float64")
+    minutes = np.full(labels.shape, np.nan, dtype="float64")
+    finite_mask = np.isfinite(labels)
+    finite_positions = np.flatnonzero(finite_mask)
+    finite_labels = labels[finite_mask].astype(int)
+    valid_label_mask = (
+        (finite_labels >= 0)
+        & (finite_labels < len(EXIT_EVENT_TIME_BIN_UPPER_MINUTES))
+        & (finite_labels == labels[finite_mask])
+    )
+    minutes[finite_positions[valid_label_mask]] = EXIT_EVENT_TIME_BIN_UPPER_MINUTES[
+        finite_labels[valid_label_mask]
+    ]
+    return minutes
+
+
+def time_bin_probability_expected_minutes(
+    predictions: dict[str, np.ndarray],
+    target: str,
+    row_count: int,
+) -> np.ndarray | None:
+    probability_columns = [
+        f"{target}_prob_{index}"
+        for index in range(len(EXIT_EVENT_TIME_BIN_REPRESENTATIVE_MINUTES))
+    ]
+    if not any(column in predictions for column in probability_columns):
+        return None
+    probabilities = np.column_stack(
+        [
+            np.asarray(predictions[column], dtype="float64")
+            if column in predictions
+            else np.zeros(row_count, dtype="float64")
+            for column in probability_columns
+        ]
+    )
+    probabilities = np.where(np.isfinite(probabilities), probabilities, 0.0)
+    probabilities = np.clip(probabilities, 0.0, 1.0)
+    probability_sum = probabilities.sum(axis=1)
+    weighted_minutes = probabilities @ EXIT_EVENT_TIME_BIN_REPRESENTATIVE_MINUTES
+    return np.divide(
+        weighted_minutes,
+        probability_sum,
+        out=np.full(row_count, np.nan, dtype="float64"),
+        where=probability_sum > 0,
+    )
+
+
 def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd.DataFrame:
     columns = [
         "decision_timestamp",
@@ -785,6 +835,18 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
             output[f"pred_{side}_exit_event_minutes_from_log"] = np.expm1(
                 np.clip(log_predictions, 0.0, np.log1p(EXIT_EVENT_MAX_HOLD_MINUTES))
             )
+        time_bin_target = f"{side}_exit_event_time_bin"
+        if time_bin_target in predictions:
+            output[f"pred_{side}_exit_event_time_bin_minutes"] = time_bin_label_to_minutes(
+                predictions[time_bin_target]
+            )
+        expected_minutes = time_bin_probability_expected_minutes(
+            predictions,
+            time_bin_target,
+            len(output),
+        )
+        if expected_minutes is not None:
+            output[f"pred_{side}_exit_event_time_bin_expected_minutes"] = expected_minutes
     return output
 
 

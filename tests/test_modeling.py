@@ -526,6 +526,13 @@ class ModelingTests(unittest.TestCase):
             "short_best_adjusted_pnl": [2.5, 1.5],
             "long_exit_event_log_minutes": [np.log1p(60.0), -2.0],
             "short_exit_event_log_minutes": [np.log1p(3000.0), np.log1p(15.0)],
+            "long_exit_event_time_bin": [0, 3],
+            "short_exit_event_time_bin": [5, 99],
+            "long_exit_event_time_bin_prob_0": [0.5, 0.0],
+            "long_exit_event_time_bin_prob_1": [0.5, 0.0],
+            "long_exit_event_time_bin_prob_3": [0.0, 1.0],
+            "short_exit_event_time_bin_prob_4": [0.25, 0.0],
+            "short_exit_event_time_bin_prob_5": [0.75, 1.0],
         }
 
         output = prediction_frame(df, predictions)
@@ -540,6 +547,13 @@ class ModelingTests(unittest.TestCase):
         self.assertAlmostEqual(output["pred_long_exit_event_minutes_from_log"].iloc[1], 0.0)
         self.assertAlmostEqual(output["pred_short_exit_event_minutes_from_log"].iloc[0], 1440.0)
         self.assertAlmostEqual(output["pred_short_exit_event_minutes_from_log"].iloc[1], 15.0)
+        self.assertEqual(output["pred_long_exit_event_time_bin_minutes"].tolist(), [15.0, 720.0])
+        self.assertAlmostEqual(output["pred_long_exit_event_time_bin_expected_minutes"].iloc[0], 22.5)
+        self.assertAlmostEqual(output["pred_long_exit_event_time_bin_expected_minutes"].iloc[1], 480.0)
+        self.assertAlmostEqual(output["pred_short_exit_event_time_bin_minutes"].iloc[0], 1440.0)
+        self.assertTrue(np.isnan(output["pred_short_exit_event_time_bin_minutes"].iloc[1]))
+        self.assertAlmostEqual(output["pred_short_exit_event_time_bin_expected_minutes"].iloc[0], 1350.0)
+        self.assertAlmostEqual(output["pred_short_exit_event_time_bin_expected_minutes"].iloc[1], 1440.0)
 
     def test_enrich_predictions_with_dataset_targets_adds_missing_context_columns(self):
         predictions = pd.DataFrame(
