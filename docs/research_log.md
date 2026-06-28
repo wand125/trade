@@ -1850,3 +1850,36 @@ Artifacts:
 - `mean/median/min` はshort exposureを強く落とすが、EV overestimateは大きく改善せず、long-only寄りでfold最低PnLを壊す。
 - `fixed_horizon_score_mode=max` を維持する。
 - EV過大評価対策は、horizon集約ではなくOOFで実現PnLに対するcalibration/penaltyを学習する方向へ進める。
+
+### 2026-06-28 14:26 JST Fixed Horizon OOF Calibration
+
+作業:
+
+- fixed horizon EV target用の汎用group calibrationを追加した。
+- `oof-fixed-horizon-calibration` CLIを追加し、validation月をleave-one-month-outで校正できるようにした。
+- `docs/reports` の採番が本文 `日時` の昇順であることを確認する `tests/test_docs_reports.py` を追加した。
+- regime calibration (`volatility_regime,session_regime`, shrink `0.65`) と global bias calibration (groupなし, shrink `1.0`) を比較した。
+- report: `docs/reports/00035_2026-06-28_fixed_horizon_oof_calibration.md`
+
+Artifacts:
+
+- regime calibration: `experiments/20260628_052021_fixed_horizon_oof_group_calib_p1_l1p2/`
+- regime candidate selection: `data/reports/backtests/20260628_052218_model_candidate_selection/`
+- global bias calibration: `experiments/20260628_052305_fixed_horizon_oof_global_bias_p1_l1p2/`
+- global strict selection: `data/reports/backtests/20260628_052436_model_candidate_selection/`
+- global relaxed diagnostic selection: `data/reports/backtests/20260628_052503_model_candidate_selection/`
+
+結果:
+
+| variant | strict eligible | top cost min pnl | min trades | forced exit max | smoothed miss max | EV overestimate max |
+|---|---:|---:|---:|---:|---:|---:|
+| raw fixed horizon | 7 | `27.2158` | 47 | `0.000000` | `0.454545` | `15.692745` |
+| regime calibration | 0 | `9.3470` | 3 | `0.000000` | `0.666667` | `20.238968` |
+| global bias calibration | 0 | `38.0184` | 76 | `0.057471` | `0.617978` | `15.713636` |
+
+判断:
+
+- regime別fixed horizon calibrationは採用しない。
+- global bias calibrationはtarget biasを下げるが、trade selection後のEV overestimateを下げないため採用保留。
+- strict gateを緩めるとglobal bias候補は3件残るが、profit-barrier missとforced exitを悪化させているため、採用ではなく診断扱い。
+- 次はtrade selection後の実現PnL penalty、profit-barrier missを直接下げるexit target、hazard/survival型exit timing targetへ進む。

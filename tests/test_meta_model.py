@@ -6,14 +6,18 @@ import pandas as pd
 from trade_data.meta_model import (
     GroupEVCalibrationConfig,
     MetaModelConfig,
+    add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
     available_feature_columns,
     build_training_frame,
     build_sample_weights,
     combine_fit_predictions,
+    fit_group_target_calibrator,
     fit_group_ev_calibrator,
     filter_months,
+    fixed_horizon_target_specs,
+    parse_csv_ints,
     parse_csv_months,
     parse_csv_strings,
     side_target_means,
@@ -28,6 +32,10 @@ def prediction_frame():
             "short_best_adjusted_pnl": [3.0, 4.0, 15.0],
             "pred_long_best_adjusted_pnl": [9.0, 18.0, 6.0],
             "pred_short_best_adjusted_pnl": [4.0, 5.0, 14.0],
+            "long_fixed_60m_adjusted_pnl": [1.0, 3.0, 9.0],
+            "short_fixed_60m_adjusted_pnl": [8.0, 4.0, 2.0],
+            "pred_long_fixed_60m_adjusted_pnl": [11.0, 13.0, 19.0],
+            "pred_short_fixed_60m_adjusted_pnl": [18.0, 14.0, 12.0],
             "pred_long_max_adverse_pnl": [-2.0, -3.0, -1.0],
             "pred_short_max_adverse_pnl": [-1.0, -2.0, -4.0],
             "pred_long_best_holding_minutes": [30.0, 60.0, 45.0],
@@ -64,6 +72,13 @@ class MetaModelTests(unittest.TestCase):
     def test_parse_csv_strings_allows_empty(self):
         self.assertEqual(parse_csv_strings("session_regime,volatility_regime"), ["session_regime", "volatility_regime"])
         self.assertEqual(parse_csv_strings(""), [])
+
+    def test_parse_csv_ints_allows_empty_and_rejects_text(self):
+        self.assertEqual(parse_csv_ints("60, 240,720"), [60, 240, 720])
+        self.assertEqual(parse_csv_ints(""), [])
+
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_csv_ints("60m")
 
     def test_filter_months_uses_dataset_month(self):
         df = pd.DataFrame(
@@ -205,6 +220,22 @@ class MetaModelTests(unittest.TestCase):
 
         side_mean = df["long_best_adjusted_pnl"].mean()
         self.assertTrue((output["pred_regime_calibrated_long_best_adjusted_pnl"] == side_mean).all())
+
+    def test_fixed_horizon_group_calibration_adds_regime_adjusted_columns(self):
+        df = prediction_frame()
+        config = GroupEVCalibrationConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            prediction_shrinkage=0.0,
+        )
+        specs = fixed_horizon_target_specs((60,))
+
+        calibrator = fit_group_target_calibrator(df, config, specs)
+        output = add_group_calibrated_fixed_horizon_columns(df, calibrator)
+
+        self.assertEqual(output["pred_regime_calibrated_long_fixed_60m_adjusted_pnl"].tolist(), [2.0, 2.0, 9.0])
+        self.assertEqual(output["pred_regime_calibrated_short_fixed_60m_adjusted_pnl"].tolist(), [6.0, 6.0, 2.0])
 
 
 if __name__ == "__main__":
