@@ -4618,6 +4618,146 @@ def read_holdout_run_frames(paths: list[Path]) -> list[pd.DataFrame]:
     return [read_holdout_run_frame(path) for path in expand_holdout_run_paths(paths)]
 
 
+def expand_model_trade_exposure_run_paths(paths: list[Path]) -> list[Path]:
+    expanded: list[Path] = []
+    for path in paths:
+        if path.is_dir() and not (path / "trades.csv").exists():
+            children = [
+                child
+                for child in sorted(path.iterdir())
+                if child.is_dir()
+                and (child / "config.json").exists()
+                and (child / "trades.csv").exists()
+            ]
+            if children:
+                expanded.extend(children)
+                continue
+        expanded.append(path)
+    return expanded
+
+
+def month_label_from_run_config(config: dict[str, object], run_dir: Path) -> str:
+    backtest_config = config.get("backtest_config", {})
+    if isinstance(backtest_config, dict):
+        evaluation_start = backtest_config.get("evaluation_start")
+        if evaluation_start:
+            return pd.Timestamp(evaluation_start).strftime("%Y-%m")
+    suffix = run_dir.name[-7:]
+    if len(suffix) == 7 and suffix[4] == "-":
+        return suffix
+    return run_dir.name
+
+
+def read_model_trade_exposure_frame(
+    path: Path,
+    long_column: str = "",
+    short_column: str = "",
+) -> pd.DataFrame:
+    run_dir = path if path.is_dir() else path.parent
+    trades_path = path if path.name == "trades.csv" else run_dir / "trades.csv"
+    config_path = run_dir / "config.json"
+    if not trades_path.exists():
+        raise FileNotFoundError(f"trades.csv not found: {trades_path}")
+    if not config_path.exists():
+        raise FileNotFoundError(f"model-policy config not found: {config_path}")
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    model_policy_config = config.get("model_policy_config")
+    if not isinstance(model_policy_config, dict):
+        raise ValueError(f"run has no model_policy_config: {run_dir}")
+    predictions_value = model_policy_config.get("predictions")
+    if not predictions_value:
+        raise ValueError(f"run has no model_policy_config.predictions: {run_dir}")
+    predictions_path = Path(str(predictions_value))
+    selected_long_column = long_column or str(
+        model_policy_config.get("long_column", "pred_long_best_adjusted_pnl")
+    )
+    selected_short_column = short_column or str(
+        model_policy_config.get("short_column", "pred_short_best_adjusted_pnl")
+    )
+
+    trades = read_trades_csv(trades_path)
+    predictions = read_analysis_predictions(
+        predictions_path,
+        selected_long_column,
+        selected_short_column,
+    )
+    enriched = enrich_trades_with_predictions(trades, predictions)
+    enriched.insert(0, "month", month_label_from_run_config(config, run_dir))
+    enriched.insert(1, "run_dir", str(run_dir))
+    enriched.insert(2, "predictions_path", str(predictions_path))
+    return enriched
+
+
+def read_model_trade_exposure_frames(
+    paths: list[Path],
+    long_column: str = "",
+    short_column: str = "",
+) -> list[pd.DataFrame]:
+    return [
+        read_model_trade_exposure_frame(path, long_column, short_column)
+        for path in expand_model_trade_exposure_run_paths(paths)
+    ]
+
+
+def trade_exposure_group_summary(
+    frame: pd.DataFrame,
+    group_columns: list[str],
+) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame(columns=group_columns)
+    missing = sorted(set(group_columns) - set(frame.columns))
+    if missing:
+        raise ValueError(f"trade exposure frame missing columns: {', '.join(missing)}")
+    working = frame.copy()
+    working["_wins"] = numeric_indicator(working["is_win"])
+    working["_longs"] = numeric_indicator(working["is_long"])
+    working["_shorts"] = numeric_indicator(working["is_short"])
+    working["_forced"] = numeric_indicator(working["is_forced_exit"])
+    working["_direction_errors"] = numeric_indicator(working["direction_error"])
+    working["_no_edge"] = numeric_indicator(working["no_edge_entry"])
+    working["_pred_side_errors"] = numeric_indicator(working["predicted_side_error"])
+
+    summary = (
+        working.groupby(group_columns, dropna=False, observed=True)
+        .agg(
+            trade_count=("adjusted_pnl", "size"),
+            total_adjusted_pnl=("adjusted_pnl", "sum"),
+            avg_adjusted_pnl=("adjusted_pnl", "mean"),
+            win_rate=("_wins", "mean"),
+            long_trade_count=("_longs", "sum"),
+            short_trade_count=("_shorts", "sum"),
+            forced_exit_count=("_forced", "sum"),
+            direction_error_rate=("_direction_errors", "mean"),
+            no_edge_rate=("_no_edge", "mean"),
+            predicted_side_error_rate=("_pred_side_errors", "mean"),
+            exit_regret_mean=("exit_regret", "mean"),
+            ev_overestimate_vs_realized_mean=("ev_overestimate_vs_realized", "mean"),
+        )
+        .reset_index()
+    )
+    if "month" in group_columns:
+        month_totals = (
+            working.groupby("month", dropna=False, observed=True)
+            .agg(
+                month_trade_count=("adjusted_pnl", "size"),
+                month_total_adjusted_pnl=("adjusted_pnl", "sum"),
+            )
+            .reset_index()
+        )
+        summary = summary.merge(month_totals, on="month", how="left")
+        month_trade_count = summary["month_trade_count"].replace(0, np.nan)
+        month_pnl = summary["month_total_adjusted_pnl"].replace(0, np.nan)
+        summary["trade_share"] = summary["trade_count"] / month_trade_count
+        summary["pnl_share"] = summary["total_adjusted_pnl"] / month_pnl
+    sort_columns = ["total_adjusted_pnl", "trade_count"]
+    ascending = [True, False]
+    if "month" in group_columns:
+        sort_columns = ["month", *sort_columns]
+        ascending = [True, *ascending]
+    return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
+
+
 def holdout_case_ids(frame: pd.DataFrame) -> pd.Series:
     period = frame["period_start"].astype(str).str.slice(0, 10)
     spread = frame.get("spread_points", pd.Series(0.0, index=frame.index)).astype(str)
@@ -5274,6 +5414,91 @@ def handle_model_holdout_audit(args: argparse.Namespace) -> int:
     ]
     existing_display_columns = [column for column in display_columns if column in summary.columns]
     print(summary.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def handle_model_trade_exposure(args: argparse.Namespace) -> int:
+    run_paths = parse_csv_paths(args.runs)
+    expanded_run_paths = expand_model_trade_exposure_run_paths(run_paths)
+    exposure_frames = read_model_trade_exposure_frames(
+        run_paths,
+        args.long_column,
+        args.short_column,
+    )
+    enriched = pd.concat(exposure_frames, ignore_index=True) if exposure_frames else pd.DataFrame()
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    enriched.to_csv(run_dir / "enriched_trades.csv", index=False)
+    if enriched.empty:
+        metadata = {
+            "runs": [str(path) for path in run_paths],
+            "expanded_runs": [str(path) for path in expanded_run_paths],
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "label": args.label,
+            "top_n": args.top_n,
+        }
+        with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+            json.dump(metadata, handle, ensure_ascii=False, indent=2)
+        print("no trades to summarize")
+        print(f"artifacts: {run_dir}")
+        return 0
+
+    group_specs = {
+        "month": ["month"],
+        "direction": ["month", "direction"],
+        "combined_regime": ["month", "combined_regime"],
+        "direction_combined_regime": ["month", "direction", "combined_regime"],
+        "session_regime": ["month", "session_regime"],
+        "direction_session_regime": ["month", "direction", "session_regime"],
+        "volatility_regime": ["month", "volatility_regime"],
+        "direction_volatility_regime": ["month", "direction", "volatility_regime"],
+    }
+    summaries: dict[str, pd.DataFrame] = {}
+    for name, group_columns in group_specs.items():
+        summary = trade_exposure_group_summary(enriched, group_columns)
+        summaries[name] = summary
+        summary.to_csv(run_dir / f"group_by_{name}.csv", index=False)
+
+    metadata = {
+        "runs": [str(path) for path in run_paths],
+        "expanded_runs": [str(path) for path in expanded_run_paths],
+        "long_column": args.long_column,
+        "short_column": args.short_column,
+        "label": args.label,
+        "top_n": args.top_n,
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2)
+
+    month_summary = summaries["month"]
+    display_columns = [
+        "month",
+        "trade_count",
+        "total_adjusted_pnl",
+        "avg_adjusted_pnl",
+        "win_rate",
+        "forced_exit_count",
+        "direction_error_rate",
+        "no_edge_rate",
+        "ev_overestimate_vs_realized_mean",
+    ]
+    print("month exposure:")
+    print(month_summary.loc[:, display_columns].to_string(index=False))
+    print("worst direction x combined regime:")
+    worst = summaries["direction_combined_regime"].groupby("month", group_keys=False).head(args.top_n)
+    worst_columns = [
+        "month",
+        "direction",
+        "combined_regime",
+        "trade_count",
+        "total_adjusted_pnl",
+        "avg_adjusted_pnl",
+        "win_rate",
+        "trade_share",
+    ]
+    print(worst.loc[:, worst_columns].to_string(index=False))
     print(f"artifacts: {run_dir}")
     return 0
 
@@ -5959,6 +6184,34 @@ def build_parser() -> argparse.ArgumentParser:
     model_holdout_audit.add_argument("--min-adjusted-pnl-per-case", type=float, default=0.0)
     model_holdout_audit.add_argument("--top-n", type=int, default=10)
     model_holdout_audit.set_defaults(func=handle_model_holdout_audit)
+
+    model_trade_exposure = subparsers.add_parser(
+        "model-trade-exposure",
+        help="aggregate model-policy trade exposure by month, side, and market regime",
+    )
+    model_trade_exposure.add_argument(
+        "--runs",
+        required=True,
+        help="comma-separated model-policy run dirs, trades.csv files, or parent dirs containing runs",
+    )
+    model_trade_exposure.add_argument(
+        "--long-column",
+        default="",
+        help="optional prediction column override; defaults to each run config long_column",
+    )
+    model_trade_exposure.add_argument(
+        "--short-column",
+        default="",
+        help="optional prediction column override; defaults to each run config short_column",
+    )
+    model_trade_exposure.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_trade_exposure.add_argument("--label", default="model_trade_exposure")
+    model_trade_exposure.add_argument("--top-n", type=int, default=3)
+    model_trade_exposure.set_defaults(func=handle_model_trade_exposure)
 
     analyze_trades = subparsers.add_parser(
         "analyze-trades",

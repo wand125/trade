@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -20,6 +21,7 @@ from trade_data.backtest import (
     profit_barrier_calibration_diagnostics,
     profit_barrier_diagnostics,
     read_holdout_run_frame,
+    read_model_trade_exposure_frame,
     run_backtest,
     run_model_policy,
     summarize_holdout_audit,
@@ -28,6 +30,7 @@ from trade_data.backtest import (
     summarize_trades,
     summarize_sweep_frames,
     trade_analysis_summary,
+    trade_exposure_group_summary,
     trade_failure_flags,
     trade_group_summary,
     trades_to_frame,
@@ -2773,6 +2776,94 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(set(grouped["direction"]), {"long", "short"})
         regime_grouped = trade_group_summary(enriched, "trend_regime")
         self.assertEqual(set(regime_grouped["trend_regime"]), {"up", "down"})
+
+    def test_model_trade_exposure_reads_run_config_and_groups_regime_exposure(self):
+        timestamps = pd.date_range("2024-12-01 00:00:00+00:00", periods=5, freq="min")
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "short"],
+                "entry_timestamp": [timestamps[1], timestamps[2]],
+                "exit_timestamp": [timestamps[3], timestamps[4]],
+                "entry_price": [100.0, 105.0],
+                "exit_price": [102.0, 107.0],
+                "raw_pnl": [2.0, -2.0],
+                "adjusted_pnl": [2.0, -2.4],
+                "holding_minutes": [2.0, 2.0],
+                "exit_reason": ["signal_close", "signal_close"],
+                "entry_decision_timestamp": [timestamps[0], timestamps[1]],
+                "exit_decision_timestamp": [timestamps[2], timestamps[3]],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": [timestamps[0], timestamps[1]],
+                "dataset_month": ["2024-12", "2024-12"],
+                "trend_regime": ["up", "down"],
+                "volatility_regime": ["low_vol", "low_vol"],
+                "session_regime": ["london", "asia"],
+                "gap_regime": ["normal_gap", "normal_gap"],
+                "combined_regime": ["up_low_vol", "down_low_vol"],
+                "long_best_adjusted_pnl": [10.0, 1.0],
+                "short_best_adjusted_pnl": [2.0, 8.0],
+                "long_best_holding_minutes": [5.0, 4.0],
+                "short_best_holding_minutes": [6.0, 3.0],
+                "long_max_adverse_pnl": [-1.0, -2.0],
+                "short_max_adverse_pnl": [-2.0, -3.0],
+                "long_profit_barrier_hit": [1, 0],
+                "short_profit_barrier_hit": [0, 1],
+                "long_wait_regret": [0.0, 1.0],
+                "short_wait_regret": [2.0, 0.0],
+                "long_entry_local_rank": [0.9, 0.2],
+                "short_entry_local_rank": [0.1, 0.8],
+                "pred_long_best_adjusted_pnl": [12.0, 2.0],
+                "pred_short_best_adjusted_pnl": [2.0, 10.0],
+                "pred_long_best_holding_minutes": [4.0, 4.0],
+                "pred_short_best_holding_minutes": [6.0, 3.0],
+                "pred_long_max_adverse_pnl": [-1.0, -2.0],
+                "pred_short_max_adverse_pnl": [-2.0, -3.0],
+                "pred_long_wait_regret": [0.0, 2.0],
+                "pred_short_wait_regret": [1.0, 0.0],
+                "pred_long_entry_local_rank": [0.9, 0.2],
+                "pred_short_entry_local_rank": [0.3, 0.8],
+                "pred_long_profit_barrier_hit": [1, 0],
+                "pred_short_profit_barrier_hit": [0, 1],
+            }
+        )
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            predictions_path = root / "predictions.parquet"
+            predictions.to_parquet(predictions_path)
+            run_dir = root / "run_2024-12"
+            run_dir.mkdir()
+            trades.to_csv(run_dir / "trades.csv", index=False)
+            (run_dir / "config.json").write_text(
+                json.dumps(
+                    {
+                        "backtest_config": {
+                            "evaluation_start": "2024-12-01T00:00:00+00:00"
+                        },
+                        "model_policy_config": {
+                            "predictions": str(predictions_path),
+                            "long_column": "pred_long_best_adjusted_pnl",
+                            "short_column": "pred_short_best_adjusted_pnl",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            enriched = read_model_trade_exposure_frame(run_dir)
+            grouped = trade_exposure_group_summary(
+                enriched,
+                ["month", "direction", "combined_regime"],
+            )
+
+        self.assertEqual(enriched["month"].unique().tolist(), ["2024-12"])
+        short_row = grouped[grouped["direction"] == "short"].iloc[0]
+        self.assertEqual(short_row["combined_regime"], "down_low_vol")
+        self.assertAlmostEqual(short_row["total_adjusted_pnl"], -2.4)
+        self.assertAlmostEqual(short_row["trade_share"], 0.5)
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")

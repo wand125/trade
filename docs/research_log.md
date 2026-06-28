@@ -4072,3 +4072,35 @@ Artifacts:
 - `quality>=5` は単月post-hocで、validation/2025-02を壊すため採用しない。
 - `quality>=8` 以上は月10trades条件を満たさず、実質NoTradeなので採用しない。
 - 次はquality hard gateではなく、side/entry calibration、short exposure concentration、direction/session別risk検知、component列のmulti-feature stackingへ戻る。
+
+### 2026-06-29 07:29 JST Trade exposure failure profile
+
+作業:
+
+- `model-trade-exposure` を追加し、複数の `model-policy` runから `config.json` の予測parquetと `trades.csv` を結合できるようにした。
+- `down5,up10` のbase runを、validation 4か月と既存holdout 3か月で同じ露出軸に集計した。
+- 2024-12で悪化した `long:london` / `short:asia` をblockまたはEV penaltyにする後付け診断も実施した。
+- report: `docs/reports/00110_2026-06-29_trade_exposure_failure_profile.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- base exposure: `data/reports/backtests/20260628_222618_down5_up10_trade_exposure/`
+- block exposure: `data/reports/backtests/20260628_222813_down5_up10_block_long_london_short_asia_exposure/`
+- penalty exposure: `data/reports/backtests/20260628_222923_down5_up10_penalty_long_london_short_asia5_exposure/`
+- variant split summary: `data/reports/backtests/20260629_down5_up10_local_exposure_variant_split_summary.csv`
+
+結果:
+
+| variant | validation sum | validation min | holdout sum | holdout min | note |
+|---|---:|---:|---:|---:|---|
+| base | `622.6486` | `138.0338` | `242.5008` | `-20.8252` | 現行基準 |
+| block `long:london`, `short:asia` | `499.9724` | `110.9922` | `261.6722` | `-39.0314` | 2024-12を悪化 |
+| penalty5 `long:london`, `short:asia` | `401.9836` | `40.1824` | `243.5110` | `13.2610` | 2024-12は救うがvalidationを壊す |
+
+判断:
+
+- `model-trade-exposure` は固定候補の失敗局所化に使える。
+- 2024-12失敗は月全体のregime mixではなく、選択tradeのside / session / low-vol露出とEV過大評価に出る。
+- 単純なsession/regime blockは、ポジション空きで別entryが入り実backtestを悪化させうる。採用しない。
+- 次はhard ruleではなく、side confidence / EV calibration / exit timing targetの教師・特徴側へ戻す。

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 07:16 JST
+最終更新: 2026-06-29 07:29 JST
 
 ## 現在の状態
 
@@ -25,6 +25,8 @@ entry timingのsupport-aware calibrationを追加済み。`entry-timing-calibrat
 候補選定のleave-one-fold-out診断を追加済み。`model-candidate-selection-jackknife` は保存済みselection `config.json` を読み、各validation月を1つ抜いて候補を再選定し、抜いた月のbase/costで評価する。`00107` のw0/w1 selectionでは4fold全てholdout pass、3/4foldでfull top一致。2024-11を抜いたときだけ `down5,range5` に変わったが、抜いた2024-11でもcost min `86.0172` で通過した。詳細は `docs/reports/00108_2026-06-29_candidate_selection_jackknife.md`。
 
 jackknife選定候補を既存holdout stressへ固定監査済み。`model-holdout-audit` はvalidation summary側の重複candidate keyをmerge前に落とすよう修正した。jackknife候補はvalidation内では通過するが、既存holdout stressでは `down5,up10` が9case中6通過で2024-12全コスト負け、`down5,range5` は6case中2通過で合計PnLも負。したがって標準policyへは昇格しない。詳細は `docs/reports/00109_2026-06-29_jackknife_holdout_gap.md`。
+
+選択済みtrade露出の横断診断 `model-trade-exposure` を追加済み。`down5,up10` の2024-12失敗は月全体のregime mixより、選択trade上の `long:down_low_vol`, `long:up_low_vol`, `long:london`, `short:asia` とEV過大評価に出る。ただし、これらの露出はvalidationでは概ね利益寄与しており、`long:london` / `short:asia` のblockは2024-12を `-39.0314` へ悪化、penalty5は2024-12を `+13.2610` に戻すがvalidation minを `40.1824` まで壊した。採用せず、診断・教師/特徴へのフィードバックに留める。詳細は `docs/reports/00110_2026-06-29_trade_exposure_failure_profile.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

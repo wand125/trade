@@ -481,6 +481,19 @@ This reselects candidates with one validation fold removed, then evaluates the
 selected candidate on the removed fold. Treat it as a robustness diagnostic, not
 as a substitute for unseen holdout months.
 
+After fixed `model-policy` runs exist, inspect selected-trade exposure by month,
+side, and regime directly from each run's `config.json` and `trades.csv`:
+
+```bash
+python -m trade_data.backtest model-trade-exposure \
+  --runs data/reports/backtests/<model_policy_runs_parent> \
+  --label model_trade_exposure
+```
+
+This writes `enriched_trades.csv` and `group_by_*` summaries. Use it for failure
+localization and robustness diagnostics; do not promote post-hoc session/regime
+blocks without a fresh pre-registered holdout.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:
