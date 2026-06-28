@@ -2497,3 +2497,40 @@ Artifacts:
 - calibrated/lower列はvalidation内でlong-only化し、2024-11の adjusted pnl `-48.8580` によりbasic gateを満たさない。
 - raw列はvalidation上はbasic eligibleだが、2024-12で adjusted pnl `-184.9344` と大きく崩れた。
 - profit-barrier probabilityはhard gateへ昇格しない。次は `penalty * (1 - calibrated_probability_lower)` のようなEV score penalty / tie-break / uncertainty penaltyとして試す。
+
+### 2026-06-28 18:17 JST Profit Barrier EV Penalty Validation
+
+作業:
+
+- profit-barrier hard gateを外し、既存の `profit_barrier_miss_penalty * (1 - probability)` を raw / calibrated / lower probability列で比較した。
+- validation 4foldは `timed_ev`, exit-event holding minutes, `entry=5,10`, short offset `8,12`, max hold `480,720`, penalty `0,0.5,1,2,4,6,8`。
+- no-penalty最良、raw strict最良、calibrated/lower strict最良を2024-12反証月へ固定適用した。
+- report: `docs/reports/00052_2026-06-28_profit_barrier_ev_penalty_validation.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- raw sweeps: `data/reports/backtests/profit_barrier_penalty_raw/`
+- calibrated sweeps: `data/reports/backtests/profit_barrier_penalty_calibrated/`
+- lower sweeps: `data/reports/backtests/profit_barrier_penalty_lower/`
+- summary CSV: `data/reports/backtests/20260628_profit_barrier_penalty_validation_summary.csv`
+- 2024-12 raw penalty diagnostic: `data/reports/backtests/20260628_091701_model_timed_ev_2024-12/`
+- 2024-12 no-penalty reference: `data/reports/backtests/20260628_091701_model_timed_ev_2024-12_1/`
+- 2024-12 lower diagnostic: `data/reports/backtests/20260628_091701_model_timed_ev_2024-12_2/`
+- 2024-12 calibrated diagnostic: `data/reports/backtests/20260628_091701_model_timed_ev_2024-12_3/`
+
+結果:
+
+| variant | validation strict | min pnl | total pnl | 2024-12 adjusted pnl | trades | profit factor |
+|---|---|---:|---:|---:|---:|---:|
+| lower penalty `6`, max hold `480` | `true` | `52.3018` | `462.2030` | `-214.3986` | `72` | `0.4837` |
+| calibrated penalty `6`, max hold `480` | `true` | `52.3018` | `461.7346` | `-212.1886` | `72` | `0.4890` |
+| raw penalty `8`, max hold `720` | `true` | `33.5668` | `317.7776` | `-141.9282` | `56` | `0.6029` |
+| no penalty reference | `false` | `12.5636` | `287.8596` | `-227.4118` | `63` | `0.4507` |
+
+判断:
+
+- 線形profit-barrier penaltyはvalidationでは明確に改善したが、calibrated/lower topは2024-12でNoTradeに大きく負けた。
+- raw penaltyは2024-12損失を縮めたが、`-141.9282` で採用水準ではない。
+- calibrated/lowerの2024-12 selected tradesでは `0.4-0.6` bucketが actual hit `0.24` / predicted mean 約 `0.52` と強く過大評価した。
+- profit-barrier probability単独のhard gate/global linear penalty探索はいったん打ち切る。次は exit timing、time-exit probability penalty、hazard-like exit policyへ進む。
