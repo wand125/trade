@@ -2571,3 +2571,39 @@ Artifacts:
 - 2024-12では損失とdrawdownを縮めたが、NoTradeには大きく負ける。
 - direction errorとactual barrier missは依然高く、entry score penaltyだけでは方向選択やtail lossを直せない。
 - 実装は探索軸として残すが標準policyへ昇格しない。次はevent probabilityで予定保有時間を短縮するhazard-like policyへ進む。
+
+### 2026-06-28 18:40 JST Holding Shrink Validation
+
+作業:
+
+- `time_exit_holding_shrink` と `loss_first_holding_shrink` を `ModelPolicyConfig`, `model-policy`, `model-sweep` に追加した。
+- `timed_ev` / `fixed_horizon_ev` の予定保有時間に `1 - shrink * event_probability` をかける。entry scoreは落とさず、entry後の予定決済だけを早める。
+- validation 4foldで `time_exit_holding_shrink=0,0.25,0.5,0.75,1`, `loss_first_holding_shrink=0,0.25,0.5,0.75,1` を比較した。
+- validation top、top2、no-shrink reference、前回のentry penalty topを2024-12反証月へ固定適用した。
+- report: `docs/reports/00054_2026-06-28_holding_shrink_validation.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- validation sweeps: `data/reports/backtests/holding_shrink_soft/`
+- validation summary: `data/reports/backtests/20260628_holding_shrink_validation_summary.csv`
+- 2024-12 holding shrink top: `data/reports/backtests/20260628_094021_model_timed_ev_2024-12/`
+- 2024-12 holding shrink top2: `data/reports/backtests/20260628_094021_model_timed_ev_2024-12_1/`
+- 2024-12 entry penalty top: `data/reports/backtests/20260628_094021_model_timed_ev_2024-12_2/`
+- 2024-12 no-shrink reference: `data/reports/backtests/20260628_094021_model_timed_ev_2024-12_3/`
+
+結果:
+
+| policy | validation strict | min pnl | total pnl | 2024-12 adjusted pnl | trades | profit factor |
+|---|---|---:|---:|---:|---:|---:|
+| holding shrink `time=0.25`, `loss=0.75`, max hold `720` | `true` | `55.5528` | `450.7384` | `-209.0802` | `68` | `0.4728` |
+| holding shrink `time=0.75`, `loss=0.75`, max hold `480` | `true` | `53.2266` | `443.0060` | `-236.7336` | `76` | `0.4361` |
+| entry penalty `time=6`, `loss=6`, max hold `720` | `true` | `75.1682` | `531.6246` | `-172.7944` | `46` | `0.4960` |
+| no-shrink reference | `false` | `12.5636` | `287.8596` | `-227.4118` | `63` | `0.4507` |
+
+判断:
+
+- holding shrink単独でもvalidationではno-shrinkを大きく上回り、strict候補を作った。
+- 2024-12ではno-shrinkより損失を縮める候補はあるが、entry penalty topには届かずNoTradeにも大きく負ける。
+- 予定保有時間をentry時点で短縮するだけでは、悪いentryの抑制やactual barrier miss改善が弱い。
+- 実装は探索軸として残すが標準policyへ昇格しない。次はentry penaltyとの組み合わせ、または保有中にprobabilityを再評価するdynamic / hazard-like exitへ進む。

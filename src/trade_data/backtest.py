@@ -61,6 +61,8 @@ SWEEP_KEY_COLUMNS = [
     "profit_barrier_miss_penalty",
     "time_exit_penalty",
     "loss_first_penalty",
+    "time_exit_holding_shrink",
+    "loss_first_holding_shrink",
     "side_confidence_penalty",
     "side_confidence_penalty_rules",
     "side_confidence_overfit_penalty_rules",
@@ -327,6 +329,8 @@ class ModelPolicyConfig:
     profit_barrier_miss_penalty: float = 0.0
     time_exit_penalty: float = 0.0
     loss_first_penalty: float = 0.0
+    time_exit_holding_shrink: float = 0.0
+    loss_first_holding_shrink: float = 0.0
     side_confidence_penalty: float = 0.0
     side_confidence_penalty_rules: tuple[str, ...] = ()
     side_confidence_overfit_penalty_rules: tuple[str, ...] = ()
@@ -575,7 +579,7 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         config.long_time_exit_column,
         config.short_time_exit_column,
     ]
-    if config.time_exit_penalty > 0:
+    if config.time_exit_penalty > 0 or config.time_exit_holding_shrink > 0:
         required_columns.extend(time_exit_prediction_columns)
     else:
         optional_columns.extend(optional_parquet_columns(path, time_exit_prediction_columns))
@@ -583,7 +587,7 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         config.long_loss_first_column,
         config.short_loss_first_column,
     ]
-    if config.loss_first_penalty > 0:
+    if config.loss_first_penalty > 0 or config.loss_first_holding_shrink > 0:
         required_columns.extend(loss_first_prediction_columns)
     else:
         optional_columns.extend(optional_parquet_columns(path, loss_first_prediction_columns))
@@ -708,6 +712,10 @@ def model_signal_from_predictions(
         raise ValueError("time_exit_penalty must be non-negative")
     if config.loss_first_penalty < 0:
         raise ValueError("loss_first_penalty must be non-negative")
+    if not 0 <= config.time_exit_holding_shrink <= 1:
+        raise ValueError("time_exit_holding_shrink must be between 0 and 1")
+    if not 0 <= config.loss_first_holding_shrink <= 1:
+        raise ValueError("loss_first_holding_shrink must be between 0 and 1")
     if config.side_confidence_penalty < 0:
         raise ValueError("side_confidence_penalty must be non-negative")
     if not 0 <= config.min_side_confidence <= 1:
@@ -726,6 +734,10 @@ def model_signal_from_predictions(
     short_ev = aligned[config.short_column].reset_index(drop=True).astype(float)
     long_holding = None
     short_holding = None
+    long_time_exit = None
+    short_time_exit = None
+    long_loss_first = None
+    short_loss_first = None
     if config.policy == "fixed_horizon_ev":
         validate_fixed_horizon_config(config)
         long_fixed_aligned = prediction_index[list(config.long_fixed_horizon_columns)].reindex(df["timestamp"])
@@ -756,20 +768,22 @@ def model_signal_from_predictions(
         short_barrier = barrier_aligned[config.short_profit_barrier_column].reset_index(drop=True).astype(float)
         long_ev = long_ev - config.profit_barrier_miss_penalty * (1.0 - long_barrier).clip(0.0, 1.0)
         short_ev = short_ev - config.profit_barrier_miss_penalty * (1.0 - short_barrier).clip(0.0, 1.0)
-    if config.time_exit_penalty > 0:
+    if config.time_exit_penalty > 0 or config.time_exit_holding_shrink > 0:
         time_exit_aligned = prediction_index[
             [config.long_time_exit_column, config.short_time_exit_column]
         ].reindex(df["timestamp"])
         long_time_exit = time_exit_aligned[config.long_time_exit_column].reset_index(drop=True).astype(float)
         short_time_exit = time_exit_aligned[config.short_time_exit_column].reset_index(drop=True).astype(float)
+    if config.time_exit_penalty > 0:
         long_ev = long_ev - config.time_exit_penalty * long_time_exit.clip(0.0, 1.0)
         short_ev = short_ev - config.time_exit_penalty * short_time_exit.clip(0.0, 1.0)
-    if config.loss_first_penalty > 0:
+    if config.loss_first_penalty > 0 or config.loss_first_holding_shrink > 0:
         loss_first_aligned = prediction_index[
             [config.long_loss_first_column, config.short_loss_first_column]
         ].reindex(df["timestamp"])
         long_loss_first = loss_first_aligned[config.long_loss_first_column].reset_index(drop=True).astype(float)
         short_loss_first = loss_first_aligned[config.short_loss_first_column].reset_index(drop=True).astype(float)
+    if config.loss_first_penalty > 0:
         long_ev = long_ev - config.loss_first_penalty * long_loss_first.clip(0.0, 1.0)
         short_ev = short_ev - config.loss_first_penalty * short_loss_first.clip(0.0, 1.0)
     long_side_confidence = None
@@ -827,6 +841,30 @@ def model_signal_from_predictions(
         )
         long_holding = holding_aligned[config.long_holding_column].reset_index(drop=True).astype(float)
         short_holding = holding_aligned[config.short_holding_column].reset_index(drop=True).astype(float)
+    if (
+        config.policy in {"timed_ev", "fixed_horizon_ev"}
+        and long_holding is not None
+        and short_holding is not None
+        and (config.time_exit_holding_shrink > 0 or config.loss_first_holding_shrink > 0)
+    ):
+        long_holding_multiplier = pd.Series(1.0, index=long_holding.index, dtype="float64")
+        short_holding_multiplier = pd.Series(1.0, index=short_holding.index, dtype="float64")
+        if config.time_exit_holding_shrink > 0:
+            long_holding_multiplier -= (
+                config.time_exit_holding_shrink * long_time_exit.clip(0.0, 1.0)
+            )
+            short_holding_multiplier -= (
+                config.time_exit_holding_shrink * short_time_exit.clip(0.0, 1.0)
+            )
+        if config.loss_first_holding_shrink > 0:
+            long_holding_multiplier -= (
+                config.loss_first_holding_shrink * long_loss_first.clip(0.0, 1.0)
+            )
+            short_holding_multiplier -= (
+                config.loss_first_holding_shrink * short_loss_first.clip(0.0, 1.0)
+            )
+        long_holding = long_holding * long_holding_multiplier.clip(0.0, 1.0)
+        short_holding = short_holding * short_holding_multiplier.clip(0.0, 1.0)
     best_side = pd.Series(0, index=df.index, dtype="int8")
     best_score = pd.concat([long_ev, short_ev], axis=1).max(axis=1)
     side_gap = (long_ev - short_ev).abs()
@@ -2346,6 +2384,8 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         profit_barrier_miss_penalty=args.profit_barrier_miss_penalty,
         time_exit_penalty=args.time_exit_penalty,
         loss_first_penalty=args.loss_first_penalty,
+        time_exit_holding_shrink=args.time_exit_holding_shrink,
+        loss_first_holding_shrink=args.loss_first_holding_shrink,
         side_confidence_penalty=args.side_confidence_penalty,
         side_confidence_penalty_rules=parse_optional_csv_strings(args.side_confidence_penalty_rules),
         side_confidence_overfit_penalty_rules=parse_optional_csv_strings(
@@ -2612,6 +2652,18 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         help="EV penalty multiplied by side loss-first exit-event probability",
     )
     parser.add_argument(
+        "--time-exit-holding-shrink",
+        type=float,
+        default=0.0,
+        help="fractional holding-time shrink multiplied by side time-exit probability",
+    )
+    parser.add_argument(
+        "--loss-first-holding-shrink",
+        type=float,
+        default=0.0,
+        help="fractional holding-time shrink multiplied by side loss-first exit-event probability",
+    )
+    parser.add_argument(
         "--side-confidence-penalty",
         type=float,
         default=0.0,
@@ -2680,6 +2732,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     profit_barrier_miss_penalties = parse_csv_floats(args.profit_barrier_miss_penalties)
     time_exit_penalties = parse_csv_floats(args.time_exit_penalties)
     loss_first_penalties = parse_csv_floats(args.loss_first_penalties)
+    time_exit_holding_shrinks = parse_csv_floats(args.time_exit_holding_shrinks)
+    loss_first_holding_shrinks = parse_csv_floats(args.loss_first_holding_shrinks)
     side_confidence_penalties = parse_csv_floats(args.side_confidence_penalties)
     fixed_horizon_score_modes = parse_csv_strings(args.fixed_horizon_score_modes)
     unknown_fixed_horizon_score_modes = sorted(
@@ -2718,6 +2772,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         profit_barrier_miss_penalties,
         time_exit_penalties,
         loss_first_penalties,
+        time_exit_holding_shrinks,
+        loss_first_holding_shrinks,
         side_confidence_penalties,
         min_side_confidences,
         require_profit_barriers,
@@ -2738,6 +2794,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         profit_barrier_miss_penalty,
         time_exit_penalty,
         loss_first_penalty,
+        time_exit_holding_shrink,
+        loss_first_holding_shrink,
         side_confidence_penalty,
         min_side_confidence,
         require_profit_barrier,
@@ -2798,6 +2856,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     profit_barrier_miss_penalty=profit_barrier_miss_penalty,
                     time_exit_penalty=time_exit_penalty,
                     loss_first_penalty=loss_first_penalty,
+                    time_exit_holding_shrink=time_exit_holding_shrink,
+                    loss_first_holding_shrink=loss_first_holding_shrink,
                     side_confidence_penalty=side_confidence_penalty,
                     side_confidence_penalty_rules=parse_optional_csv_strings(
                         args.side_confidence_penalty_rules
@@ -2841,6 +2901,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "profit_barrier_miss_penalty": profit_barrier_miss_penalty,
                     "time_exit_penalty": time_exit_penalty,
                     "loss_first_penalty": loss_first_penalty,
+                    "time_exit_holding_shrink": time_exit_holding_shrink,
+                    "loss_first_holding_shrink": loss_first_holding_shrink,
                     "side_confidence_penalty": side_confidence_penalty,
                     "side_confidence_penalty_rules": regime_values_to_string(
                         model_policy_config.side_confidence_penalty_rules
@@ -2885,6 +2947,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "profit_barrier_miss_penalties": profit_barrier_miss_penalties,
         "time_exit_penalties": time_exit_penalties,
         "loss_first_penalties": loss_first_penalties,
+        "time_exit_holding_shrinks": time_exit_holding_shrinks,
+        "loss_first_holding_shrinks": loss_first_holding_shrinks,
         "side_confidence_penalties": side_confidence_penalties,
         "side_confidence_penalty_rules": parse_optional_csv_strings(
             args.side_confidence_penalty_rules
@@ -2949,6 +3013,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["time_exit_penalty"] = 0.0
     if "loss_first_penalty" not in output.columns:
         output["loss_first_penalty"] = 0.0
+    if "time_exit_holding_shrink" not in output.columns:
+        output["time_exit_holding_shrink"] = 0.0
+    if "loss_first_holding_shrink" not in output.columns:
+        output["loss_first_holding_shrink"] = 0.0
     if "side_confidence_penalty" not in output.columns:
         output["side_confidence_penalty"] = 0.0
     if "side_confidence_penalty_rules" not in output.columns:
@@ -3065,6 +3133,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "profit_barrier_miss_penalty",
         "time_exit_penalty",
         "loss_first_penalty",
+        "time_exit_holding_shrink",
+        "loss_first_holding_shrink",
         "max_wait_regret",
         "min_entry_rank",
         "min_trade_quality",
@@ -3961,6 +4031,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--loss-first-penalties",
         default="0",
         help="comma-separated EV penalties multiplied by side loss-first exit-event probability",
+    )
+    model_sweep.add_argument(
+        "--time-exit-holding-shrinks",
+        default="0",
+        help="comma-separated holding-time shrink factors multiplied by side time-exit probability",
+    )
+    model_sweep.add_argument(
+        "--loss-first-holding-shrinks",
+        default="0",
+        help="comma-separated holding-time shrink factors multiplied by side loss-first exit-event probability",
     )
     model_sweep.add_argument(
         "--side-confidence-penalties",
