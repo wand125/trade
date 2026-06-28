@@ -2607,3 +2607,38 @@ Artifacts:
 - 2024-12ではno-shrinkより損失を縮める候補はあるが、entry penalty topには届かずNoTradeにも大きく負ける。
 - 予定保有時間をentry時点で短縮するだけでは、悪いentryの抑制やactual barrier miss改善が弱い。
 - 実装は探索軸として残すが標準policyへ昇格しない。次はentry penaltyとの組み合わせ、または保有中にprobabilityを再評価するdynamic / hazard-like exitへ進む。
+
+### 2026-06-28 18:48 JST Entry Penalty Holding Shrink Combo
+
+作業:
+
+- entry EV penaltyとholding shrinkを同時に使う小gridをvalidation 4foldで比較した。
+- gridは `time_exit_penalty=0,3,6`, `loss_first_penalty=0,3,6`, `time_exit_holding_shrink=0,0.25,0.5`, `loss_first_holding_shrink=0,0.5,0.75`, max hold `480,720`。
+- validation top2本、entry penalty単独、no-shrink referenceを2024-12反証月へ固定適用した。
+- report: `docs/reports/00055_2026-06-28_entry_penalty_holding_shrink_combo.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- validation sweeps: `data/reports/backtests/entry_penalty_holding_shrink_combo/`
+- validation summary: `data/reports/backtests/20260628_entry_penalty_holding_shrink_combo_summary.csv`
+- 2024-12 combo top min-pnl: `data/reports/backtests/20260628_094754_model_timed_ev_2024-12/`
+- 2024-12 combo top2 holdout: `data/reports/backtests/20260628_094754_model_timed_ev_2024-12_1/`
+- 2024-12 entry penalty reference: `data/reports/backtests/20260628_094754_model_timed_ev_2024-12_2/`
+- 2024-12 no-shrink reference: `data/reports/backtests/20260628_094754_model_timed_ev_2024-12_3/`
+
+結果:
+
+| policy | validation strict | min pnl | total pnl | 2024-12 adjusted pnl | trades | profit factor |
+|---|---|---:|---:|---:|---:|---:|
+| penalty `6/6` + time shrink `0.50`, max hold `720` | `true` | `85.1886` | `493.4848` | `-173.6648` | `47` | `0.4733` |
+| penalty `6/6` + time shrink `0.25`, max hold `720` | `true` | `80.0648` | `513.3876` | `-159.0158` | `46` | `0.5211` |
+| entry penalty `6/6`, max hold `720` | `true` | `75.1682` | `531.6246` | `-172.7944` | `46` | `0.4960` |
+| no-shrink reference | `false` | `12.5636` | `287.8596` | `-227.4118` | `63` | `0.4507` |
+
+判断:
+
+- combinationはvalidation min pnlを改善したが、total pnlはentry penalty単独が上。
+- 2024-12ではcombo top2がentry penalty単独より `13.7786` 改善したが、NoTradeには大きく負ける。
+- validation topの `time shrink=0.50` は2024-12でdirection error `0.6383` と壊れた。
+- 標準policyには昇格しない。次は保有中にprobabilityを再評価するdynamic / hazard-like exit policyを実装する。
