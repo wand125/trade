@@ -2284,3 +2284,32 @@ worst groups:
 - ただし高confidence bucket `0.70-0.80` はaccuracy `0.3309` で強く壊れている。
 - side confidenceは採用gateではなく、regime-aware calibration/penaltyの材料として扱う。
 - 次はこの結果をexecutable backtestに接続する前に、より広いOOFまたは別holdoutで再現性を確認する。
+
+### 2026-06-28 17:20 JST Regime Side Confidence Penalty Smoke
+
+作業:
+
+- `--side-confidence-penalty-rules` を追加した。
+- `--side-confidence-overfit-penalty-rules` を追加した。
+- 2024-12 smokeで、前回worstだった `combined_regime=range_normal_vol` と `session_regime=london` にpenaltyをかけた。
+- report: `docs/reports/00046_2026-06-28_regime_side_confidence_penalty_smoke.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- low-confidence rule: `data/reports/backtests/20260628_081824_model_sweep_2024-12/`
+- high-confidence overfit rule: `data/reports/backtests/20260628_081949_model_sweep_2024-12/`
+
+結果:
+
+| variant | adjusted pnl | trades | profit factor | max drawdown | worst direction/session |
+|---|---:|---:|---:|---:|---|
+| prior best global confidence gate | `-109.8978` | `331` | `0.7276` | `119.9102` | `long:london` |
+| regime low-confidence penalty | `-222.3816` | `473` | `0.6309` | `233.7378` | `long:london` |
+| regime high-confidence overfit penalty | `-249.2666` | `503` | `0.6269` | `263.4316` | `long:london` |
+
+判断:
+
+- regime-aware penaltyは探索軸として実装したが、このsmokeでは採用しない。
+- 悪化の中心は引き続き `long:london` で、confidence penaltyだけではentry集合の質を改善できなかった。
+- side confidenceは、NoTradeに大きく負ける候補を救う道具ではなく、既にviableな候補のtie-break/penaltyとして検証すべき。

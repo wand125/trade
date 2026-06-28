@@ -586,6 +586,54 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(unpenalized_signal.tolist(), [1, 1])
         self.assertEqual(penalized_signal.tolist(), [-1, 1])
 
+    def test_side_confidence_penalty_rule_applies_only_matching_regime(self):
+        df = frame_with_opens([100, 101])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [18.0, 18.0],
+                "pred_best_side_prob_1": [0.6, 0.6],
+                "pred_best_side_prob_-1": [0.9, 0.9],
+                "combined_regime": ["down_normal_vol", "range_low_vol"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10.0,
+            side_margin=0.1,
+            side_confidence_penalty_rules=("combined_regime=down_normal_vol:10",),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [-1, 1])
+
+    def test_side_confidence_overfit_penalty_rule_penalizes_high_confidence_side(self):
+        df = frame_with_opens([100, 101])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [18.0, 18.0],
+                "pred_best_side_prob_1": [0.9, 0.9],
+                "pred_best_side_prob_-1": [0.2, 0.2],
+                "combined_regime": ["down_normal_vol", "range_low_vol"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10.0,
+            side_margin=0.1,
+            side_confidence_overfit_penalty_rules=("combined_regime=down_normal_vol:5",),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [-1, 1])
+
     def test_model_signal_can_filter_low_side_confidence(self):
         df = frame_with_opens([100, 101, 102])
         predictions = pd.DataFrame(

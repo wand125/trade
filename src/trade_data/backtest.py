@@ -60,6 +60,8 @@ SWEEP_KEY_COLUMNS = [
     "min_trade_quality",
     "profit_barrier_miss_penalty",
     "side_confidence_penalty",
+    "side_confidence_penalty_rules",
+    "side_confidence_overfit_penalty_rules",
     "min_side_confidence",
     "require_profit_barrier",
     "profit_barrier_threshold",
@@ -318,6 +320,8 @@ class ModelPolicyConfig:
     min_trade_quality: float = -float("inf")
     profit_barrier_miss_penalty: float = 0.0
     side_confidence_penalty: float = 0.0
+    side_confidence_penalty_rules: tuple[str, ...] = ()
+    side_confidence_overfit_penalty_rules: tuple[str, ...] = ()
     min_side_confidence: float = 0.0
     require_profit_barrier: bool = False
     profit_barrier_threshold: float = 0.5
@@ -563,7 +567,12 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         config.long_side_confidence_column,
         config.short_side_confidence_column,
     ]
-    if config.min_side_confidence > 0 or config.side_confidence_penalty > 0:
+    if (
+        config.min_side_confidence > 0
+        or config.side_confidence_penalty > 0
+        or config.side_confidence_penalty_rules
+        or config.side_confidence_overfit_penalty_rules
+    ):
         required_columns.extend(side_confidence_prediction_columns)
     else:
         optional_columns.extend(optional_parquet_columns(path, side_confidence_prediction_columns))
@@ -721,7 +730,12 @@ def model_signal_from_predictions(
         short_ev = short_ev - config.profit_barrier_miss_penalty * (1.0 - short_barrier).clip(0.0, 1.0)
     long_side_confidence = None
     short_side_confidence = None
-    if config.min_side_confidence > 0 or config.side_confidence_penalty > 0:
+    if (
+        config.min_side_confidence > 0
+        or config.side_confidence_penalty > 0
+        or config.side_confidence_penalty_rules
+        or config.side_confidence_overfit_penalty_rules
+    ):
         side_confidence_aligned = prediction_index[
             [config.long_side_confidence_column, config.short_side_confidence_column]
         ].reindex(df["timestamp"])
@@ -735,13 +749,34 @@ def model_signal_from_predictions(
             .reset_index(drop=True)
             .astype(float)
         )
-        if config.side_confidence_penalty > 0:
-            long_ev = long_ev - config.side_confidence_penalty * (
-                1.0 - long_side_confidence
-            ).clip(0.0, 1.0)
-            short_ev = short_ev - config.side_confidence_penalty * (
-                1.0 - short_side_confidence
-            ).clip(0.0, 1.0)
+        if config.side_confidence_penalty > 0 or config.side_confidence_penalty_rules:
+            side_confidence_penalty = pd.Series(
+                config.side_confidence_penalty,
+                index=df.index,
+                dtype="float64",
+            )
+            for conditions, penalty in parsed_side_confidence_penalty_rules(config):
+                condition_mask = side_rule_condition_mask(
+                    prediction_index,
+                    df["timestamp"],
+                    df.index,
+                    conditions,
+                )
+                side_confidence_penalty += np.where(condition_mask.to_numpy(), penalty, 0.0)
+            long_ev = long_ev - side_confidence_penalty * (1.0 - long_side_confidence).clip(0.0, 1.0)
+            short_ev = short_ev - side_confidence_penalty * (1.0 - short_side_confidence).clip(0.0, 1.0)
+        if config.side_confidence_overfit_penalty_rules:
+            side_confidence_overfit_penalty = pd.Series(0.0, index=df.index, dtype="float64")
+            for conditions, penalty in parsed_side_confidence_overfit_penalty_rules(config):
+                condition_mask = side_rule_condition_mask(
+                    prediction_index,
+                    df["timestamp"],
+                    df.index,
+                    conditions,
+                )
+                side_confidence_overfit_penalty += np.where(condition_mask.to_numpy(), penalty, 0.0)
+            long_ev = long_ev - side_confidence_overfit_penalty * long_side_confidence.clip(0.0, 1.0)
+            short_ev = short_ev - side_confidence_overfit_penalty * short_side_confidence.clip(0.0, 1.0)
     if config.policy == "timed_ev":
         holding_aligned = prediction_index[[config.long_holding_column, config.short_holding_column]].reindex(
             df["timestamp"]
@@ -1715,6 +1750,19 @@ def parse_side_extra_margin_rule(rule: str) -> tuple[int, tuple[tuple[str, str],
     return parse_side_name(side_text), parse_condition_parts(condition_text, rule), margin
 
 
+def parse_side_confidence_penalty_rule(rule: str) -> tuple[tuple[tuple[str, str], ...], float]:
+    try:
+        condition_text, penalty_text = rule.rsplit(":", maxsplit=1)
+    except ValueError as exc:
+        raise ValueError(
+            f"side confidence penalty rule must use column=value+...:penalty syntax: {rule}"
+        ) from exc
+    penalty = float(penalty_text.strip())
+    if penalty < 0:
+        raise ValueError("side confidence penalty rule penalty must be non-negative")
+    return parse_condition_parts(condition_text, rule), penalty
+
+
 def parsed_extra_side_margin_rules(config: ModelPolicyConfig) -> list[tuple[str, str, float]]:
     return [parse_extra_side_margin_rule(rule) for rule in config.extra_side_margin_rules]
 
@@ -1729,6 +1777,21 @@ def parsed_side_extra_margin_rules(
     return [parse_side_extra_margin_rule(rule) for rule in config.side_extra_margin_rules]
 
 
+def parsed_side_confidence_penalty_rules(
+    config: ModelPolicyConfig,
+) -> list[tuple[tuple[tuple[str, str], ...], float]]:
+    return [parse_side_confidence_penalty_rule(rule) for rule in config.side_confidence_penalty_rules]
+
+
+def parsed_side_confidence_overfit_penalty_rules(
+    config: ModelPolicyConfig,
+) -> list[tuple[tuple[tuple[str, str], ...], float]]:
+    return [
+        parse_side_confidence_penalty_rule(rule)
+        for rule in config.side_confidence_overfit_penalty_rules
+    ]
+
+
 def extra_side_margin_rule_columns(config: ModelPolicyConfig) -> list[str]:
     return list(dict.fromkeys(column for column, _, _ in parsed_extra_side_margin_rules(config)))
 
@@ -1738,6 +1801,10 @@ def side_rule_columns(config: ModelPolicyConfig) -> list[str]:
     for _, conditions in parsed_side_block_rules(config):
         columns.extend(column for column, _ in conditions)
     for _, conditions, _ in parsed_side_extra_margin_rules(config):
+        columns.extend(column for column, _ in conditions)
+    for conditions, _ in parsed_side_confidence_penalty_rules(config):
+        columns.extend(column for column, _ in conditions)
+    for conditions, _ in parsed_side_confidence_overfit_penalty_rules(config):
         columns.extend(column for column, _ in conditions)
     return list(dict.fromkeys(columns))
 
@@ -2230,6 +2297,10 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         min_trade_quality=args.min_trade_quality,
         profit_barrier_miss_penalty=args.profit_barrier_miss_penalty,
         side_confidence_penalty=args.side_confidence_penalty,
+        side_confidence_penalty_rules=parse_optional_csv_strings(args.side_confidence_penalty_rules),
+        side_confidence_overfit_penalty_rules=parse_optional_csv_strings(
+            args.side_confidence_overfit_penalty_rules
+        ),
         min_side_confidence=args.min_side_confidence,
         require_profit_barrier=args.require_profit_barrier,
         profit_barrier_threshold=args.profit_barrier_threshold,
@@ -2481,6 +2552,22 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         help="EV penalty multiplied by 1 - predicted best-side probability",
     )
     parser.add_argument(
+        "--side-confidence-penalty-rules",
+        default="",
+        help=(
+            "comma-separated column=value+...:penalty rules that add to side-confidence "
+            "penalty in matching regimes"
+        ),
+    )
+    parser.add_argument(
+        "--side-confidence-overfit-penalty-rules",
+        default="",
+        help=(
+            "comma-separated column=value+...:penalty rules that subtract penalty * "
+            "side confidence in matching regimes"
+        ),
+    )
+    parser.add_argument(
         "--min-side-confidence",
         type=float,
         default=0.0,
@@ -2634,6 +2721,12 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     min_trade_quality=min_trade_quality,
                     profit_barrier_miss_penalty=profit_barrier_miss_penalty,
                     side_confidence_penalty=side_confidence_penalty,
+                    side_confidence_penalty_rules=parse_optional_csv_strings(
+                        args.side_confidence_penalty_rules
+                    ),
+                    side_confidence_overfit_penalty_rules=parse_optional_csv_strings(
+                        args.side_confidence_overfit_penalty_rules
+                    ),
                     min_side_confidence=min_side_confidence,
                     require_profit_barrier=require_profit_barrier,
                     profit_barrier_threshold=profit_barrier_threshold,
@@ -2669,6 +2762,12 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "min_trade_quality": min_trade_quality,
                     "profit_barrier_miss_penalty": profit_barrier_miss_penalty,
                     "side_confidence_penalty": side_confidence_penalty,
+                    "side_confidence_penalty_rules": regime_values_to_string(
+                        model_policy_config.side_confidence_penalty_rules
+                    ),
+                    "side_confidence_overfit_penalty_rules": regime_values_to_string(
+                        model_policy_config.side_confidence_overfit_penalty_rules
+                    ),
                     "min_side_confidence": min_side_confidence,
                     "require_profit_barrier": require_profit_barrier,
                     "profit_barrier_threshold": profit_barrier_threshold,
@@ -2705,6 +2804,12 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "risk_penalties": risk_penalties,
         "profit_barrier_miss_penalties": profit_barrier_miss_penalties,
         "side_confidence_penalties": side_confidence_penalties,
+        "side_confidence_penalty_rules": parse_optional_csv_strings(
+            args.side_confidence_penalty_rules
+        ),
+        "side_confidence_overfit_penalty_rules": parse_optional_csv_strings(
+            args.side_confidence_overfit_penalty_rules
+        ),
         "fixed_horizon_score_modes": fixed_horizon_score_modes,
         "min_predicted_hold_minutes": min_predicted_hold_minutes_values,
         "max_predicted_hold_minutes": max_predicted_hold_minutes_values,
@@ -2756,6 +2861,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["profit_barrier_miss_penalty"] = 0.0
     if "side_confidence_penalty" not in output.columns:
         output["side_confidence_penalty"] = 0.0
+    if "side_confidence_penalty_rules" not in output.columns:
+        output["side_confidence_penalty_rules"] = ""
+    if "side_confidence_overfit_penalty_rules" not in output.columns:
+        output["side_confidence_overfit_penalty_rules"] = ""
     if "min_side_confidence" not in output.columns:
         output["min_side_confidence"] = 0.0
     if "fixed_horizon_score_mode" not in output.columns:
@@ -2925,6 +3034,12 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output["extra_side_margin_rules"] = output["extra_side_margin_rules"].fillna("").astype(str)
     output["side_extra_margin_rules"] = output["side_extra_margin_rules"].fillna("").astype(str)
     output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
+    output["side_confidence_penalty_rules"] = (
+        output["side_confidence_penalty_rules"].fillna("").astype(str)
+    )
+    output["side_confidence_overfit_penalty_rules"] = (
+        output["side_confidence_overfit_penalty_rules"].fillna("").astype(str)
+    )
     output["fixed_horizon_score_mode"] = output["fixed_horizon_score_mode"].fillna("max").astype(str)
     output["worst_direction_session"] = output["worst_direction_session"].fillna("").astype(str)
     output["worst_combined_regime"] = output["worst_combined_regime"].fillna("").astype(str)
@@ -3711,6 +3826,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--side-confidence-penalties",
         default="0",
         help="comma-separated EV penalties multiplied by 1 - predicted best-side probability",
+    )
+    model_sweep.add_argument(
+        "--side-confidence-penalty-rules",
+        default="",
+        help=(
+            "comma-separated column=value+...:penalty rules that add to side-confidence "
+            "penalty in matching regimes"
+        ),
+    )
+    model_sweep.add_argument(
+        "--side-confidence-overfit-penalty-rules",
+        default="",
+        help=(
+            "comma-separated column=value+...:penalty rules that subtract penalty * "
+            "side confidence in matching regimes"
+        ),
     )
     model_sweep.add_argument("--max-wait-regrets", default="inf")
     model_sweep.add_argument("--min-entry-ranks", default="0")

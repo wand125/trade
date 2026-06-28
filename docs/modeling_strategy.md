@@ -204,6 +204,7 @@ short_utility > long_utility なら short
 - meta model は同じvalidation月でfitとpolicy selectionをしない。validation内walk-forwardで、meta fit月、policy selection月、test月を分ける。
 - `best_side` probability は `side-confidence-report` で月/regime/bucket別に校正を見る。2024-12 smokeでは高confidenceでもbelow-randomになるbucketがあるため、global `min_side_confidence` gateは標準採用しない。使う場合はwalk-forward OOF上のregime-aware calibrationを通し、executable backtestで確認する。
 - side calibrationだけを調べる場合は `target-set side_confidence` を使う。これは `long_best_adjusted_pnl`, `short_best_adjusted_pnl`, `best_side` のみに絞り、full policy target OOFより軽く診断を回すためのtarget set。
+- `side-confidence-penalty-rules` / `side-confidence-overfit-penalty-rules` は探索軸として残すが、2024-12 smokeでは悪化した。標準採用せず、viable candidateのtie-break/penaltyとしてのみ再検証する。
 
 深層学習:
 
