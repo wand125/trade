@@ -284,6 +284,55 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [0, 1, 0])
 
+    def test_model_signal_can_block_side_specific_compound_regime(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [1.0, 1.0, 20.0],
+                "pred_short_best_adjusted_pnl": [20.0, 20.0, 17.0],
+                "trend_regime": ["range", "range", "range"],
+                "volatility_regime": ["low_vol", "low_vol", "low_vol"],
+                "session_regime": ["asia", "london", "asia"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            side_block_rules=("short:trend_regime=range+volatility_regime=low_vol+session_regime=asia",),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, -1, 1])
+
+    def test_model_signal_can_add_side_specific_compound_margin(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [17.0, 17.0, 20.0],
+                "pred_short_best_adjusted_pnl": [20.0, 20.0, 17.0],
+                "trend_regime": ["range", "range", "range"],
+                "volatility_regime": ["low_vol", "low_vol", "low_vol"],
+                "session_regime": ["asia", "london", "asia"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            side_margin=0,
+            side_extra_margin_rules=(
+                "short:trend_regime=range+volatility_regime=low_vol+session_regime=asia:5",
+            ),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, -1, 1])
+
     def test_model_signal_can_apply_side_specific_entry_offsets(self):
         df = frame_with_opens([100, 101, 102])
         predictions = pd.DataFrame(
@@ -422,6 +471,8 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["min_entry_rank"].tolist(), [0.0])
         self.assertEqual(normalized["require_profit_barrier"].tolist(), [False])
         self.assertEqual(normalized["profit_barrier_threshold"].tolist(), [0.5])
+        self.assertEqual(normalized["side_extra_margin_rules"].tolist(), [""])
+        self.assertEqual(normalized["side_block_rules"].tolist(), [""])
         self.assertEqual(normalized["block_trend_regimes"].tolist(), [""])
         self.assertEqual(normalized["block_volatility_regimes"].tolist(), [""])
         self.assertEqual(normalized["block_session_regimes"].tolist(), [""])

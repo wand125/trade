@@ -1255,3 +1255,40 @@ Artifacts:
 - profit barrier probability gateは有効なfilter軸だが、単独では採用不可。
 - 最大損失は barrier確率だけでなく、fixed horizon 720m short EVの過大評価とexit timingの遅さが重なっている。
 - 次は `asia / range / low_vol` のshortだけを抑制する side-specific regime suppression、exit timing target、candidate selectionへのprofit barrier miss率追加を優先する。
+
+### 2026-06-28 09:26 JST Side-Specific Regime Suppression
+
+作業:
+
+- `model-policy` / `model-sweep` に `--side-block-rules` と `--side-extra-margin-rules` を追加した。
+- rule形式は `short:session_regime=asia`、`short:trend_regime=range+volatility_regime=low_vol+session_regime=asia`、`short:session_regime=asia:5`。
+- `model-candidate-selection` の集計keyへ `side_extra_margin_rules` / `side_block_rules` を追加した。
+- 既存レポート `docs/reports/2026-06-28_profit_barrier_probability_gate.md` は更新時刻 `2026-06-28 09:26 JST` で追記した。
+- report: `docs/reports/2026-06-28_side_specific_regime_suppression.md`
+
+Artifacts:
+
+- narrow candidate selection: `data/reports/backtests/20260628_001732_model_candidate_selection/`
+- medium candidate selection: `data/reports/backtests/20260628_002001_model_candidate_selection/`
+- asia short candidate selection: `data/reports/backtests/20260628_002217_model_candidate_selection/`
+- validation-selected blind: `data/reports/backtests/20260628_002235_model_fixed_horizon_ev_2025-03/`
+- reference blind: `data/reports/backtests/20260628_002236_model_fixed_horizon_ev_2025-03/`
+- cost sensitivity: `data/reports/backtests/20260628_002255_model_cost_sensitivity_2025-03/`
+- failure analysis: `data/reports/backtests/20260628_002507_side_specific_asia_short_block_2025-03/`
+
+結果:
+
+- `short:trend_regime=range+volatility_regime=low_vol+session_regime=asia` は、2025-03 blindを `-27.4534` までしか改善しなかった。`trend_regime` が変わった直後の再entryを許した。
+- `short:volatility_regime=low_vol+session_regime=asia` は、2025-03 blind `-26.8930`。`asia / normal_vol` shortへの再entryを許した。
+- `short:session_regime=asia` はvalidation-selected `entry=0`, `short offset=6`, `side_margin=1`, `barrier threshold=0.40` で、2025-03 blind adjusted pnl `+18.0748`, raw pnl `+29.2330`, 35 trades, profit factor `1.2700`, max DD `44.6526`。
+- 同candidateのshort pnlは `-0.0096` で、2025-03の最大short損失はほぼ消えた。
+- ただし spread `0.2` / slippage `0.10` / delay `1` では adjusted pnl `-6.1046` まで落ちる。
+- `short offset=8` referenceは2025-03 blind `+27.1356`、最悪コスト条件でも `+5.4936` だが、validation選択では2番手なので採用しない。
+
+判断:
+
+- `short:session_regime=asia` は、今回のlineで初めて2025-03 blindのNoTradeを上回った。
+- ただし2025-03の最大損失を見た後に作ったruleなので、2025-03でのプラスは最終採用根拠にしない。
+- 次は2025-04以降のblindで事前登録候補として検証する。
+- failure analysisでは direction error rate `0.4286`、predicted side error rate `0.4571`、exit regret sum `702.5012` が残る。改善は方向予測ではなく、危険時間帯のshortをno-trade化した効果が中心。
+- 次の本流は、side/regime別損失集中をcandidate selectionに入れることと、exit timing target改善。

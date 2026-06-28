@@ -55,6 +55,8 @@ SWEEP_KEY_COLUMNS = [
     "require_profit_barrier",
     "profit_barrier_threshold",
     "extra_side_margin_rules",
+    "side_extra_margin_rules",
+    "side_block_rules",
     "block_trend_regimes",
     "block_volatility_regimes",
     "block_session_regimes",
@@ -184,6 +186,8 @@ class ModelPolicyConfig:
     require_profit_barrier: bool = False
     profit_barrier_threshold: float = 0.5
     extra_side_margin_rules: tuple[str, ...] = ()
+    side_extra_margin_rules: tuple[str, ...] = ()
+    side_block_rules: tuple[str, ...] = ()
     block_trend_regimes: tuple[str, ...] = ()
     block_volatility_regimes: tuple[str, ...] = ()
     block_session_regimes: tuple[str, ...] = ()
@@ -413,6 +417,7 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
     if config.require_profit_barrier:
         columns.extend([config.long_profit_barrier_column, config.short_profit_barrier_column])
     columns.extend(extra_side_margin_rule_columns(config))
+    columns.extend(side_rule_columns(config))
     columns.extend([column for column, _ in blocked_regime_columns(config)])
     columns = list(dict.fromkeys(columns))
     predictions = pd.read_parquet(path, columns=columns)
@@ -459,6 +464,23 @@ def fixed_horizon_scores(
         pd.Series(best_scores, index=horizon_frame.index),
         pd.Series(best_minutes, index=horizon_frame.index),
     )
+
+
+def side_rule_condition_mask(
+    prediction_index: pd.DataFrame,
+    timestamps: pd.Series,
+    index: pd.Index,
+    conditions: tuple[tuple[str, str], ...],
+) -> pd.Series:
+    mask = pd.Series(True, index=index)
+    for column, expected_value in conditions:
+        aligned = prediction_index[[column]].reindex(timestamps)
+        values = pd.Series(
+            aligned[column].reset_index(drop=True).astype("string").to_numpy(),
+            index=index,
+        )
+        mask &= values.notna() & (values == expected_value)
+    return mask
 
 
 def model_signal_from_predictions(
@@ -550,6 +572,9 @@ def model_signal_from_predictions(
             index=df.index,
         )
         quality_ok &= regime_values.notna() & ~regime_values.isin(set(blocked_values))
+    for side, conditions in parsed_side_block_rules(config):
+        condition_mask = side_rule_condition_mask(prediction_index, df["timestamp"], df.index, conditions)
+        quality_ok &= ~((best_side == side) & condition_mask)
     for column, value, margin in parsed_extra_side_margin_rules(config):
         rule_aligned = prediction_index[[column]].reindex(df["timestamp"])
         rule_values = pd.Series(
@@ -557,6 +582,9 @@ def model_signal_from_predictions(
             index=df.index,
         )
         extra_side_margin += np.where((rule_values == value).fillna(False).to_numpy(), margin, 0.0)
+    for side, conditions, margin in parsed_side_extra_margin_rules(config):
+        condition_mask = side_rule_condition_mask(prediction_index, df["timestamp"], df.index, conditions)
+        extra_side_margin += np.where(((best_side == side) & condition_mask).to_numpy(), margin, 0.0)
     required_side_margin = config.side_margin + extra_side_margin
 
     if config.policy == "stateless_ev":
@@ -992,12 +1020,82 @@ def parse_extra_side_margin_rule(rule: str) -> tuple[str, str, float]:
     return column, value, margin
 
 
+def parse_side_name(value: str) -> int:
+    normalized = value.strip().lower()
+    if normalized == "long":
+        return 1
+    if normalized == "short":
+        return -1
+    raise ValueError(f"side must be long or short: {value}")
+
+
+def parse_condition_parts(condition_text: str, rule: str) -> tuple[tuple[str, str], ...]:
+    conditions: list[tuple[str, str]] = []
+    for part in condition_text.split("+"):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            column, value = part.split("=", maxsplit=1)
+        except ValueError as exc:
+            raise ValueError(f"side rule condition must use column=value syntax: {rule}") from exc
+        column = column.strip()
+        value = value.strip()
+        if not column or not value:
+            raise ValueError(f"side rule condition must include column and value: {rule}")
+        conditions.append((column, value))
+    if not conditions:
+        raise ValueError(f"side rule must include at least one condition: {rule}")
+    return tuple(conditions)
+
+
+def parse_side_block_rule(rule: str) -> tuple[int, tuple[tuple[str, str], ...]]:
+    try:
+        side_text, condition_text = rule.split(":", maxsplit=1)
+    except ValueError as exc:
+        raise ValueError(f"side block rule must use side:column=value+... syntax: {rule}") from exc
+    return parse_side_name(side_text), parse_condition_parts(condition_text, rule)
+
+
+def parse_side_extra_margin_rule(rule: str) -> tuple[int, tuple[tuple[str, str], ...], float]:
+    try:
+        side_and_conditions, margin_text = rule.rsplit(":", maxsplit=1)
+        side_text, condition_text = side_and_conditions.split(":", maxsplit=1)
+    except ValueError as exc:
+        raise ValueError(
+            f"side extra margin rule must use side:column=value+...:margin syntax: {rule}"
+        ) from exc
+    margin = float(margin_text.strip())
+    if margin < 0:
+        raise ValueError("side extra margin must be non-negative")
+    return parse_side_name(side_text), parse_condition_parts(condition_text, rule), margin
+
+
 def parsed_extra_side_margin_rules(config: ModelPolicyConfig) -> list[tuple[str, str, float]]:
     return [parse_extra_side_margin_rule(rule) for rule in config.extra_side_margin_rules]
 
 
+def parsed_side_block_rules(config: ModelPolicyConfig) -> list[tuple[int, tuple[tuple[str, str], ...]]]:
+    return [parse_side_block_rule(rule) for rule in config.side_block_rules]
+
+
+def parsed_side_extra_margin_rules(
+    config: ModelPolicyConfig,
+) -> list[tuple[int, tuple[tuple[str, str], ...], float]]:
+    return [parse_side_extra_margin_rule(rule) for rule in config.side_extra_margin_rules]
+
+
 def extra_side_margin_rule_columns(config: ModelPolicyConfig) -> list[str]:
     return list(dict.fromkeys(column for column, _, _ in parsed_extra_side_margin_rules(config)))
+
+
+def side_rule_columns(config: ModelPolicyConfig) -> list[str]:
+    columns: list[str] = []
+    for _, conditions in parsed_side_block_rules(config):
+        columns.extend(column for column, _ in conditions)
+    for _, conditions, _ in parsed_side_extra_margin_rules(config):
+        columns.extend(column for column, _ in conditions)
+    return list(dict.fromkeys(columns))
 
 
 def parse_optional_csv_strings(value: str | None) -> tuple[str, ...]:
@@ -1437,6 +1535,8 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         require_profit_barrier=args.require_profit_barrier,
         profit_barrier_threshold=args.profit_barrier_threshold,
         extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
+        side_extra_margin_rules=parse_optional_csv_strings(args.side_extra_margin_rules),
+        side_block_rules=parse_optional_csv_strings(args.side_block_rules),
         **regime_blocks_from_args(args),
     )
 
@@ -1653,6 +1753,22 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         default="",
         help="comma-separated column=value:margin rules that add side-margin in matching regimes",
     )
+    parser.add_argument(
+        "--side-extra-margin-rules",
+        default="",
+        help=(
+            "comma-separated side:column=value+...:margin rules that add side-margin only "
+            "when the selected side and all conditions match"
+        ),
+    )
+    parser.add_argument(
+        "--side-block-rules",
+        default="",
+        help=(
+            "comma-separated side:column=value+... rules that block entries only when the "
+            "selected side and all conditions match"
+        ),
+    )
     add_regime_gate_args(parser)
 
 
@@ -1730,6 +1846,12 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                                                     extra_side_margin_rules=parse_optional_csv_strings(
                                                         args.extra_side_margin_rules
                                                     ),
+                                                    side_extra_margin_rules=parse_optional_csv_strings(
+                                                        args.side_extra_margin_rules
+                                                    ),
+                                                    side_block_rules=parse_optional_csv_strings(
+                                                        args.side_block_rules
+                                                    ),
                                                     **regime_blocks,
                                                 )
                                                 metrics, _, _, _ = run_model_policy(
@@ -1762,6 +1884,12 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                                                     "extra_side_margin_rules": regime_values_to_string(
                                                         model_policy_config.extra_side_margin_rules
                                                     ),
+                                                    "side_extra_margin_rules": regime_values_to_string(
+                                                        model_policy_config.side_extra_margin_rules
+                                                    ),
+                                                    "side_block_rules": regime_values_to_string(
+                                                        model_policy_config.side_block_rules
+                                                    ),
                                                     **regime_block_metric_columns(model_policy_config),
                                                     "forced_exit_rate": forced_exit_rate,
                                                     "eligible": bool(eligible),
@@ -1789,6 +1917,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "require_profit_barriers": require_profit_barriers,
         "profit_barrier_thresholds": profit_barrier_thresholds,
         "extra_side_margin_rules": parse_optional_csv_strings(args.extra_side_margin_rules),
+        "side_extra_margin_rules": parse_optional_csv_strings(args.side_extra_margin_rules),
+        "side_block_rules": parse_optional_csv_strings(args.side_block_rules),
         **{field: list(values) for field, values in regime_blocks.items()},
         "min_trades": args.min_trades,
         "max_forced_exit_rate": args.max_forced_exit_rate,
@@ -1836,6 +1966,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["profit_barrier_threshold"] = 0.5
     if "extra_side_margin_rules" not in output.columns:
         output["extra_side_margin_rules"] = ""
+    if "side_extra_margin_rules" not in output.columns:
+        output["side_extra_margin_rules"] = ""
+    if "side_block_rules" not in output.columns:
+        output["side_block_rules"] = ""
     for field, _ in REGIME_BLOCK_FIELDS:
         if field not in output.columns:
             output[field] = ""
@@ -1884,6 +2018,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     else:
         output["require_profit_barrier"] = output["require_profit_barrier"].astype(bool)
     output["extra_side_margin_rules"] = output["extra_side_margin_rules"].fillna("").astype(str)
+    output["side_extra_margin_rules"] = output["side_extra_margin_rules"].fillna("").astype(str)
+    output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
     for field, _ in REGIME_BLOCK_FIELDS:
         output[field] = output[field].fillna("").astype(str)
     return output
@@ -2359,6 +2495,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--extra-side-margin-rules",
         default="",
         help="comma-separated column=value:margin rules that add side-margin in matching regimes",
+    )
+    model_sweep.add_argument(
+        "--side-extra-margin-rules",
+        default="",
+        help=(
+            "comma-separated side:column=value+...:margin rules that add side-margin only "
+            "when the selected side and all conditions match"
+        ),
+    )
+    model_sweep.add_argument(
+        "--side-block-rules",
+        default="",
+        help=(
+            "comma-separated side:column=value+... rules that block entries only when the "
+            "selected side and all conditions match"
+        ),
     )
     model_sweep.add_argument("--min-trades", type=int, default=0)
     model_sweep.add_argument("--max-forced-exit-rate", type=float, default=1.0)
