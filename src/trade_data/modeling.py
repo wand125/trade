@@ -784,6 +784,70 @@ def time_bin_probability_expected_minutes(
     )
 
 
+def add_exit_holding_columns(
+    predictions: pd.DataFrame,
+    replace_existing: bool = False,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    output = predictions.copy()
+    added_columns: list[str] = []
+    skipped_existing_columns: list[str] = []
+    missing_source_columns: list[str] = []
+    for side in ["long", "short"]:
+        log_source = f"pred_{side}_exit_event_log_minutes"
+        log_output = f"pred_{side}_exit_event_minutes_from_log"
+        if log_source in output.columns:
+            if replace_existing or log_output not in output.columns:
+                log_predictions = output[log_source].to_numpy(dtype="float64")
+                output[log_output] = np.expm1(
+                    np.clip(log_predictions, 0.0, np.log1p(EXIT_EVENT_MAX_HOLD_MINUTES))
+                )
+                added_columns.append(log_output)
+            else:
+                skipped_existing_columns.append(log_output)
+        else:
+            missing_source_columns.append(log_source)
+
+        time_bin_source = f"pred_{side}_exit_event_time_bin"
+        time_bin_output = f"pred_{side}_exit_event_time_bin_minutes"
+        if time_bin_source in output.columns:
+            if replace_existing or time_bin_output not in output.columns:
+                output[time_bin_output] = time_bin_label_to_minutes(
+                    output[time_bin_source].to_numpy(dtype="float64")
+                )
+                added_columns.append(time_bin_output)
+            else:
+                skipped_existing_columns.append(time_bin_output)
+        else:
+            missing_source_columns.append(time_bin_source)
+
+        probability_predictions = {
+            column.removeprefix("pred_"): output[column].to_numpy(dtype="float64")
+            for column in output.columns
+            if column.startswith(f"pred_{side}_exit_event_time_bin_prob_")
+        }
+        expected_output = f"pred_{side}_exit_event_time_bin_expected_minutes"
+        expected_minutes = time_bin_probability_expected_minutes(
+            probability_predictions,
+            f"{side}_exit_event_time_bin",
+            len(output),
+        )
+        if expected_minutes is not None:
+            if replace_existing or expected_output not in output.columns:
+                output[expected_output] = expected_minutes
+                added_columns.append(expected_output)
+            else:
+                skipped_existing_columns.append(expected_output)
+        else:
+            missing_source_columns.append(f"pred_{side}_exit_event_time_bin_prob_*")
+    return output, {
+        "rows": int(len(output)),
+        "added_columns": added_columns,
+        "skipped_existing_columns": skipped_existing_columns,
+        "missing_source_columns": missing_source_columns,
+        "replace_existing": bool(replace_existing),
+    }
+
+
 def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd.DataFrame:
     columns = [
         "decision_timestamp",
@@ -1617,6 +1681,33 @@ def handle_enrich_predictions(args: argparse.Namespace) -> int:
             "months": months,
             "target_columns": target_columns,
             "replace_existing": bool(args.replace_existing),
+        }
+    )
+    metrics_path = args.output_path.with_suffix(".metrics.json")
+    with metrics_path.open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    print(f"wrote: {args.output_path}")
+    print(f"metrics: {metrics_path}")
+    return 0
+
+
+def handle_derive_exit_holding_columns(args: argparse.Namespace) -> int:
+    predictions = pd.read_parquet(args.predictions)
+    output, metrics = add_exit_holding_columns(
+        predictions,
+        replace_existing=args.replace_existing,
+    )
+    if not metrics["added_columns"]:
+        raise ValueError(
+            "no exit holding columns were added; use --replace-existing true to overwrite "
+            "existing derived columns or check source probability/regression columns"
+        )
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    output.to_parquet(args.output_path, index=False)
+    metrics.update(
+        {
+            "predictions": str(args.predictions),
+            "output_path": str(args.output_path),
         }
     )
     metrics_path = args.output_path.with_suffix(".metrics.json")
@@ -3102,6 +3193,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="overwrite prediction columns when the target column already exists",
     )
     enrich_predictions_parser.set_defaults(func=handle_enrich_predictions)
+
+    derive_exit_holding_parser = subparsers.add_parser(
+        "derive-exit-holding-columns",
+        help="add bounded/log and time-bin-derived holding columns to saved predictions",
+    )
+    derive_exit_holding_parser.add_argument("--predictions", type=Path, required=True)
+    derive_exit_holding_parser.add_argument("--output-path", type=Path, required=True)
+    derive_exit_holding_parser.add_argument(
+        "--replace-existing",
+        type=parse_bool,
+        default=False,
+        help="overwrite derived holding columns if they already exist",
+    )
+    derive_exit_holding_parser.set_defaults(func=handle_derive_exit_holding_columns)
 
     side_confidence_report = subparsers.add_parser(
         "side-confidence-report",

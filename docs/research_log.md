@@ -4,6 +4,19 @@
 
 ## 2026-06-29 JST
 
+### 05:28 Exit holding multifold comparison
+
+- 既存の4ヶ月validation prediction `experiments/20260628_101740_policy_combined_side_exit_p1_l1p2/predictions_valid.parquet` を使い、exit holding sourceを同じgridで比較した。
+- 既存predictionへ派生列を後付けする `trade_data.modeling derive-exit-holding-columns` を追加した。
+- 対象foldは `2024-07`, `2024-09`, `2024-11`, `2025-01`。固定entry条件は `entry=12`, short offset `6`, side margin `5`, rank `0.5`, short low-vol penalty `down5/up10/range5`。
+- baseでは `bin_expected cap=480` が最上位。4fold min pnl `145.5682`, sum pnl `673.9120`。
+- high cost (`spread=0.2`, `slippage=0.1`, `delay=1`) でも `bin_expected cap=480` が最上位。4fold min pnl `120.5842`, sum pnl `562.8784`。
+- `raw_event cap=480` との差は小さいため、bin expectedを新edgeとして採用するのではなく、raw event minutesと同等以上に機能するholding表現として扱う。
+- `bin_expected_hazard` はtrade数とforced exitを抑えるが、fold最低PnLと合計PnLを削るため、この固定条件では標準採用しない。
+- 既存artifactには `pred_*_exit_event_log_minutes` がないため、log-derived holdingの4fold比較は未実施。logを含めるにはdataset/train artifactを揃え直す。
+- report: `docs/reports/00099_2026-06-29_exit_holding_multifold_comparison.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 05:18 Exit time bin holding columns
 
 - 既存の `long_exit_event_time_bin` / `short_exit_event_time_bin` classifier出力から、`timed_ev` に渡せるholding派生列を追加した。

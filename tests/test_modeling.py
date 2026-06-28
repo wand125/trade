@@ -6,6 +6,7 @@ import pandas as pd
 from trade_data.dataset import iter_months
 from trade_data.modeling import (
     add_calibrated_ev_columns,
+    add_exit_holding_columns,
     add_profit_barrier_calibrated_columns,
     apply_split_purging,
     build_parser,
@@ -554,6 +555,49 @@ class ModelingTests(unittest.TestCase):
         self.assertTrue(np.isnan(output["pred_short_exit_event_time_bin_minutes"].iloc[1]))
         self.assertAlmostEqual(output["pred_short_exit_event_time_bin_expected_minutes"].iloc[0], 1350.0)
         self.assertAlmostEqual(output["pred_short_exit_event_time_bin_expected_minutes"].iloc[1], 1440.0)
+
+    def test_add_exit_holding_columns_derives_saved_prediction_columns(self):
+        predictions = pd.DataFrame(
+            {
+                "pred_long_exit_event_log_minutes": [np.log1p(30.0), -1.0],
+                "pred_short_exit_event_log_minutes": [np.log1p(3000.0), np.log1p(120.0)],
+                "pred_long_exit_event_time_bin": [2, 99],
+                "pred_short_exit_event_time_bin": [0, 5],
+                "pred_long_exit_event_time_bin_prob_0": [0.0, 0.5],
+                "pred_long_exit_event_time_bin_prob_2": [1.0, 0.5],
+                "pred_short_exit_event_time_bin_prob_4": [1.0, 0.0],
+                "pred_short_exit_event_time_bin_prob_5": [0.0, 1.0],
+            }
+        )
+
+        output, metrics = add_exit_holding_columns(predictions)
+
+        self.assertAlmostEqual(output["pred_long_exit_event_minutes_from_log"].iloc[0], 30.0)
+        self.assertAlmostEqual(output["pred_long_exit_event_minutes_from_log"].iloc[1], 0.0)
+        self.assertAlmostEqual(output["pred_short_exit_event_minutes_from_log"].iloc[0], 1440.0)
+        self.assertAlmostEqual(output["pred_short_exit_event_minutes_from_log"].iloc[1], 120.0)
+        self.assertAlmostEqual(output["pred_long_exit_event_time_bin_minutes"].iloc[0], 240.0)
+        self.assertTrue(np.isnan(output["pred_long_exit_event_time_bin_minutes"].iloc[1]))
+        self.assertEqual(output["pred_short_exit_event_time_bin_minutes"].tolist(), [15.0, 1440.0])
+        self.assertAlmostEqual(output["pred_long_exit_event_time_bin_expected_minutes"].iloc[0], 150.0)
+        self.assertAlmostEqual(output["pred_long_exit_event_time_bin_expected_minutes"].iloc[1], 78.75)
+        self.assertAlmostEqual(output["pred_short_exit_event_time_bin_expected_minutes"].iloc[0], 1080.0)
+        self.assertAlmostEqual(output["pred_short_exit_event_time_bin_expected_minutes"].iloc[1], 1440.0)
+        self.assertIn("pred_long_exit_event_minutes_from_log", metrics["added_columns"])
+        self.assertEqual(metrics["rows"], 2)
+
+    def test_add_exit_holding_columns_skips_existing_columns_without_replace(self):
+        predictions = pd.DataFrame(
+            {
+                "pred_long_exit_event_log_minutes": [np.log1p(30.0)],
+                "pred_long_exit_event_minutes_from_log": [999.0],
+            }
+        )
+
+        output, metrics = add_exit_holding_columns(predictions)
+
+        self.assertEqual(output["pred_long_exit_event_minutes_from_log"].tolist(), [999.0])
+        self.assertIn("pred_long_exit_event_minutes_from_log", metrics["skipped_existing_columns"])
 
     def test_enrich_predictions_with_dataset_targets_adds_missing_context_columns(self):
         predictions = pd.DataFrame(
