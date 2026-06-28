@@ -1,7 +1,7 @@
 # 2025-06 Blind: Asia Short Block Failure
 
 日時: 2026-06-28 10:37 JST
-更新日時: 2026-06-28 10:37 JST
+更新日時: 2026-06-28 10:47 JST
 
 ## 目的
 
@@ -187,3 +187,17 @@ calibration overestimateは2025-06では `0.4667` まで悪化しており、過
 - cost sensitivity: OK
 - failure analysis: OK
 - validation back-check candidate selection: OK
+
+## 更新: 2026-06-28 10:47 JST
+
+Next 2 / 3 に対応し、short exposure concentration と support-aware barrier gateを追加した。
+
+詳細:
+
+- `docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
+
+主な結果:
+
+- 2025-06 selected `short:session_regime=asia` は `short_trade_share=0.933333` で `short_trade_share_ok=false` になった。
+- all short sessions blocked diagnosticは1 tradeだけで、`eligible_base=false` / `eligible_cost=false`。
+- smoothed actual miss / calibrationは、1 trade候補を raw 0.0 として過度に楽観しない値 `0.333333` に補正した。

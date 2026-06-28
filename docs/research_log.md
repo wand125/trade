@@ -1525,3 +1525,72 @@ Validation back-check:
 - 2025-06では同じshort過大評価が London shortへ移動した。
 - session hard blockを増やすとNoTradeへ近づくだけなので、本流にはしない。
 - 次は short exposure concentration、support-aware actual miss / calibration、exit timing targetを優先する。
+
+### 2026-06-28 10:47 JST Short Exposure And Support-Aware Gates
+
+作業:
+
+- `model-policy` / `model-sweep` metricsへ side exposure concentration列を追加した。
+- `long_trade_share`, `short_trade_share`, `max_side_trade_share` を保存する。
+- profit barrier miss rateへ Laplace-smoothed rateを追加した。
+- profit barrier calibrationへ smoothed actual hit rate / overestimateを追加した。
+- `model-candidate-selection` に以下を追加した。
+  - `--max-short-trade-share`
+  - `--max-side-trade-share`
+  - `--max-smoothed-actual-profit-barrier-miss-rate`
+  - `--max-smoothed-profit-barrier-calibration-overestimate`
+- report: `docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
+
+Artifacts:
+
+- no-cost selected: `data/reports/backtests/20260628_014713_model_sweep_2025-06_1/`
+- no-cost no-short diagnostic: `data/reports/backtests/20260628_014713_model_sweep_2025-06/`
+- cost selected: `data/reports/backtests/20260628_014713_model_sweep_2025-06_2/`
+- cost no-short diagnostic: `data/reports/backtests/20260628_014713_model_sweep_2025-06_3/`
+- candidate selection: `data/reports/backtests/20260628_014727_model_candidate_selection/`
+
+結果:
+
+- 2025-06 selected `short:session_regime=asia`:
+  - no-cost adjusted pnl `-100.4662`
+  - cost adjusted pnl `-103.7488`
+  - trades `15`
+  - `short_trade_share=0.933333`
+  - `max_side_trade_share=0.933333`
+  - `actual_profit_barrier_miss_rate_smoothed=0.470588`
+  - `profit_barrier_calibration_overestimate_smoothed_max=0.470588`
+  - `short_trade_share_ok=false`
+  - `eligible=false`
+- all short sessions blocked diagnostic:
+  - no-cost adjusted pnl `0.5570`
+  - cost adjusted pnl `0.3570`
+  - trades `1`
+  - `max_side_trade_share=1.000000`
+  - smoothed actual miss / calibration `0.333333`
+  - `eligible_base=false`, `eligible_cost=false`
+
+検証:
+
+- `python3 -m py_compile src/trade_data/backtest.py`: OK。
+- `python3 -m unittest tests.test_backtest`: 33 tests OK。
+- `model-candidate-selection --help`: OK。
+- `git diff --check`: OK。
+
+判断:
+
+- `--max-short-trade-share` は 2025-06の失敗候補を直接落とせる。
+- `--max-side-trade-share` は少数tradeのNoTrade類似候補も検出するが、主に診断として使う。
+- smoothed actual miss / calibrationは raw 0/1の過反応を弱める。1 trade候補を raw 0.0 として楽観せず `0.333333` に補正できた。
+- 次は validation 4fold以上で short share閾値と smoothed gateの台地を見る。
+
+### 2026-06-28 10:52 JST Report Numbering Rule Clarification
+
+作業:
+
+- `docs/reports` の通し番号は、ファイルシステムの更新時刻や本文の `更新日時` ではなく、本文冒頭の `日時: YYYY-MM-DD HH:MM JST` だけを基準にする運用を再確認した。
+- `GOAL.md`, `docs/README.md`, `docs/experiment_protocol.md`, `docs/status.md` に `更新日時` を採番基準にしないことを明記した。
+
+判断:
+
+- `更新日時` は追記・修正履歴の管理に使う。
+- 通し番号の並び替えや新規番号判断には `日時` のみを使う。

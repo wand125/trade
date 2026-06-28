@@ -131,6 +131,12 @@ DIRECTION_SESSION_DIAGNOSTIC_COLUMNS = [
     "worst_direction_session_trade_count",
 ]
 
+SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS = [
+    "long_trade_share",
+    "short_trade_share",
+    "max_side_trade_share",
+]
+
 PROFIT_BARRIER_LABEL_COLUMNS = [
     "long_profit_barrier_hit",
     "short_profit_barrier_hit",
@@ -138,10 +144,12 @@ PROFIT_BARRIER_LABEL_COLUMNS = [
 
 PROFIT_BARRIER_DIAGNOSTIC_COLUMNS = [
     "predicted_profit_barrier_miss_rate",
+    "predicted_profit_barrier_miss_rate_smoothed",
     "predicted_profit_barrier_miss_count",
     "predicted_profit_barrier_observed_count",
     "predicted_profit_barrier_miss_adjusted_pnl",
     "actual_profit_barrier_miss_rate",
+    "actual_profit_barrier_miss_rate_smoothed",
     "actual_profit_barrier_miss_count",
     "actual_profit_barrier_observed_count",
     "actual_profit_barrier_miss_adjusted_pnl",
@@ -159,11 +167,14 @@ PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS = [
     "profit_barrier_calibration_observed_count",
     "profit_barrier_calibration_bucket_count",
     "profit_barrier_calibration_overestimate_max",
+    "profit_barrier_calibration_overestimate_smoothed_max",
     "profit_barrier_calibration_abs_error_max",
     "worst_profit_barrier_calibration_bucket_count",
     "worst_profit_barrier_calibration_predicted_mean",
     "worst_profit_barrier_calibration_actual_hit_rate",
+    "worst_profit_barrier_calibration_actual_hit_rate_smoothed",
     "worst_profit_barrier_calibration_overestimate",
+    "worst_profit_barrier_calibration_overestimate_smoothed",
 ]
 
 PROFIT_BARRIER_CALIBRATION_STRING_COLUMNS = [
@@ -182,7 +193,14 @@ def probability_bucket_label(lower: float, upper: float) -> str:
 PROFIT_BARRIER_CALIBRATION_BUCKET_COLUMNS = [
     f"profit_barrier_calibration_{probability_bucket_key(lower, upper)}_{field}"
     for lower, upper in PROFIT_BARRIER_CALIBRATION_BUCKETS
-    for field in ("count", "predicted_mean", "actual_hit_rate", "overestimate")
+    for field in (
+        "count",
+        "predicted_mean",
+        "actual_hit_rate",
+        "actual_hit_rate_smoothed",
+        "overestimate",
+        "overestimate_smoothed",
+    )
 ]
 
 PROFIT_BARRIER_CALIBRATION_COLUMNS = [
@@ -193,6 +211,7 @@ PROFIT_BARRIER_CALIBRATION_COLUMNS = [
 COERCED_NUMERIC_DIAGNOSTIC_COLUMNS = {
     "direction_session_adjusted_pnl_min",
     "worst_direction_session_trade_count",
+    *SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS,
     *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
     *PROFIT_BARRIER_CALIBRATION_COLUMNS,
 }
@@ -911,6 +930,9 @@ def summarize_trades(
             "exposure_hours": 0.0,
             "long_trade_count": 0,
             "short_trade_count": 0,
+            "long_trade_share": 0.0,
+            "short_trade_share": 0.0,
+            "max_side_trade_share": 0.0,
             "long_adjusted_pnl": 0.0,
             "short_adjusted_pnl": 0.0,
             "long_raw_pnl": 0.0,
@@ -935,6 +957,10 @@ def summarize_trades(
     profit_factor = None if gross_loss == 0 else gross_profit / gross_loss
     long_mask = trades["direction"] == "long"
     short_mask = trades["direction"] == "short"
+    long_trade_count = int(long_mask.sum())
+    short_trade_count = int(short_mask.sum())
+    long_trade_share = long_trade_count / trade_count
+    short_trade_share = short_trade_count / trade_count
     long_adjusted = adjusted[long_mask]
     short_adjusted = adjusted[short_mask]
     long_raw = raw[long_mask]
@@ -952,8 +978,11 @@ def summarize_trades(
         "profit_factor": None if profit_factor is None else float(profit_factor),
         "max_drawdown": float(drawdowns.max()),
         "exposure_hours": float(trades["holding_minutes"].sum() / 60),
-        "long_trade_count": int((trades["direction"] == "long").sum()),
-        "short_trade_count": int((trades["direction"] == "short").sum()),
+        "long_trade_count": long_trade_count,
+        "short_trade_count": short_trade_count,
+        "long_trade_share": float(long_trade_share),
+        "short_trade_share": float(short_trade_share),
+        "max_side_trade_share": float(max(long_trade_share, short_trade_share)),
         "long_adjusted_pnl": float(long_adjusted.sum()),
         "short_adjusted_pnl": float(short_adjusted.sum()),
         "long_raw_pnl": float(long_raw.sum()),
@@ -1053,15 +1082,21 @@ def barrier_miss_summary(
     if not observed.any():
         return {
             f"{prefix}_profit_barrier_miss_rate": None,
+            f"{prefix}_profit_barrier_miss_rate_smoothed": None,
             f"{prefix}_profit_barrier_miss_count": 0,
             f"{prefix}_profit_barrier_observed_count": 0,
             f"{prefix}_profit_barrier_miss_adjusted_pnl": 0.0,
         }
     miss = observed & (values.astype(float) < threshold)
+    miss_count = int(miss.sum())
+    observed_count = int(observed.sum())
     return {
-        f"{prefix}_profit_barrier_miss_rate": float(miss.sum() / observed.sum()),
-        f"{prefix}_profit_barrier_miss_count": int(miss.sum()),
-        f"{prefix}_profit_barrier_observed_count": int(observed.sum()),
+        f"{prefix}_profit_barrier_miss_rate": float(miss_count / observed_count),
+        f"{prefix}_profit_barrier_miss_rate_smoothed": float(
+            (miss_count + 1.0) / (observed_count + 2.0)
+        ),
+        f"{prefix}_profit_barrier_miss_count": miss_count,
+        f"{prefix}_profit_barrier_observed_count": observed_count,
         f"{prefix}_profit_barrier_miss_adjusted_pnl": float(
             trades.loc[miss, "adjusted_pnl"].astype(float).sum()
         ),
@@ -1076,10 +1111,12 @@ def profit_barrier_diagnostics(
     if trades.empty:
         return {
             "predicted_profit_barrier_miss_rate": 0.0,
+            "predicted_profit_barrier_miss_rate_smoothed": 0.0,
             "predicted_profit_barrier_miss_count": 0,
             "predicted_profit_barrier_observed_count": 0,
             "predicted_profit_barrier_miss_adjusted_pnl": 0.0,
             "actual_profit_barrier_miss_rate": 0.0,
+            "actual_profit_barrier_miss_rate_smoothed": 0.0,
             "actual_profit_barrier_miss_count": 0,
             "actual_profit_barrier_observed_count": 0,
             "actual_profit_barrier_miss_adjusted_pnl": 0.0,
@@ -1110,6 +1147,7 @@ def profit_barrier_diagnostics(
         output.update(
             {
                 "predicted_profit_barrier_miss_rate": None,
+                "predicted_profit_barrier_miss_rate_smoothed": None,
                 "predicted_profit_barrier_miss_count": 0,
                 "predicted_profit_barrier_observed_count": 0,
                 "predicted_profit_barrier_miss_adjusted_pnl": 0.0,
@@ -1135,6 +1173,7 @@ def profit_barrier_diagnostics(
         output.update(
             {
                 "actual_profit_barrier_miss_rate": None,
+                "actual_profit_barrier_miss_rate_smoothed": None,
                 "actual_profit_barrier_miss_count": 0,
                 "actual_profit_barrier_observed_count": 0,
                 "actual_profit_barrier_miss_adjusted_pnl": 0.0,
@@ -1149,19 +1188,24 @@ def empty_profit_barrier_calibration_diagnostics() -> dict[str, object]:
         "profit_barrier_calibration_observed_count": 0,
         "profit_barrier_calibration_bucket_count": 0,
         "profit_barrier_calibration_overestimate_max": 0.0,
+        "profit_barrier_calibration_overestimate_smoothed_max": 0.0,
         "profit_barrier_calibration_abs_error_max": 0.0,
         "worst_profit_barrier_calibration_bucket": "",
         "worst_profit_barrier_calibration_bucket_count": 0,
         "worst_profit_barrier_calibration_predicted_mean": 0.0,
         "worst_profit_barrier_calibration_actual_hit_rate": 0.0,
+        "worst_profit_barrier_calibration_actual_hit_rate_smoothed": 0.0,
         "worst_profit_barrier_calibration_overestimate": 0.0,
+        "worst_profit_barrier_calibration_overestimate_smoothed": 0.0,
     }
     for lower, upper in PROFIT_BARRIER_CALIBRATION_BUCKETS:
         prefix = f"profit_barrier_calibration_{probability_bucket_key(lower, upper)}"
         output[f"{prefix}_count"] = 0
         output[f"{prefix}_predicted_mean"] = 0.0
         output[f"{prefix}_actual_hit_rate"] = 0.0
+        output[f"{prefix}_actual_hit_rate_smoothed"] = 0.0
         output[f"{prefix}_overestimate"] = 0.0
+        output[f"{prefix}_overestimate_smoothed"] = 0.0
     return output
 
 
@@ -1217,25 +1261,34 @@ def profit_barrier_calibration_diagnostics(
                     "count": 0,
                     "predicted_mean": 0.0,
                     "actual_hit_rate": 0.0,
+                    "actual_hit_rate_smoothed": 0.0,
                     "overestimate": 0.0,
+                    "overestimate_smoothed": 0.0,
                     "abs_error": 0.0,
                 }
             )
             continue
         predicted_mean = float(predicted_values.loc[in_bucket].mean())
         actual_hit_rate = float(actual_hits.loc[in_bucket].mean())
+        hit_count = float(actual_hits.loc[in_bucket].sum())
+        actual_hit_rate_smoothed = float((hit_count + 1.0) / (count + 2.0))
         overestimate = max(0.0, predicted_mean - actual_hit_rate)
+        overestimate_smoothed = max(0.0, predicted_mean - actual_hit_rate_smoothed)
         abs_error = abs(predicted_mean - actual_hit_rate)
         output[f"{prefix}_predicted_mean"] = predicted_mean
         output[f"{prefix}_actual_hit_rate"] = actual_hit_rate
+        output[f"{prefix}_actual_hit_rate_smoothed"] = actual_hit_rate_smoothed
         output[f"{prefix}_overestimate"] = overestimate
+        output[f"{prefix}_overestimate_smoothed"] = overestimate_smoothed
         bucket_rows.append(
             {
                 "bucket": bucket_label,
                 "count": count,
                 "predicted_mean": predicted_mean,
                 "actual_hit_rate": actual_hit_rate,
+                "actual_hit_rate_smoothed": actual_hit_rate_smoothed,
                 "overestimate": overestimate,
+                "overestimate_smoothed": overestimate_smoothed,
                 "abs_error": abs_error,
             }
         )
@@ -1244,6 +1297,9 @@ def profit_barrier_calibration_diagnostics(
     output["profit_barrier_calibration_bucket_count"] = int(len(non_empty_buckets))
     output["profit_barrier_calibration_overestimate_max"] = float(
         max((row["overestimate"] for row in non_empty_buckets), default=0.0)
+    )
+    output["profit_barrier_calibration_overestimate_smoothed_max"] = float(
+        max((row["overestimate_smoothed"] for row in non_empty_buckets), default=0.0)
     )
     output["profit_barrier_calibration_abs_error_max"] = float(
         max((row["abs_error"] for row in non_empty_buckets), default=0.0)
@@ -1262,7 +1318,13 @@ def profit_barrier_calibration_diagnostics(
         output["worst_profit_barrier_calibration_actual_hit_rate"] = float(
             worst["actual_hit_rate"]
         )
+        output["worst_profit_barrier_calibration_actual_hit_rate_smoothed"] = float(
+            worst["actual_hit_rate_smoothed"]
+        )
         output["worst_profit_barrier_calibration_overestimate"] = float(worst["overestimate"])
+        output["worst_profit_barrier_calibration_overestimate_smoothed"] = float(
+            worst["overestimate_smoothed"]
+        )
     return output
 
 
@@ -2367,6 +2429,25 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["worst_direction_session"] = ""
     if "worst_direction_session_trade_count" not in output.columns:
         output["worst_direction_session_trade_count"] = 0
+    for column in SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS:
+        if column not in output.columns:
+            output[column] = 0.0
+    if {"long_trade_count", "trade_count"}.issubset(output.columns):
+        trade_count = output["trade_count"].replace(0, np.nan)
+        output["long_trade_share"] = output["long_trade_share"].mask(
+            output["long_trade_share"].isna() | (output["long_trade_share"] == 0),
+            output["long_trade_count"] / trade_count,
+        )
+    if {"short_trade_count", "trade_count"}.issubset(output.columns):
+        trade_count = output["trade_count"].replace(0, np.nan)
+        output["short_trade_share"] = output["short_trade_share"].mask(
+            output["short_trade_share"].isna() | (output["short_trade_share"] == 0),
+            output["short_trade_count"] / trade_count,
+        )
+    output["max_side_trade_share"] = output["max_side_trade_share"].mask(
+        output["max_side_trade_share"].isna() | (output["max_side_trade_share"] == 0),
+        output[["long_trade_share", "short_trade_share"]].max(axis=1),
+    )
     for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
         if column not in output.columns:
             output[column] = 0.0
@@ -2416,6 +2497,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "forced_exit_count",
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
+        *SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS,
     ]
@@ -2428,6 +2510,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output["worst_direction_session_trade_count"] = output[
         "worst_direction_session_trade_count"
     ].fillna(0)
+    for column in SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS:
+        output[column] = output[column].fillna(0.0)
     for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
         output[column] = output[column].fillna(0.0)
     for column in PROFIT_BARRIER_CALIBRATION_COLUMNS:
@@ -2497,6 +2581,7 @@ def summarize_sweep_frames(
         "short_adjusted_pnl",
         "long_trade_count",
         "short_trade_count",
+        *SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS,
         "spread_points",
         "slippage_points",
         "execution_delay_bars",
@@ -2601,6 +2686,10 @@ def summarize_candidate_selection(
     max_predicted_profit_barrier_miss_rate: float = 1.0,
     max_actual_profit_barrier_miss_rate: float = 1.0,
     max_profit_barrier_calibration_overestimate: float = 1.0,
+    max_short_trade_share: float = 1.0,
+    max_side_trade_share: float = 1.0,
+    max_smoothed_actual_profit_barrier_miss_rate: float = 1.0,
+    max_smoothed_profit_barrier_calibration_overestimate: float = 1.0,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -2614,6 +2703,16 @@ def summarize_candidate_selection(
         raise ValueError("max_actual_profit_barrier_miss_rate must be between 0 and 1")
     if not 0 <= max_profit_barrier_calibration_overestimate <= 1:
         raise ValueError("max_profit_barrier_calibration_overestimate must be between 0 and 1")
+    if not 0 <= max_short_trade_share <= 1:
+        raise ValueError("max_short_trade_share must be between 0 and 1")
+    if not 0 <= max_side_trade_share <= 1:
+        raise ValueError("max_side_trade_share must be between 0 and 1")
+    if not 0 <= max_smoothed_actual_profit_barrier_miss_rate <= 1:
+        raise ValueError("max_smoothed_actual_profit_barrier_miss_rate must be between 0 and 1")
+    if not 0 <= max_smoothed_profit_barrier_calibration_overestimate <= 1:
+        raise ValueError(
+            "max_smoothed_profit_barrier_calibration_overestimate must be between 0 and 1"
+        )
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -2669,6 +2768,16 @@ def summarize_candidate_selection(
         ],
         float("inf"),
     )
+    merged["short_trade_share_max_all"] = row_max_or_default(
+        merged,
+        ["short_trade_share_max_base", "short_trade_share_max_cost"],
+        0.0,
+    )
+    merged["max_side_trade_share_max_all"] = row_max_or_default(
+        merged,
+        ["max_side_trade_share_max_base", "max_side_trade_share_max_cost"],
+        0.0,
+    )
     merged["predicted_profit_barrier_miss_rate_max_all"] = row_max_or_default(
         merged,
         [
@@ -2685,6 +2794,14 @@ def summarize_candidate_selection(
         ],
         0.0,
     )
+    merged["actual_profit_barrier_miss_rate_smoothed_max_all"] = row_max_or_default(
+        merged,
+        [
+            "actual_profit_barrier_miss_rate_smoothed_max_base",
+            "actual_profit_barrier_miss_rate_smoothed_max_cost",
+        ],
+        0.0,
+    )
     merged["profit_barrier_calibration_overestimate_max_all"] = row_max_or_default(
         merged,
         [
@@ -2693,19 +2810,37 @@ def summarize_candidate_selection(
         ],
         0.0,
     )
+    merged["profit_barrier_calibration_overestimate_smoothed_max_all"] = row_max_or_default(
+        merged,
+        [
+            "profit_barrier_calibration_overestimate_smoothed_max_max_base",
+            "profit_barrier_calibration_overestimate_smoothed_max_max_cost",
+        ],
+        0.0,
+    )
     merged["side_loss_ok"] = merged["side_adjusted_pnl_min_all"] >= -max_side_loss_per_fold
     merged["direction_session_loss_ok"] = (
         merged["direction_session_adjusted_pnl_min_all"] >= -max_direction_session_loss_per_fold
     )
+    merged["short_trade_share_ok"] = merged["short_trade_share_max_all"] <= max_short_trade_share
+    merged["side_trade_share_ok"] = merged["max_side_trade_share_max_all"] <= max_side_trade_share
     merged["predicted_profit_barrier_miss_ok"] = (
         merged["predicted_profit_barrier_miss_rate_max_all"] <= max_predicted_profit_barrier_miss_rate
     )
     merged["actual_profit_barrier_miss_ok"] = (
         merged["actual_profit_barrier_miss_rate_max_all"] <= max_actual_profit_barrier_miss_rate
     )
+    merged["smoothed_actual_profit_barrier_miss_ok"] = (
+        merged["actual_profit_barrier_miss_rate_smoothed_max_all"]
+        <= max_smoothed_actual_profit_barrier_miss_rate
+    )
     merged["profit_barrier_calibration_ok"] = (
         merged["profit_barrier_calibration_overestimate_max_all"]
         <= max_profit_barrier_calibration_overestimate
+    )
+    merged["smoothed_profit_barrier_calibration_ok"] = (
+        merged["profit_barrier_calibration_overestimate_smoothed_max_all"]
+        <= max_smoothed_profit_barrier_calibration_overestimate
     )
     merged["cost_drop_ok"] = merged["cost_pnl_drop_min"] <= max_cost_pnl_drop
     merged["pre_plateau_eligible"] = (
@@ -2713,9 +2848,13 @@ def summarize_candidate_selection(
         & merged["eligible_cost"].astype(bool)
         & merged["side_loss_ok"]
         & merged["direction_session_loss_ok"]
+        & merged["short_trade_share_ok"]
+        & merged["side_trade_share_ok"]
         & merged["predicted_profit_barrier_miss_ok"]
         & merged["actual_profit_barrier_miss_ok"]
+        & merged["smoothed_actual_profit_barrier_miss_ok"]
         & merged["profit_barrier_calibration_ok"]
+        & merged["smoothed_profit_barrier_calibration_ok"]
         & merged["cost_drop_ok"]
     )
     merged["plateau_support_count"] = plateau_support_counts(
@@ -2735,12 +2874,31 @@ def summarize_candidate_selection(
             "plateau_support_count",
             "side_adjusted_pnl_min_all",
             "direction_session_adjusted_pnl_min_all",
+            "short_trade_share_max_all",
+            "max_side_trade_share_max_all",
+            "actual_profit_barrier_miss_rate_smoothed_max_all",
             "actual_profit_barrier_miss_rate_max_all",
+            "profit_barrier_calibration_overestimate_smoothed_max_all",
             "predicted_profit_barrier_miss_rate_max_all",
             "profit_barrier_calibration_overestimate_max_all",
             "cost_pnl_drop_min",
         ],
-        ascending=[False, False, False, False, False, False, True, True, True, True],
+        ascending=[
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+        ],
     ).reset_index(drop=True)
 
 
@@ -2805,6 +2963,14 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         max_predicted_profit_barrier_miss_rate=args.max_predicted_profit_barrier_miss_rate,
         max_actual_profit_barrier_miss_rate=args.max_actual_profit_barrier_miss_rate,
         max_profit_barrier_calibration_overestimate=args.max_profit_barrier_calibration_overestimate,
+        max_short_trade_share=args.max_short_trade_share,
+        max_side_trade_share=args.max_side_trade_share,
+        max_smoothed_actual_profit_barrier_miss_rate=(
+            args.max_smoothed_actual_profit_barrier_miss_rate
+        ),
+        max_smoothed_profit_barrier_calibration_overestimate=(
+            args.max_smoothed_profit_barrier_calibration_overestimate
+        ),
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -2823,6 +2989,14 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "max_predicted_profit_barrier_miss_rate": args.max_predicted_profit_barrier_miss_rate,
         "max_actual_profit_barrier_miss_rate": args.max_actual_profit_barrier_miss_rate,
         "max_profit_barrier_calibration_overestimate": args.max_profit_barrier_calibration_overestimate,
+        "max_short_trade_share": args.max_short_trade_share,
+        "max_side_trade_share": args.max_side_trade_share,
+        "max_smoothed_actual_profit_barrier_miss_rate": (
+            args.max_smoothed_actual_profit_barrier_miss_rate
+        ),
+        "max_smoothed_profit_barrier_calibration_overestimate": (
+            args.max_smoothed_profit_barrier_calibration_overestimate
+        ),
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -3126,6 +3300,30 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="maximum allowed predicted-minus-actual hit rate in any profit-barrier probability bucket",
+    )
+    model_candidate_selection.add_argument(
+        "--max-short-trade-share",
+        type=float,
+        default=1.0,
+        help="maximum allowed short-trade share in any fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-side-trade-share",
+        type=float,
+        default=1.0,
+        help="maximum allowed dominant side trade share in any fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-smoothed-actual-profit-barrier-miss-rate",
+        type=float,
+        default=1.0,
+        help="maximum allowed Laplace-smoothed actual profit-barrier miss rate",
+    )
+    model_candidate_selection.add_argument(
+        "--max-smoothed-profit-barrier-calibration-overestimate",
+        type=float,
+        default=1.0,
+        help="maximum allowed Laplace-smoothed profit-barrier calibration overestimate",
     )
     model_candidate_selection.add_argument(
         "--plateau-column",

@@ -42,7 +42,7 @@
 ## 記録場所
 
 - `reports/`
-  実験ごとのレポートを置く。ファイル名は `00001_YYYY-MM-DD_slug.md` の通し番号形式にする。通し番号はファイルシステムの更新時刻ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポートの冒頭には `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を入れる。
+  実験ごとのレポートを置く。ファイル名は `00001_YYYY-MM-DD_slug.md` の通し番号形式にする。通し番号はファイルシステムの更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポートの冒頭には `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を入れる。
 
 - `templates/`
   実験レポートやログ追記用のテンプレート。
