@@ -24,6 +24,7 @@ from trade_data.meta_model import (
     add_candidate_failure_model_columns,
     add_candidate_failure_model_values_to_examples,
     add_candidate_quality_downside_calibration_columns,
+    add_entry_timing_calibration_columns,
     add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
@@ -50,10 +51,12 @@ from trade_data.meta_model import (
     candidate_quality_downside_columns_for_side,
     candidate_quality_distribution_metrics,
     candidate_quality_group_metrics,
+    entry_timing_columns_for_side,
     combine_fit_predictions,
     combine_candidate_quality_component_columns,
     fit_candidate_failure_model_from_frame,
     fit_candidate_quality_downside_calibrator,
+    fit_entry_timing_calibrator,
     fit_candidate_quality_model_from_frame,
     fit_group_ev_calibrator,
     fit_group_target_calibrator,
@@ -1098,6 +1101,51 @@ class MetaModelTests(unittest.TestCase):
         self.assertAlmostEqual(output[short_columns["downside_prob"]].iloc[1], 0.5)
         self.assertAlmostEqual(output[short_columns["large_downside_prob"]].iloc[1], 0.5)
         self.assertLessEqual(output[short_columns["downside_risk"]].iloc[1], 0.0)
+
+    def test_entry_timing_calibration_adds_side_wait_risk_columns(self):
+        examples = pd.DataFrame(
+            {
+                "long_wait_regret": [0.0, 8.0, 1.0, 6.0],
+                "short_wait_regret": [7.0, 2.0, 0.0, 9.0],
+                "pred_long_wait_regret": [1.0, 9.0, 2.0, 8.0],
+                "pred_short_wait_regret": [8.0, 2.0, 1.0, 9.0],
+                "combined_regime": [
+                    "range_low_vol",
+                    "range_low_vol",
+                    "up_low_vol",
+                    "up_low_vol",
+                ],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "pred_long_wait_regret": [9.0, 1.0],
+                "pred_short_wait_regret": [9.0, 1.0],
+                "combined_regime": ["range_low_vol", "up_low_vol"],
+            }
+        )
+        bundle = fit_entry_timing_calibrator(
+            examples,
+            output_prefix="wait4",
+            group_columns=("combined_regime",),
+            bucket_count=2,
+            min_group_size=1,
+            prior_strength=0.0,
+            bad_wait_threshold=4.0,
+        )
+
+        output = add_entry_timing_calibration_columns(predictions, bundle)
+        long_columns = entry_timing_columns_for_side("long", "wait4")
+        short_columns = entry_timing_columns_for_side("short", "wait4")
+
+        self.assertEqual(output[long_columns["source"]].tolist(), ["group", "group"])
+        self.assertEqual(output[short_columns["source"]].tolist(), ["group", "group"])
+        self.assertAlmostEqual(output[long_columns["bad_wait_prob"]].iloc[0], 1.0)
+        self.assertAlmostEqual(output[long_columns["bad_wait_prob_risk"]].iloc[0], -1.0)
+        self.assertAlmostEqual(output[long_columns["wait_excess_mean"]].iloc[0], 4.0)
+        self.assertAlmostEqual(output[long_columns["wait_excess_risk"]].iloc[0], -4.0)
+        self.assertAlmostEqual(output[short_columns["bad_wait_prob"]].iloc[1], 0.0)
+        self.assertAlmostEqual(output[short_columns["bad_wait_prob_risk"]].iloc[1], -0.0)
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):
         predictions = add_trade_source_ev_columns(

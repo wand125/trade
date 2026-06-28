@@ -347,6 +347,19 @@ class CandidateQualityDownsideCalibrationBundle:
 
 
 @dataclass(frozen=True)
+class EntryTimingCalibrationBundle:
+    output_prefix: str
+    group_columns: tuple[str, ...]
+    bucket_edges: tuple[float, ...]
+    min_group_size: int
+    prior_strength: float
+    bad_wait_threshold: float
+    global_stats: dict[str, float]
+    side_stats: dict[str, dict[str, float]]
+    group_stats: dict[tuple[str, ...], dict[str, float]]
+
+
+@dataclass(frozen=True)
 class TradeFailureProbabilityCalibrator:
     config: GroupEVCalibrationConfig
     target_name: str
@@ -3696,6 +3709,411 @@ def candidate_quality_downside_calibration_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def read_table(path: Path) -> pd.DataFrame:
+    suffix = path.suffix.lower()
+    if suffix == ".parquet":
+        return pd.read_parquet(path)
+    if suffix == ".csv":
+        return pd.read_csv(path)
+    raise ValueError(f"unsupported table format: {path}")
+
+
+def entry_timing_base(side_name: str, output_prefix: str) -> str:
+    prefix = validate_candidate_quality_prediction_prefix(output_prefix)
+    if not prefix:
+        raise ValueError("output prefix must be non-empty")
+    return f"pred_entry_timing_{prefix}_{side_name}"
+
+
+def entry_timing_columns_for_side(side_name: str, output_prefix: str) -> dict[str, str]:
+    base = entry_timing_base(side_name, output_prefix)
+    return {
+        "calibrated_wait_regret": f"{base}_calibrated_wait_regret",
+        "bad_wait_prob": f"{base}_bad_wait_prob",
+        "wait_excess_mean": f"{base}_wait_excess_mean",
+        "wait_underestimate_mean": f"{base}_wait_underestimate_mean",
+        "bad_wait_prob_risk": f"{base}_bad_wait_prob_risk",
+        "wait_excess_risk": f"{base}_wait_excess_risk",
+        "wait_underestimate_risk": f"{base}_wait_underestimate_risk",
+        "support": f"{base}_support",
+        "source": f"{base}_source",
+        "wait_regret_bucket": f"{base}_wait_regret_bucket",
+    }
+
+
+def entry_timing_side_examples(
+    examples: pd.DataFrame,
+    group_columns: tuple[str, ...],
+) -> pd.DataFrame:
+    missing = [column for column in group_columns if column not in examples.columns]
+    for side_name, spec in SIDE_COLUMNS.items():
+        missing.extend(
+            column
+            for column in (spec["wait_regret"], f"{side_name}_wait_regret")
+            if column not in examples.columns
+        )
+    if missing:
+        raise ValueError(f"entry timing examples missing columns: {', '.join(sorted(set(missing)))}")
+
+    frames: list[pd.DataFrame] = []
+    for side_name, spec in SIDE_COLUMNS.items():
+        side_frame = pd.DataFrame(
+            {
+                "entry_side": side_name,
+                "pred_wait_regret": pd.to_numeric(
+                    examples[spec["wait_regret"]],
+                    errors="coerce",
+                ),
+                "actual_wait_regret": pd.to_numeric(
+                    examples[f"{side_name}_wait_regret"],
+                    errors="coerce",
+                ),
+            }
+        )
+        for column in group_columns:
+            side_frame[column] = examples[column].astype("string").fillna("__missing__")
+        if "dataset_month" in examples.columns:
+            side_frame["dataset_month"] = examples["dataset_month"].astype(str)
+        frames.append(side_frame)
+    frame = pd.concat(frames, ignore_index=True)
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=["pred_wait_regret", "actual_wait_regret"]
+    )
+
+
+def entry_timing_raw_stats(
+    frame: pd.DataFrame,
+    *,
+    bad_wait_threshold: float,
+) -> dict[str, float]:
+    if frame.empty:
+        return {
+            "support": 0.0,
+            "pred_wait_regret_mean": 0.0,
+            "actual_wait_regret_mean": 0.0,
+            "bad_wait_prob": 0.0,
+            "wait_excess_mean": 0.0,
+            "wait_underestimate_mean": 0.0,
+        }
+    predicted = frame["pred_wait_regret"].astype(float)
+    actual = frame["actual_wait_regret"].astype(float)
+    return {
+        "support": float(len(frame)),
+        "pred_wait_regret_mean": float(predicted.mean()),
+        "actual_wait_regret_mean": float(actual.mean()),
+        "bad_wait_prob": float((actual > bad_wait_threshold).mean()),
+        "wait_excess_mean": float((actual - bad_wait_threshold).clip(lower=0.0).mean()),
+        "wait_underestimate_mean": float((actual - predicted).clip(lower=0.0).mean()),
+    }
+
+
+def smooth_entry_timing_stats(
+    raw_stats: dict[str, float],
+    prior_stats: dict[str, float],
+    prior_strength: float,
+) -> dict[str, float]:
+    if prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    support = raw_stats["support"]
+    if support + prior_strength <= 0:
+        return dict(raw_stats)
+    smoothed = dict(raw_stats)
+    for key in [
+        "pred_wait_regret_mean",
+        "actual_wait_regret_mean",
+        "bad_wait_prob",
+        "wait_excess_mean",
+        "wait_underestimate_mean",
+    ]:
+        smoothed[key] = float(
+            (support * raw_stats[key] + prior_strength * prior_stats[key])
+            / (support + prior_strength)
+        )
+    return smoothed
+
+
+def finalized_entry_timing_stats(stats: dict[str, float]) -> dict[str, float]:
+    output = dict(stats)
+    output["bad_wait_prob_risk"] = -float(max(output["bad_wait_prob"], 0.0))
+    output["wait_excess_risk"] = -float(max(output["wait_excess_mean"], 0.0))
+    output["wait_underestimate_risk"] = -float(max(output["wait_underestimate_mean"], 0.0))
+    return output
+
+
+def fit_entry_timing_calibrator(
+    examples: pd.DataFrame,
+    *,
+    output_prefix: str,
+    group_columns: tuple[str, ...] = ("combined_regime",),
+    bucket_count: int = 10,
+    min_group_size: int = 20,
+    prior_strength: float = 50.0,
+    bad_wait_threshold: float = 4.0,
+) -> EntryTimingCalibrationBundle:
+    if min_group_size < 1:
+        raise ValueError("min_group_size must be positive")
+    if prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    output_prefix = validate_candidate_quality_prediction_prefix(output_prefix)
+    if not output_prefix:
+        raise ValueError("output prefix must be non-empty")
+    frame = entry_timing_side_examples(examples, group_columns)
+    if frame.empty:
+        raise ValueError("entry timing examples are empty")
+    edges = quality_bucket_edges(frame["pred_wait_regret"], bucket_count)
+    frame["_wait_regret_bucket"] = assign_quality_score_buckets(frame["pred_wait_regret"], edges)
+
+    raw_global = entry_timing_raw_stats(frame, bad_wait_threshold=bad_wait_threshold)
+    global_stats = finalized_entry_timing_stats(raw_global)
+    side_stats: dict[str, dict[str, float]] = {}
+    for side_name, group in frame.groupby("entry_side", dropna=False, observed=False):
+        raw_side = entry_timing_raw_stats(group, bad_wait_threshold=bad_wait_threshold)
+        side_stats[str(side_name)] = finalized_entry_timing_stats(raw_side)
+
+    key_columns = ["entry_side", *group_columns, "_wait_regret_bucket"]
+    group_stats: dict[tuple[str, ...], dict[str, float]] = {}
+    for key, group in frame.groupby(key_columns, dropna=False, observed=False):
+        if len(group) < min_group_size:
+            continue
+        key_tuple = tuple(str(value) for value in (key if isinstance(key, tuple) else (key,)))
+        side_name = key_tuple[0]
+        prior_stats = side_stats.get(side_name, global_stats)
+        raw_group = entry_timing_raw_stats(group, bad_wait_threshold=bad_wait_threshold)
+        smoothed = smooth_entry_timing_stats(raw_group, prior_stats, prior_strength)
+        group_stats[key_tuple] = finalized_entry_timing_stats(smoothed)
+
+    return EntryTimingCalibrationBundle(
+        output_prefix=output_prefix,
+        group_columns=group_columns,
+        bucket_edges=edges,
+        min_group_size=min_group_size,
+        prior_strength=prior_strength,
+        bad_wait_threshold=bad_wait_threshold,
+        global_stats=global_stats,
+        side_stats=side_stats,
+        group_stats=group_stats,
+    )
+
+
+def entry_timing_stats_frame(bundle: EntryTimingCalibrationBundle) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    rows.append({"source": "global", "key": "global", **bundle.global_stats})
+    for side_name, stats in sorted(bundle.side_stats.items()):
+        rows.append({"source": "side", "key": side_name, "entry_side": side_name, **stats})
+    for key, stats in sorted(bundle.group_stats.items()):
+        row: dict[str, object] = {
+            "source": "group",
+            "key": "|".join(key),
+            "entry_side": key[0],
+            "_wait_regret_bucket": key[-1],
+            **stats,
+        }
+        for column, value in zip(bundle.group_columns, key[1:-1], strict=True):
+            row[column] = value
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def entry_timing_output_frame(
+    predictions: pd.DataFrame,
+    side_name: str,
+    bundle: EntryTimingCalibrationBundle,
+) -> pd.DataFrame:
+    wait_column = SIDE_COLUMNS[side_name]["wait_regret"]
+    missing = [wait_column, *[column for column in bundle.group_columns if column not in predictions.columns]]
+    missing = [column for column in missing if column not in predictions.columns]
+    if missing:
+        raise ValueError(f"predictions missing entry timing calibration columns: {', '.join(missing)}")
+
+    wait_values = pd.to_numeric(predictions[wait_column], errors="coerce")
+    buckets = assign_quality_score_buckets(wait_values, bundle.bucket_edges)
+    group_values = normalize_candidate_quality_group_columns(predictions, bundle.group_columns)
+    rows: list[dict[str, object]] = []
+    for index in predictions.index:
+        key = tuple(
+            [
+                side_name,
+                *[str(group_values.loc[index, column]) for column in bundle.group_columns],
+                str(buckets.loc[index]),
+            ]
+        )
+        stats = bundle.group_stats.get(key)
+        source = "group"
+        if stats is None:
+            stats = bundle.side_stats.get(side_name)
+            source = "side"
+        if stats is None:
+            stats = bundle.global_stats
+            source = "global"
+        rows.append(
+            {
+                "calibrated_wait_regret": stats["actual_wait_regret_mean"],
+                "bad_wait_prob": stats["bad_wait_prob"],
+                "wait_excess_mean": stats["wait_excess_mean"],
+                "wait_underestimate_mean": stats["wait_underestimate_mean"],
+                "bad_wait_prob_risk": stats["bad_wait_prob_risk"],
+                "wait_excess_risk": stats["wait_excess_risk"],
+                "wait_underestimate_risk": stats["wait_underestimate_risk"],
+                "support": stats["support"],
+                "source": source,
+                "wait_regret_bucket": str(buckets.loc[index]),
+            }
+        )
+    return pd.DataFrame(rows, index=predictions.index)
+
+
+def add_entry_timing_calibration_columns(
+    predictions: pd.DataFrame,
+    bundle: EntryTimingCalibrationBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        values = entry_timing_output_frame(output, side_name, bundle)
+        columns = entry_timing_columns_for_side(side_name, bundle.output_prefix)
+        for key, column in columns.items():
+            output[column] = values[key]
+    return output
+
+
+def add_entry_timing_calibration_oof_columns(
+    predictions: pd.DataFrame,
+    examples: pd.DataFrame,
+    *,
+    oof_column: str,
+    output_prefix: str,
+    group_columns: tuple[str, ...],
+    bucket_count: int,
+    min_group_size: int,
+    prior_strength: float,
+    bad_wait_threshold: float,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    if oof_column not in predictions.columns:
+        raise ValueError(f"predictions missing OOF column: {oof_column}")
+    if oof_column not in examples.columns:
+        raise ValueError(f"entry timing examples missing OOF column: {oof_column}")
+    output = predictions.copy()
+    output_columns = [
+        column
+        for side_name in ("long", "short")
+        for column in entry_timing_columns_for_side(side_name, output_prefix).values()
+    ]
+    string_output_columns = {
+        column
+        for side_name in ("long", "short")
+        for key, column in entry_timing_columns_for_side(side_name, output_prefix).items()
+        if key in {"source", "wait_regret_bucket"}
+    }
+    for column in output_columns:
+        if column in string_output_columns:
+            output[column] = pd.Series(pd.NA, index=output.index, dtype="string")
+        else:
+            output[column] = np.nan
+
+    fold_metrics: dict[str, object] = {}
+    for value in sorted(str(item) for item in output[oof_column].dropna().astype(str).unique()):
+        prediction_mask = output[oof_column].astype(str) == value
+        fit_examples = examples[examples[oof_column].astype(str) != value]
+        if fit_examples.empty:
+            fit_examples = examples
+        bundle = fit_entry_timing_calibrator(
+            fit_examples,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=bucket_count,
+            min_group_size=min_group_size,
+            prior_strength=prior_strength,
+            bad_wait_threshold=bad_wait_threshold,
+        )
+        scored = add_entry_timing_calibration_columns(output.loc[prediction_mask].copy(), bundle)
+        output.loc[prediction_mask, output_columns] = scored[output_columns]
+        fold_metrics[value] = {
+            "fit_examples": int(len(fit_examples)),
+            "scored_predictions": int(prediction_mask.sum()),
+            "group_stats": int(len(bundle.group_stats)),
+            "bucket_edges": list(bundle.bucket_edges),
+        }
+    return output, fold_metrics
+
+
+def entry_timing_calibration_cli(args: argparse.Namespace) -> int:
+    examples = read_table(args.examples)
+    predictions = pd.read_parquet(args.predictions)
+    group_columns = tuple(parse_csv_strings(args.group_columns))
+    output_prefix = validate_candidate_quality_prediction_prefix(args.output_prefix)
+    if not output_prefix:
+        raise ValueError("--output-prefix must be non-empty")
+    if args.oof_column:
+        output, fold_metrics = add_entry_timing_calibration_oof_columns(
+            predictions,
+            examples,
+            oof_column=args.oof_column,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=args.bucket_count,
+            min_group_size=args.min_group_support,
+            prior_strength=args.prior_strength,
+            bad_wait_threshold=args.bad_wait_threshold,
+        )
+    else:
+        bundle = fit_entry_timing_calibrator(
+            examples,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=args.bucket_count,
+            min_group_size=args.min_group_support,
+            prior_strength=args.prior_strength,
+            bad_wait_threshold=args.bad_wait_threshold,
+        )
+        output = add_entry_timing_calibration_columns(predictions, bundle)
+        fold_metrics = {}
+
+    final_bundle = fit_entry_timing_calibrator(
+        examples,
+        output_prefix=output_prefix,
+        group_columns=group_columns,
+        bucket_count=args.bucket_count,
+        min_group_size=args.min_group_support,
+        prior_strength=args.prior_strength,
+        bad_wait_threshold=args.bad_wait_threshold,
+    )
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    output.to_parquet(args.output_path, index=False)
+    stats_path = args.output_path.with_suffix(".timing_stats.csv")
+    entry_timing_stats_frame(final_bundle).to_csv(stats_path, index=False)
+    output_columns = {
+        side_name: entry_timing_columns_for_side(side_name, output_prefix)
+        for side_name in ("long", "short")
+    }
+    metrics = {
+        "mode": "entry_timing_calibration",
+        "examples": str(args.examples),
+        "predictions": str(args.predictions),
+        "output_path": str(args.output_path),
+        "stats_path": str(stats_path),
+        "output_prefix": output_prefix,
+        "group_columns": list(group_columns),
+        "bucket_count": args.bucket_count,
+        "bucket_edges": list(final_bundle.bucket_edges),
+        "min_group_support": args.min_group_support,
+        "prior_strength": args.prior_strength,
+        "bad_wait_threshold": args.bad_wait_threshold,
+        "rows": {
+            "examples": int(len(examples)),
+            "predictions": int(len(predictions)),
+            "output": int(len(output)),
+            "group_stats": int(len(final_bundle.group_stats)),
+        },
+        "oof_column": args.oof_column,
+        "folds": fold_metrics,
+        "output_columns": output_columns,
+    }
+    metrics_path = args.output_path.with_suffix(".metrics.json")
+    with metrics_path.open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps({"output": str(args.output_path), "metrics": str(metrics_path)}, indent=2))
+    return 0
+
+
 def trade_failure_calibrated_prob_column(target_name: str, side_name: str) -> str:
     return f"pred_trade_failure_{target_name}_{side_name}_calibrated_prob"
 
@@ -6523,6 +6941,49 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_quality_downside_calibration_parser.set_defaults(
         func=candidate_quality_downside_calibration_cli
     )
+
+    entry_timing_calibration_parser = subparsers.add_parser(
+        "entry-timing-calibration",
+        help=(
+            "add support-aware entry timing risk columns from actual/predicted "
+            "wait regret"
+        ),
+    )
+    entry_timing_calibration_parser.add_argument(
+        "--examples",
+        type=Path,
+        required=True,
+        help="parquet or csv with actual and predicted wait_regret columns",
+    )
+    entry_timing_calibration_parser.add_argument("--predictions", type=Path, required=True)
+    entry_timing_calibration_parser.add_argument("--output-path", type=Path, required=True)
+    entry_timing_calibration_parser.add_argument(
+        "--output-prefix",
+        default="wait4",
+        help="output prefix for pred_entry_timing_<prefix>_<side>_* columns",
+    )
+    entry_timing_calibration_parser.add_argument(
+        "--group-columns",
+        default="combined_regime",
+        help="comma-separated columns combined with side and wait-regret bucket",
+    )
+    entry_timing_calibration_parser.add_argument("--bucket-count", type=int, default=10)
+    entry_timing_calibration_parser.add_argument("--min-group-support", type=int, default=20)
+    entry_timing_calibration_parser.add_argument("--prior-strength", type=float, default=50.0)
+    entry_timing_calibration_parser.add_argument(
+        "--bad-wait-threshold",
+        type=float,
+        default=4.0,
+        help="actual wait_regret above this value is treated as bad entry timing",
+    )
+    entry_timing_calibration_parser.add_argument(
+        "--oof-column",
+        help=(
+            "optional column such as dataset_month; when set, rows are calibrated "
+            "with examples from other values of this column"
+        ),
+    )
+    entry_timing_calibration_parser.set_defaults(func=entry_timing_calibration_cli)
 
     trade_failure_calibration_parser = subparsers.add_parser(
         "oof-trade-failure-calibration",

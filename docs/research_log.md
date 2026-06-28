@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 06:56 Entry timing calibration
+
+- `00105` の続きとして、`wait_regret` hard gateではなくside / `combined_regime` / predicted wait-regret bucket別にactual wait regretをOOF校正する `trade_data.meta_model entry-timing-calibration` を追加した。
+- `bad_wait_threshold=4` で `pred_entry_timing_wait4_<side>_bad_wait_prob_risk`, `wait_excess_risk`, `wait_underestimate_risk` を出力し、既存backtestの `--risk-penalties` にそのまま接続できるようにした。
+- 代表4ヶ月OOFでは全体bad wait probabilityがlong `0.2404`, short `0.2201`。group sourceはlong `115203/115252`, short `115080/115252` で概ね十分。
+- validation 4foldでは `bad_wait_prob_risk` も `wait_excess_risk` もrisk `0` が最上位。baseline sum `673.9120`, min month `145.5682` に対し、bad prob risk `5` はsum `538.1352`, min `39.2836`、wait excess risk `0.5` はsum `589.5164`, min `98.7648`。
+- 判断: calibration列の実装は採用するが、soft risk penaltyとして標準policyへは採用しない。validationで棄却されたためholdout固定確認には進めない。
+- report: `docs/reports/00106_2026-06-29_entry_timing_calibration.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 06:44 Entry timing wait regret gate
 
 - `00104` の次作業として、risk penaltyではなく既存entry timing教師の `pred_*_wait_regret` / `pred_*_entry_local_rank` gateを代表4ヶ月validationで再評価した。

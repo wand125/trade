@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 06:44 JST
+最終更新: 2026-06-29 06:56 JST
 
 ## 現在の状態
 
@@ -17,6 +17,8 @@ entry quality を密に学習するための追加教師targetは実装済み。
 candidate quality downside calibrationを追加済み。OOF candidate examplesからside/regime/quality bucket別にtarget mean/lower、downside probability、overestimate risk、support/sourceを出力できる。fixed componentではvalidation合計PnLを改善するrisk penalty候補が出たが、high costとholdoutの最低月が悪化したため、標準policy riskとしては採用せず、診断・ranking特徴量として残す。詳細は `docs/reports/00104_2026-06-29_candidate_quality_downside_calibration.md`。
 
 entry timingの `wait_regret` hard gateを再検証済み。`max_wait_regret=4` はvalidationとhigh costでdrawdownを下げるがsum/min monthを落とし、`2` はvalidation 2024-11でマイナス化する。holdoutでは `2` が良く見えるが、後付けの低頻度化として扱い標準採用しない。`min_entry_rank=0.7` は現行予測スケールでは0 trade。詳細は `docs/reports/00105_2026-06-29_entry_timing_wait_regret_gate.md`。
+
+entry timingのsupport-aware calibrationを追加済み。`entry-timing-calibration` はactual/predicted wait regretをside / regime / predicted bucket別にOOF校正し、`bad_wait_prob_risk` / `wait_excess_risk` / `wait_underestimate_risk` を出力できる。実装は診断・ranking特徴として採用するが、代表4ヶ月validationではrisk `0` が最上位で、soft penaltyはsum/min monthとEV overestimateを悪化させたため標準policyには採用しない。詳細は `docs/reports/00106_2026-06-29_entry_timing_calibration.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
@@ -216,7 +218,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 5. exit-event datasetとlog exit minutes targetを複数foldへ拡張し、候補固定後に複数blind月へ適用する。
 6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。profit barrierは全体平均ではなくside別・bucket別actual hit rateとsupportを必ず確認する。
 7. exit-event probability penalty、holding shrink単独、両者の小grid、dynamic / hazard-like exit threshold、side-confidence hard/min gateはいずれも標準採用しない。探索軸として残す。
-8. exit timingの複数fold比較では `bin_expected cap=480` がvalidation暫定最上位だったが、固定holdout stressで2025-04が大きく崩れたため標準昇格しない。normal-vol / rollover / ny_late risk ruleのvalidationでは、normal-vol short直接減点は台地なし、`time5` と `long_range5` は診断候補止まり。session/regime別の選択失敗targetもvalidation小改善後にholdoutで悪化したため、分類probability直結は採用しない。candidate quality drift診断ではfixed componentが最も現実的だが、月別・bucket別の過大評価が強いため、次はglobal hard gateではなくmonth/regime/bucket別のsupport-aware calibrated downside featureを作る。log-derived比較用にはdataset/train artifactを再生成する。
+8. exit timingの複数fold比較では `bin_expected cap=480` がvalidation暫定最上位だったが、固定holdout stressで2025-04が大きく崩れたため標準昇格しない。normal-vol / rollover / ny_late risk ruleのvalidationでは、normal-vol short直接減点は台地なし、`time5` と `long_range5` は診断候補止まり。session/regime別の選択失敗targetもvalidation小改善後にholdoutで悪化したため、分類probability直結は採用しない。candidate quality drift診断ではfixed componentが最も現実的だが、月別・bucket別の過大評価が強い。entry timing calibrationも単独soft penaltyではvalidationを改善しなかったため、次はこれらをglobal hard gateではなくstacking/ranking特徴として統合する。log-derived比較用にはdataset/train artifactを再生成する。
 9. `target-set side_confidence` との同一月比較は完了。専用化だけでは改善せず、`month_target` もvalidationを壊したため、side-confidence hard/min gate探索は止めてOOF calibration/diagnosticへ戻す。
 10. side-confidence penalty tuningは、calibration改善後にviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。shared representationを持つMLP/TCNを試す場合は、HGBのtarget独立fitでは得られない表現共有が本当に効くかを検証点にする。
 11. diagnostic gate、group-loss penalty、diagnostic soft penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。diagnostic soft penaltyの今回topは2024-12で悪化したため、標準policyへ昇格しない。
