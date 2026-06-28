@@ -8,6 +8,7 @@ from trade_data.modeling import (
     add_calibrated_ev_columns,
     add_profit_barrier_calibrated_columns,
     apply_split_purging,
+    build_parser,
     build_sample_weights,
     chunk_months,
     evaluate_models,
@@ -325,6 +326,28 @@ class ModelingTests(unittest.TestCase):
     def test_parse_mlp_batch_size_accepts_auto_or_positive_int(self):
         self.assertEqual(parse_mlp_batch_size("auto"), "auto")
         self.assertEqual(parse_mlp_batch_size("128"), 128)
+
+    def test_oof_shared_mlp_parser_accepts_shared_model_args(self):
+        parser = build_parser()
+
+        args = parser.parse_args(
+            [
+                "oof-shared-mlp",
+                "--months",
+                "2024-07,2024-09",
+                "--hidden-layers",
+                "16,8",
+                "--batch-size",
+                "64",
+                "--max-iter",
+                "3",
+            ]
+        )
+
+        self.assertEqual(args.func.__name__, "oof_shared_mlp")
+        self.assertEqual(args.hidden_layers, (16, 8))
+        self.assertEqual(args.batch_size, 64)
+        self.assertEqual(args.max_iter, 3)
 
     def test_parse_csv_months(self):
         self.assertEqual(parse_csv_months("2024-01,2024-03"), ["2024-01", "2024-03"])

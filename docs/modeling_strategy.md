@@ -154,6 +154,7 @@ short_utility > long_utility なら short
 - classification で分位点 bin と補助 `label` を予測する。
 - 現在のHGB実装はtargetごとの独立モデルであり、shared representationを持たない。そのため、dense entry quality targetはEV予測の表現改善には直接効かない。
 - `train-shared-mlp` で、scikit-learn `MLPRegressor` によるmulti-output regression prototypeを追加した。これはpolicy regression targetsを1つのshared modelで同時出力し、HGB独立fitとの差分を測るための入口。classification probabilityはまだ扱わない。
+- `oof-shared-mlp` でblocked OOFにも対応した。shared MLPの評価では、oracle-exit selectionだけでなく、OOF predictionを実行可能backtestへ接続してturnoverとside balanceを見る。
 - 現時点の selection metric は oracle exit を使うため、entry/side ranking の暫定評価に限る。
 - 次の評価では、予測値だけで entry/exit を実行する backtest policy に接続する。
 

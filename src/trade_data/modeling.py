@@ -2283,6 +2283,122 @@ def oof(args: argparse.Namespace) -> int:
     return 0
 
 
+def oof_shared_mlp(args: argparse.Namespace) -> int:
+    months = resolve_oof_months(args)
+    model_config = shared_mlp_config_from_args(args)
+    regression_targets, classification_targets = resolve_target_names(args.target_set)
+    all_df, feature_columns = load_months(
+        args.dataset_dir,
+        months,
+        args.horizon_hours,
+        args.min_adjusted_edge,
+    )
+    regression_targets, available_classification_targets, missing_targets = filter_available_target_names(
+        [all_df],
+        regression_targets,
+        classification_targets,
+    )
+    if not regression_targets:
+        raise ValueError("oof-shared-mlp requires at least one available regression target")
+    fold_months = chunk_months(months, args.fold_month_count)
+    run_label = args.label or f"shared_mlp_{args.target_set}_oof_edge{args.min_adjusted_edge:g}"
+    run_dir = make_run_dir(args.output_dir, run_label)
+
+    fold_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for fold_index, holdout_months in enumerate(fold_months):
+        holdout_mask = all_df["dataset_month"].isin(holdout_months)
+        holdout_df = all_df.loc[holdout_mask].copy()
+        fit_df = all_df.loc[~holdout_mask].copy()
+        if holdout_df.empty:
+            raise ValueError(f"empty OOF holdout fold: {', '.join(holdout_months)}")
+        if fit_df.empty:
+            raise ValueError(f"empty OOF fit fold for holdout: {', '.join(holdout_months)}")
+        fit_rows_before_purge = int(len(fit_df))
+        fit_rows_removed = 0
+        if args.purge_label_overlap:
+            fit_df, fit_rows_removed = purge_overlapping_labels(
+                fit_df,
+                [holdout_df],
+                horizon_hours=args.horizon_hours,
+                embargo_hours=args.embargo_hours,
+            )
+            if fit_df.empty:
+                raise ValueError(f"purging removed all fit rows for holdout: {', '.join(holdout_months)}")
+        fit_df = maybe_sample(fit_df, args.sample_frac, args.random_seed + fold_index)
+
+        print(f"[fold {fold_index}] train shared MLP regressor: {', '.join(regression_targets)}")
+        model = train_shared_mlp_regressor(model_config)
+        model.fit(
+            as_matrix(fit_df, feature_columns),
+            shared_regression_training_values(
+                fit_df,
+                regression_targets,
+                args.target_clip_quantile,
+            ),
+        )
+        split_metrics, predictions = evaluate_shared_mlp_regressor(
+            model,
+            holdout_df,
+            feature_columns,
+            regression_targets,
+        )
+        pred_frame = prediction_frame(holdout_df, predictions)
+        pred_frame["oof_fold"] = fold_index
+        pred_frame["oof_holdout_months"] = ",".join(holdout_months)
+        fold_outputs.append(pred_frame)
+        if SELECTION_COLUMNS.issubset(pred_frame.columns):
+            split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
+        fold_metrics[str(fold_index)] = {
+            "holdout_months": holdout_months,
+            "fit_rows_before_purge": fit_rows_before_purge,
+            "fit_rows_removed_by_purge": fit_rows_removed,
+            "fit_rows_after_purge_and_sampling": int(len(fit_df)),
+            "holdout_rows": int(len(holdout_df)),
+            "metrics": split_metrics,
+            "model_diagnostics": shared_mlp_diagnostics(model, model_config),
+        }
+
+    oof_predictions = pd.concat(fold_outputs, ignore_index=True).sort_values("decision_timestamp")
+    oof_predictions.to_parquet(run_dir / "predictions_oof.parquet", index=False)
+    with (run_dir / "feature_columns.json").open("w", encoding="utf-8") as handle:
+        json.dump(feature_columns, handle, ensure_ascii=False, indent=2)
+    metrics: dict[str, object] = {
+        "mode": "shared_mlp_blocked_oof",
+        "months": months,
+        "fold_months": fold_months,
+        "dataset_dir": str(args.dataset_dir),
+        "horizon_hours": args.horizon_hours,
+        "min_adjusted_edge": args.min_adjusted_edge,
+        "purge_label_overlap": args.purge_label_overlap,
+        "embargo_hours": args.embargo_hours,
+        "model_config": asdict(model_config),
+        "target_set": args.target_set,
+        "regression_targets": regression_targets,
+        "classification_targets_requested_but_not_trained": available_classification_targets,
+        "missing_targets": missing_targets,
+        "feature_count": len(feature_columns),
+        "rows": {
+            "input": int(len(all_df)),
+            "oof_predictions": int(len(oof_predictions)),
+        },
+        "month_rows": month_counts(oof_predictions),
+        "folds": fold_metrics,
+        "oof": prediction_frame_evaluation_metrics(
+            oof_predictions,
+            regression_targets,
+            [],
+            args.entry_threshold,
+        ),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    write_shared_mlp_oof_report(run_dir, metrics)
+    print(json.dumps(metrics["oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def write_report(run_dir: Path, metrics: dict[str, object]) -> None:
     test_selection = metrics["test"]["selection"]
     valid_selection = metrics["valid"]["selection"]
@@ -2445,6 +2561,50 @@ def write_oof_report(run_dir: Path, metrics: dict[str, object]) -> None:
         [
             "",
             "This report evaluates blocked out-of-fold predictions. It is intended for calibration and meta-model training data, not as a final executable policy score.",
+        ]
+    )
+    (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_shared_mlp_oof_report(run_dir: Path, metrics: dict[str, object]) -> None:
+    lines = [
+        "# Shared MLP Blocked OOF Report",
+        "",
+        f"- months: {', '.join(metrics['months'])}",
+        f"- fold months: {'; '.join(','.join(fold) for fold in metrics['fold_months'])}",
+        f"- feature count: {metrics['feature_count']}",
+        f"- input rows: {metrics['rows']['input']}",
+        f"- oof rows: {metrics['rows']['oof_predictions']}",
+        f"- regression targets: {', '.join(metrics['regression_targets'])}",
+        f"- purge label overlap: {metrics['purge_label_overlap']}",
+        f"- embargo hours: {metrics['embargo_hours']}",
+        "",
+        "This report evaluates blocked out-of-fold predictions from a shared multi-output MLP regressor. "
+        "Classification targets are not trained in this prototype.",
+    ]
+    selection = metrics["oof"].get("selection")
+    if selection:
+        lines.extend(
+            [
+                "",
+                "## OOF Selection",
+                "",
+                "| threshold | trades | oracle-exit pnl | avg pnl | side acc | oracle upper bound |",
+                "|---:|---:|---:|---:|---:|---:|",
+                (
+                    f"| {selection['entry_threshold']:.4f} | "
+                    f"{selection['selected_trade_count']} | "
+                    f"{selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{selection['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{selection['selected_side_accuracy']:.4f} | "
+                    f"{selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "OOF selection metrics still use oracle exits from target data and are not executable policy scores.",
         ]
     )
     (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -2630,6 +2790,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="full trains all research targets; policy trains only columns needed by executable policy sweeps",
     )
     oof_parser.set_defaults(func=oof)
+
+    shared_mlp_oof_parser = subparsers.add_parser(
+        "oof-shared-mlp",
+        help="train blocked OOF predictions with a shared multi-output MLP regressor",
+    )
+    shared_mlp_oof_parser.add_argument("--dataset-dir", type=Path, default=Path("data/processed/datasets/xauusd_m1"))
+    shared_mlp_oof_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    shared_mlp_oof_parser.add_argument("--label", default="", help="optional run label for the experiment directory")
+    shared_mlp_oof_parser.add_argument("--months", help="comma-separated OOF months in YYYY-MM format")
+    shared_mlp_oof_parser.add_argument("--start-month", help="first OOF month in YYYY-MM format")
+    shared_mlp_oof_parser.add_argument("--end-month", help="last OOF month in YYYY-MM format")
+    shared_mlp_oof_parser.add_argument(
+        "--fold-month-count",
+        type=int,
+        default=1,
+        help="number of contiguous months held out per OOF fold",
+    )
+    shared_mlp_oof_parser.add_argument("--horizon-hours", type=float, default=24.0)
+    shared_mlp_oof_parser.add_argument("--min-adjusted-edge", type=float, default=15.0)
+    shared_mlp_oof_parser.add_argument(
+        "--purge-label-overlap",
+        type=parse_bool,
+        default=True,
+        help="remove fit rows whose label horizon overlaps each OOF holdout window",
+    )
+    shared_mlp_oof_parser.add_argument(
+        "--embargo-hours",
+        type=float,
+        default=0.0,
+        help="extra time buffer around each OOF holdout label window",
+    )
+    shared_mlp_oof_parser.add_argument("--hidden-layers", type=parse_hidden_layer_sizes, default=(64, 32))
+    shared_mlp_oof_parser.add_argument(
+        "--activation",
+        choices=["identity", "logistic", "tanh", "relu"],
+        default="relu",
+    )
+    shared_mlp_oof_parser.add_argument("--alpha", type=float, default=0.001)
+    shared_mlp_oof_parser.add_argument("--learning-rate-init", type=float, default=0.001)
+    shared_mlp_oof_parser.add_argument("--max-iter", type=int, default=80)
+    shared_mlp_oof_parser.add_argument("--batch-size", type=parse_mlp_batch_size, default="auto")
+    shared_mlp_oof_parser.add_argument("--early-stopping", type=parse_bool, default=True)
+    shared_mlp_oof_parser.add_argument("--validation-fraction", type=float, default=0.15)
+    shared_mlp_oof_parser.add_argument("--n-iter-no-change", type=int, default=10)
+    shared_mlp_oof_parser.add_argument("--tol", type=float, default=1e-5)
+    shared_mlp_oof_parser.add_argument("--random-seed", type=int, default=7)
+    shared_mlp_oof_parser.add_argument("--sample-frac", type=float, default=1.0)
+    shared_mlp_oof_parser.add_argument("--entry-threshold", type=float, default=15.0)
+    shared_mlp_oof_parser.add_argument("--target-clip-quantile", type=float, default=0.99)
+    shared_mlp_oof_parser.add_argument(
+        "--target-set",
+        choices=sorted(TARGET_SETS),
+        default="policy",
+        help="regression targets from this set are trained jointly; classification targets are skipped",
+    )
+    shared_mlp_oof_parser.set_defaults(func=oof_shared_mlp)
 
     side_confidence_report = subparsers.add_parser(
         "side-confidence-report",

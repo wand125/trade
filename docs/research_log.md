@@ -2829,3 +2829,40 @@ Artifacts:
 - 極小smokeは性能判断ではない。`max_iter=3` で未収束、sampleも2%のみ。
 - executable smokeでは取引過多、long偏り、コスト負けが明確。代表4fold本実験ではturnover制御とside balanceを必ず見る。
 - classification probabilityは未対応なので、exit-event/profit-barrier確率が必要なpolicyはHGB classifierとのhybridまたはshared classifier追加を別に検討する。
+
+### 2026-06-28 20:06 JST Shared MLP Blocked OOF
+
+作業:
+
+- `trade_data.modeling oof-shared-mlp` を追加した。
+- holdout月ごとにfit月を分け、purge/embargoを適用した上でshared MLP regressionをfitする。
+- 2024-07/2024-09の2ヶ月で極小OOF smokeを実行した。
+- 生成した `predictions_oof.parquet` を各holdout月の `timed_ev` backtestへ接続した。
+- report: `docs/reports/00061_2026-06-28_shared_mlp_blocked_oof.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- OOF smoke model: `experiments/20260628_110628_shared_mlp_oof_smoke/`
+- executable smoke 2024-07: `data/reports/backtests/shared_mlp_oof_smoke/20260628_110643_model_timed_ev_2024-07/`
+- executable smoke 2024-09: `data/reports/backtests/shared_mlp_oof_smoke/20260628_110643_model_timed_ev_2024-09/`
+
+結果:
+
+| item | value |
+|---|---:|
+| input / OOF rows | `60472 / 60472` |
+| fold fit rows after sample | `578`, `632` |
+| fold n_iter | `2/2`, `2/2` |
+| OOF selected trades | `47557` |
+| OOF oracle-exit pnl | `846517.1014` |
+| OOF side accuracy | `0.5784` |
+| 2024-07 executable adjusted pnl | `47.3170` |
+| 2024-09 executable adjusted pnl | `32.6390` |
+| 2024-07 / 2024-09 trades | `562 / 985` |
+
+判断:
+
+- shared MLP blocked OOFの配線は動いた。
+- 2% sample、max_iter 2のsmokeなので性能採用には使わない。
+- 両月のexecutable pnlはプラスだが、取引数が多く、2024-07はshort signalが少ない。代表4fold本実験ではturnoverとside balanceを主要診断にする。

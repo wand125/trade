@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 20:01 JST
+最終更新: 2026-06-28 20:06 JST
 
 ## 現在の状態
 
@@ -102,6 +102,8 @@ candidate selectionへ複合diagnostic soft penaltyを追加済み。direction e
 
 shared representation検証の入口として `train-shared-mlp` を追加済み。scikit-learn `MLPRegressor` をmulti-output regressionとして使い、policy regression targetsを1つのモデルで同時学習する。極小smokeではartifact生成と `timed_ev` 接続は成功したが、2024-12 executable backtestは adjusted pnl `-88.1778`, 689 trades, profit factor `0.8632` で、取引過多・long偏り・コスト負けが出た。これは接続確認であり採用実験ではない。詳細は `docs/reports/00060_2026-06-28_shared_mlp_regression_smoke.md`。
 
+shared MLP用のblocked OOF CLI `oof-shared-mlp` を追加済み。2ヶ月smokeでは `predictions_oof.parquet` を生成し、各holdout月の `timed_ev` backtestへ接続できた。2024-07 adjusted pnl `+47.3170`, 562 trades、2024-09 adjusted pnl `+32.6390`, 985 trades。ただしsample 2%、max_iter 2で未収束かつ取引過多・side偏りがあるため、採用判断には使わない。詳細は `docs/reports/00061_2026-06-28_shared_mlp_blocked_oof.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -135,7 +137,7 @@ shared representation検証の入口として `train-shared-mlp` を追加済み
 10. diagnostic gate、group-loss penalty、diagnostic soft penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。diagnostic soft penaltyの今回topは2024-12で悪化したため、標準policyへ昇格しない。
 11. profit-barrier probability単独のhard gate/global linear penalty探索は打ち切る。今後はdirection/sessionやcombined regimeのrisk penaltyと同時に扱う場合だけ再評価する。
 12. 次はside/entry calibrationとprofit-barrier missの同時制御へ戻る。exit timingだけで負け月を救う方向には寄せすぎない。
-13. `train-shared-mlp` を代表validation 4foldで本実験する。極小smokeでは接続は確認済みだが、取引過多・long偏り・コスト負けが出たため、turnover制御、side balance、executable backtestで評価する。classification probabilityが必要なpolicyはHGB classifierとのhybridかshared classifier追加を別途検証する。
+13. `oof-shared-mlp` を代表validation 4foldで本実験する。極小smokeではOOF配線と実行可能backtest接続は確認済みだが、取引過多・side偏りがあるため、turnover制御、side balance、drawdown、NoTrade比較で評価する。classification probabilityが必要なpolicyはHGB classifierとのhybridかshared classifier追加を別途検証する。
 
 ## 未決定事項
 

@@ -203,6 +203,18 @@ python -m trade_data.modeling train-shared-mlp \
 This prototype trains regression targets only. Probability-based gates still
 require HGB classifier predictions or a later shared classifier.
 
+Build blocked OOF predictions with the shared MLP:
+
+```bash
+python -m trade_data.modeling oof-shared-mlp \
+  --dataset-dir data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined \
+  --months 2024-07,2024-09,2024-11,2025-01 \
+  --fold-month-count 1 \
+  --target-set policy \
+  --hidden-layers 64,32 \
+  --max-iter 80
+```
+
 ## Backtest Saved Model Predictions
 
 Run an executable policy from saved model predictions:
