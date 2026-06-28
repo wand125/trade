@@ -40,11 +40,14 @@ from trade_data.meta_model import (
     build_candidate_quality_training_frame,
     build_sample_weights,
     build_training_frame,
+    candidate_quality_bucket_metrics,
     candidate_entry_side_masks,
     candidate_failure_prob_column,
     candidate_failure_risk_column,
     candidate_failure_taken_prob_column,
     candidate_failure_target_column,
+    candidate_quality_distribution_metrics,
+    candidate_quality_group_metrics,
     combine_fit_predictions,
     combine_candidate_quality_component_columns,
     fit_candidate_failure_model_from_frame,
@@ -61,6 +64,7 @@ from trade_data.meta_model import (
     parse_csv_ints,
     parse_csv_months,
     parse_csv_strings,
+    prepare_candidate_quality_report_frame,
     residual_penalty_output_column,
     residual_penalty_scored_metrics,
     trade_quality_calibration_metrics,
@@ -985,6 +989,57 @@ class MetaModelTests(unittest.TestCase):
             output["pred_candidate_quality_component_stack_short_overestimate_risk"].tolist(),
             [-0.0, -0.0, -4.0],
         )
+
+    def test_candidate_quality_report_metrics_capture_month_and_bucket_drift(self):
+        examples = pd.DataFrame(
+            {
+                "target": [10.0, -5.0, 0.0, -20.0],
+                "pred_taken_ev": [12.0, 8.0, 5.0, 1.0],
+                "pred_candidate_quality_taken_adjusted_pnl": [9.0, 0.0, 3.0, -3.0],
+                "pred_candidate_quality_taken_lower_adjusted_pnl": [5.0, -8.0, -1.0, -10.0],
+                "dataset_month": ["2024-07", "2024-07", "2024-09", "2024-09"],
+                "candidate_side": ["long", "short", "long", "short"],
+                "combined_regime": [
+                    "up_low_vol",
+                    "range_normal_vol",
+                    "range_normal_vol",
+                    "down_high_vol",
+                ],
+            }
+        )
+
+        frame = prepare_candidate_quality_report_frame(examples)
+        overall = candidate_quality_distribution_metrics(frame, downside_thresholds=(0.0, -15.0))
+        month_metrics = candidate_quality_group_metrics(
+            frame,
+            [("dataset_month",)],
+            downside_thresholds=(0.0, -15.0),
+            min_support=1,
+        )
+        bucket_metrics = candidate_quality_bucket_metrics(
+            frame,
+            score_column="_mean_pred",
+            bucket_count=2,
+            group_columns=("dataset_month",),
+            downside_thresholds=(0.0, -15.0),
+            min_support=1,
+        )
+
+        self.assertEqual(overall["support"], 4)
+        self.assertAlmostEqual(overall["target_mean"], -3.75)
+        self.assertAlmostEqual(overall["raw_bias"], 10.25)
+        self.assertAlmostEqual(overall["mean_bias"], 6.0)
+        self.assertAlmostEqual(overall["lower_coverage"], 0.75)
+        self.assertAlmostEqual(overall["target_rate_le_0"], 0.75)
+        self.assertAlmostEqual(overall["target_rate_le_neg15"], 0.25)
+        self.assertEqual(len(month_metrics), 2)
+        july = month_metrics[month_metrics["dataset_month"] == "2024-07"].iloc[0]
+        september = month_metrics[month_metrics["dataset_month"] == "2024-09"].iloc[0]
+        self.assertAlmostEqual(july["target_mean"], 2.5)
+        self.assertAlmostEqual(july["target_mean_shift"], 6.25)
+        self.assertAlmostEqual(september["target_rate_le_0"], 1.0)
+        self.assertEqual(int(bucket_metrics["support"].sum()), 4)
+        self.assertEqual(set(bucket_metrics["bucket"].astype(str)), {"q01", "q02"})
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):
         predictions = add_trade_source_ev_columns(

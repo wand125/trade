@@ -281,6 +281,25 @@ This writes `pred_candidate_quality_component_fixed_weighted_<side>_*`
 columns that can be passed to `model-sweep --long-trade-quality-column` and
 `--short-trade-quality-column`.
 
+Diagnose candidate-quality OOF examples by month, side, regime, and prediction
+buckets before wiring the quality score into a policy:
+
+```bash
+python -m trade_data.meta_model candidate-quality-report \
+  --examples data/reports/modeling/<run>/validation_oof_candidate_quality_examples.csv \
+  --output-dir data/reports/modeling \
+  --label candidate_quality_downside_report \
+  --downside-thresholds 0,-15 \
+  --bucket-score mean \
+  --bucket-count 10 \
+  --bucket-group-columns dataset_month,candidate_side
+```
+
+This writes `overall_metrics.csv`, `group_metrics.csv`,
+`bucket_metrics.csv`, and `summary.json`. The report is intended to catch
+month/regime drift in target downside prevalence, lower-quantile coverage, and
+EV overestimate before a hard gate or scalar risk penalty is tried.
+
 If a saved prediction parquet was produced before actual forced-exit target
 columns were preserved, enrich it from the dataset files before training
 barrier-event targets:

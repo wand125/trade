@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 06:17 Candidate quality downside drift report
+
+- `00102` の次作業として、分類failure probability直結ではなく、candidate rowの連続targetを月別・regime別・bucket別に診断する `trade_data.meta_model candidate-quality-report` を追加した。
+- 既存のtimed / fixed / clipped candidate quality component OOF examplesを診断し、`overall_metrics.csv`, `group_metrics.csv`, `bucket_metrics.csv`, `summary.json` を出力するようにした。
+- fixed componentはoverallで target mean `1.2754`, mean bias `0.2982`, mean MAE `7.9169`, lower coverage `0.7055`, `target<=0` `0.4114`, `target<=-15` `0.0806`。timedより現実的で、clipped bestよりdownside情報を保持している。
+- ただしfixed componentは2024-11で mean overestimate `5.4115`, lower coverage `0.6125`, `target<=-15` `0.1151` と下振れが大きい。2025-01も `target<=0` `0.4885` まで悪化する。
+- prediction bucket別では、fixed componentの上位 `q09/q10` がmean prediction高めにもかかわらずmean overestimate `6.5076` / `6.3060`、lower coverage `0.5844` / `0.6139` と悪い。quality scoreは単調なrankとして使えない。
+- 判断: `candidate-quality-report` は採用。fixed componentを中心に次はmonth/regime/bucket別のsupport-aware calibrated downside featureへ進む。global quality hard gateやscalar risk直結は継続して採用しない。
+- report: `docs/reports/00103_2026-06-29_candidate_quality_downside_drift_report.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 06:04 Candidate failure regime/session targets
 
 - `00101` の次作業として、normal-vol / time-sessionをruleで直接減点せず、candidate-entry failure targetとして教師化した。

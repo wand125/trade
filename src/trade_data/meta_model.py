@@ -2904,6 +2904,307 @@ def candidate_quality_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
     return metrics
 
 
+def candidate_quality_threshold_suffix(threshold: float) -> str:
+    text = f"{threshold:g}".replace("-", "neg").replace(".", "p")
+    return f"le_{text}"
+
+
+def prepare_candidate_quality_report_frame(
+    examples: pd.DataFrame,
+    *,
+    target_column: str = "target",
+    raw_prediction_column: str = "pred_taken_ev",
+    mean_prediction_column: str = CANDIDATE_QUALITY_TAKEN_COLUMN,
+    lower_prediction_column: str = CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN,
+) -> pd.DataFrame:
+    required_columns = {
+        target_column,
+        raw_prediction_column,
+        mean_prediction_column,
+        lower_prediction_column,
+    }
+    missing = sorted(required_columns - set(examples.columns))
+    if missing:
+        raise ValueError(f"candidate quality examples missing columns: {', '.join(missing)}")
+    output = examples.copy()
+    output["_target"] = pd.to_numeric(output[target_column], errors="coerce")
+    output["_raw_pred"] = pd.to_numeric(output[raw_prediction_column], errors="coerce")
+    output["_mean_pred"] = pd.to_numeric(output[mean_prediction_column], errors="coerce")
+    output["_lower_pred"] = pd.to_numeric(output[lower_prediction_column], errors="coerce")
+    output = output.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=["_target", "_raw_pred", "_mean_pred", "_lower_pred"]
+    )
+    output["_raw_error"] = output["_raw_pred"] - output["_target"]
+    output["_mean_error"] = output["_mean_pred"] - output["_target"]
+    output["_lower_error"] = output["_lower_pred"] - output["_target"]
+    output["_raw_overestimate"] = output["_raw_error"].clip(lower=0.0)
+    output["_mean_overestimate"] = output["_mean_error"].clip(lower=0.0)
+    output["_lower_overestimate"] = output["_lower_error"].clip(lower=0.0)
+    output["_lower_covered"] = output["_lower_pred"] <= output["_target"]
+    return output
+
+
+def candidate_quality_distribution_metrics(
+    frame: pd.DataFrame,
+    downside_thresholds: tuple[float, ...] = (0.0, -15.0),
+) -> dict[str, float]:
+    if frame.empty:
+        metrics = {
+            "support": 0,
+            "target_mean": 0.0,
+            "target_std": 0.0,
+            "target_q10": 0.0,
+            "target_q25": 0.0,
+            "target_median": 0.0,
+            "raw_predicted_mean": 0.0,
+            "mean_predicted_mean": 0.0,
+            "lower_predicted_mean": 0.0,
+            "raw_bias": 0.0,
+            "mean_bias": 0.0,
+            "lower_bias": 0.0,
+            "raw_overestimate_mean": 0.0,
+            "mean_overestimate_mean": 0.0,
+            "lower_overestimate_mean": 0.0,
+            "mean_mae": 0.0,
+            "lower_coverage": 0.0,
+        }
+        for threshold in downside_thresholds:
+            suffix = candidate_quality_threshold_suffix(threshold)
+            metrics[f"target_rate_{suffix}"] = 0.0
+            metrics[f"raw_pred_rate_{suffix}"] = 0.0
+            metrics[f"mean_pred_rate_{suffix}"] = 0.0
+            metrics[f"lower_pred_rate_{suffix}"] = 0.0
+        return metrics
+
+    metrics = {
+        "support": int(len(frame)),
+        "target_mean": float(frame["_target"].mean()),
+        "target_std": float(frame["_target"].std(ddof=0)),
+        "target_q10": float(frame["_target"].quantile(0.10)),
+        "target_q25": float(frame["_target"].quantile(0.25)),
+        "target_median": float(frame["_target"].median()),
+        "raw_predicted_mean": float(frame["_raw_pred"].mean()),
+        "mean_predicted_mean": float(frame["_mean_pred"].mean()),
+        "lower_predicted_mean": float(frame["_lower_pred"].mean()),
+        "raw_bias": float(frame["_raw_error"].mean()),
+        "mean_bias": float(frame["_mean_error"].mean()),
+        "lower_bias": float(frame["_lower_error"].mean()),
+        "raw_overestimate_mean": float(frame["_raw_overestimate"].mean()),
+        "mean_overestimate_mean": float(frame["_mean_overestimate"].mean()),
+        "lower_overestimate_mean": float(frame["_lower_overestimate"].mean()),
+        "mean_mae": float(frame["_mean_error"].abs().mean()),
+        "lower_coverage": float(frame["_lower_covered"].mean()),
+    }
+    for threshold in downside_thresholds:
+        suffix = candidate_quality_threshold_suffix(threshold)
+        metrics[f"target_rate_{suffix}"] = float((frame["_target"] <= threshold).mean())
+        metrics[f"raw_pred_rate_{suffix}"] = float((frame["_raw_pred"] <= threshold).mean())
+        metrics[f"mean_pred_rate_{suffix}"] = float((frame["_mean_pred"] <= threshold).mean())
+        metrics[f"lower_pred_rate_{suffix}"] = float((frame["_lower_pred"] <= threshold).mean())
+    return metrics
+
+
+def parse_groupings(value: str | None) -> list[tuple[str, ...]]:
+    if value is None:
+        return []
+    groupings: list[tuple[str, ...]] = []
+    for raw_grouping in value.split(";"):
+        columns = tuple(parse_csv_strings(raw_grouping))
+        if columns:
+            groupings.append(columns)
+    return groupings
+
+
+def candidate_quality_group_metrics(
+    frame: pd.DataFrame,
+    groupings: list[tuple[str, ...]],
+    *,
+    downside_thresholds: tuple[float, ...] = (0.0, -15.0),
+    min_support: int = 1,
+) -> pd.DataFrame:
+    overall = candidate_quality_distribution_metrics(frame, downside_thresholds)
+    rows: list[dict[str, object]] = []
+    for grouping in groupings:
+        missing = [column for column in grouping if column not in frame.columns]
+        if missing:
+            continue
+        grouping_name = ",".join(grouping)
+        for key, group in frame.groupby(list(grouping), dropna=False, sort=True, observed=False):
+            if len(group) < min_support:
+                continue
+            key_tuple = key if isinstance(key, tuple) else (key,)
+            metrics = candidate_quality_distribution_metrics(group, downside_thresholds)
+            row: dict[str, object] = {
+                "grouping": grouping_name,
+                "group_key": "|".join("__missing__" if pd.isna(value) else str(value) for value in key_tuple),
+            }
+            for column, value in zip(grouping, key_tuple, strict=True):
+                row[column] = "__missing__" if pd.isna(value) else value
+            row.update(metrics)
+            row["target_mean_shift"] = row["target_mean"] - overall["target_mean"]
+            row["mean_bias_shift"] = row["mean_bias"] - overall["mean_bias"]
+            row["lower_coverage_shift"] = row["lower_coverage"] - overall["lower_coverage"]
+            if 0.0 in downside_thresholds:
+                suffix = candidate_quality_threshold_suffix(0.0)
+                row[f"target_rate_{suffix}_shift"] = (
+                    row[f"target_rate_{suffix}"] - overall[f"target_rate_{suffix}"]
+                )
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def candidate_quality_bucket_metrics(
+    frame: pd.DataFrame,
+    *,
+    score_column: str = "_mean_pred",
+    bucket_count: int = 10,
+    group_columns: tuple[str, ...] = (),
+    downside_thresholds: tuple[float, ...] = (0.0, -15.0),
+    min_support: int = 1,
+) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame()
+    if score_column not in frame.columns:
+        raise ValueError(f"unknown candidate quality score column: {score_column}")
+    if bucket_count < 2:
+        raise ValueError("bucket_count must be at least 2")
+    missing_groups = [column for column in group_columns if column not in frame.columns]
+    if missing_groups:
+        raise ValueError(f"candidate quality bucket groups missing columns: {', '.join(missing_groups)}")
+    output = frame.copy()
+    bucket_total = min(bucket_count, len(output))
+    labels = [f"q{index + 1:02d}" for index in range(bucket_total)]
+    ranks = output[score_column].rank(method="first")
+    output["_quality_score_bucket"] = pd.qcut(ranks, q=bucket_total, labels=labels)
+    grouping_columns = [*group_columns, "_quality_score_bucket"]
+    rows: list[dict[str, object]] = []
+    for key, group in output.groupby(grouping_columns, dropna=False, sort=True, observed=False):
+        if len(group) < min_support:
+            continue
+        key_tuple = key if isinstance(key, tuple) else (key,)
+        metrics = candidate_quality_distribution_metrics(group, downside_thresholds)
+        row: dict[str, object] = {
+            "score_column": score_column,
+            "bucket": str(key_tuple[-1]),
+            "score_min": float(group[score_column].min()),
+            "score_max": float(group[score_column].max()),
+        }
+        for column, value in zip(grouping_columns[:-1], key_tuple[:-1], strict=True):
+            row[column] = "__missing__" if pd.isna(value) else value
+        row.update(metrics)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def candidate_quality_report_cli(args: argparse.Namespace) -> int:
+    examples = pd.read_csv(args.examples)
+    downside_thresholds = tuple(parse_csv_floats(args.downside_thresholds) or [0.0, -15.0])
+    frame = prepare_candidate_quality_report_frame(
+        examples,
+        target_column=args.target_column,
+        raw_prediction_column=args.raw_prediction_column,
+        mean_prediction_column=args.mean_prediction_column,
+        lower_prediction_column=args.lower_prediction_column,
+    )
+    groupings = parse_groupings(args.groupings)
+    if not groupings:
+        groupings = [
+            ("dataset_month",),
+            ("candidate_side",),
+            ("combined_regime",),
+            ("session_regime",),
+            ("dataset_month", "candidate_side"),
+            ("dataset_month", "combined_regime"),
+            ("dataset_month", "session_regime"),
+        ]
+    used_groupings = [
+        grouping for grouping in groupings if all(column in frame.columns for column in grouping)
+    ]
+    skipped_groupings = [
+        grouping for grouping in groupings if any(column not in frame.columns for column in grouping)
+    ]
+    bucket_group_columns = tuple(
+        column for column in parse_csv_strings(args.bucket_group_columns) if column in frame.columns
+    )
+    bucket_score_map = {
+        "raw": "_raw_pred",
+        "mean": "_mean_pred",
+        "lower": "_lower_pred",
+    }
+    if args.bucket_score not in bucket_score_map:
+        raise ValueError("bucket_score must be raw, mean, or lower")
+
+    overall = candidate_quality_distribution_metrics(frame, downside_thresholds)
+    group_metrics = candidate_quality_group_metrics(
+        frame,
+        used_groupings,
+        downside_thresholds=downside_thresholds,
+        min_support=args.min_group_support,
+    )
+    bucket_metrics = candidate_quality_bucket_metrics(
+        frame,
+        score_column=bucket_score_map[args.bucket_score],
+        bucket_count=args.bucket_count,
+        group_columns=bucket_group_columns,
+        downside_thresholds=downside_thresholds,
+        min_support=args.min_group_support,
+    )
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    pd.DataFrame([overall]).to_csv(run_dir / "overall_metrics.csv", index=False)
+    group_metrics.to_csv(run_dir / "group_metrics.csv", index=False)
+    bucket_metrics.to_csv(run_dir / "bucket_metrics.csv", index=False)
+
+    worst_downside_rows: list[dict[str, object]] = []
+    worst_overestimate_rows: list[dict[str, object]] = []
+    if not group_metrics.empty:
+        downside_column = f"target_rate_{candidate_quality_threshold_suffix(0.0)}"
+        worst_downside_rows = (
+            group_metrics.sort_values([downside_column, "support"], ascending=[False, False])
+            .head(args.summary_rows)
+            .to_dict(orient="records")
+        )
+        worst_overestimate_rows = (
+            group_metrics.sort_values(["mean_overestimate_mean", "support"], ascending=[False, False])
+            .head(args.summary_rows)
+            .to_dict(orient="records")
+        )
+    summary = {
+        "mode": "candidate_quality_report",
+        "examples": str(args.examples),
+        "rows": {
+            "input": int(len(examples)),
+            "usable": int(len(frame)),
+            "group_metrics": int(len(group_metrics)),
+            "bucket_metrics": int(len(bucket_metrics)),
+        },
+        "columns": {
+            "target": args.target_column,
+            "raw_prediction": args.raw_prediction_column,
+            "mean_prediction": args.mean_prediction_column,
+            "lower_prediction": args.lower_prediction_column,
+        },
+        "downside_thresholds": list(downside_thresholds),
+        "groupings": {
+            "used": [list(grouping) for grouping in used_groupings],
+            "skipped": [list(grouping) for grouping in skipped_groupings],
+        },
+        "bucket": {
+            "score": args.bucket_score,
+            "score_column": bucket_score_map[args.bucket_score],
+            "count": args.bucket_count,
+            "group_columns": list(bucket_group_columns),
+        },
+        "overall": overall,
+        "worst_downside_groups": worst_downside_rows,
+        "worst_overestimate_groups": worst_overestimate_rows,
+    }
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps({"overall": overall, "artifacts": str(run_dir)}, indent=2))
+    return 0
+
+
 def trade_failure_calibrated_prob_column(target_name: str, side_name: str) -> str:
     return f"pred_trade_failure_{target_name}_{side_name}_calibrated_prob"
 
@@ -5638,6 +5939,53 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated non-negative weights, required for weighted_mean",
     )
     combine_candidate_quality_parser.set_defaults(func=combine_candidate_quality_components_cli)
+
+    candidate_quality_report_parser = subparsers.add_parser(
+        "candidate-quality-report",
+        help="diagnose candidate-entry quality prediction drift by month, side, regime, and buckets",
+    )
+    candidate_quality_report_parser.add_argument("--examples", type=Path, required=True)
+    candidate_quality_report_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    candidate_quality_report_parser.add_argument("--label", default="candidate_quality_report")
+    candidate_quality_report_parser.add_argument("--target-column", default="target")
+    candidate_quality_report_parser.add_argument("--raw-prediction-column", default="pred_taken_ev")
+    candidate_quality_report_parser.add_argument(
+        "--mean-prediction-column",
+        default=CANDIDATE_QUALITY_TAKEN_COLUMN,
+    )
+    candidate_quality_report_parser.add_argument(
+        "--lower-prediction-column",
+        default=CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN,
+    )
+    candidate_quality_report_parser.add_argument(
+        "--downside-thresholds",
+        default="0,-15",
+        help="comma-separated target thresholds used for downside prevalence diagnostics",
+    )
+    candidate_quality_report_parser.add_argument(
+        "--groupings",
+        default=(
+            "dataset_month;candidate_side;combined_regime;session_regime;"
+            "dataset_month,candidate_side;dataset_month,combined_regime;"
+            "dataset_month,session_regime"
+        ),
+        help="semicolon-separated groupings; each grouping is comma-separated columns",
+    )
+    candidate_quality_report_parser.add_argument(
+        "--bucket-score",
+        choices=("raw", "mean", "lower"),
+        default="mean",
+        help="prediction column family used to build quantile buckets",
+    )
+    candidate_quality_report_parser.add_argument("--bucket-count", type=int, default=10)
+    candidate_quality_report_parser.add_argument(
+        "--bucket-group-columns",
+        default="dataset_month,candidate_side",
+        help="comma-separated columns to include before the prediction quantile bucket",
+    )
+    candidate_quality_report_parser.add_argument("--min-group-support", type=int, default=20)
+    candidate_quality_report_parser.add_argument("--summary-rows", type=int, default=10)
+    candidate_quality_report_parser.set_defaults(func=candidate_quality_report_cli)
 
     trade_failure_calibration_parser = subparsers.add_parser(
         "oof-trade-failure-calibration",
