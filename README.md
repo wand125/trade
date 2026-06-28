@@ -300,6 +300,33 @@ This writes `overall_metrics.csv`, `group_metrics.csv`,
 month/regime drift in target downside prevalence, lower-quantile coverage, and
 EV overestimate before a hard gate or scalar risk penalty is tried.
 
+Support-aware candidate-quality downside calibration columns can be added from
+the OOF candidate examples:
+
+```bash
+python -m trade_data.meta_model candidate-quality-downside-calibration \
+  --examples data/reports/modeling/<run>/validation_oof_candidate_quality_examples.csv \
+  --predictions data/reports/modeling/<run>/predictions_validation_oof_candidate_quality_model.parquet \
+  --output-path data/reports/modeling/<run>/predictions_oof_downside.parquet \
+  --input-prediction-prefix fixed_component \
+  --output-prefix fixed_downside \
+  --group-columns combined_regime \
+  --bucket-count 10 \
+  --min-group-support 20 \
+  --prior-strength 50 \
+  --lower-z 1.0 \
+  --downside-threshold 0 \
+  --large-downside-threshold -15 \
+  --oof-column dataset_month
+```
+
+This writes calibrated target mean/lower, downside probabilities,
+overestimate-risk columns, support, source, and quality bucket for each side.
+Use `--oof-column` for validation OOF scoring; omit it when fitting on all OOF
+examples and applying to a fixed holdout prediction parquet. Treat these columns
+as diagnostic/ranking features until a separate holdout confirms the risk
+penalty, because validation-only gains have repeatedly failed on later months.
+
 If a saved prediction parquet was produced before actual forced-exit target
 columns were preserved, enrich it from the dataset files before training
 barrier-event targets:

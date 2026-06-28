@@ -23,6 +23,7 @@ from trade_data.meta_model import (
     TradeQualityModelConfig,
     add_candidate_failure_model_columns,
     add_candidate_failure_model_values_to_examples,
+    add_candidate_quality_downside_calibration_columns,
     add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
@@ -46,11 +47,13 @@ from trade_data.meta_model import (
     candidate_failure_risk_column,
     candidate_failure_taken_prob_column,
     candidate_failure_target_column,
+    candidate_quality_downside_columns_for_side,
     candidate_quality_distribution_metrics,
     candidate_quality_group_metrics,
     combine_fit_predictions,
     combine_candidate_quality_component_columns,
     fit_candidate_failure_model_from_frame,
+    fit_candidate_quality_downside_calibrator,
     fit_candidate_quality_model_from_frame,
     fit_group_ev_calibrator,
     fit_group_target_calibrator,
@@ -1040,6 +1043,61 @@ class MetaModelTests(unittest.TestCase):
         self.assertAlmostEqual(september["target_rate_le_0"], 1.0)
         self.assertEqual(int(bucket_metrics["support"].sum()), 4)
         self.assertEqual(set(bucket_metrics["bucket"].astype(str)), {"q01", "q02"})
+
+    def test_candidate_quality_downside_calibration_adds_side_risk_columns(self):
+        examples = pd.DataFrame(
+            {
+                "target": [10.0, -20.0, 0.0, -5.0, 5.0, -15.0],
+                "pred_taken_ev": [12.0, 12.0, 6.0, 6.0, 4.0, 4.0],
+                "pred_candidate_quality_taken_adjusted_pnl": [8.0, 9.0, 2.0, 3.0, -1.0, -2.0],
+                "pred_candidate_quality_taken_lower_adjusted_pnl": [4.0, 5.0, -3.0, -4.0, -5.0, -6.0],
+                "candidate_side": ["long", "long", "long", "short", "short", "short"],
+                "combined_regime": [
+                    "range_low_vol",
+                    "range_low_vol",
+                    "up_low_vol",
+                    "range_low_vol",
+                    "up_low_vol",
+                    "up_low_vol",
+                ],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "pred_candidate_quality_fixed_component_long_adjusted_pnl": [8.0, 2.0],
+                "pred_candidate_quality_fixed_component_short_adjusted_pnl": [3.0, -1.0],
+                "combined_regime": ["range_low_vol", "up_low_vol"],
+            }
+        )
+        bundle = fit_candidate_quality_downside_calibrator(
+            examples,
+            input_prediction_prefix="fixed_component",
+            output_prefix="fixed_downside",
+            group_columns=("combined_regime",),
+            bucket_count=2,
+            min_group_size=1,
+            prior_strength=0.0,
+            lower_z=0.0,
+            downside_threshold=0.0,
+            large_downside_threshold=-15.0,
+        )
+
+        output = add_candidate_quality_downside_calibration_columns(predictions, bundle)
+        long_columns = candidate_quality_downside_columns_for_side("long", "fixed_downside")
+        short_columns = candidate_quality_downside_columns_for_side("short", "fixed_downside")
+
+        self.assertEqual(output[long_columns["quality_bucket"]].tolist(), ["q02", "q01"])
+        self.assertEqual(output[short_columns["quality_bucket"]].tolist(), ["q02", "q01"])
+        self.assertEqual(output[long_columns["source"]].tolist(), ["group", "group"])
+        self.assertEqual(output[short_columns["source"]].tolist(), ["group", "group"])
+        self.assertAlmostEqual(output[long_columns["calibrated_mean"]].iloc[0], -5.0)
+        self.assertAlmostEqual(output[long_columns["downside_prob"]].iloc[0], 0.5)
+        self.assertAlmostEqual(output[long_columns["overestimate"]].iloc[0], 14.5)
+        self.assertAlmostEqual(output[long_columns["overestimate_risk"]].iloc[0], -14.5)
+        self.assertAlmostEqual(output[short_columns["calibrated_mean"]].iloc[1], -5.0)
+        self.assertAlmostEqual(output[short_columns["downside_prob"]].iloc[1], 0.5)
+        self.assertAlmostEqual(output[short_columns["large_downside_prob"]].iloc[1], 0.5)
+        self.assertLessEqual(output[short_columns["downside_risk"]].iloc[1], 0.0)
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):
         predictions = add_trade_source_ev_columns(

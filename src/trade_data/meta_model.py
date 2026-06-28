@@ -331,6 +331,22 @@ class CandidateQualityModelBundle:
 
 
 @dataclass(frozen=True)
+class CandidateQualityDownsideCalibrationBundle:
+    input_prediction_prefix: str
+    output_prefix: str
+    group_columns: tuple[str, ...]
+    bucket_edges: tuple[float, ...]
+    min_group_size: int
+    prior_strength: float
+    lower_z: float
+    downside_threshold: float
+    large_downside_threshold: float
+    global_stats: dict[str, float]
+    side_stats: dict[str, dict[str, float]]
+    group_stats: dict[tuple[str, ...], dict[str, float]]
+
+
+@dataclass(frozen=True)
 class TradeFailureProbabilityCalibrator:
     config: GroupEVCalibrationConfig
     target_name: str
@@ -3205,6 +3221,481 @@ def candidate_quality_report_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def candidate_quality_downside_base(side_name: str, output_prefix: str) -> str:
+    prefix = validate_candidate_quality_prediction_prefix(output_prefix)
+    if not prefix:
+        raise ValueError("output prefix must be non-empty")
+    return f"pred_candidate_quality_{prefix}_{side_name}"
+
+
+def candidate_quality_downside_columns_for_side(side_name: str, output_prefix: str) -> dict[str, str]:
+    base = candidate_quality_downside_base(side_name, output_prefix)
+    return {
+        "calibrated_mean": f"{base}_calibrated_target_mean",
+        "calibrated_lower": f"{base}_calibrated_target_lower",
+        "downside_prob": f"{base}_downside_prob",
+        "large_downside_prob": f"{base}_large_downside_prob",
+        "overestimate": f"{base}_overestimate",
+        "lower_overestimate": f"{base}_lower_overestimate",
+        "overestimate_risk": f"{base}_overestimate_risk",
+        "downside_risk": f"{base}_downside_risk",
+        "large_downside_risk": f"{base}_large_downside_risk",
+        "support": f"{base}_support",
+        "source": f"{base}_source",
+        "quality_bucket": f"{base}_quality_bucket",
+    }
+
+
+def quality_bucket_edges(values: pd.Series, bucket_count: int) -> tuple[float, ...]:
+    if bucket_count < 2:
+        raise ValueError("bucket_count must be at least 2")
+    numeric = pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
+    if numeric.empty:
+        return (-np.inf, np.inf)
+    quantiles = np.linspace(0.0, 1.0, bucket_count + 1)
+    edges = np.unique(np.quantile(numeric.to_numpy(dtype=float), quantiles))
+    if len(edges) < 2:
+        value = float(edges[0])
+        edges = np.asarray([value - 1e-9, value + 1e-9], dtype=float)
+    edges = edges.astype(float)
+    edges[0] = -np.inf
+    edges[-1] = np.inf
+    return tuple(float(edge) for edge in edges)
+
+
+def assign_quality_score_buckets(values: pd.Series, edges: tuple[float, ...]) -> pd.Series:
+    if len(edges) < 2:
+        raise ValueError("bucket edges must contain at least two values")
+    labels = [f"q{index + 1:02d}" for index in range(len(edges) - 1)]
+    numeric = pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    buckets = pd.cut(numeric, bins=list(edges), labels=labels, include_lowest=True)
+    return buckets.astype("string").fillna("__missing__")
+
+
+def normalize_candidate_quality_group_columns(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.DataFrame:
+    output = pd.DataFrame(index=frame.index)
+    for column in columns:
+        if column not in frame.columns:
+            raise ValueError(f"candidate quality calibration missing group column: {column}")
+        output[column] = frame[column].astype("string").fillna("__missing__")
+    return output
+
+
+def candidate_quality_downside_raw_stats(
+    frame: pd.DataFrame,
+    *,
+    downside_threshold: float,
+    large_downside_threshold: float,
+) -> dict[str, float]:
+    if frame.empty:
+        return {
+            "support": 0.0,
+            "target_mean": 0.0,
+            "target_std": 0.0,
+            "target_standard_error": 0.0,
+            "downside_prob": 0.0,
+            "large_downside_prob": 0.0,
+            "mean_overestimate": 0.0,
+            "lower_overestimate": 0.0,
+            "lower_coverage": 0.0,
+        }
+    target = frame["_target"].astype(float)
+    target_std_value = target_std(target)
+    return {
+        "support": float(len(frame)),
+        "target_mean": float(target.mean()),
+        "target_std": target_std_value,
+        "target_standard_error": target_standard_error(target),
+        "downside_prob": float((target <= downside_threshold).mean()),
+        "large_downside_prob": float((target <= large_downside_threshold).mean()),
+        "mean_overestimate": float(frame["_mean_overestimate"].mean()),
+        "lower_overestimate": float(frame["_lower_overestimate"].mean()),
+        "lower_coverage": float(frame["_lower_covered"].mean()),
+    }
+
+
+def smooth_candidate_quality_downside_stats(
+    raw_stats: dict[str, float],
+    prior_stats: dict[str, float],
+    prior_strength: float,
+) -> dict[str, float]:
+    if prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    support = raw_stats["support"]
+    if support + prior_strength <= 0:
+        return dict(raw_stats)
+    smoothed = dict(raw_stats)
+    for key in [
+        "target_mean",
+        "downside_prob",
+        "large_downside_prob",
+        "mean_overestimate",
+        "lower_overestimate",
+        "lower_coverage",
+    ]:
+        smoothed[key] = float(
+            (support * raw_stats[key] + prior_strength * prior_stats[key])
+            / (support + prior_strength)
+        )
+    return smoothed
+
+
+def finalized_candidate_quality_downside_stats(
+    stats: dict[str, float],
+    *,
+    lower_z: float,
+) -> dict[str, float]:
+    output = dict(stats)
+    output["calibrated_lower"] = float(
+        output["target_mean"] - lower_z * output["target_standard_error"]
+    )
+    output["overestimate_risk"] = -float(max(output["mean_overestimate"], 0.0))
+    output["downside_risk"] = -float(max(output["downside_prob"], 0.0))
+    output["large_downside_risk"] = -float(max(output["large_downside_prob"], 0.0))
+    return output
+
+
+def fit_candidate_quality_downside_calibrator(
+    examples: pd.DataFrame,
+    *,
+    input_prediction_prefix: str,
+    output_prefix: str,
+    group_columns: tuple[str, ...] = ("combined_regime",),
+    bucket_count: int = 10,
+    min_group_size: int = 20,
+    prior_strength: float = 50.0,
+    lower_z: float = 1.0,
+    downside_threshold: float = 0.0,
+    large_downside_threshold: float = -15.0,
+    target_column: str = "target",
+    raw_prediction_column: str = "pred_taken_ev",
+    mean_prediction_column: str = CANDIDATE_QUALITY_TAKEN_COLUMN,
+    lower_prediction_column: str = CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN,
+) -> CandidateQualityDownsideCalibrationBundle:
+    if min_group_size < 1:
+        raise ValueError("min_group_size must be positive")
+    if lower_z < 0:
+        raise ValueError("lower_z must be non-negative")
+    frame = prepare_candidate_quality_report_frame(
+        examples,
+        target_column=target_column,
+        raw_prediction_column=raw_prediction_column,
+        mean_prediction_column=mean_prediction_column,
+        lower_prediction_column=lower_prediction_column,
+    )
+    if "candidate_side" not in frame.columns:
+        raise ValueError("candidate quality examples missing candidate_side")
+    normalized_groups = normalize_candidate_quality_group_columns(frame, group_columns)
+    for column in group_columns:
+        frame[column] = normalized_groups[column]
+    frame["candidate_side"] = frame["candidate_side"].astype("string").fillna("__missing__")
+    edges = quality_bucket_edges(frame["_mean_pred"], bucket_count)
+    frame["_quality_score_bucket"] = assign_quality_score_buckets(frame["_mean_pred"], edges)
+
+    raw_global = candidate_quality_downside_raw_stats(
+        frame,
+        downside_threshold=downside_threshold,
+        large_downside_threshold=large_downside_threshold,
+    )
+    global_stats = finalized_candidate_quality_downside_stats(raw_global, lower_z=lower_z)
+    side_stats: dict[str, dict[str, float]] = {}
+    for side_name, group in frame.groupby("candidate_side", dropna=False, observed=False):
+        raw_side = candidate_quality_downside_raw_stats(
+            group,
+            downside_threshold=downside_threshold,
+            large_downside_threshold=large_downside_threshold,
+        )
+        side_stats[str(side_name)] = finalized_candidate_quality_downside_stats(
+            raw_side,
+            lower_z=lower_z,
+        )
+
+    key_columns = ["candidate_side", *group_columns, "_quality_score_bucket"]
+    group_stats: dict[tuple[str, ...], dict[str, float]] = {}
+    for key, group in frame.groupby(key_columns, dropna=False, observed=False):
+        if len(group) < min_group_size:
+            continue
+        key_tuple = tuple(str(value) for value in (key if isinstance(key, tuple) else (key,)))
+        side_name = key_tuple[0]
+        prior_stats = side_stats.get(side_name, global_stats)
+        raw_group = candidate_quality_downside_raw_stats(
+            group,
+            downside_threshold=downside_threshold,
+            large_downside_threshold=large_downside_threshold,
+        )
+        smoothed = smooth_candidate_quality_downside_stats(
+            raw_group,
+            prior_stats,
+            prior_strength,
+        )
+        group_stats[key_tuple] = finalized_candidate_quality_downside_stats(
+            smoothed,
+            lower_z=lower_z,
+        )
+
+    return CandidateQualityDownsideCalibrationBundle(
+        input_prediction_prefix=validate_candidate_quality_prediction_prefix(input_prediction_prefix),
+        output_prefix=validate_candidate_quality_prediction_prefix(output_prefix),
+        group_columns=group_columns,
+        bucket_edges=edges,
+        min_group_size=min_group_size,
+        prior_strength=prior_strength,
+        lower_z=lower_z,
+        downside_threshold=downside_threshold,
+        large_downside_threshold=large_downside_threshold,
+        global_stats=global_stats,
+        side_stats=side_stats,
+        group_stats=group_stats,
+    )
+
+
+def candidate_quality_downside_stats_frame(
+    bundle: CandidateQualityDownsideCalibrationBundle,
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    rows.append({"source": "global", "key": "global", **bundle.global_stats})
+    for side_name, stats in sorted(bundle.side_stats.items()):
+        rows.append({"source": "side", "key": side_name, "candidate_side": side_name, **stats})
+    for key, stats in sorted(bundle.group_stats.items()):
+        row: dict[str, object] = {
+            "source": "group",
+            "key": "|".join(key),
+            "candidate_side": key[0],
+            "_quality_score_bucket": key[-1],
+            **stats,
+        }
+        for column, value in zip(bundle.group_columns, key[1:-1], strict=True):
+            row[column] = value
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def candidate_quality_downside_output_frame(
+    predictions: pd.DataFrame,
+    side_name: str,
+    bundle: CandidateQualityDownsideCalibrationBundle,
+) -> pd.DataFrame:
+    quality_column = candidate_quality_columns_for_side(
+        side_name,
+        bundle.input_prediction_prefix,
+    )[0]
+    missing = [quality_column, *[column for column in bundle.group_columns if column not in predictions.columns]]
+    missing = [column for column in missing if column not in predictions.columns]
+    if missing:
+        raise ValueError(f"predictions missing candidate quality calibration columns: {', '.join(missing)}")
+
+    quality_values = pd.to_numeric(predictions[quality_column], errors="coerce")
+    buckets = assign_quality_score_buckets(quality_values, bundle.bucket_edges)
+    group_values = normalize_candidate_quality_group_columns(predictions, bundle.group_columns)
+    rows: list[dict[str, object]] = []
+    for index in predictions.index:
+        key = tuple(
+            [
+                side_name,
+                *[str(group_values.loc[index, column]) for column in bundle.group_columns],
+                str(buckets.loc[index]),
+            ]
+        )
+        stats = bundle.group_stats.get(key)
+        source = "group"
+        if stats is None:
+            stats = bundle.side_stats.get(side_name)
+            source = "side"
+        if stats is None:
+            stats = bundle.global_stats
+            source = "global"
+        rows.append(
+            {
+                "calibrated_mean": stats["target_mean"],
+                "calibrated_lower": stats["calibrated_lower"],
+                "downside_prob": stats["downside_prob"],
+                "large_downside_prob": stats["large_downside_prob"],
+                "overestimate": stats["mean_overestimate"],
+                "lower_overestimate": stats["lower_overestimate"],
+                "overestimate_risk": stats["overestimate_risk"],
+                "downside_risk": stats["downside_risk"],
+                "large_downside_risk": stats["large_downside_risk"],
+                "support": stats["support"],
+                "source": source,
+                "quality_bucket": str(buckets.loc[index]),
+            }
+        )
+    return pd.DataFrame(rows, index=predictions.index)
+
+
+def add_candidate_quality_downside_calibration_columns(
+    predictions: pd.DataFrame,
+    bundle: CandidateQualityDownsideCalibrationBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        values = candidate_quality_downside_output_frame(output, side_name, bundle)
+        columns = candidate_quality_downside_columns_for_side(side_name, bundle.output_prefix)
+        for key, column in columns.items():
+            output[column] = values[key]
+    return output
+
+
+def add_candidate_quality_downside_calibration_oof_columns(
+    predictions: pd.DataFrame,
+    examples: pd.DataFrame,
+    *,
+    oof_column: str,
+    input_prediction_prefix: str,
+    output_prefix: str,
+    group_columns: tuple[str, ...],
+    bucket_count: int,
+    min_group_size: int,
+    prior_strength: float,
+    lower_z: float,
+    downside_threshold: float,
+    large_downside_threshold: float,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    if oof_column not in predictions.columns:
+        raise ValueError(f"predictions missing OOF column: {oof_column}")
+    if oof_column not in examples.columns:
+        raise ValueError(f"candidate quality examples missing OOF column: {oof_column}")
+    output = predictions.copy()
+    fold_metrics: dict[str, object] = {}
+    output_columns = [
+        column
+        for side_name in ("long", "short")
+        for column in candidate_quality_downside_columns_for_side(side_name, output_prefix).values()
+    ]
+    string_output_columns = {
+        column
+        for side_name in ("long", "short")
+        for key, column in candidate_quality_downside_columns_for_side(side_name, output_prefix).items()
+        if key in {"source", "quality_bucket"}
+    }
+    for column in output_columns:
+        if column in string_output_columns:
+            output[column] = pd.Series(pd.NA, index=output.index, dtype="string")
+        else:
+            output[column] = np.nan
+    for value in sorted(str(item) for item in output[oof_column].dropna().astype(str).unique()):
+        prediction_mask = output[oof_column].astype(str) == value
+        fit_examples = examples[examples[oof_column].astype(str) != value]
+        if fit_examples.empty:
+            fit_examples = examples
+        bundle = fit_candidate_quality_downside_calibrator(
+            fit_examples,
+            input_prediction_prefix=input_prediction_prefix,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=bucket_count,
+            min_group_size=min_group_size,
+            prior_strength=prior_strength,
+            lower_z=lower_z,
+            downside_threshold=downside_threshold,
+            large_downside_threshold=large_downside_threshold,
+        )
+        scored = add_candidate_quality_downside_calibration_columns(
+            output.loc[prediction_mask].copy(),
+            bundle,
+        )
+        output.loc[prediction_mask, output_columns] = scored[output_columns]
+        fold_metrics[value] = {
+            "fit_examples": int(len(fit_examples)),
+            "scored_predictions": int(prediction_mask.sum()),
+            "group_stats": int(len(bundle.group_stats)),
+            "bucket_edges": list(bundle.bucket_edges),
+        }
+    return output, fold_metrics
+
+
+def candidate_quality_downside_calibration_cli(args: argparse.Namespace) -> int:
+    examples = pd.read_csv(args.examples)
+    predictions = pd.read_parquet(args.predictions)
+    group_columns = tuple(parse_csv_strings(args.group_columns))
+    output_prefix = validate_candidate_quality_prediction_prefix(args.output_prefix)
+    input_prediction_prefix = validate_candidate_quality_prediction_prefix(args.input_prediction_prefix)
+    if not output_prefix:
+        raise ValueError("--output-prefix must be non-empty")
+    if args.oof_column:
+        output, fold_metrics = add_candidate_quality_downside_calibration_oof_columns(
+            predictions,
+            examples,
+            oof_column=args.oof_column,
+            input_prediction_prefix=input_prediction_prefix,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=args.bucket_count,
+            min_group_size=args.min_group_support,
+            prior_strength=args.prior_strength,
+            lower_z=args.lower_z,
+            downside_threshold=args.downside_threshold,
+            large_downside_threshold=args.large_downside_threshold,
+        )
+    else:
+        bundle = fit_candidate_quality_downside_calibrator(
+            examples,
+            input_prediction_prefix=input_prediction_prefix,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=args.bucket_count,
+            min_group_size=args.min_group_support,
+            prior_strength=args.prior_strength,
+            lower_z=args.lower_z,
+            downside_threshold=args.downside_threshold,
+            large_downside_threshold=args.large_downside_threshold,
+        )
+        output = add_candidate_quality_downside_calibration_columns(predictions, bundle)
+        fold_metrics = {}
+
+    final_bundle = fit_candidate_quality_downside_calibrator(
+        examples,
+        input_prediction_prefix=input_prediction_prefix,
+        output_prefix=output_prefix,
+        group_columns=group_columns,
+        bucket_count=args.bucket_count,
+        min_group_size=args.min_group_support,
+        prior_strength=args.prior_strength,
+        lower_z=args.lower_z,
+        downside_threshold=args.downside_threshold,
+        large_downside_threshold=args.large_downside_threshold,
+    )
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    output.to_parquet(args.output_path, index=False)
+    stats_path = args.output_path.with_suffix(".calibration_stats.csv")
+    candidate_quality_downside_stats_frame(final_bundle).to_csv(stats_path, index=False)
+    output_columns = {
+        side_name: candidate_quality_downside_columns_for_side(side_name, output_prefix)
+        for side_name in ("long", "short")
+    }
+    metrics = {
+        "mode": "candidate_quality_downside_calibration",
+        "examples": str(args.examples),
+        "predictions": str(args.predictions),
+        "output_path": str(args.output_path),
+        "stats_path": str(stats_path),
+        "input_prediction_prefix": input_prediction_prefix,
+        "output_prefix": output_prefix,
+        "group_columns": list(group_columns),
+        "bucket_count": args.bucket_count,
+        "bucket_edges": list(final_bundle.bucket_edges),
+        "min_group_support": args.min_group_support,
+        "prior_strength": args.prior_strength,
+        "lower_z": args.lower_z,
+        "downside_threshold": args.downside_threshold,
+        "large_downside_threshold": args.large_downside_threshold,
+        "rows": {
+            "examples": int(len(examples)),
+            "predictions": int(len(predictions)),
+            "output": int(len(output)),
+            "group_stats": int(len(final_bundle.group_stats)),
+        },
+        "oof_column": args.oof_column,
+        "folds": fold_metrics,
+        "output_columns": output_columns,
+    }
+    metrics_path = args.output_path.with_suffix(".metrics.json")
+    with metrics_path.open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps({"output": str(args.output_path), "metrics": str(metrics_path)}, indent=2))
+    return 0
+
+
 def trade_failure_calibrated_prob_column(target_name: str, side_name: str) -> str:
     return f"pred_trade_failure_{target_name}_{side_name}_calibrated_prob"
 
@@ -5986,6 +6477,52 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_quality_report_parser.add_argument("--min-group-support", type=int, default=20)
     candidate_quality_report_parser.add_argument("--summary-rows", type=int, default=10)
     candidate_quality_report_parser.set_defaults(func=candidate_quality_report_cli)
+
+    candidate_quality_downside_calibration_parser = subparsers.add_parser(
+        "candidate-quality-downside-calibration",
+        help=(
+            "add support-aware candidate-quality downside calibration columns "
+            "from OOF candidate examples"
+        ),
+    )
+    candidate_quality_downside_calibration_parser.add_argument("--examples", type=Path, required=True)
+    candidate_quality_downside_calibration_parser.add_argument("--predictions", type=Path, required=True)
+    candidate_quality_downside_calibration_parser.add_argument("--output-path", type=Path, required=True)
+    candidate_quality_downside_calibration_parser.add_argument(
+        "--input-prediction-prefix",
+        default="",
+        help="candidate-quality prediction prefix already present in --predictions",
+    )
+    candidate_quality_downside_calibration_parser.add_argument(
+        "--output-prefix",
+        default="downside_calibrated",
+        help="output prefix for calibrated downside columns",
+    )
+    candidate_quality_downside_calibration_parser.add_argument(
+        "--group-columns",
+        default="combined_regime",
+        help="comma-separated columns combined with side and quality bucket for calibration",
+    )
+    candidate_quality_downside_calibration_parser.add_argument("--bucket-count", type=int, default=10)
+    candidate_quality_downside_calibration_parser.add_argument("--min-group-support", type=int, default=20)
+    candidate_quality_downside_calibration_parser.add_argument("--prior-strength", type=float, default=50.0)
+    candidate_quality_downside_calibration_parser.add_argument("--lower-z", type=float, default=1.0)
+    candidate_quality_downside_calibration_parser.add_argument("--downside-threshold", type=float, default=0.0)
+    candidate_quality_downside_calibration_parser.add_argument(
+        "--large-downside-threshold",
+        type=float,
+        default=-15.0,
+    )
+    candidate_quality_downside_calibration_parser.add_argument(
+        "--oof-column",
+        help=(
+            "optional column such as dataset_month; when set, rows are calibrated "
+            "with examples from other values of this column"
+        ),
+    )
+    candidate_quality_downside_calibration_parser.set_defaults(
+        func=candidate_quality_downside_calibration_cli
+    )
 
     trade_failure_calibration_parser = subparsers.add_parser(
         "oof-trade-failure-calibration",

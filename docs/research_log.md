@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 06:36 Candidate quality downside calibration
+
+- `00103` のdownside driftを受け、`trade_data.meta_model candidate-quality-downside-calibration` を追加した。candidate side + `combined_regime` + quality bucketごとに target mean/lower, downside probability, large downside probability, overestimate risk, support/sourceを出力する。
+- OOF validationでは `--oof-column dataset_month` によりscored monthをfit examplesから外す。holdout applyではOOF全体fitを固定predictionへ適用する。
+- fixed component OOF globalは support `9091`, target mean `1.2754`, downside prob `0.4114`, large downside prob `0.0806`, mean overestimate `4.1076`, lower coverage `0.7055`。short側のdownside probは `0.4545` と高い。
+- validation 4ヶ月では `overestimate_risk` penalty `0.25` がsum pnl `673.9120 -> 690.8404` を改善したが、min month pnlは `145.5682 -> 128.2770` に悪化。high costでもsumは `562.8784 -> 587.6084` だがmin monthは `120.5842 -> 88.7012`。
+- `downside_risk` penalty `2.0` はvalidation sum `684.8380` だがworst regime lossが悪化し、強いpenaltyは取引数を削りすぎる。
+- holdout 4ヶ月では `overestimate_risk` penalty `0.25` がsum `-116.0564 -> -88.1660`, max DD `474.6194 -> 406.1932` と改善した一方、2025-03/2025-04を悪化させた。`downside_risk` penalty `2.0` はsum `-160.0460`, min month `-326.0556` に悪化。
+- 判断: downside calibration列は診断・ranking特徴量として採用するが、標準policyのrisk penaltyには採用しない。次は2025-04へ後付けで合わせず、validation内で事前登録したregime/session exposure riskとentry timing target再設計を扱う。
+- report: `docs/reports/00104_2026-06-29_candidate_quality_downside_calibration.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 06:17 Candidate quality downside drift report
 
 - `00102` の次作業として、分類failure probability直結ではなく、candidate rowの連続targetを月別・regime別・bucket別に診断する `trade_data.meta_model candidate-quality-report` を追加した。
