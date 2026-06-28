@@ -12,8 +12,8 @@ from typing import Iterable
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from sklearn.metrics import brier_score_loss, mean_absolute_error, mean_squared_error, r2_score, roc_auc_score
 
 from trade_data.backtest import (
     FIXED_HORIZON_SCORE_MODES,
@@ -215,7 +215,44 @@ class TradeQualityModelBundle:
     target_mean: float
 
 
+@dataclass(frozen=True)
+class TradeFailureModelConfig:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    max_depth: int | None
+    min_samples_leaf: int
+    l2_regularization: float
+    max_features: float
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
+    random_seed: int
+    sample_weighting: str
+    prediction_shrinkage: float
+    large_loss_threshold: float
+    exit_regret_threshold: float
+    target_names: tuple[str, ...]
+
+
+@dataclass
+class TradeFailureModelBundle:
+    config: TradeFailureModelConfig
+    models: dict[str, HistGradientBoostingClassifier | None]
+    feature_columns: list[str]
+    category_mappings: dict[str, dict[str, int]]
+    target_means: dict[str, float]
+
+
 FIXED_HORIZON_MINUTES = (60, 240, 720)
+TRADE_FAILURE_TARGET_NAMES = (
+    "large_loss",
+    "wrong_side",
+    "profit_barrier_miss",
+    "exit_regret_high",
+    "any_failure",
+)
 TRADE_SOURCE_LONG_EV_COLUMN = "pred_trade_source_long_ev"
 TRADE_SOURCE_SHORT_EV_COLUMN = "pred_trade_source_short_ev"
 TRADE_QUALITY_LONG_COLUMN = "pred_trade_quality_long_adjusted_pnl"
@@ -1529,6 +1566,205 @@ def add_trade_quality_model_values_to_enriched(
     return output
 
 
+def trade_failure_prob_column(target_name: str, side_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_{side_name}_prob"
+
+
+def trade_failure_risk_column(target_name: str, side_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_{side_name}_risk"
+
+
+def trade_failure_taken_prob_column(target_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_taken_prob"
+
+
+def validate_trade_failure_targets(target_names: tuple[str, ...]) -> None:
+    unknown = sorted(set(target_names) - set(TRADE_FAILURE_TARGET_NAMES))
+    if unknown:
+        raise ValueError(f"unknown trade failure targets: {', '.join(unknown)}")
+
+
+def trade_failure_targets_from_enriched(
+    enriched: pd.DataFrame,
+    config: TradeFailureModelConfig,
+) -> pd.DataFrame:
+    validate_trade_failure_targets(config.target_names)
+    adjusted = finite_float_series(enriched, "adjusted_pnl")
+    exit_regret = finite_float_series(enriched, "exit_regret")
+    targets = pd.DataFrame(index=enriched.index)
+    targets["large_loss"] = adjusted <= -config.large_loss_threshold
+    targets["wrong_side"] = enriched["direction_error"].fillna(False).astype(bool)
+    targets["profit_barrier_miss"] = finite_float_series(
+        enriched,
+        "actual_taken_profit_barrier_hit",
+        default=0.0,
+    ) < 0.5
+    targets["exit_regret_high"] = exit_regret >= config.exit_regret_threshold
+    targets["any_failure"] = targets[
+        ["large_loss", "wrong_side", "profit_barrier_miss", "exit_regret_high"]
+    ].any(axis=1)
+    return targets.loc[:, list(config.target_names)].astype(int)
+
+
+def build_trade_failure_training_frame(
+    enriched: pd.DataFrame,
+    config: TradeFailureModelConfig,
+) -> pd.DataFrame:
+    frame = trade_quality_features_from_enriched(enriched).drop(columns=["target"])
+    targets = trade_failure_targets_from_enriched(enriched, config)
+    frame = pd.concat([frame, targets], axis=1)
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(subset=list(config.target_names))
+
+
+def fit_trade_failure_model(
+    enriched: pd.DataFrame,
+    config: TradeFailureModelConfig,
+) -> TradeFailureModelBundle:
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if config.large_loss_threshold < 0:
+        raise ValueError("large_loss_threshold must be non-negative")
+    if config.exit_regret_threshold < 0:
+        raise ValueError("exit_regret_threshold must be non-negative")
+    validate_trade_failure_targets(config.target_names)
+    frame = build_trade_failure_training_frame(enriched, config)
+    if frame.empty:
+        raise ValueError("trade failure model training frame is empty")
+    mappings = category_mappings(frame, TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS)
+    encoded = encode_trade_quality_features(frame, mappings)
+    feature_columns = trade_quality_feature_columns(encoded)
+    models: dict[str, HistGradientBoostingClassifier | None] = {}
+    target_means: dict[str, float] = {}
+    for index, target_name in enumerate(config.target_names):
+        target = frame[target_name].astype(int)
+        target_means[target_name] = float(target.mean())
+        if target.nunique(dropna=True) < 2:
+            models[target_name] = None
+            continue
+        model = HistGradientBoostingClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            max_depth=config.max_depth,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            max_features=config.max_features,
+            early_stopping=config.early_stopping,
+            validation_fraction=config.validation_fraction,
+            n_iter_no_change=config.n_iter_no_change,
+            tol=config.tol,
+            random_state=config.random_seed + index,
+        )
+        weight_frame = frame.assign(target=target)
+        model.fit(
+            encoded[feature_columns].astype("float32").to_numpy(),
+            target.to_numpy(dtype="int8"),
+            sample_weight=trade_quality_sample_weights(weight_frame, config.sample_weighting),
+        )
+        models[target_name] = model
+    return TradeFailureModelBundle(
+        config=config,
+        models=models,
+        feature_columns=feature_columns,
+        category_mappings=mappings,
+        target_means=target_means,
+    )
+
+
+def predict_trade_failure_features(
+    raw_features: pd.DataFrame,
+    bundle: TradeFailureModelBundle,
+    target_name: str,
+) -> np.ndarray:
+    if target_name not in bundle.target_means:
+        raise ValueError(f"unknown fitted trade failure target: {target_name}")
+    model = bundle.models.get(target_name)
+    if model is None:
+        probabilities = np.full(len(raw_features), bundle.target_means[target_name], dtype="float64")
+    else:
+        encoded = encode_trade_quality_features(raw_features, bundle.category_mappings)
+        classes = list(model.classes_)
+        positive_index = classes.index(1) if 1 in classes else None
+        if positive_index is None:
+            probabilities = np.full(len(raw_features), bundle.target_means[target_name], dtype="float64")
+        else:
+            probabilities = model.predict_proba(
+                encoded[bundle.feature_columns].astype("float32").to_numpy()
+            )[:, positive_index]
+    if bundle.config.prediction_shrinkage < 1.0:
+        probabilities = (
+            bundle.config.prediction_shrinkage * probabilities
+            + (1.0 - bundle.config.prediction_shrinkage) * bundle.target_means[target_name]
+        )
+    return np.clip(probabilities, 0.0, 1.0)
+
+
+def add_trade_failure_model_columns(
+    predictions: pd.DataFrame,
+    bundle: TradeFailureModelBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        features = trade_quality_features_from_predictions(output, side_name)
+        for target_name in bundle.config.target_names:
+            probability = predict_trade_failure_features(features, bundle, target_name)
+            prob_column = trade_failure_prob_column(target_name, side_name)
+            output[prob_column] = probability
+            output[trade_failure_risk_column(target_name, side_name)] = -output[prob_column]
+    return output
+
+
+def add_trade_failure_model_values_to_enriched(
+    enriched: pd.DataFrame,
+    bundle: TradeFailureModelBundle,
+) -> pd.DataFrame:
+    output = enriched.copy()
+    targets = trade_failure_targets_from_enriched(output, bundle.config)
+    features = trade_quality_features_from_enriched(output)
+    for target_name in bundle.config.target_names:
+        output[f"trade_failure_{target_name}"] = targets[target_name].astype(int)
+        output[trade_failure_taken_prob_column(target_name)] = predict_trade_failure_features(
+            features,
+            bundle,
+            target_name,
+        )
+    return output
+
+
+def trade_failure_scored_metrics(scored: pd.DataFrame, target_names: tuple[str, ...]) -> dict[str, object]:
+    if scored.empty:
+        return {
+            target_name: {
+                "trade_count": 0,
+                "prevalence": 0.0,
+                "predicted_mean": 0.0,
+                "bias": 0.0,
+                "brier": 0.0,
+                "auc": 0.5,
+            }
+            for target_name in target_names
+        }
+    metrics: dict[str, object] = {}
+    for target_name in target_names:
+        target_column = f"trade_failure_{target_name}"
+        pred_column = trade_failure_taken_prob_column(target_name)
+        y_true = scored[target_column].astype(int)
+        y_pred = scored[pred_column].astype(float).clip(0.0, 1.0)
+        if y_true.nunique(dropna=True) >= 2:
+            auc = float(roc_auc_score(y_true, y_pred))
+        else:
+            auc = 0.5
+        metrics[target_name] = {
+            "trade_count": int(len(scored)),
+            "prevalence": float(y_true.mean()),
+            "predicted_mean": float(y_pred.mean()),
+            "bias": float(y_pred.mean() - y_true.mean()),
+            "brier": float(brier_score_loss(y_true, y_pred)),
+            "auc": auc,
+        }
+    return metrics
+
+
 def side_examples(df: pd.DataFrame, side_name: str) -> pd.DataFrame:
     spec = SIDE_COLUMNS[side_name]
     side_value = 1.0 if side_name == "long" else -1.0
@@ -2642,6 +2878,162 @@ def oof_trade_quality_model(args: argparse.Namespace) -> int:
     return 0
 
 
+def trade_failure_model_config_from_args(args: argparse.Namespace) -> TradeFailureModelConfig:
+    target_names = tuple(parse_csv_strings(args.failure_targets) or list(TRADE_FAILURE_TARGET_NAMES))
+    return TradeFailureModelConfig(
+        max_iter=args.max_iter,
+        learning_rate=args.learning_rate,
+        max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
+        min_samples_leaf=args.min_samples_leaf,
+        l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
+        random_seed=args.random_seed,
+        sample_weighting=args.sample_weighting,
+        prediction_shrinkage=args.prediction_shrinkage,
+        large_loss_threshold=args.large_loss_threshold,
+        exit_regret_threshold=args.exit_regret_threshold,
+        target_names=target_names,
+    )
+
+
+def oof_trade_failure_model(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF trade failure model")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+    validation_trades = read_trade_frames(parse_csv_paths(args.validation_trades))
+    validation_enriched = enrich_trades_for_trade_quality(validation_trades, validation_predictions)
+    validation_enriched = validation_enriched[
+        validation_enriched["dataset_month"].isin(validation_months)
+    ].copy()
+    if validation_enriched.empty:
+        raise ValueError("validation selected-trade frame is empty after month filtering")
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    config = trade_failure_model_config_from_args(args)
+    validate_trade_failure_targets(config.target_names)
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_trade_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for fold_index, holdout_month in enumerate(validation_months):
+        fit_trades = validation_enriched[validation_enriched["dataset_month"] != holdout_month].copy()
+        holdout_trades = validation_enriched[validation_enriched["dataset_month"] == holdout_month].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_trades.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build trade failure model OOF fold for {holdout_month}")
+        fold_config = TradeFailureModelConfig(
+            **{
+                **asdict(config),
+                "random_seed": config.random_seed + 13 * fold_index,
+            }
+        )
+        fold_bundle = fit_trade_failure_model(fit_trades, fold_config)
+        holdout_prediction_output = add_trade_failure_model_columns(holdout_predictions, fold_bundle)
+        holdout_trade_output = add_trade_failure_model_values_to_enriched(holdout_trades, fold_bundle)
+        fold_prediction_outputs.append(holdout_prediction_output)
+        fold_trade_outputs.append(holdout_trade_output)
+        fold_metrics[holdout_month] = {
+            "fit_trades": int(len(fit_trades)),
+            "holdout_trades": int(len(holdout_trades)),
+            "holdout_predictions": int(len(holdout_predictions)),
+            "holdout": trade_failure_scored_metrics(holdout_trade_output, config.target_names),
+            "target_means": fold_bundle.target_means,
+            "feature_columns": fold_bundle.feature_columns,
+            "category_mappings": fold_bundle.category_mappings,
+        }
+
+    validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+    validation_oof_trades = pd.concat(fold_trade_outputs, ignore_index=True)
+    if "entry_timestamp" in validation_oof_trades.columns:
+        validation_oof_trades = validation_oof_trades.sort_values("entry_timestamp")
+
+    final_bundle = fit_trade_failure_model(validation_enriched, config)
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_trade_failure_model_columns(apply_predictions, final_bundle)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_trade_failure_model.parquet",
+        index=False,
+    )
+    validation_oof_trades.to_csv(run_dir / "validation_oof_failure_enriched_trades.csv", index=False)
+    validation_enriched.to_csv(run_dir / "validation_fit_enriched_trades.csv", index=False)
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_trade_failure_model.parquet",
+            index=False,
+        )
+    joblib.dump(final_bundle, run_dir / "trade_failure_model.joblib")
+    metrics = {
+        "mode": "validation_oof_trade_failure_model",
+        "config": asdict(config),
+        "validation_trades": [str(path) for path in parse_csv_paths(args.validation_trades)],
+        "validation_predictions": str(args.validation_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "validation_predictions": int(len(validation_predictions)),
+            "validation_trades": int(len(validation_enriched)),
+            "validation_oof": int(len(validation_oof)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_predictions": month_counts(validation_predictions),
+            "validation_trades": month_counts(validation_enriched),
+            "validation_oof": month_counts(validation_oof),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "final_model": {
+            "target_means": final_bundle.target_means,
+            "feature_columns": final_bundle.feature_columns,
+            "category_mappings": final_bundle.category_mappings,
+        },
+        "folds": fold_metrics,
+        "validation_oof": trade_failure_scored_metrics(validation_oof_trades, config.target_names),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def fit(args: argparse.Namespace) -> int:
     config = MetaModelConfig(
         max_iter=args.max_iter,
@@ -2821,7 +3213,11 @@ def build_parser() -> argparse.ArgumentParser:
             default="max",
         )
 
-    def add_trade_quality_model_args(model_parser: argparse.ArgumentParser) -> None:
+    def add_trade_quality_model_args(
+        model_parser: argparse.ArgumentParser,
+        *,
+        include_target_clip_quantile: bool = True,
+    ) -> None:
         model_parser.add_argument("--max-iter", type=int, default=80)
         model_parser.add_argument("--learning-rate", type=float, default=0.03)
         model_parser.add_argument("--max-leaf-nodes", type=int, default=5)
@@ -2834,7 +3230,8 @@ def build_parser() -> argparse.ArgumentParser:
         model_parser.add_argument("--n-iter-no-change", type=int, default=10)
         model_parser.add_argument("--tol", type=float, default=1e-6)
         model_parser.add_argument("--random-seed", type=int, default=31)
-        model_parser.add_argument("--target-clip-quantile", type=float, default=0.98)
+        if include_target_clip_quantile:
+            model_parser.add_argument("--target-clip-quantile", type=float, default=0.98)
         model_parser.add_argument(
             "--sample-weighting",
             choices=["none", "month", "side", "month_side"],
@@ -3009,6 +3406,40 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(trade_quality_model_parser)
     add_trade_quality_model_args(trade_quality_model_parser)
     trade_quality_model_parser.set_defaults(func=oof_trade_quality_model)
+
+    trade_failure_model_parser = subparsers.add_parser(
+        "oof-trade-failure-model",
+        help="build validation OOF selected-trade failure probability columns",
+    )
+    trade_failure_model_parser.add_argument(
+        "--validation-trades",
+        required=True,
+        help="comma-separated model-policy trades.csv files for validation months",
+    )
+    trade_failure_model_parser.add_argument("--validation-predictions", type=Path, required=True)
+    trade_failure_model_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation-trade failure model",
+    )
+    trade_failure_model_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    trade_failure_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    trade_failure_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    trade_failure_model_parser.add_argument("--label", default="trade_failure_model")
+    trade_failure_model_parser.add_argument(
+        "--failure-targets",
+        default=",".join(TRADE_FAILURE_TARGET_NAMES),
+        help="comma-separated failure targets: large_loss,wrong_side,profit_barrier_miss,exit_regret_high,any_failure",
+    )
+    trade_failure_model_parser.add_argument("--large-loss-threshold", type=float, default=10.0)
+    trade_failure_model_parser.add_argument("--exit-regret-threshold", type=float, default=10.0)
+    add_trade_source_args(trade_failure_model_parser)
+    add_trade_quality_model_args(trade_failure_model_parser, include_target_clip_quantile=False)
+    trade_failure_model_parser.set_defaults(func=oof_trade_failure_model)
     return parser
 
 

@@ -3308,3 +3308,46 @@ Artifacts:
 - soft penaltyはvalidation上の見た目を改善したが、fixed 2024-12で既存baseline `-54.6032` より悪化した。
 - EV overestimate平均もvalidation topで `15.6220` とほぼ下がらず、失敗原因の直接制御になっていない。
 - selected-trade quality由来の回帰的penaltyはいったん止め、次は `large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high` の実行trade failure分類targetへ進む。
+
+### 2026-06-28 23:55 JST Trade Failure Classifier Risk
+
+作業:
+
+- `trade_data.meta_model` に `oof-trade-failure-model` を追加した。
+- targetは `large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high`, `any_failure`。
+- side別に `pred_trade_failure_<target>_<side>_prob` と `pred_trade_failure_<target>_<side>_risk=-prob` を出力する。
+- `large_loss_threshold=10`, `exit_regret_threshold=10` で、hybrid top validation selected trades 106件からOOF分類した。
+- `large_loss` はfull validation sweep、他targetは同一policy骨格のrisk smoke sweepを実施した。
+- report: `docs/reports/00078_2026-06-28_trade_failure_classifier_risk.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+Artifacts:
+
+- failure model 2024-12 apply: `data/reports/modeling/20260628_144901_trade_failure_hybrid_v1_2024_12/`
+- failure model 2025-02 apply: `data/reports/modeling/20260628_144901_trade_failure_hybrid_v1_2025_02/`
+- large_loss validation sweeps: `data/reports/backtests/trade_failure_large_loss_risk_validation/`
+- large_loss summary: `data/reports/backtests/trade_failure_large_loss_risk_summary/20260628_145258_model_sweep_summary/`
+- large_loss fixed tests: `data/reports/backtests/trade_failure_large_loss_risk_fixed_tests/`
+- other target smoke sweeps: `data/reports/backtests/trade_failure_*_risk_smoke_validation/`
+
+結果:
+
+| item | value |
+|---|---:|
+| large_loss OOF AUC | `0.5736` |
+| wrong_side OOF AUC | `0.4845` |
+| profit_barrier_miss OOF AUC | `0.4595` |
+| exit_regret_high OOF AUC | `0.4566` |
+| any_failure OOF AUC | `0.5284` |
+| large_loss validation top min pnl | `92.8530` |
+| large_loss validation top sum pnl | `402.2514` |
+| large_loss risk0 same skeleton min pnl | `82.7176` |
+| fixed 2024-12 large_loss risk | `-37.2928` |
+| fixed 2025-02 large_loss risk | `76.9254` |
+
+判断:
+
+- `large_loss` だけが薄く有効。validation fold最低損益と2024-12固定testを改善した。
+- ただし2024-12はまだNoTrade未満で、2025-02はbaselineより少し弱い。標準採用は保留。
+- `wrong_side`, `profit_barrier_miss`, `exit_regret_high`, `any_failure` は単独riskでは最良がrisk `0`。
+- 次は `large_loss` targetに絞り、threshold `5/10/15`、side/regime別校正、candidate-entry集合への拡張を試す。

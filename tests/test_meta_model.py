@@ -7,11 +7,14 @@ from trade_data.meta_model import (
     GroupEVCalibrationConfig,
     MetaModelConfig,
     ResidualPenaltyConfig,
+    TradeFailureModelConfig,
     TradeQualityModelConfig,
     add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
     add_residual_penalty_columns,
+    add_trade_failure_model_columns,
+    add_trade_failure_model_values_to_enriched,
     add_trade_quality_model_columns,
     add_trade_quality_model_values_to_enriched,
     add_trade_quality_columns,
@@ -24,6 +27,7 @@ from trade_data.meta_model import (
     fit_group_target_calibrator,
     fit_group_ev_calibrator,
     fit_residual_penalty_calibrator,
+    fit_trade_failure_model,
     fit_trade_quality_model,
     fit_trade_quality_calibrator,
     filter_months,
@@ -35,6 +39,8 @@ from trade_data.meta_model import (
     residual_penalty_scored_metrics,
     trade_quality_calibration_metrics,
     side_target_means,
+    trade_failure_prob_column,
+    trade_failure_risk_column,
     train_model,
 )
 
@@ -492,6 +498,81 @@ class MetaModelTests(unittest.TestCase):
         self.assertIn("pred_trade_quality_short_adjusted_pnl", output.columns)
         self.assertFalse(output["pred_trade_quality_long_adjusted_pnl"].isna().any())
         self.assertFalse(scored["pred_trade_quality_taken_adjusted_pnl"].isna().any())
+
+    def test_trade_failure_model_adds_probability_and_risk_columns(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "long", "short", "short"],
+                "direction_sign": [1, 1, -1, -1],
+                "adjusted_pnl": [1.0, -6.0, 9.0, -8.0],
+                "direction_error": [False, True, False, True],
+                "actual_taken_profit_barrier_hit": [1.0, 0.0, 1.0, 0.0],
+                "exit_regret": [0.0, 6.0, 0.0, 8.0],
+                "pred_taken_ev": [11.0, 13.0, 12.0, 10.0],
+                "pred_opposite_ev": [8.0, 9.0, 4.0, 5.0],
+                "pred_best_ev": [11.0, 13.0, 12.0, 10.0],
+                "pred_taken_best_holding_minutes": [10.0, 20.0, 30.0, 40.0],
+                "pred_taken_max_adverse_pnl": [-1.0, -2.0, -3.0, -4.0],
+                "pred_taken_wait_regret": [0.1, 0.2, 0.3, 0.4],
+                "pred_taken_entry_local_rank": [0.8, 0.7, 0.9, 0.6],
+                "pred_taken_profit_barrier_hit": [1.0, 1.0, 1.0, 0.0],
+                "entry_decision_timestamp": pd.date_range(
+                    "2025-01-01",
+                    periods=4,
+                    freq="h",
+                    tz="UTC",
+                ),
+                "dataset_month": ["2024-07", "2024-07", "2024-09", "2024-09"],
+                "session_regime": ["asia", "asia", "ny_late", "ny_late"],
+                "volatility_regime": ["low_vol", "low_vol", "normal_vol", "normal_vol"],
+            }
+        )
+        config = TradeFailureModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            large_loss_threshold=5.0,
+            exit_regret_threshold=5.0,
+            target_names=("large_loss", "wrong_side", "profit_barrier_miss", "exit_regret_high", "any_failure"),
+        )
+
+        bundle = fit_trade_failure_model(trades, config)
+        output = add_trade_failure_model_columns(predictions, bundle)
+        scored = add_trade_failure_model_values_to_enriched(trades, bundle)
+
+        for target_name in config.target_names:
+            long_prob = trade_failure_prob_column(target_name, "long")
+            short_prob = trade_failure_prob_column(target_name, "short")
+            long_risk = trade_failure_risk_column(target_name, "long")
+            short_risk = trade_failure_risk_column(target_name, "short")
+            self.assertIn(long_prob, output.columns)
+            self.assertIn(short_prob, output.columns)
+            self.assertFalse(output[long_prob].isna().any())
+            self.assertFalse(output[short_prob].isna().any())
+            self.assertEqual(output[long_risk].tolist(), (-output[long_prob]).tolist())
+            self.assertEqual(output[short_risk].tolist(), (-output[short_prob]).tolist())
+            self.assertIn(f"pred_trade_failure_{target_name}_taken_prob", scored.columns)
+            self.assertIn(f"trade_failure_{target_name}", scored.columns)
 
 
 if __name__ == "__main__":

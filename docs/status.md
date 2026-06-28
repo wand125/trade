@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 23:39 JST
+最終更新: 2026-06-28 23:55 JST
 
 ## 現在の状態
 
@@ -132,6 +132,8 @@ selected-trade qualityの校正済み値をentry EVへ直接置換してvalidati
 
 selected-trade qualityから `raw EV - calibrated quality` の過大評価幅を作り、既存 `risk_penalty` で部分的にEVから引くsoft penaltyを検証済み。`add_trade_quality_columns` は `pred_trade_quality_*_overestimate` と `*_overestimate_risk` を出力する。validation 4foldでは `risk_penalty=0.25` が min pnl `86.9174`, sum `442.9766` で直前hybrid基準を上回ったが、fixed holdout 2024-12で `-128.2556` と崩れ、`risk=0.10` / `0.50` も2024-12で `-222.7318` / `-77.5040`。標準採用せず、次は実行trade failure分類targetへ進む。詳細は `docs/reports/00077_2026-06-28_selected_trade_quality_overestimate_soft_penalty.md`。
 
+実行trade failure classifier基盤を追加済み。`oof-trade-failure-model` は `large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high`, `any_failure` のside別probabilityと `risk=-probability` を出力する。OOFでは `large_loss` だけAUC `0.5736` と薄く使え、validation 4fold full sweepで `entry=12`, `short offset=6`, `side margin=5`, `risk_penalty=10`, `min_entry_rank=0.5` が min pnl `92.8530`, sum `402.2514`。fixed 2024-12は baseline `-54.6032` から `-37.2928` へ改善したがNoTrade未満、2025-02は baseline `+81.8334` から `+76.9254` へ少し悪化。標準採用は保留し、次は `large_loss` threshold/校正/使い方を改善する。詳細は `docs/reports/00078_2026-06-28_trade_failure_classifier_risk.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -179,6 +181,7 @@ selected-trade qualityから `raw EV - calibrated quality` の過大評価幅を
 24. selected-trade qualityのgroup平均下限gateは、過大評価の平均補正には効くが、未来月で良いtradeも落とす。hard gateは採用しない。
 25. selected-trade qualityの校正済み値をentry EVへ全面置換すると、validationとfixed holdoutの両方を壊した。次は全面置換ではなく、`pred_taken_ev - calibrated_quality` の過大評価soft penalty、またはtrade failure分類targetとして使う。
 26. selected-trade qualityの過大評価soft penaltyはvalidation上だけ改善し、fixed 2024-12で既存baselineより悪化した。過大評価幅の回帰的penaltyはいったん止め、`large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high` などの実行trade failure分類targetへ進む。
+27. trade failure classifierでは `large_loss` だけが薄く有効。validation min pnlと2024-12固定testは改善したが、NoTradeを超えず、2025-02を少し削る。標準採用は保留し、次は `large_loss` threshold、side/regime別校正、candidate-entry集合への拡張を試す。
 
 ## 未決定事項
 
@@ -189,6 +192,8 @@ selected-trade qualityから `raw EV - calibrated quality` の過大評価幅を
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-28 23:55 JST 更新: 実行trade failure classifierを追加した。`large_loss` はOOF AUC `0.5736`、validation top min pnl `92.8530`, sum `402.2514`。fixed 2024-12は `-37.2928` でbaseline `-54.6032` より改善するがNoTrade未満、2025-02は `+76.9254` でbaseline `+81.8334` より少し弱い。`wrong_side` / `profit_barrier_miss` / `exit_regret_high` / `any_failure` は単独riskでは最良がrisk `0`。次は `large_loss` targetに絞り、threshold比較、side/regime別校正、candidate-entry集合への拡張を行う。
 
 2026-06-28 23:39 JST 更新: selected-trade qualityから過大評価soft penalty列を追加した。validationでは `risk_penalty=0.25` が min pnl `86.9174`, sum `442.9766` で改善したが、fixed 2024-12は `-128.2556` と既存baselineより悪化。`risk=0.10/0.50` も2024-12で崩れるため標準採用しない。次は過大評価回帰ではなく、実行trade failure分類targetへ進む。
 
