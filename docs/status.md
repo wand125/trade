@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 16:55 JST
+最終更新: 2026-06-28 17:12 JST
 
 ## 現在の状態
 
@@ -70,6 +70,8 @@ delay `1` full-gridを新しいcombined regime診断付きで再生成し、`com
 
 `side-confidence-report` を追加済み。予測済みparquetから `best_side` 確率のaccuracy、confidence、overconfidence、月/regime/bucket別の壊れ方を集計できる。smoke valid+testではconfidence平均 `0.5861` に対してaccuracy `0.5089`、2024-12 testではaccuracy `0.4770` / overconfidence `0.1074`。testの `range_normal_vol` と `london`、validの `down_low_vol` で過大確信が大きく、単純な `min_side_confidence` gateは危険。詳細は `docs/reports/00044_2026-06-28_side_confidence_calibration_report.md`。
 
+`side_confidence` target setを追加し、代表4ヶ月のblocked OOF診断を実施済み。targetは `long_best_adjusted_pnl`, `short_best_adjusted_pnl`, `best_side` のみに絞る。2024-07/09/11/2025-01 OOFでは `best_side` balanced accuracy `0.5519`、confidence平均 `0.5685`、accuracy `0.5666` でglobalにはほぼ校正された。一方で `high_vol`, `down_normal_vol`, `up_normal_vol`, 2024-09, `normal_vol` では過大確信が残り、0.70-0.80 confidence bucketはaccuracy `0.3309` と危険。詳細は `docs/reports/00045_2026-06-28_side_confidence_oof_representative.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認や再採番でも、ファイルシステムのmtimeではなく本文内の `日時` を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -98,10 +100,11 @@ delay `1` full-gridを新しいcombined regime診断付きで再生成し、`com
 5. exit-event datasetを2025-02以降にも拡張し、候補固定後に複数blind月へ適用する。
 6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。
 7. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
-8. `side-confidence-report` を広いwalk-forward OOF予測へ適用し、global confidence gateではなくregime-aware calibrationの可否を確認する。
-9. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
-10. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
-11. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+8. `side-confidence-report` をより広いwalk-forward OOF予測へ適用し、representative smokeの過大確信が安定して出るか確認する。
+9. global `min_side_confidence` gateではなく、regime-aware side confidence penalty/calibrationを設計してexecutable backtestで検証する。
+10. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
+11. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
+12. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項
 
@@ -228,6 +231,7 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`
 - `docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`
 - `docs/reports/00044_2026-06-28_side_confidence_calibration_report.md`
+- `docs/reports/00045_2026-06-28_side_confidence_oof_representative.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
 - `experiments/20260628_062101_exit_event_target_smoke/`

@@ -172,6 +172,12 @@ class ModelingTests(unittest.TestCase):
         self.assertIn("short_fixed_720m_adjusted_pnl", regression_targets)
         self.assertIn("long_profit_barrier_hit_240m", classification_targets)
 
+    def test_side_confidence_target_set_keeps_only_side_diagnostics(self):
+        regression_targets, classification_targets = resolve_target_names("side_confidence")
+
+        self.assertEqual(regression_targets, ["long_best_adjusted_pnl", "short_best_adjusted_pnl"])
+        self.assertEqual(classification_targets, ["best_side"])
+
     def test_filter_available_target_names_drops_missing_research_targets(self):
         frame = pd.DataFrame(
             {

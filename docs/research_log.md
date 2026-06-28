@@ -2240,3 +2240,47 @@ worst groups:
 - `best_side` probabilityはglobal thresholdで使うには危険。2024-12 testでは高confidence bucketほど悪くなる箇所がある。
 - side confidenceは、hard gateではなくOOF regime-aware calibrationの対象にする。
 - 次は広い期間のdataset/predictionsへこの診断を適用し、過大確信が月固有か構造的かを確認する。
+
+### 2026-06-28 17:12 JST Side Confidence Representative OOF
+
+作業:
+
+- `best_side` 対応datasetを `2024-07..2025-01` で生成した。
+- `side_confidence` target setを追加した。targetは `long_best_adjusted_pnl`, `short_best_adjusted_pnl`, `best_side` のみ。
+- full 7ヶ月 `policy` OOFと7ヶ月 `side_confidence` OOFは診断用途には重すぎたため中断した。
+- 代表4ヶ月 `2024-07,2024-09,2024-11,2025-01` で、`sample_frac=0.25`, `max_iter=20` のblocked OOFを完走した。
+- `side-confidence-report` をOOF予測へ適用した。
+- report: `docs/reports/00045_2026-06-28_side_confidence_oof_representative.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- dataset: `data/processed/datasets/xauusd_m1_best_side_oof_smoke/`
+- OOF model: `experiments/20260628_081124_best_side_oof_representative_smoke/`
+- diagnostic: `data/reports/modeling/20260628_081219_side_confidence_oof_representative_smoke/`
+
+結果:
+
+| metric | value |
+|---|---:|
+| rows | `119241` |
+| best_side accuracy | `0.5666` |
+| best_side balanced accuracy | `0.5519` |
+| confidence mean | `0.5685` |
+| overconfidence | `0.0020` |
+
+worst groups:
+
+| group | rows | accuracy | confidence | overconfidence |
+|---|---:|---:|---:|---:|
+| `high_vol` | `503` | `0.4553` | `0.5949` | `0.1396` |
+| `down_normal_vol` | `7830` | `0.4764` | `0.5865` | `0.1101` |
+| `up_normal_vol` | `7210` | `0.4656` | `0.5485` | `0.0829` |
+| `2024-09` | `28885` | `0.5071` | `0.5810` | `0.0739` |
+
+判断:
+
+- global calibrationはかなり改善し、全体ではconfidenceとaccuracyがほぼ一致した。
+- ただし高confidence bucket `0.70-0.80` はaccuracy `0.3309` で強く壊れている。
+- side confidenceは採用gateではなく、regime-aware calibration/penaltyの材料として扱う。
+- 次はこの結果をexecutable backtestに接続する前に、より広いOOFまたは別holdoutで再現性を確認する。
