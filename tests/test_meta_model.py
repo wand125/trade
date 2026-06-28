@@ -29,6 +29,7 @@ from trade_data.meta_model import (
     add_group_calibrated_ev_columns,
     add_meta_predictions,
     add_residual_penalty_columns,
+    add_side_outcome_calibration_columns,
     add_trade_failure_model_columns,
     add_trade_failure_model_values_to_enriched,
     add_trade_failure_probability_calibration_columns,
@@ -61,6 +62,7 @@ from trade_data.meta_model import (
     fit_group_ev_calibrator,
     fit_group_target_calibrator,
     fit_residual_penalty_calibrator,
+    fit_side_outcome_calibrator,
     fit_trade_failure_model,
     fit_trade_failure_probability_calibrator,
     fit_trade_quality_calibrator,
@@ -73,6 +75,7 @@ from trade_data.meta_model import (
     prepare_candidate_quality_report_frame,
     residual_penalty_output_column,
     residual_penalty_scored_metrics,
+    side_outcome_columns_for_side,
     trade_quality_calibration_metrics,
     side_target_means,
     add_candidate_quality_model_columns,
@@ -1146,6 +1149,62 @@ class MetaModelTests(unittest.TestCase):
         self.assertAlmostEqual(output[long_columns["wait_excess_risk"]].iloc[0], -4.0)
         self.assertAlmostEqual(output[short_columns["bad_wait_prob"]].iloc[1], 0.0)
         self.assertAlmostEqual(output[short_columns["bad_wait_prob_risk"]].iloc[1], -0.0)
+
+    def test_side_outcome_calibration_adds_ev_distribution_columns(self):
+        examples = pd.DataFrame(
+            {
+                "long_best_adjusted_pnl": [10.0, -20.0, 8.0, -5.0],
+                "short_best_adjusted_pnl": [-5.0, 15.0, 1.0, 0.0],
+                "pred_trade_source_long_ev": [12.0, 12.0, 4.0, 4.0],
+                "pred_trade_source_short_ev": [3.0, 10.0, 3.0, 3.0],
+                "pred_best_side_prob_1": [0.8, 0.9, 0.6, 0.4],
+                "pred_best_side_prob_-1": [0.2, 0.1, 0.4, 0.6],
+                "combined_regime": [
+                    "range_low_vol",
+                    "range_low_vol",
+                    "up_low_vol",
+                    "up_low_vol",
+                ],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "pred_trade_source_long_ev": [12.0, 4.0],
+                "pred_trade_source_short_ev": [10.0, 3.0],
+                "pred_best_side_prob_1": [0.9, 0.4],
+                "pred_best_side_prob_-1": [0.1, 0.6],
+                "combined_regime": ["range_low_vol", "up_low_vol"],
+            }
+        )
+        bundle = fit_side_outcome_calibrator(
+            examples,
+            output_prefix="evdist",
+            group_columns=("combined_regime",),
+            bucket_count=2,
+            confidence_bucket_count=2,
+            min_group_size=1,
+            prior_strength=0.0,
+            lower_z=0.0,
+            no_edge_threshold=0.0,
+            large_loss_threshold=-15.0,
+        )
+
+        output = add_side_outcome_calibration_columns(predictions, bundle)
+        long_columns = side_outcome_columns_for_side("long", "evdist")
+        short_columns = side_outcome_columns_for_side("short", "evdist")
+
+        self.assertEqual(output[long_columns["source"]].tolist(), ["group", "group"])
+        self.assertEqual(output[long_columns["ev_bucket"]].tolist(), ["q02", "q01"])
+        self.assertEqual(output[long_columns["confidence_bucket"]].tolist(), ["q02", "q01"])
+        self.assertAlmostEqual(output[long_columns["calibrated_target_mean"]].iloc[0], -5.0)
+        self.assertAlmostEqual(output[long_columns["no_edge_prob"]].iloc[0], 0.5)
+        self.assertAlmostEqual(output[long_columns["wrong_side_prob"]].iloc[0], 0.5)
+        self.assertAlmostEqual(output[long_columns["ev_overestimate"]].iloc[0], 17.0)
+        self.assertAlmostEqual(output[long_columns["ev_overestimate_risk"]].iloc[0], -17.0)
+        self.assertAlmostEqual(output[long_columns["confidence_overestimate"]].iloc[0], 0.45)
+        self.assertAlmostEqual(output[long_columns["realized_ev_score"]].iloc[0], -22.0)
+        self.assertEqual(output[short_columns["source"]].tolist(), ["group", "group"])
+        self.assertLessEqual(output[short_columns["wrong_side_risk"]].iloc[0], 0.0)
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):
         predictions = add_trade_source_ev_columns(

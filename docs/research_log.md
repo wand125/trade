@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 07:58 Side outcome EV distribution calibration
+
+- `trade_data.meta_model side-outcome-calibration` を追加した。side別EV bucket、side confidence bucket、`combined_regime`, `session_regime` で、target mean/lower、no-edge確率、large-loss確率、wrong-side確率、EV過大評価riskをsupport-awareに出力する。
+- 代表4ヶ月validationでは `dataset_month` を抜くOOF校正で、scored monthの情報をfit側に混ぜないようにした。OOF predictionsは `115252` 行。
+- raw baselineは side-outcome列付きparquetでも `sum=622.6486`, `min=138.0338`, `trades=275` を再現した。
+- EV列への直接差し替えはvalidationで棄却。bestでも calibrated meanが `sum=176.2470`, `min=-116.8952` とrawを大きく下回った。
+- gateとしてはvalidationで `wrong_side_risk >= -0.45` が `sum=663.4534`, `min=148.1228`、`conservative_ev_score >= 10` が `sum=678.4180`, `min=143.8022` と改善した。
+- しかし既存holdout `2024-12`, `2025-02`, `2025-03` ではraw `sum=242.5008`, `min=-20.8252` に対し、`wrong_side_risk >= -0.45` は `sum=145.5712`, `min=-57.7274`、`conservative_ev_score >= 10` は `sum=192.3162`, `min=-28.4754` に悪化した。
+- 判断: side-outcome校正列は実装として採用し、診断・stacking特徴量として残す。ただし標準policyのEV差し替えやhard gateには採用しない。単一risk列の閾値化はvalidation改善がholdoutへ外挿しない。
+- report: `docs/reports/00112_2026-06-29_side_outcome_evdist_calibration.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 07:16 Jackknife holdout gap
 
 - `00108` のjackknife選定候補を、既存の2024-12 / 2025-02 / 2025-03 base/mid/high cost holdout sweepへ固定監査した。

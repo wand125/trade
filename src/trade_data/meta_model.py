@@ -360,6 +360,26 @@ class EntryTimingCalibrationBundle:
 
 
 @dataclass(frozen=True)
+class SideOutcomeCalibrationBundle:
+    output_prefix: str
+    group_columns: tuple[str, ...]
+    ev_bucket_edges: tuple[float, ...]
+    confidence_bucket_edges: tuple[float, ...]
+    min_group_size: int
+    prior_strength: float
+    lower_z: float
+    no_edge_threshold: float
+    large_loss_threshold: float
+    long_prediction_column: str
+    short_prediction_column: str
+    long_confidence_column: str
+    short_confidence_column: str
+    global_stats: dict[str, float]
+    side_stats: dict[str, dict[str, float]]
+    group_stats: dict[tuple[str, ...], dict[str, float]]
+
+
+@dataclass(frozen=True)
 class TradeFailureProbabilityCalibrator:
     config: GroupEVCalibrationConfig
     target_name: str
@@ -4114,6 +4134,618 @@ def entry_timing_calibration_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def side_outcome_base(side_name: str, output_prefix: str) -> str:
+    prefix = validate_candidate_quality_prediction_prefix(output_prefix)
+    if not prefix:
+        raise ValueError("output prefix must be non-empty")
+    return f"pred_side_outcome_{prefix}_{side_name}"
+
+
+def side_outcome_columns_for_side(side_name: str, output_prefix: str) -> dict[str, str]:
+    base = side_outcome_base(side_name, output_prefix)
+    return {
+        "calibrated_target_mean": f"{base}_calibrated_target_mean",
+        "calibrated_target_lower": f"{base}_calibrated_target_lower",
+        "realized_ev_score": f"{base}_realized_ev_score",
+        "conservative_ev_score": f"{base}_conservative_ev_score",
+        "no_edge_prob": f"{base}_no_edge_prob",
+        "large_loss_prob": f"{base}_large_loss_prob",
+        "side_win_prob": f"{base}_side_win_prob",
+        "wrong_side_prob": f"{base}_wrong_side_prob",
+        "ev_overestimate": f"{base}_ev_overestimate",
+        "confidence_mean": f"{base}_confidence_mean",
+        "confidence_overestimate": f"{base}_confidence_overestimate",
+        "wrong_side_gap_mean": f"{base}_wrong_side_gap_mean",
+        "no_edge_risk": f"{base}_no_edge_risk",
+        "large_loss_risk": f"{base}_large_loss_risk",
+        "wrong_side_risk": f"{base}_wrong_side_risk",
+        "ev_overestimate_risk": f"{base}_ev_overestimate_risk",
+        "confidence_overestimate_risk": f"{base}_confidence_overestimate_risk",
+        "wrong_side_gap_risk": f"{base}_wrong_side_gap_risk",
+        "support": f"{base}_support",
+        "source": f"{base}_source",
+        "ev_bucket": f"{base}_ev_bucket",
+        "confidence_bucket": f"{base}_confidence_bucket",
+    }
+
+
+def side_outcome_prediction_column(
+    side_name: str,
+    *,
+    long_prediction_column: str,
+    short_prediction_column: str,
+) -> str:
+    return long_prediction_column if side_name == "long" else short_prediction_column
+
+
+def side_outcome_confidence_column(
+    side_name: str,
+    *,
+    long_confidence_column: str,
+    short_confidence_column: str,
+) -> str:
+    return long_confidence_column if side_name == "long" else short_confidence_column
+
+
+def side_outcome_examples(
+    examples: pd.DataFrame,
+    *,
+    group_columns: tuple[str, ...],
+    long_prediction_column: str,
+    short_prediction_column: str,
+    long_confidence_column: str,
+    short_confidence_column: str,
+) -> pd.DataFrame:
+    required_columns = set(group_columns)
+    for side_name, spec in SIDE_COLUMNS.items():
+        required_columns.update(
+            {
+                spec["target"],
+                spec["opposite_target"],
+                side_outcome_prediction_column(
+                    side_name,
+                    long_prediction_column=long_prediction_column,
+                    short_prediction_column=short_prediction_column,
+                ),
+                side_outcome_confidence_column(
+                    side_name,
+                    long_confidence_column=long_confidence_column,
+                    short_confidence_column=short_confidence_column,
+                ),
+            }
+        )
+    missing = sorted(required_columns - set(examples.columns))
+    if missing:
+        raise ValueError(f"side outcome examples missing columns: {', '.join(missing)}")
+
+    frames: list[pd.DataFrame] = []
+    for side_name, spec in SIDE_COLUMNS.items():
+        pred_column = side_outcome_prediction_column(
+            side_name,
+            long_prediction_column=long_prediction_column,
+            short_prediction_column=short_prediction_column,
+        )
+        confidence_column = side_outcome_confidence_column(
+            side_name,
+            long_confidence_column=long_confidence_column,
+            short_confidence_column=short_confidence_column,
+        )
+        side_frame = pd.DataFrame(
+            {
+                "entry_side": side_name,
+                "pred_ev": pd.to_numeric(examples[pred_column], errors="coerce"),
+                "target": pd.to_numeric(examples[spec["target"]], errors="coerce"),
+                "opposite_target": pd.to_numeric(
+                    examples[spec["opposite_target"]],
+                    errors="coerce",
+                ),
+                "pred_confidence": pd.to_numeric(
+                    examples[confidence_column],
+                    errors="coerce",
+                ).clip(0.0, 1.0),
+            }
+        )
+        for column in group_columns:
+            side_frame[column] = examples[column].astype("string").fillna("__missing__")
+        if "dataset_month" in examples.columns:
+            side_frame["dataset_month"] = examples["dataset_month"].astype(str)
+        frames.append(side_frame)
+    frame = pd.concat(frames, ignore_index=True)
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=["pred_ev", "target", "opposite_target", "pred_confidence"]
+    )
+
+
+def side_outcome_raw_stats(
+    frame: pd.DataFrame,
+    *,
+    no_edge_threshold: float,
+    large_loss_threshold: float,
+) -> dict[str, float]:
+    if frame.empty:
+        return {
+            "support": 0.0,
+            "pred_ev_mean": 0.0,
+            "target_mean": 0.0,
+            "target_std": 0.0,
+            "target_standard_error": 0.0,
+            "no_edge_prob": 0.0,
+            "large_loss_prob": 0.0,
+            "side_win_prob": 0.0,
+            "wrong_side_prob": 0.0,
+            "ev_overestimate": 0.0,
+            "confidence_mean": 0.0,
+            "confidence_overestimate": 0.0,
+            "wrong_side_gap_mean": 0.0,
+        }
+    target = frame["target"].astype(float)
+    opposite = frame["opposite_target"].astype(float)
+    pred_ev = frame["pred_ev"].astype(float)
+    confidence = frame["pred_confidence"].astype(float).clip(0.0, 1.0)
+    side_is_best = (target >= opposite).astype(float)
+    return {
+        "support": float(len(frame)),
+        "pred_ev_mean": float(pred_ev.mean()),
+        "target_mean": float(target.mean()),
+        "target_std": target_std(target),
+        "target_standard_error": target_standard_error(target),
+        "no_edge_prob": float((target <= no_edge_threshold).mean()),
+        "large_loss_prob": float((target <= large_loss_threshold).mean()),
+        "side_win_prob": float(side_is_best.mean()),
+        "wrong_side_prob": float(1.0 - side_is_best.mean()),
+        "ev_overestimate": float((pred_ev - target).clip(lower=0.0).mean()),
+        "confidence_mean": float(confidence.mean()),
+        "confidence_overestimate": float((confidence - side_is_best).clip(lower=0.0).mean()),
+        "wrong_side_gap_mean": float((opposite - target).clip(lower=0.0).mean()),
+    }
+
+
+def smooth_side_outcome_stats(
+    raw_stats: dict[str, float],
+    prior_stats: dict[str, float],
+    prior_strength: float,
+) -> dict[str, float]:
+    if prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    support = raw_stats["support"]
+    if support + prior_strength <= 0:
+        return dict(raw_stats)
+    smoothed = dict(raw_stats)
+    for key in [
+        "pred_ev_mean",
+        "target_mean",
+        "no_edge_prob",
+        "large_loss_prob",
+        "side_win_prob",
+        "wrong_side_prob",
+        "ev_overestimate",
+        "confidence_mean",
+        "confidence_overestimate",
+        "wrong_side_gap_mean",
+    ]:
+        smoothed[key] = float(
+            (support * raw_stats[key] + prior_strength * prior_stats[key])
+            / (support + prior_strength)
+        )
+    return smoothed
+
+
+def finalized_side_outcome_stats(
+    stats: dict[str, float],
+    *,
+    lower_z: float,
+) -> dict[str, float]:
+    output = dict(stats)
+    output["calibrated_target_lower"] = float(
+        output["target_mean"] - lower_z * output["target_standard_error"]
+    )
+    output["realized_ev_score"] = float(
+        output["target_mean"] - max(output["ev_overestimate"], 0.0)
+    )
+    output["conservative_ev_score"] = float(
+        output["calibrated_target_lower"] - max(output["ev_overestimate"], 0.0)
+    )
+    output["no_edge_risk"] = -float(max(output["no_edge_prob"], 0.0))
+    output["large_loss_risk"] = -float(max(output["large_loss_prob"], 0.0))
+    output["wrong_side_risk"] = -float(max(output["wrong_side_prob"], 0.0))
+    output["ev_overestimate_risk"] = -float(max(output["ev_overestimate"], 0.0))
+    output["confidence_overestimate_risk"] = -float(
+        max(output["confidence_overestimate"], 0.0)
+    )
+    output["wrong_side_gap_risk"] = -float(max(output["wrong_side_gap_mean"], 0.0))
+    return output
+
+
+def fit_side_outcome_calibrator(
+    examples: pd.DataFrame,
+    *,
+    output_prefix: str,
+    group_columns: tuple[str, ...] = ("combined_regime",),
+    bucket_count: int = 10,
+    confidence_bucket_count: int = 5,
+    min_group_size: int = 20,
+    prior_strength: float = 50.0,
+    lower_z: float = 1.0,
+    no_edge_threshold: float = 0.0,
+    large_loss_threshold: float = -15.0,
+    long_prediction_column: str = TRADE_SOURCE_LONG_EV_COLUMN,
+    short_prediction_column: str = TRADE_SOURCE_SHORT_EV_COLUMN,
+    long_confidence_column: str = "pred_best_side_prob_1",
+    short_confidence_column: str = "pred_best_side_prob_-1",
+) -> SideOutcomeCalibrationBundle:
+    if min_group_size < 1:
+        raise ValueError("min_group_size must be positive")
+    if prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    if lower_z < 0:
+        raise ValueError("lower_z must be non-negative")
+    output_prefix = validate_candidate_quality_prediction_prefix(output_prefix)
+    if not output_prefix:
+        raise ValueError("output prefix must be non-empty")
+    frame = side_outcome_examples(
+        examples,
+        group_columns=group_columns,
+        long_prediction_column=long_prediction_column,
+        short_prediction_column=short_prediction_column,
+        long_confidence_column=long_confidence_column,
+        short_confidence_column=short_confidence_column,
+    )
+    if frame.empty:
+        raise ValueError("side outcome examples are empty")
+    ev_edges = quality_bucket_edges(frame["pred_ev"], bucket_count)
+    confidence_edges = quality_bucket_edges(frame["pred_confidence"], confidence_bucket_count)
+    frame["_ev_bucket"] = assign_quality_score_buckets(frame["pred_ev"], ev_edges)
+    frame["_confidence_bucket"] = assign_quality_score_buckets(
+        frame["pred_confidence"],
+        confidence_edges,
+    )
+
+    raw_global = side_outcome_raw_stats(
+        frame,
+        no_edge_threshold=no_edge_threshold,
+        large_loss_threshold=large_loss_threshold,
+    )
+    global_stats = finalized_side_outcome_stats(raw_global, lower_z=lower_z)
+    side_stats: dict[str, dict[str, float]] = {}
+    for side_name, group in frame.groupby("entry_side", dropna=False, observed=False):
+        raw_side = side_outcome_raw_stats(
+            group,
+            no_edge_threshold=no_edge_threshold,
+            large_loss_threshold=large_loss_threshold,
+        )
+        side_stats[str(side_name)] = finalized_side_outcome_stats(raw_side, lower_z=lower_z)
+
+    key_columns = ["entry_side", *group_columns, "_ev_bucket", "_confidence_bucket"]
+    group_stats: dict[tuple[str, ...], dict[str, float]] = {}
+    for key, group in frame.groupby(key_columns, dropna=False, observed=False):
+        if len(group) < min_group_size:
+            continue
+        key_tuple = tuple(str(value) for value in (key if isinstance(key, tuple) else (key,)))
+        side_name = key_tuple[0]
+        prior_stats = side_stats.get(side_name, global_stats)
+        raw_group = side_outcome_raw_stats(
+            group,
+            no_edge_threshold=no_edge_threshold,
+            large_loss_threshold=large_loss_threshold,
+        )
+        smoothed = smooth_side_outcome_stats(raw_group, prior_stats, prior_strength)
+        group_stats[key_tuple] = finalized_side_outcome_stats(smoothed, lower_z=lower_z)
+
+    return SideOutcomeCalibrationBundle(
+        output_prefix=output_prefix,
+        group_columns=group_columns,
+        ev_bucket_edges=ev_edges,
+        confidence_bucket_edges=confidence_edges,
+        min_group_size=min_group_size,
+        prior_strength=prior_strength,
+        lower_z=lower_z,
+        no_edge_threshold=no_edge_threshold,
+        large_loss_threshold=large_loss_threshold,
+        long_prediction_column=long_prediction_column,
+        short_prediction_column=short_prediction_column,
+        long_confidence_column=long_confidence_column,
+        short_confidence_column=short_confidence_column,
+        global_stats=global_stats,
+        side_stats=side_stats,
+        group_stats=group_stats,
+    )
+
+
+def side_outcome_stats_frame(bundle: SideOutcomeCalibrationBundle) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    rows.append({"source": "global", "key": "global", **bundle.global_stats})
+    for side_name, stats in sorted(bundle.side_stats.items()):
+        rows.append({"source": "side", "key": side_name, "entry_side": side_name, **stats})
+    for key, stats in sorted(bundle.group_stats.items()):
+        row: dict[str, object] = {
+            "source": "group",
+            "key": "|".join(key),
+            "entry_side": key[0],
+            "_ev_bucket": key[-2],
+            "_confidence_bucket": key[-1],
+            **stats,
+        }
+        for column, value in zip(bundle.group_columns, key[1:-2], strict=True):
+            row[column] = value
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def side_outcome_output_frame(
+    predictions: pd.DataFrame,
+    side_name: str,
+    bundle: SideOutcomeCalibrationBundle,
+) -> pd.DataFrame:
+    pred_column = side_outcome_prediction_column(
+        side_name,
+        long_prediction_column=bundle.long_prediction_column,
+        short_prediction_column=bundle.short_prediction_column,
+    )
+    confidence_column = side_outcome_confidence_column(
+        side_name,
+        long_confidence_column=bundle.long_confidence_column,
+        short_confidence_column=bundle.short_confidence_column,
+    )
+    missing = [
+        pred_column,
+        confidence_column,
+        *[column for column in bundle.group_columns if column not in predictions.columns],
+    ]
+    missing = [column for column in missing if column not in predictions.columns]
+    if missing:
+        raise ValueError(f"predictions missing side outcome calibration columns: {', '.join(missing)}")
+
+    ev_values = pd.to_numeric(predictions[pred_column], errors="coerce")
+    confidence_values = pd.to_numeric(predictions[confidence_column], errors="coerce").clip(0.0, 1.0)
+    ev_buckets = assign_quality_score_buckets(ev_values, bundle.ev_bucket_edges)
+    confidence_buckets = assign_quality_score_buckets(
+        confidence_values,
+        bundle.confidence_bucket_edges,
+    )
+    group_values = normalize_candidate_quality_group_columns(predictions, bundle.group_columns)
+    rows: list[dict[str, object]] = []
+    for index in predictions.index:
+        key = tuple(
+            [
+                side_name,
+                *[str(group_values.loc[index, column]) for column in bundle.group_columns],
+                str(ev_buckets.loc[index]),
+                str(confidence_buckets.loc[index]),
+            ]
+        )
+        stats = bundle.group_stats.get(key)
+        source = "group"
+        if stats is None:
+            stats = bundle.side_stats.get(side_name)
+            source = "side"
+        if stats is None:
+            stats = bundle.global_stats
+            source = "global"
+        rows.append(
+            {
+                "calibrated_target_mean": stats["target_mean"],
+                "calibrated_target_lower": stats["calibrated_target_lower"],
+                "realized_ev_score": stats["realized_ev_score"],
+                "conservative_ev_score": stats["conservative_ev_score"],
+                "no_edge_prob": stats["no_edge_prob"],
+                "large_loss_prob": stats["large_loss_prob"],
+                "side_win_prob": stats["side_win_prob"],
+                "wrong_side_prob": stats["wrong_side_prob"],
+                "ev_overestimate": stats["ev_overestimate"],
+                "confidence_mean": stats["confidence_mean"],
+                "confidence_overestimate": stats["confidence_overestimate"],
+                "wrong_side_gap_mean": stats["wrong_side_gap_mean"],
+                "no_edge_risk": stats["no_edge_risk"],
+                "large_loss_risk": stats["large_loss_risk"],
+                "wrong_side_risk": stats["wrong_side_risk"],
+                "ev_overestimate_risk": stats["ev_overestimate_risk"],
+                "confidence_overestimate_risk": stats["confidence_overestimate_risk"],
+                "wrong_side_gap_risk": stats["wrong_side_gap_risk"],
+                "support": stats["support"],
+                "source": source,
+                "ev_bucket": str(ev_buckets.loc[index]),
+                "confidence_bucket": str(confidence_buckets.loc[index]),
+            }
+        )
+    return pd.DataFrame(rows, index=predictions.index)
+
+
+def add_side_outcome_calibration_columns(
+    predictions: pd.DataFrame,
+    bundle: SideOutcomeCalibrationBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        values = side_outcome_output_frame(output, side_name, bundle)
+        columns = side_outcome_columns_for_side(side_name, bundle.output_prefix)
+        for key, column in columns.items():
+            output[column] = values[key]
+    return output
+
+
+def add_side_outcome_calibration_oof_columns(
+    predictions: pd.DataFrame,
+    examples: pd.DataFrame,
+    *,
+    oof_column: str,
+    output_prefix: str,
+    group_columns: tuple[str, ...],
+    bucket_count: int,
+    confidence_bucket_count: int,
+    min_group_size: int,
+    prior_strength: float,
+    lower_z: float,
+    no_edge_threshold: float,
+    large_loss_threshold: float,
+    long_prediction_column: str,
+    short_prediction_column: str,
+    long_confidence_column: str,
+    short_confidence_column: str,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    if oof_column not in predictions.columns:
+        raise ValueError(f"predictions missing OOF column: {oof_column}")
+    if oof_column not in examples.columns:
+        raise ValueError(f"side outcome examples missing OOF column: {oof_column}")
+    output = predictions.copy()
+    output_columns = [
+        column
+        for side_name in ("long", "short")
+        for column in side_outcome_columns_for_side(side_name, output_prefix).values()
+    ]
+    string_output_columns = {
+        column
+        for side_name in ("long", "short")
+        for key, column in side_outcome_columns_for_side(side_name, output_prefix).items()
+        if key in {"source", "ev_bucket", "confidence_bucket"}
+    }
+    for column in output_columns:
+        if column in string_output_columns:
+            output[column] = pd.Series(pd.NA, index=output.index, dtype="string")
+        else:
+            output[column] = np.nan
+
+    fold_metrics: dict[str, object] = {}
+    for value in sorted(str(item) for item in output[oof_column].dropna().astype(str).unique()):
+        prediction_mask = output[oof_column].astype(str) == value
+        fit_examples = examples[examples[oof_column].astype(str) != value]
+        if fit_examples.empty:
+            fit_examples = examples
+        bundle = fit_side_outcome_calibrator(
+            fit_examples,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=bucket_count,
+            confidence_bucket_count=confidence_bucket_count,
+            min_group_size=min_group_size,
+            prior_strength=prior_strength,
+            lower_z=lower_z,
+            no_edge_threshold=no_edge_threshold,
+            large_loss_threshold=large_loss_threshold,
+            long_prediction_column=long_prediction_column,
+            short_prediction_column=short_prediction_column,
+            long_confidence_column=long_confidence_column,
+            short_confidence_column=short_confidence_column,
+        )
+        scored = add_side_outcome_calibration_columns(output.loc[prediction_mask].copy(), bundle)
+        output.loc[prediction_mask, output_columns] = scored[output_columns]
+        fold_metrics[value] = {
+            "fit_examples": int(len(fit_examples)),
+            "scored_predictions": int(prediction_mask.sum()),
+            "group_stats": int(len(bundle.group_stats)),
+            "ev_bucket_edges": list(bundle.ev_bucket_edges),
+            "confidence_bucket_edges": list(bundle.confidence_bucket_edges),
+        }
+    return output, fold_metrics
+
+
+def side_outcome_calibration_cli(args: argparse.Namespace) -> int:
+    examples = read_table(args.examples)
+    predictions = pd.read_parquet(args.predictions)
+    group_columns = tuple(parse_csv_strings(args.group_columns))
+    output_prefix = validate_candidate_quality_prediction_prefix(args.output_prefix)
+    if not output_prefix:
+        raise ValueError("--output-prefix must be non-empty")
+    if args.oof_column:
+        output, fold_metrics = add_side_outcome_calibration_oof_columns(
+            predictions,
+            examples,
+            oof_column=args.oof_column,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=args.bucket_count,
+            confidence_bucket_count=args.confidence_bucket_count,
+            min_group_size=args.min_group_support,
+            prior_strength=args.prior_strength,
+            lower_z=args.lower_z,
+            no_edge_threshold=args.no_edge_threshold,
+            large_loss_threshold=args.large_loss_threshold,
+            long_prediction_column=args.long_column,
+            short_prediction_column=args.short_column,
+            long_confidence_column=args.long_confidence_column,
+            short_confidence_column=args.short_confidence_column,
+        )
+    else:
+        bundle = fit_side_outcome_calibrator(
+            examples,
+            output_prefix=output_prefix,
+            group_columns=group_columns,
+            bucket_count=args.bucket_count,
+            confidence_bucket_count=args.confidence_bucket_count,
+            min_group_size=args.min_group_support,
+            prior_strength=args.prior_strength,
+            lower_z=args.lower_z,
+            no_edge_threshold=args.no_edge_threshold,
+            large_loss_threshold=args.large_loss_threshold,
+            long_prediction_column=args.long_column,
+            short_prediction_column=args.short_column,
+            long_confidence_column=args.long_confidence_column,
+            short_confidence_column=args.short_confidence_column,
+        )
+        output = add_side_outcome_calibration_columns(predictions, bundle)
+        fold_metrics = {}
+
+    final_bundle = fit_side_outcome_calibrator(
+        examples,
+        output_prefix=output_prefix,
+        group_columns=group_columns,
+        bucket_count=args.bucket_count,
+        confidence_bucket_count=args.confidence_bucket_count,
+        min_group_size=args.min_group_support,
+        prior_strength=args.prior_strength,
+        lower_z=args.lower_z,
+        no_edge_threshold=args.no_edge_threshold,
+        large_loss_threshold=args.large_loss_threshold,
+        long_prediction_column=args.long_column,
+        short_prediction_column=args.short_column,
+        long_confidence_column=args.long_confidence_column,
+        short_confidence_column=args.short_confidence_column,
+    )
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    output.to_parquet(args.output_path, index=False)
+    stats_path = args.output_path.with_suffix(".side_outcome_stats.csv")
+    side_outcome_stats_frame(final_bundle).to_csv(stats_path, index=False)
+    output_columns = {
+        side_name: side_outcome_columns_for_side(side_name, output_prefix)
+        for side_name in ("long", "short")
+    }
+    metrics = {
+        "mode": "side_outcome_calibration",
+        "examples": str(args.examples),
+        "predictions": str(args.predictions),
+        "output_path": str(args.output_path),
+        "stats_path": str(stats_path),
+        "output_prefix": output_prefix,
+        "group_columns": list(group_columns),
+        "bucket_count": args.bucket_count,
+        "confidence_bucket_count": args.confidence_bucket_count,
+        "ev_bucket_edges": list(final_bundle.ev_bucket_edges),
+        "confidence_bucket_edges": list(final_bundle.confidence_bucket_edges),
+        "min_group_support": args.min_group_support,
+        "prior_strength": args.prior_strength,
+        "lower_z": args.lower_z,
+        "no_edge_threshold": args.no_edge_threshold,
+        "large_loss_threshold": args.large_loss_threshold,
+        "long_column": args.long_column,
+        "short_column": args.short_column,
+        "long_confidence_column": args.long_confidence_column,
+        "short_confidence_column": args.short_confidence_column,
+        "rows": {
+            "examples": int(len(examples)),
+            "predictions": int(len(predictions)),
+            "output": int(len(output)),
+            "group_stats": int(len(final_bundle.group_stats)),
+        },
+        "oof_column": args.oof_column,
+        "folds": fold_metrics,
+        "output_columns": output_columns,
+    }
+    metrics_path = args.output_path.with_suffix(".metrics.json")
+    with metrics_path.open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps({"output": str(args.output_path), "metrics": str(metrics_path)}, indent=2))
+    return 0
+
+
 def trade_failure_calibrated_prob_column(target_name: str, side_name: str) -> str:
     return f"pred_trade_failure_{target_name}_{side_name}_calibrated_prob"
 
@@ -6984,6 +7616,67 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     entry_timing_calibration_parser.set_defaults(func=entry_timing_calibration_cli)
+
+    side_outcome_calibration_parser = subparsers.add_parser(
+        "side-outcome-calibration",
+        help=(
+            "add support-aware realized EV, side uncertainty, and overestimate "
+            "calibration columns"
+        ),
+    )
+    side_outcome_calibration_parser.add_argument(
+        "--examples",
+        type=Path,
+        required=True,
+        help="parquet or csv with actual side targets and prediction columns",
+    )
+    side_outcome_calibration_parser.add_argument("--predictions", type=Path, required=True)
+    side_outcome_calibration_parser.add_argument("--output-path", type=Path, required=True)
+    side_outcome_calibration_parser.add_argument(
+        "--output-prefix",
+        default="evdist",
+        help="output prefix for pred_side_outcome_<prefix>_<side>_* columns",
+    )
+    side_outcome_calibration_parser.add_argument(
+        "--group-columns",
+        default="combined_regime",
+        help="comma-separated columns combined with side, EV bucket, and confidence bucket",
+    )
+    side_outcome_calibration_parser.add_argument("--bucket-count", type=int, default=10)
+    side_outcome_calibration_parser.add_argument("--confidence-bucket-count", type=int, default=5)
+    side_outcome_calibration_parser.add_argument("--min-group-support", type=int, default=20)
+    side_outcome_calibration_parser.add_argument("--prior-strength", type=float, default=50.0)
+    side_outcome_calibration_parser.add_argument("--lower-z", type=float, default=1.0)
+    side_outcome_calibration_parser.add_argument("--no-edge-threshold", type=float, default=0.0)
+    side_outcome_calibration_parser.add_argument("--large-loss-threshold", type=float, default=-15.0)
+    side_outcome_calibration_parser.add_argument(
+        "--long-column",
+        default=TRADE_SOURCE_LONG_EV_COLUMN,
+        help="long-side EV prediction column to calibrate",
+    )
+    side_outcome_calibration_parser.add_argument(
+        "--short-column",
+        default=TRADE_SOURCE_SHORT_EV_COLUMN,
+        help="short-side EV prediction column to calibrate",
+    )
+    side_outcome_calibration_parser.add_argument(
+        "--long-confidence-column",
+        default="pred_best_side_prob_1",
+        help="long-side confidence/probability column",
+    )
+    side_outcome_calibration_parser.add_argument(
+        "--short-confidence-column",
+        default="pred_best_side_prob_-1",
+        help="short-side confidence/probability column",
+    )
+    side_outcome_calibration_parser.add_argument(
+        "--oof-column",
+        help=(
+            "optional column such as dataset_month; when set, rows are calibrated "
+            "with examples from other values of this column"
+        ),
+    )
+    side_outcome_calibration_parser.set_defaults(func=side_outcome_calibration_cli)
 
     trade_failure_calibration_parser = subparsers.add_parser(
         "oof-trade-failure-calibration",
