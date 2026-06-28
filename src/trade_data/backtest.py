@@ -2086,6 +2086,84 @@ def flatten_rule_sets(rule_sets: Iterable[Iterable[str]]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(rule for rule_set in rule_sets for rule in rule_set))
 
 
+def model_policy_sweep_key_defaults() -> dict[str, object]:
+    defaults = asdict(ModelPolicyConfig(predictions=Path("")))
+    return {column: defaults[column] for column in SWEEP_KEY_COLUMNS}
+
+
+def stringify_sweep_key_value(value: object) -> str:
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray, dict)):
+        return regime_values_to_string(str(part) for part in value)
+    return str(value)
+
+
+def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    output = frame.copy()
+    defaults = model_policy_sweep_key_defaults()
+    for column, default in defaults.items():
+        if column not in output.columns:
+            output[column] = stringify_sweep_key_value(default)
+
+    numeric_columns = [
+        "entry_threshold",
+        "long_entry_threshold_offset",
+        "short_entry_threshold_offset",
+        "exit_threshold",
+        "side_margin",
+        "risk_penalty",
+        "min_predicted_hold_minutes",
+        "max_predicted_hold_minutes",
+        "max_wait_regret",
+        "min_entry_rank",
+        "min_trade_quality",
+        "profit_barrier_miss_penalty",
+        "time_exit_penalty",
+        "loss_first_penalty",
+        "time_exit_holding_shrink",
+        "loss_first_holding_shrink",
+        "time_exit_exit_threshold",
+        "loss_first_exit_threshold",
+        "side_confidence_penalty",
+        "min_side_confidence",
+        "profit_barrier_threshold",
+    ]
+    for column in numeric_columns:
+        output[column] = pd.to_numeric(output[column], errors="raise")
+
+    if output["require_profit_barrier"].dtype == object:
+        output["require_profit_barrier"] = output["require_profit_barrier"].map(
+            lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"}
+        )
+    else:
+        output["require_profit_barrier"] = output["require_profit_barrier"].astype(bool)
+
+    string_columns = [
+        "policy",
+        "fixed_horizon_score_mode",
+        "side_confidence_penalty_rules",
+        "side_confidence_overfit_penalty_rules",
+        "side_ev_penalty_rules",
+        "extra_side_margin_rules",
+        "side_extra_margin_rules",
+        "side_block_rules",
+        "block_trend_regimes",
+        "block_volatility_regimes",
+        "block_session_regimes",
+        "block_gap_regimes",
+        "block_combined_regimes",
+    ]
+    for column in string_columns:
+        output[column] = output[column].map(stringify_sweep_key_value).fillna("")
+    return output
+
+
 def regime_blocks_from_args(args: argparse.Namespace) -> dict[str, tuple[str, ...]]:
     return {
         field: parse_optional_csv_strings(getattr(args, field))
@@ -3581,7 +3659,7 @@ def summarize_sweep_frames(
     metrics = pd.concat(
         [normalize_sweep_metrics(frame, f"frame_{index}") for index, frame in enumerate(frames)],
         ignore_index=True,
-    )
+    ).copy()
     metrics["fold_eligible"] = (
         (metrics["trade_count"] >= min_trades_per_fold)
         & (metrics["forced_exit_rate"] <= max_forced_exit_rate)
@@ -4245,6 +4323,186 @@ def read_sweep_frames(paths: list[Path]) -> list[pd.DataFrame]:
     return frames
 
 
+def sweep_key_values_from_model_policy_config(config: dict[str, object]) -> dict[str, object]:
+    defaults = model_policy_sweep_key_defaults()
+    values = {column: config.get(column, default) for column, default in defaults.items()}
+    return normalize_sweep_key_columns(pd.DataFrame([values])).iloc[0].to_dict()
+
+
+def expand_holdout_run_paths(paths: list[Path]) -> list[Path]:
+    expanded: list[Path] = []
+    for path in paths:
+        if path.is_dir() and not (path / "metrics.json").exists() and not (path / "metrics.csv").exists():
+            children = [
+                child
+                for child in sorted(path.iterdir())
+                if child.is_dir()
+                and (child / "config.json").exists()
+                and ((child / "metrics.json").exists() or (child / "metrics.csv").exists())
+            ]
+            if children:
+                expanded.extend(children)
+                continue
+        expanded.append(path)
+    return expanded
+
+
+def read_holdout_run_frame(path: Path) -> pd.DataFrame:
+    run_dir = path if path.is_dir() else path.parent
+    if path.is_dir():
+        metrics_path = path / "metrics.csv" if (path / "metrics.csv").exists() else path / "metrics.json"
+    else:
+        metrics_path = path
+    config_path = run_dir / "config.json"
+    if not metrics_path.exists():
+        raise FileNotFoundError(f"holdout metrics not found: {metrics_path}")
+    if not config_path.exists():
+        raise FileNotFoundError(f"holdout config not found: {config_path}")
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    model_policy_config = config.get("model_policy_config")
+    if not isinstance(model_policy_config, dict):
+        raise ValueError(f"holdout run has no model_policy_config: {run_dir}")
+
+    if metrics_path.suffix == ".csv":
+        frame = pd.read_csv(metrics_path)
+    elif metrics_path.suffix == ".json":
+        frame = pd.DataFrame([json.loads(metrics_path.read_text(encoding="utf-8"))])
+    else:
+        raise ValueError(f"unsupported holdout metrics file: {metrics_path}")
+
+    key_values = sweep_key_values_from_model_policy_config(model_policy_config)
+    for column, value in key_values.items():
+        frame[column] = value
+    frame = normalize_sweep_metrics(frame, str(run_dir)).copy()
+    frame["holdout_run"] = str(run_dir)
+    return frame
+
+
+def read_holdout_run_frames(paths: list[Path]) -> list[pd.DataFrame]:
+    return [read_holdout_run_frame(path) for path in expand_holdout_run_paths(paths)]
+
+
+def holdout_case_ids(frame: pd.DataFrame) -> pd.Series:
+    period = frame["period_start"].astype(str).str.slice(0, 10)
+    spread = frame.get("spread_points", pd.Series(0.0, index=frame.index)).astype(str)
+    slippage = frame.get("slippage_points", pd.Series(0.0, index=frame.index)).astype(str)
+    delay = frame.get("execution_delay_bars", pd.Series(0, index=frame.index)).astype(str)
+    return (
+        frame["sweep_source"].astype(str)
+        + "|"
+        + period
+        + "|spread="
+        + spread
+        + "|slippage="
+        + slippage
+        + "|delay="
+        + delay
+    )
+
+
+def summarize_holdout_audit(
+    holdout_frames: list[pd.DataFrame],
+    validation_summary: pd.DataFrame | None = None,
+    min_holdout_cases: int = 1,
+    min_trades_per_case: int = 1,
+    max_forced_exit_rate: float = 1.0,
+    max_drawdown: float = 1e100,
+    min_adjusted_pnl_per_case: float = 0.0,
+) -> pd.DataFrame:
+    if min_holdout_cases <= 0:
+        raise ValueError("min_holdout_cases must be positive")
+    if min_trades_per_case < 0:
+        raise ValueError("min_trades_per_case must be non-negative")
+    if max_forced_exit_rate < 0:
+        raise ValueError("max_forced_exit_rate must be non-negative")
+    if max_drawdown < 0:
+        raise ValueError("max_drawdown must be non-negative")
+    if not holdout_frames:
+        raise ValueError("at least one holdout frame is required")
+
+    holdouts = pd.concat(
+        [normalize_sweep_metrics(frame, f"holdout_{index}") for index, frame in enumerate(holdout_frames)],
+        ignore_index=True,
+    ).copy()
+    holdouts["holdout_case"] = holdout_case_ids(holdouts)
+    holdouts["holdout_month"] = holdouts["period_start"].astype(str).str.slice(0, 7)
+    holdouts["holdout_case_ok"] = (
+        (holdouts["trade_count"] >= min_trades_per_case)
+        & (holdouts["forced_exit_rate"] <= max_forced_exit_rate)
+        & (holdouts["max_drawdown"] <= max_drawdown)
+        & (holdouts["total_adjusted_pnl"] >= min_adjusted_pnl_per_case)
+    )
+    holdouts["holdout_positive_case"] = holdouts["total_adjusted_pnl"] > 0
+
+    grouped = holdouts.groupby(SWEEP_KEY_COLUMNS, dropna=False)
+    summary = grouped.agg(
+        holdout_case_count=("holdout_case", "nunique"),
+        holdout_month_count=("holdout_month", "nunique"),
+        holdout_case_ok_count=("holdout_case_ok", "sum"),
+        holdout_positive_case_count=("holdout_positive_case", "sum"),
+        holdout_total_adjusted_pnl_min=("total_adjusted_pnl", "min"),
+        holdout_total_adjusted_pnl_sum=("total_adjusted_pnl", "sum"),
+        holdout_total_adjusted_pnl_mean=("total_adjusted_pnl", "mean"),
+        holdout_total_raw_pnl_min=("total_raw_pnl", "min"),
+        holdout_trade_count_min=("trade_count", "min"),
+        holdout_trade_count_sum=("trade_count", "sum"),
+        holdout_forced_exit_rate_max=("forced_exit_rate", "max"),
+        holdout_max_drawdown_max=("max_drawdown", "max"),
+        holdout_short_trade_share_max=("short_trade_share", "max"),
+        holdout_max_side_trade_share_max=("max_side_trade_share", "max"),
+        holdout_direction_combined_regime_pnl_min=(
+            "direction_combined_regime_adjusted_pnl_min",
+            "min",
+        ),
+        holdout_direction_error_rate_max=("direction_error_rate", "max"),
+        holdout_ev_overestimate_vs_realized_mean_max=(
+            "ev_overestimate_vs_realized_mean",
+            "max",
+        ),
+    ).reset_index()
+    summary["holdout_eligible"] = (
+        (summary["holdout_case_count"] >= min_holdout_cases)
+        & (summary["holdout_case_ok_count"] == summary["holdout_case_count"])
+    )
+    summary["holdout_positive_case_rate"] = (
+        summary["holdout_positive_case_count"] / summary["holdout_case_count"].replace(0, np.nan)
+    ).fillna(0.0)
+
+    if validation_summary is not None:
+        validation = normalize_sweep_key_columns(validation_summary)
+        summary = validation.merge(
+            summary,
+            on=SWEEP_KEY_COLUMNS,
+            how="inner",
+            suffixes=("_validation", ""),
+        )
+        if "eligible" in summary.columns:
+            summary["validation_eligible"] = summary["eligible"].astype(bool)
+            summary["audit_eligible"] = summary["validation_eligible"] & summary["holdout_eligible"]
+        else:
+            summary["audit_eligible"] = summary["holdout_eligible"]
+    else:
+        summary["audit_eligible"] = summary["holdout_eligible"]
+
+    validation_sort_column = (
+        "total_adjusted_pnl_min_cost"
+        if "total_adjusted_pnl_min_cost" in summary.columns
+        else "holdout_total_adjusted_pnl_min"
+    )
+    return summary.sort_values(
+        [
+            "audit_eligible",
+            "holdout_eligible",
+            "holdout_total_adjusted_pnl_min",
+            validation_sort_column,
+            "holdout_total_adjusted_pnl_sum",
+            "holdout_max_drawdown_max",
+        ],
+        ascending=[False, False, False, False, False, True],
+    ).reset_index(drop=True)
+
+
 def handle_model_sweep_summary(args: argparse.Namespace) -> int:
     paths = parse_csv_paths(args.sweeps)
     frames = read_sweep_frames(paths)
@@ -4409,6 +4667,59 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
     with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
         json.dump(metadata, handle, ensure_ascii=False, indent=2)
     print(summary.head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def handle_model_holdout_audit(args: argparse.Namespace) -> int:
+    holdout_paths = parse_csv_paths(args.holdout_runs)
+    holdout_frames = read_holdout_run_frames(holdout_paths)
+    validation_summary = (
+        pd.read_csv(args.validation_summary) if args.validation_summary is not None else None
+    )
+    summary = summarize_holdout_audit(
+        holdout_frames=holdout_frames,
+        validation_summary=validation_summary,
+        min_holdout_cases=args.min_holdout_cases,
+        min_trades_per_case=args.min_trades_per_case,
+        max_forced_exit_rate=args.max_forced_exit_rate,
+        max_drawdown=args.max_drawdown,
+        min_adjusted_pnl_per_case=args.min_adjusted_pnl_per_case,
+    )
+    run_dir = make_run_dir(args.output_dir, "model_holdout_audit")
+    summary.to_csv(run_dir / "metrics.csv", index=False)
+    metadata = {
+        "holdout_runs": [str(path) for path in holdout_paths],
+        "expanded_holdout_runs": [str(path) for path in expand_holdout_run_paths(holdout_paths)],
+        "validation_summary": str(args.validation_summary) if args.validation_summary else None,
+        "min_holdout_cases": args.min_holdout_cases,
+        "min_trades_per_case": args.min_trades_per_case,
+        "max_forced_exit_rate": args.max_forced_exit_rate,
+        "max_drawdown": args.max_drawdown,
+        "min_adjusted_pnl_per_case": args.min_adjusted_pnl_per_case,
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2)
+    display_columns = [
+        "policy",
+        "entry_threshold",
+        "short_entry_threshold_offset",
+        "side_margin",
+        "min_entry_rank",
+        "side_ev_penalty_rules",
+        "eligible",
+        "holdout_case_count",
+        "holdout_month_count",
+        "holdout_case_ok_count",
+        "holdout_total_adjusted_pnl_min",
+        "holdout_total_adjusted_pnl_sum",
+        "holdout_positive_case_rate",
+        "holdout_max_drawdown_max",
+        "holdout_eligible",
+        "audit_eligible",
+    ]
+    existing_display_columns = [column for column in display_columns if column in summary.columns]
+    print(summary.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
     print(f"artifacts: {run_dir}")
     return 0
 
@@ -4989,6 +5300,36 @@ def build_parser() -> argparse.ArgumentParser:
     model_candidate_selection.add_argument("--min-plateau-neighbors", type=int, default=0)
     model_candidate_selection.add_argument("--top-n", type=int, default=10)
     model_candidate_selection.set_defaults(func=handle_model_candidate_selection)
+
+    model_holdout_audit = subparsers.add_parser(
+        "model-holdout-audit",
+        help="audit selected model-policy candidates across fixed holdout run artifacts",
+    )
+    model_holdout_audit.add_argument(
+        "--holdout-runs",
+        required=True,
+        help=(
+            "comma-separated model-policy/model-cost-sensitivity run dirs, metrics files, "
+            "or parent dirs containing run dirs"
+        ),
+    )
+    model_holdout_audit.add_argument(
+        "--validation-summary",
+        type=Path,
+        help="optional model-candidate-selection or sweep summary CSV to merge by policy keys",
+    )
+    model_holdout_audit.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_holdout_audit.add_argument("--min-holdout-cases", type=int, default=1)
+    model_holdout_audit.add_argument("--min-trades-per-case", type=int, default=1)
+    model_holdout_audit.add_argument("--max-forced-exit-rate", type=float, default=1.0)
+    model_holdout_audit.add_argument("--max-drawdown", type=float, default=1e100)
+    model_holdout_audit.add_argument("--min-adjusted-pnl-per-case", type=float, default=0.0)
+    model_holdout_audit.add_argument("--top-n", type=int, default=10)
+    model_holdout_audit.set_defaults(func=handle_model_holdout_audit)
 
     analyze_trades = subparsers.add_parser(
         "analyze-trades",

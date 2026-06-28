@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 
@@ -17,8 +18,10 @@ from trade_data.backtest import (
     prepare_analysis_predictions,
     profit_barrier_calibration_diagnostics,
     profit_barrier_diagnostics,
+    read_holdout_run_frame,
     run_backtest,
     run_model_policy,
+    summarize_holdout_audit,
     summarize_candidate_selection,
     summarize_trades,
     summarize_sweep_frames,
@@ -1922,6 +1925,128 @@ class BacktestTests(unittest.TestCase):
             risk_summary.iloc[0]["near_top_risk_score"],
             risk_summary.iloc[1]["near_top_risk_score"],
         )
+
+    def test_holdout_run_frame_reads_model_policy_config_keys(self):
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "config.json").write_text(
+                """
+{
+  "model_policy_config": {
+    "predictions": "predictions.parquet",
+    "policy": "timed_ev",
+    "entry_threshold": 15.0,
+    "short_entry_threshold_offset": 4.0,
+    "side_margin": 5.0,
+    "max_predicted_hold_minutes": 480.0,
+    "min_entry_rank": 0.5,
+    "side_ev_penalty_rules": ["long:session_regime=ny_late:15"]
+  }
+}
+""".strip(),
+                encoding="utf-8",
+            )
+            (run_dir / "metrics.json").write_text(
+                """
+{
+  "strategy": "model_timed_ev",
+  "period_start": "2025-02-01T00:00:00+00:00",
+  "period_end": "2025-03-01T00:00:00+00:00",
+  "total_adjusted_pnl": 12.0,
+  "total_raw_pnl": 15.0,
+  "trade_count": 3,
+  "win_rate": 0.6666666667,
+  "max_drawdown": 4.0,
+  "forced_exit_count": 0
+}
+""".strip(),
+                encoding="utf-8",
+            )
+
+            frame = read_holdout_run_frame(run_dir)
+
+        row = frame.iloc[0]
+        self.assertEqual(row["policy"], "timed_ev")
+        self.assertEqual(row["entry_threshold"], 15.0)
+        self.assertEqual(row["short_entry_threshold_offset"], 4.0)
+        self.assertEqual(row["max_predicted_hold_minutes"], 480.0)
+        self.assertEqual(row["min_entry_rank"], 0.5)
+        self.assertEqual(row["side_ev_penalty_rules"], "long:session_regime=ny_late:15")
+        self.assertAlmostEqual(row["forced_exit_rate"], 0.0)
+
+    def test_holdout_audit_requires_all_holdout_cases_to_pass(self):
+        def holdout(month, values):
+            rows = []
+            for offset, pnl in values:
+                rows.append(
+                    {
+                        "policy": "timed_ev",
+                        "entry_threshold": 15,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 5,
+                        "risk_penalty": 0,
+                        "max_wait_regret": float("inf"),
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "period_start": f"{month}-01T00:00:00+00:00",
+                        "period_end": f"{month}-28T00:00:00+00:00",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 20,
+                        "win_rate": 0.55,
+                        "max_drawdown": 30,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        validation = pd.DataFrame(
+            {
+                "policy": ["timed_ev", "timed_ev"],
+                "entry_threshold": [15, 15],
+                "long_entry_threshold_offset": [0, 0],
+                "short_entry_threshold_offset": [4, 8],
+                "exit_threshold": [0, 0],
+                "side_margin": [5, 5],
+                "risk_penalty": [0, 0],
+                "max_wait_regret": [float("inf"), float("inf")],
+                "min_entry_rank": [0.5, 0.5],
+                "require_profit_barrier": ["False", "False"],
+                "eligible": [True, True],
+                "total_adjusted_pnl_min_cost": [40.0, 35.0],
+            }
+        )
+
+        summary = summarize_holdout_audit(
+            holdout_frames=[
+                holdout("2024-12", [(4, -10), (8, 15)]),
+                holdout("2025-02", [(4, 30), (8, 20)]),
+            ],
+            validation_summary=validation,
+            min_holdout_cases=2,
+            min_trades_per_case=10,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_adjusted_pnl_per_case=0.0,
+        )
+
+        top = summary.iloc[0]
+        self.assertEqual(top["short_entry_threshold_offset"], 8)
+        self.assertTrue(bool(top["audit_eligible"]))
+        offset4 = summary[summary["short_entry_threshold_offset"] == 4].iloc[0]
+        self.assertFalse(bool(offset4["holdout_eligible"]))
+        self.assertEqual(offset4["holdout_case_ok_count"], 1)
 
     def test_direction_session_diagnostics_reports_worst_group(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=3, freq="min")

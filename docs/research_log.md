@@ -4,6 +4,13 @@
 
 ## 2026-06-28 JST
 
+### 22:28 Multi-holdout audit
+
+- `model-holdout-audit` を追加。`model-policy` / `model-cost-sensitivity` artifactから候補keyを復元し、validation summaryとmergeして複数holdout月・cost caseを同時監査できるようにした。
+- `short:up_low_vol` sweepのvalidation eligible候補を、2024-12/2025-02標準holdoutで監査。全候補 `audit_eligible=false`。相対最良は `long:ny_late:15`, `min_rank=0.5` だが holdout min pnl `-5.4938`。
+- cost stress監査でも全候補 `audit_eligible=false`。相対最良の `long:ny_late:15`, `min_rank=0.5` は min pnl `-26.0816`、36 cases中19 pass。
+- 判断: 現在のside EV penalty候補は標準policyへ昇格しない。次はside EV penalty探索を広げず、support-aware realized-PnL targetやside/regime別EV calibrationへ戻る。
+
 ### 22:12 Short up_low_vol EV penalty
 
 - `short:combined_regime=up_low_vol` を直接side EV penaltyで減点する実験を実施。

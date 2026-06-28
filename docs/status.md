@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 22:12 JST
+最終更新: 2026-06-28 22:28 JST
 
 ## 現在の状態
 
@@ -118,6 +118,8 @@ side/regime EV penaltyを追加済み。`--side-ev-penalty-rules` は `side:colu
 
 `short:combined_regime=up_low_vol` のside EV penaltyを検証済み。short shareは下がるが、validation最悪月PnLが `long:ny_late:15` 単独の `93.8904` からcombo `69.8078` / `63.6080` へ落ち、short-onlyは `50.2796` まで悪化した。固定testでもcomboは2024-12 `-77.3720` / `-79.1486`、2025-02 `+28.5478` / `+64.0924` で、既存baselineや `long:ny_late` risk topを上回らない。したがって直接減点は採用しない。詳細は `docs/reports/00070_2026-06-28_short_up_low_vol_ev_penalty.md`。
 
+複数holdout同時監査 `model-holdout-audit` を追加済み。`model-policy` / `model-cost-sensitivity` artifactの `config.json` から候補keyを復元し、validation summaryとmergeしてholdout月・cost caseを同時に監査できる。直近のside EV penalty候補群では、validation上eligibleでも、2024-12/2025-02標準holdoutとcost stressの両方で `audit_eligible=True` は0件。`long:ny_late:15` risk topが相対最良だが、標準holdout min pnl `-5.4938`、cost stress min pnl `-26.0816` でNoTradeを安定して超えない。詳細は `docs/reports/00071_2026-06-28_multi_holdout_candidate_audit.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -158,6 +160,7 @@ side/regime EV penaltyを追加済み。`--side-ev-penalty-rules` は `side:colu
 17. near-top risk rankingは実装済み。複合riskでは `long:ny_late` を採用せず、drawdown-only採用は脆いため標準基準にしない。
 18. `long:ny_late:15` side EV penalty risk topは2024-12を防御し、2025-02でも非破綻だったが、2025-02ではbaselineを上回らない。標準採用は保留する。
 19. `short:up_low_vol` の直接side EV penaltyはvalidation最悪月と2024-12固定testを壊すため採用しない。short偏重riskはpost-hocなgroup減点ではなく、support-aware target、side/regime別calibrated EV、複数holdout同時rankingで扱う。
+20. `model-holdout-audit` による2ヶ月同時監査では現候補が全滅した。次はside EV penalty探索を広げず、entry/side EV calibrationとsupport-aware realized-PnL targetへ戻る。
 
 ## 未決定事項
 
@@ -168,6 +171,8 @@ side/regime EV penaltyを追加済み。`--side-ev-penalty-rules` は `side:colu
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-28 22:28 JST 更新: `model-holdout-audit` を追加し、validation eligible候補を2024-12/2025-02の標準holdoutとcost stressで同時監査した。標準条件でもcost stressでも `audit_eligible=True` は0件。`long:ny_late:15` risk topは相対最良だがNoTradeを安定して超えない。次はside EV penalty探索を広げず、support-aware realized-PnL targetやside/regime別EV calibrationへ戻る。
 
 2026-06-28 22:12 JST 更新: `short:combined_regime=up_low_vol` のside EV penaltyをvalidation/base、cost-mid、2024-12/2025-02固定test、代表cost stressで確認した。short比率は下がるが、validation最悪月PnLと2024-12 holdoutが悪化するため直接減点は採用しない。次はshort偏重riskを、group post-hoc penaltyではなくsupport-aware targetやside/regime別calibrated EV、複数holdout同時rankingで扱う。
 
