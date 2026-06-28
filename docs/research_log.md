@@ -2,6 +2,19 @@
 
 時系列の作業記録。判断、実験、失敗、次の行動を追記する。
 
+## 2026-06-29 JST
+
+### 03:59 Short low-vol side EV penalty cost stress
+
+- 2025-03 baselineのselected tradesを診断。longは `+47.6936`、shortは `-96.3762` で、最悪groupは `short:asia -67.7956` と `short:rollover -37.6094`。
+- `min_side_confidence` hard gateはvalidationを壊した。baseline min pnl `82.7176` に対し、`0.55` は `7.0802`、`0.60` は `-12.1826`。global `side_confidence_penalty` も最良 `5` で min pnl `49.0358` に落ちるため採用しない。
+- short combined-regime side EV penaltyを試し、`down5,up15,range10` はvalidation min pnl `118.7610`, sum `638.9718`、zero-cost holdout 2024-12/2025-02/2025-03で `10.0758 / 83.0220 / 82.7884` と全てプラス。
+- ただしcost stressでは2024-12がmoderate cost `-22.8348`、high cost `-53.7684` へ落ち、3ヶ月合算もhigh costでマイナス。取引回数増加によるzero-cost改善の可能性が残る。
+- `entry=16`, `rank=0.5` で取引回数を減らす案は、holdoutで2024-12 `-18.6930`、2025-02 `-43.3716` とzero-cost時点で悪化したため採用しない。
+- 判断: short low-vol side EV comboは重要候補として残すが標準policyへ昇格しない。次はzero-costだけでなくmoderate costのvalidation min pnlも同時に見るcandidate selectionへ進む。
+- report: `docs/reports/00091_2026-06-29_short_lowvol_side_ev_penalty_cost_stress.md`
+- 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ## 2026-06-28 JST
 
 ### 23:19 Selected-trade quality hybrid gate

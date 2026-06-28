@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 03:38 JST
+最終更新: 2026-06-29 03:59 JST
 
 ## 現在の状態
 
@@ -158,6 +158,8 @@ prefixed candidate quality componentを合成する `combine-candidate-quality-c
 
 2025-03へ同一HGB entry + MLP exit + forced target frameを生成し、`component_fixed_weighted quality>=2` を追加holdoutで確認済み。baseline/quality `0` は adjusted pnl `-48.6826`, 112 trades、事前登録候補 `quality>=2` は `-55.7516`, 104 tradesへ悪化した。`quality>=5` は2025-03単月では `-45.2572` へ小改善するが、validationと2025-02を壊すためpost-hoc採用しない。`quality>=8` 以上は取引ゼロでNoTrade化し、月10trades条件を満たさない。`component_fixed_weighted` hard gateは標準採用せず、今後は診断特徴またはmulti-feature stacking入力として扱う。詳細は `docs/reports/00090_2026-06-29_candidate_quality_component_2025_03_apply.md`。
 
+2025-03のshort偏重と `short:asia` 損失集中を受けて、side-confidence gate、side-confidence penalty、short combined-regime side EV penalty、entry tightening、cost stressを確認済み。side-confidence hard/soft gateはvalidationを壊したため採用しない。`short:combined_regime=down_low_vol:5,short:combined_regime=up_low_vol:15,short:combined_regime=range_low_vol:10` はzero-cost固定holdout 2024-12/2025-02/2025-03を全てプラスにしたが、2024-12はmoderate costで `-22.8348`、high costで `-53.7684` へ落ちるため標準採用しない。`entry=16` tighteningも2024-12/2025-02をzero-cost時点で壊した。今後はcost-aware validationを選定基準に組み込み、side EV penalty探索を広げすぎずmulti-feature stacking/rankingへ進む。詳細は `docs/reports/00091_2026-06-29_short_lowvol_side_ev_penalty_cost_stress.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -217,6 +219,8 @@ prefixed candidate quality componentを合成する `combine-candidate-quality-c
 36. deterministic component ensembleでは `component_fixed_weighted quality>=0` だけがbaselineを小幅改善した。ただしfold最低PnLは同じで、fixed holdout未確認。標準採用せず、tie-break候補として複数holdoutへ進める。
 37. `component_fixed_weighted quality>=0` はfixed holdoutで取引を落とさずbaseline同一。`quality>=2` は2024-12/2025-02を改善するがvalidationを悪化させ、2025-03追加holdoutでも `-48.6826 -> -55.7516` に悪化したため採用しない。
 38. 2025-03ではHGB entry/sideが崩れ、short偏重と `short:asia` 損失集中が出ている。次はquality hard gateを深掘りせず、side/entry calibration、short exposure concentration、direction/session別risk検知、またはcandidate quality componentをmulti-feature stackingで扱う。
+39. side-confidence hard/soft gateは標準採用しない。short low-vol side EV comboはzero-costでは有望だが、cost stressで脆いため標準採用しない。
+40. 次はzero-costだけでなくmoderate costのvalidation min pnlを同時に満たす選定基準を使う。entry thresholdを単純に上げる方向はholdoutで悪化したため、本流から外す。
 
 ## 未決定事項
 
