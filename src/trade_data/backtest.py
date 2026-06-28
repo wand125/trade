@@ -3840,6 +3840,8 @@ def summarize_candidate_selection(
     near_top_exit_regret_weight: float = 1.0,
     near_top_actual_miss_weight: float = 100.0,
     near_top_side_share_weight: float = 100.0,
+    min_base_folds: int | None = None,
+    min_cost_folds: int | None = None,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -3917,10 +3919,16 @@ def summarize_candidate_selection(
         raise ValueError("near_top_side_share_weight must be non-negative")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
+    base_min_folds = min_folds if min_base_folds is None else min_base_folds
+    cost_min_folds = min_folds if min_cost_folds is None else min_cost_folds
+    if base_min_folds <= 0:
+        raise ValueError("min_base_folds must be positive")
+    if cost_min_folds <= 0:
+        raise ValueError("min_cost_folds must be positive")
 
     base_summary = summarize_sweep_frames(
         frames=base_frames,
-        min_folds=min_folds,
+        min_folds=base_min_folds,
         min_trades_per_fold=min_trades_per_fold,
         max_forced_exit_rate=max_forced_exit_rate,
         max_drawdown=max_drawdown,
@@ -3929,7 +3937,7 @@ def summarize_candidate_selection(
     )
     cost_summary = summarize_sweep_frames(
         frames=cost_frames,
-        min_folds=min_folds,
+        min_folds=cost_min_folds,
         min_trades_per_fold=min_trades_per_fold,
         max_forced_exit_rate=max_forced_exit_rate,
         max_drawdown=max_drawdown,
@@ -4542,6 +4550,8 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         base_frames=base_frames,
         cost_frames=cost_frames,
         min_folds=args.min_folds,
+        min_base_folds=args.min_base_folds,
+        min_cost_folds=args.min_cost_folds,
         min_trades_per_fold=args.min_trades_per_fold,
         max_forced_exit_rate=args.max_forced_exit_rate,
         max_drawdown=args.max_drawdown,
@@ -4606,6 +4616,8 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "base_sweeps": [str(path) for path in base_paths],
         "cost_sweeps": [str(path) for path in cost_paths],
         "min_folds": args.min_folds,
+        "min_base_folds": args.min_base_folds,
+        "min_cost_folds": args.min_cost_folds,
         "min_trades_per_fold": args.min_trades_per_fold,
         "max_forced_exit_rate": args.max_forced_exit_rate,
         "max_drawdown": args.max_drawdown,
@@ -5089,6 +5101,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("data/reports/backtests"),
     )
     model_candidate_selection.add_argument("--min-folds", type=int, default=2)
+    model_candidate_selection.add_argument(
+        "--min-base-folds",
+        type=int,
+        default=None,
+        help="minimum required base/no-cost folds; defaults to --min-folds",
+    )
+    model_candidate_selection.add_argument(
+        "--min-cost-folds",
+        type=int,
+        default=None,
+        help="minimum required cost-aware folds; defaults to --min-folds",
+    )
     model_candidate_selection.add_argument("--min-trades-per-fold", type=int, default=30)
     model_candidate_selection.add_argument("--max-forced-exit-rate", type=float, default=0.0)
     model_candidate_selection.add_argument("--max-drawdown", type=float, default=100.0)

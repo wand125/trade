@@ -1084,6 +1084,80 @@ class BacktestTests(unittest.TestCase):
         self.assertFalse(bool(offset4["eligible"]))
         self.assertFalse(bool(offset4["side_loss_ok"]))
 
+    def test_candidate_selection_allows_separate_base_and_cost_fold_requirements(self):
+        def fold(pnl):
+            return pd.DataFrame(
+                [
+                    {
+                        "policy": "fixed_horizon_ev",
+                        "entry_threshold": 0,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": 8,
+                        "exit_threshold": 0,
+                        "side_margin": 2,
+                        "risk_penalty": 0,
+                        "max_wait_regret": 4,
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "extra_side_margin_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 40,
+                        "win_rate": 0.55,
+                        "max_drawdown": 30.0,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "long_adjusted_pnl": 20,
+                        "short_adjusted_pnl": 10,
+                    }
+                ]
+            )
+
+        default_summary = summarize_candidate_selection(
+            base_frames=[fold(30), fold(28)],
+            cost_frames=[fold(20), fold(18), fold(17)],
+            min_folds=3,
+            min_trades_per_fold=30,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=20.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+        self.assertFalse(bool(default_summary.iloc[0]["eligible"]))
+        self.assertEqual(default_summary.iloc[0]["fold_count_base"], 2)
+        self.assertEqual(default_summary.iloc[0]["fold_count_cost"], 3)
+
+        explicit_summary = summarize_candidate_selection(
+            base_frames=[fold(30), fold(28)],
+            cost_frames=[fold(20), fold(18), fold(17)],
+            min_folds=3,
+            min_base_folds=2,
+            min_cost_folds=3,
+            min_trades_per_fold=30,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=20.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+        self.assertTrue(bool(explicit_summary.iloc[0]["eligible"]))
+        self.assertTrue(bool(explicit_summary.iloc[0]["eligible_base"]))
+        self.assertTrue(bool(explicit_summary.iloc[0]["eligible_cost"]))
+
     def test_candidate_selection_can_gate_direction_session_loss(self):
         def fold(values):
             rows = []

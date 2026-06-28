@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 04:14 High-stress cost selection failure
+
+- validation側にもhigh cost (`spread=0.2`, `slippage=0.1`, `delay=1`) を追加し、base + moderate + high costを同時に満たすcandidate selectionを実行した。
+- `model-candidate-selection` に `--min-base-folds` / `--min-cost-folds` を追加。base/no-cost fold数とcost scenario fold数が違う場合でも、本文内の実験設計どおりに `base=4`, `cost=8` のように明示できる。
+- explicit fold selectionでは `down5,up10,range5` がtop。validation base min pnl `138.3706`, cost min pnl `107.1572`, cost sum `1182.7684`, max drawdown `86.9156`。
+- ただし固定holdout stressでは同候補の全scenario min pnlが `-32.4176`、high cost合計が `-31.6628`、max drawdownが `181.6922` まで悪化した。
+- `down10,up10,range10` はvalidation topではないが、holdout全scenario合計 `569.9690` とmax drawdown `127.9822` は相対的に良い。現行rankingはこの外挿を拾えていない。
+- 判断: high-stress validation selectionを入れても標準採用候補はまだない。次はvalidation fold内でstress-aware rankingを定義し、未使用holdout月で確認する。
+- report: `docs/reports/00093_2026-06-29_highstress_cost_selection_failure.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 04:06 Cost-aware low-vol selection holdout
 
 - short low-vol rule set gridをmoderate cost (`spread=0.1`, `slippage=0.05`, `delay=1`) でも4fold validation評価した。
