@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 08:49 Validation stateful candidate examples
+
+- 代表validation 4ヶ月 (`2024-07`, `2024-09`, `2024-11`, `2025-01`) で、raw policy と `min_trade_quality=0` stack0 policy の `model-policy` runを生成した。
+- 固定条件は `timed_ev`, entry threshold `12`, short offset `6`, side margin `5`, min entry rank `0.5`, max predicted hold `480`, loss multiplier `1.2`, short low-vol系side EV penalty。
+- `model-trade-delta` で `stateful_candidate_examples.csv` を作成。254例、target mean `2.4123`, target median `1.3995`, `target<=0` rate `0.3976`。
+- raw EVとのcalibrationは raw predicted mean `16.4274`, raw bias `14.0151`, raw overestimate mean `15.0311`, mean MAE `16.0471`。validationでもraw EVはstateful targetを大きく過大評価。
+- 判断: validation例を次の教師候補として採用。次は月抜きOOFで `stateful_entry_value` modelを作り、hard gateではなくEV補正/ranking tie-breakとして検証する。
+- report: `docs/reports/00117_2026-06-29_validation_stateful_candidate_examples.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 08:42 Stateful candidate examples
 
 - `model-trade-delta` に `stateful_candidate_examples.csv` 出力を追加した。candidate policyで実際に取った取引を、candidate-quality-styleの学習入力として保存する。

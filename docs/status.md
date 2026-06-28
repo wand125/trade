@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 08:42 JST
+最終更新: 2026-06-29 08:49 JST
 
 ## 現在の状態
 
@@ -39,6 +39,8 @@ raw vs stack gateの取引差分診断 `model-trade-delta` を追加済み。`en
 `model-trade-delta` にstateful blocking診断を追加済み。candidate取引の保有中に消えたbase-only取引を `blocking_pairs.csv` と `group_by_blocking_candidate_*` に出力する。2025-03では `only_candidate long` が自身 `-18.8318` に加えbase側純利益 `+51.0776` をブロックし、stateful net `-69.9094`。`only_candidate short` もstateful net `-53.1846`。品質meanは正なので、pointwise qualityは「保有中に逃す機会」を見ていない。次は `stateful_entry_value` / `stateful_positive_cost_value` をOOFで作り、hard gateではなくranking/tie-breakまたはEV補正として検証する。詳細は `docs/reports/00115_2026-06-29_stateful_blocking_diagnostics.md`。
 
 `model-trade-delta` は `stateful_candidate_examples.csv` も出力する。候補例は `target`, `stateful_entry_value`, `stateful_positive_cost_value`, `blocking_cost`, `replacement_regret`, `side`, `decision_timestamp` などを持ち、candidate-quality-styleの学習入力として使える。2024-12/2025-03 smokeでは220例、target mean `-0.0655`、raw EV mean `18.4353`、raw bias `18.5008`。2025-03 `only_candidate long` はtarget sum `-69.9094`、blocking cost `75.3170`。次は代表validation月で同じexamplesを作り、月抜きOOFでstateful value modelを学習する。詳細は `docs/reports/00116_2026-06-29_stateful_candidate_examples.md`。
+
+代表validation 4ヶ月でも `stateful_candidate_examples.csv` を作成済み。254例、target mean `2.4123`、raw EV mean `16.4274`、raw bias `14.0151`、`target<=0` 率 `0.3976`。stack0 policyは4ヶ月合計ではrawを上回るが、raw EVはstateful targetをまだ大きく過大評価している。次は月抜きOOFで `stateful_entry_value` modelを作り、hard gateではなくEV補正/ranking tie-breakとして検証する。詳細は `docs/reports/00117_2026-06-29_validation_stateful_candidate_examples.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

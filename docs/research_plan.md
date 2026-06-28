@@ -78,6 +78,7 @@
 - 期待損益の回帰。
 - 決済タイミングの hazard model。
 - 取引単位の ranking target。
+- 一玉制約の機会費用を含む `stateful_entry_value` / `blocking_cost` target。
 
 ## Phase 3: 古典モデルと軽量モデル
 
@@ -166,4 +167,3 @@
 - 欠損注入
 - スプレッド悪化シナリオ
 - 取引不可時間帯の除外
-
