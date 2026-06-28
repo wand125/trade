@@ -3351,3 +3351,39 @@ Artifacts:
 - ただし2024-12はまだNoTrade未満で、2025-02はbaselineより少し弱い。標準採用は保留。
 - `wrong_side`, `profit_barrier_miss`, `exit_regret_high`, `any_failure` は単独riskでは最良がrisk `0`。
 - 次は `large_loss` targetに絞り、threshold `5/10/15`、side/regime別校正、candidate-entry集合への拡張を試す。
+
+### 2026-06-29 00:22 JST Large Loss Threshold Comparison
+
+作業:
+
+- `large_loss_threshold=5` と `15` のOOF trade failure modelを追加生成した。
+- 既存 `threshold=10` と同じgridで、validation 4foldのrisk sweepとsummaryを作成した。
+- 各thresholdのvalidation top候補を、fixed holdout `2024-12` / `2025-02` に適用した。
+- report: `docs/reports/00079_2026-06-29_large_loss_threshold_comparison.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+Artifacts:
+
+- t5 model apply: `data/reports/modeling/20260628_150052_trade_failure_large_loss_t5_2024_12/`, `data/reports/modeling/20260628_150052_trade_failure_large_loss_t5_2025_02/`
+- t15 model apply: `data/reports/modeling/20260628_150053_trade_failure_large_loss_t15_2024_12/`, `data/reports/modeling/20260628_150053_trade_failure_large_loss_t15_2025_02/`
+- t5 validation summary: `data/reports/backtests/trade_failure_large_loss_t5_risk_summary/20260628_151951_model_sweep_summary/`
+- t10 validation summary: `data/reports/backtests/trade_failure_large_loss_risk_summary/20260628_145258_model_sweep_summary/`
+- t15 validation summary: `data/reports/backtests/trade_failure_large_loss_t15_risk_summary/20260628_151951_model_sweep_summary/`
+- fixed tests: `data/reports/backtests/trade_failure_large_loss_t5_risk_fixed_tests/`, `data/reports/backtests/trade_failure_large_loss_risk_fixed_tests/`, `data/reports/backtests/trade_failure_large_loss_t15_risk_fixed_tests/`
+
+結果:
+
+| item | t5 | t10 | t15 |
+|---|---:|---:|---:|
+| OOF AUC | `0.4042` | `0.5736` | `0.5665` |
+| validation top min pnl | `88.8168` | `92.8530` | `87.4970` |
+| validation top sum pnl | `386.5722` | `402.2514` | `399.4064` |
+| fixed 2024-12 adjusted pnl | `22.3498` | `-37.2928` | `-55.4970` |
+| fixed 2025-02 adjusted pnl | `-19.6600` | `76.9254` | `21.5216` |
+
+判断:
+
+- `threshold=5` はOOF AUCが0.5未満で、2024-12を救っても2025-02をNoTrade未満にする。採用しない。
+- `threshold=15` は分類性能は `10` に近いが、2024-12を悪化させる。優先度を下げる。
+- `threshold=10` はOOF/validation/2ヶ月合計で最も筋がよいが、2024-12がまだNoTrade未満。標準採用は保留する。
+- 次はthreshold探索ではなく、`threshold=10` のside/regime別校正、またはcandidate-entry集合へのfailure target拡張へ進む。
