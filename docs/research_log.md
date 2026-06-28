@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 05:48 Normal vol / time risk validation
+
+- `00100` の2025-04 failureで見えた `short:range_normal_vol`, `short:up_normal_vol`, `long:range_normal_vol`, `rollover`, `ny_late` を、2025-04へ直接合わせず代表4ヶ月validationだけで確認した。
+- 既存low-vol short penaltyをbaselineにし、normal-vol方向別EV減点と `rollover/ny_late` 両side EV減点を10候補の小gridで評価した。
+- `model-candidate-selection --plateau-column side_ev_penalty_rules` が文字列rule setで落ちたため、`plateau_support_counts` をカテゴリplateau列にも対応させた。数値列は従来通り、カテゴリ列は同一カテゴリのeligible件数をsupportとして数える。
+- validation結果では、`short_norm5` / `short_norm10` はhigh cost最低月がマイナスへ落ち、normal-vol short直接減点は台地にならなかった。
+- `time5` はhigh cost min pnlを `120.5842 -> 125.4900` に小改善したが、base sum `673.9120 -> 644.3098`、cost sum `562.8784 -> 552.7068` と全体を削るため標準昇格しない。
+- `long_range5` もcost min `120.8868` とbaselineをわずかに上回るが、base/cost sumを削るため診断候補止まり。
+- 判断: normal-vol side EV penaltyを標準候補にしない。`time5` / `long_range5` はrisk診断・ranking特徴として残し、次はrule追加ではなくsession/regime別の選択失敗を教師化する。
+- report: `docs/reports/00101_2026-06-29_normal_time_risk_validation.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 05:38 Exit holding holdout stress
 
 - `00099` でvalidation最上位だった `bin_expected cap=480` を、2024-12 / 2025-02 / 2025-03 / 2025-04の固定holdoutへ適用した。

@@ -14,6 +14,7 @@ from trade_data.backtest import (
     fixed_horizon_scores,
     model_signal_from_predictions,
     normalize_sweep_metrics,
+    plateau_support_counts,
     parse_optional_rule_sets,
     prepare_analysis_predictions,
     profit_barrier_calibration_diagnostics,
@@ -29,6 +30,7 @@ from trade_data.backtest import (
     trade_failure_flags,
     trade_group_summary,
     trades_to_frame,
+    SWEEP_KEY_COLUMNS,
 )
 
 
@@ -1136,6 +1138,58 @@ class BacktestTests(unittest.TestCase):
         offset4 = summary[summary["short_entry_threshold_offset"] == 4].iloc[0]
         self.assertFalse(bool(offset4["eligible"]))
         self.assertFalse(bool(offset4["side_loss_ok"]))
+
+    def test_plateau_support_counts_handles_categorical_sweep_key(self):
+        rows = []
+        for rules, eligible in [
+            ("short:combined_regime=range_normal_vol:5", True),
+            ("short:combined_regime=range_normal_vol:5", True),
+            ("short:combined_regime=range_normal_vol:10", True),
+            ("short:combined_regime=range_normal_vol:10", False),
+        ]:
+            row = {column: "" for column in SWEEP_KEY_COLUMNS}
+            row.update(
+                {
+                    "policy": "timed_ev",
+                    "entry_threshold": 12,
+                    "long_entry_threshold_offset": 0,
+                    "short_entry_threshold_offset": 6,
+                    "exit_threshold": 0,
+                    "side_margin": 5,
+                    "risk_penalty": 0,
+                    "fixed_horizon_score_mode": "max",
+                    "min_predicted_hold_minutes": 1,
+                    "max_predicted_hold_minutes": 480,
+                    "min_valid_predicted_hold_minutes": -float("inf"),
+                    "max_wait_regret": float("inf"),
+                    "min_entry_rank": 0.5,
+                    "min_trade_quality": -float("inf"),
+                    "profit_barrier_miss_penalty": 0,
+                    "time_exit_penalty": 0,
+                    "loss_first_penalty": 0,
+                    "time_exit_holding_shrink": 0,
+                    "loss_first_holding_shrink": 0,
+                    "time_exit_exit_threshold": float("inf"),
+                    "loss_first_exit_threshold": float("inf"),
+                    "side_confidence_penalty": 0,
+                    "min_side_confidence": 0,
+                    "require_profit_barrier": False,
+                    "profit_barrier_threshold": 0.5,
+                    "side_ev_penalty_rules": rules,
+                    "eligible": eligible,
+                }
+            )
+            rows.append(row)
+        frame = pd.DataFrame(rows)
+
+        support = plateau_support_counts(
+            frame,
+            plateau_column="side_ev_penalty_rules",
+            plateau_radius=0,
+            eligible_column="eligible",
+        )
+
+        self.assertEqual(support.tolist(), [1, 1, 0, 1])
 
     def test_candidate_selection_allows_separate_base_and_cost_fold_requirements(self):
         def fold(pnl):

@@ -3914,15 +3914,25 @@ def plateau_support_counts(
 
     support = pd.Series(0, index=frame.index, dtype="int64")
     group_columns = [column for column in SWEEP_KEY_COLUMNS if column != plateau_column]
-    plateau_values = pd.to_numeric(frame[plateau_column])
+    numeric_plateau_values = pd.to_numeric(frame[plateau_column], errors="coerce")
+    use_numeric_distance = numeric_plateau_values.notna().all()
+    plateau_values = (
+        numeric_plateau_values
+        if use_numeric_distance
+        else frame[plateau_column].fillna("").astype(str)
+    )
     for _, group in frame.groupby(group_columns, dropna=False):
         eligible_indices = group.index[frame.loc[group.index, eligible_column].to_numpy()]
         if len(eligible_indices) == 0:
             continue
         eligible_values = plateau_values.loc[eligible_indices]
         for index in group.index:
-            distance = (eligible_values - plateau_values.loc[index]).abs()
-            support.loc[index] = int(((distance > 0) & (distance <= plateau_radius)).sum())
+            if use_numeric_distance:
+                distance = (eligible_values - plateau_values.loc[index]).abs()
+                support.loc[index] = int(((distance > 0) & (distance <= plateau_radius)).sum())
+            else:
+                same_category = eligible_values == plateau_values.loc[index]
+                support.loc[index] = int(same_category.drop(index, errors="ignore").sum())
     return support
 
 
