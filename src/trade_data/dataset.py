@@ -40,6 +40,7 @@ BASE_FEATURE_COLUMNS = [
 ROLLING_WINDOWS = [15, 60, 240]
 FFT_WINDOWS = [64, 256]
 EXIT_FIXED_HORIZON_MINUTES = [60, 240, 720]
+PROFIT_BARRIER_HORIZON_MINUTES = EXIT_FIXED_HORIZON_MINUTES
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,10 @@ def future_best_labels(
     short_adverse = np.full(n, np.nan)
     long_profit_barrier_hit = np.full(n, np.nan)
     short_profit_barrier_hit = np.full(n, np.nan)
+    profit_barrier_horizon_targets: dict[str, np.ndarray] = {}
+    for minutes in PROFIT_BARRIER_HORIZON_MINUTES:
+        profit_barrier_horizon_targets[f"long_profit_barrier_hit_{minutes}m"] = np.full(n, np.nan)
+        profit_barrier_horizon_targets[f"short_profit_barrier_hit_{minutes}m"] = np.full(n, np.nan)
     fixed_horizon_targets: dict[str, np.ndarray] = {}
     for minutes in EXIT_FIXED_HORIZON_MINUTES:
         fixed_horizon_targets[f"long_fixed_{minutes}m_adjusted_pnl"] = np.full(n, np.nan)
@@ -255,9 +260,26 @@ def future_best_labels(
             profit_barrier_raw,
             loss_barrier_raw,
         )
-        for minutes in EXIT_FIXED_HORIZON_MINUTES:
+        for minutes in PROFIT_BARRIER_HORIZON_MINUTES:
             fixed_ns = fixed_horizon_ns[minutes]
             fixed_exit_idx = int(np.searchsorted(ts_ns, ts_ns[entry_idx] + fixed_ns, side="left"))
+            barrier_exit_idx = min(fixed_exit_idx, exit_end)
+            if barrier_exit_idx >= exit_start and barrier_exit_idx < n:
+                horizon_prices = opens[exit_start : barrier_exit_idx + 1]
+                profit_barrier_horizon_targets[f"long_profit_barrier_hit_{minutes}m"][
+                    decision_idx
+                ] = profit_barrier_hit_before_loss(
+                    horizon_prices - entry_price,
+                    profit_barrier_raw,
+                    loss_barrier_raw,
+                )
+                profit_barrier_horizon_targets[f"short_profit_barrier_hit_{minutes}m"][
+                    decision_idx
+                ] = profit_barrier_hit_before_loss(
+                    entry_price - horizon_prices,
+                    profit_barrier_raw,
+                    loss_barrier_raw,
+                )
             if fixed_exit_idx <= exit_end and fixed_exit_idx < n:
                 long_fixed_raw = opens[fixed_exit_idx] - entry_price
                 short_fixed_raw = entry_price - opens[fixed_exit_idx]
@@ -332,6 +354,7 @@ def future_best_labels(
             "short_max_adverse_pnl": short_adverse,
             "long_profit_barrier_hit": long_profit_barrier_hit,
             "short_profit_barrier_hit": short_profit_barrier_hit,
+            **profit_barrier_horizon_targets,
             **fixed_horizon_targets,
             "long_best_exit_idx": long_best_exit_idx,
             "short_best_exit_idx": short_best_exit_idx,
@@ -523,6 +546,13 @@ def build_month_dataset(
     output["short_best_exit_idx"] = output["short_best_exit_idx"].astype("int64")
     output["long_profit_barrier_hit"] = output["long_profit_barrier_hit"].astype("int8")
     output["short_profit_barrier_hit"] = output["short_profit_barrier_hit"].astype("int8")
+    profit_barrier_horizon_target_columns = [
+        f"{side}_profit_barrier_hit_{minutes}m"
+        for minutes in PROFIT_BARRIER_HORIZON_MINUTES
+        for side in ["long", "short"]
+    ]
+    for column in profit_barrier_horizon_target_columns:
+        output[column] = output[column].astype("int8")
 
     for column in feature_columns:
         output[column] = output[column].astype("float32")
@@ -542,6 +572,7 @@ def build_month_dataset(
         *quantized_target_columns,
         "long_profit_barrier_hit",
         "short_profit_barrier_hit",
+        *profit_barrier_horizon_target_columns,
         *fixed_horizon_target_columns,
         "open",
         "high",
@@ -585,6 +616,7 @@ def build_month_dataset(
         [
             "long_profit_barrier_hit",
             "short_profit_barrier_hit",
+            *profit_barrier_horizon_target_columns,
             *fixed_horizon_target_columns,
             *timing_target_columns,
         ],

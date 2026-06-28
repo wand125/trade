@@ -44,12 +44,32 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(labels.loc[0, "best_exit_idx"], 2)
         self.assertEqual(labels.loc[0, "long_profit_barrier_hit"], 1)
         self.assertEqual(labels.loc[0, "short_profit_barrier_hit"], 0)
+        self.assertEqual(labels.loc[0, "long_profit_barrier_hit_60m"], 1)
+        self.assertEqual(labels.loc[0, "short_profit_barrier_hit_60m"], 0)
 
         self.assertEqual(labels.loc[1, "entry_idx"], 2)
         self.assertEqual(labels.loc[1, "label"], -1)
         self.assertAlmostEqual(labels.loc[1, "short_best_adjusted_pnl"], 5.4)
         self.assertEqual(labels.loc[1, "best_exit_idx"], 3)
         self.assertEqual(labels.loc[1, "short_profit_barrier_hit"], 1)
+
+    def test_future_best_labels_adds_time_limited_profit_barrier_targets(self):
+        opens = [100.0] * 200
+        opens[1] = 100.0
+        opens[71] = 105.0
+        df = frame(opens)
+
+        labels = future_best_labels(
+            df,
+            horizon=pd.Timedelta(hours=3),
+            min_adjusted_edge=1.0,
+            profit_multiplier=0.9,
+            loss_multiplier=1.3,
+        )
+
+        self.assertEqual(labels.loc[0, "long_profit_barrier_hit"], 1)
+        self.assertEqual(labels.loc[0, "long_profit_barrier_hit_60m"], 0)
+        self.assertEqual(labels.loc[0, "long_profit_barrier_hit_240m"], 1)
 
     def test_features_use_current_and_past_values(self):
         df = frame([100, 101, 103, 106, 110])
@@ -86,6 +106,8 @@ class DatasetTests(unittest.TestCase):
         self.assertIn("best_adjusted_pnl_quantile", dataset.columns)
         self.assertIn("long_profit_barrier_hit", dataset.columns)
         self.assertIn("short_profit_barrier_hit", dataset.columns)
+        self.assertIn("long_profit_barrier_hit_60m", dataset.columns)
+        self.assertIn("short_profit_barrier_hit_720m", dataset.columns)
         self.assertIn("long_fixed_60m_adjusted_pnl", dataset.columns)
         self.assertIn("short_fixed_60m_adjusted_pnl", dataset.columns)
         self.assertIn("long_wait_regret", dataset.columns)
@@ -101,6 +123,7 @@ class DatasetTests(unittest.TestCase):
         self.assertIn("target_columns", summary)
         self.assertIn("long_wait_regret", summary["target_columns"])
         self.assertIn("long_profit_barrier_hit", summary["target_columns"])
+        self.assertIn("long_profit_barrier_hit_60m", summary["target_columns"])
         self.assertIn("long_fixed_60m_adjusted_pnl", summary["target_columns"])
         self.assertIn("trend_regime", dataset.columns)
         self.assertIn("volatility_regime", dataset.columns)

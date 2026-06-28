@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 12:48 JST
+最終更新: 2026-06-28 12:58 JST
 
 ## 現在の状態
 
@@ -46,6 +46,8 @@ trade-analysis diagnostic gateを追加済み。`model-sweep` metricsに `direct
 
 validation 4foldのhigh-turnover gridを新diagnostic列入りで再生成し、diagnostic gateの閾値台地を確認済み。2025-07 smoke-like gate (`exit_regret_mean<=15`, `EV overestimate<=10`) はvalidation候補を0件にするためhard採用しない。`balanced` gateは候補5件を維持するが選別力は弱く、`focused` / `strict` は2件/1件に縮むため台地が弱い。現時点ではdiagnosticを主hard gateにせず、tie-breakと失敗分析に使う。詳細は `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md` と `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`。
 
+時間別profit barrier targetを追加済み。`long_profit_barrier_hit_60m/240m/720m` と `short_profit_barrier_hit_60m/240m/720m` をdatasetに生成し、`target-set policy` / `full` のclassification targetへ追加した。2025-01のsmokeでは60m targetは希少、240m/720mは正例が十分ある。主datasetはまだ再生成していない。詳細は `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -67,11 +69,11 @@ validation 4foldのhigh-turnover gridを新diagnostic列入りで再生成し、
 
 ## 次の作業
 
-1. 次のblindを見る前に、cost-aware評価を主目的にした候補選定基準を再固定する。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
-2. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
-3. PnL, trade count, side/session loss, short share, smoothed barrier miss, cost-aware成績を同時に満たす候補を固定する。
-4. profit barrier threshold `0.0` が選ばれた理由を分析する。barrier probability targetの選別力が弱い可能性が高い。
-5. exit timing targetを fixed horizon、barrier time、hazard-like close probability、realized exit regret へ拡張する。
+1. 主dataset `data/processed/datasets/xauusd_m1_p1_l1p2/` を時間別profit barrier target込みで再生成する。
+2. `target-set policy` のHGBを再学習し、`pred_*_profit_barrier_hit_240m_prob` / `720m_prob` をprofit barrier columnに使ったvalidation sweepを比較する。
+3. 次のblindを見る前に、cost-aware評価を主目的にした候補選定基準を再固定する。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
+4. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
+5. PnL, trade count, side/session loss, short share, smoothed barrier miss, cost-aware成績を同時に満たす候補を固定する。
 6. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
 7. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
@@ -165,6 +167,8 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 
 2026-06-28 12:48 JST 更新: validation 4foldのhigh-turnover gridを新diagnostic列入りで再生成し、diagnostic gateの閾値台地を確認した。no diagnostic / lenient / balanced はeligible 5件、focusedは2件、strictは1件、2025-07 smoke-like gateは0件。したがって2025-07 post-hoc閾値はhard採用せず、diagnosticは当面tie-breakと失敗分析へ回す。既存reports 30本は、ファイル更新時刻ではなく本文内 `日時` 順で採番が一致することも確認した。詳細は `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`。
 
+2026-06-28 12:58 JST 更新: 時間別profit barrier targetを追加した。`long/short_profit_barrier_hit_60m/240m/720m` は既存policyのprofit barrier columnに差し替え可能。2025-01 smokeでは60m targetは正例が少なすぎるためまず診断扱い、240m/720m targetを次のvalidation sweep候補にする。詳細は `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`。
+
 ## 直近の実験
 
 - `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
@@ -181,8 +185,10 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`
 - `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`
 - `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`
+- `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
+- `experiments/20260628_035801_exit_target_smoke/`
 - `data/reports/backtests/20260628_034513_model_candidate_selection/`
 - `data/reports/backtests/20260628_124813_diagnostic_gate_threshold_comparison.csv`
 - `data/reports/backtests/20260628_033639_model_sweep_2025-07/`

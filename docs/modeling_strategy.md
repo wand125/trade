@@ -195,6 +195,7 @@ short_utility > long_utility なら short
 次に改善する target / feature:
 
 - fixed horizon return を追加し、oracle best exit だけに依存しない。
+- 時間別profit barrier target (`60m`, `240m`, `720m`) を使い、24h以内なら遅くてもよいentryと、短時間で利益バリアを取れるentryを分ける。
 - long/short 別、regime 別の calibration を追加する。
 - 直近数日トレンド、ボラティリティ、ATR percentile、MA乖離、drawdown などの regime feature を追加する。
 - exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。

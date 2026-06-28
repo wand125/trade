@@ -21,7 +21,12 @@ from sklearn.metrics import (
     r2_score,
 )
 
-from trade_data.dataset import EXIT_FIXED_HORIZON_MINUTES, iter_months, output_stem
+from trade_data.dataset import (
+    EXIT_FIXED_HORIZON_MINUTES,
+    PROFIT_BARRIER_HORIZON_MINUTES,
+    iter_months,
+    output_stem,
+)
 from trade_data.regime import REGIME_COLUMNS, REGIME_NUMERIC_COLUMNS
 
 
@@ -32,6 +37,11 @@ EV_TARGETS = [
 EXIT_FIXED_HORIZON_TARGETS = [
     f"{side}_fixed_{minutes}m_adjusted_pnl"
     for minutes in EXIT_FIXED_HORIZON_MINUTES
+    for side in ["long", "short"]
+]
+PROFIT_BARRIER_HORIZON_TARGETS = [
+    f"{side}_profit_barrier_hit_{minutes}m"
+    for minutes in PROFIT_BARRIER_HORIZON_MINUTES
     for side in ["long", "short"]
 ]
 
@@ -56,6 +66,7 @@ CLASSIFICATION_TARGETS = [
     "side_score_quantile",
     "long_profit_barrier_hit",
     "short_profit_barrier_hit",
+    *PROFIT_BARRIER_HORIZON_TARGETS,
     "long_wait_regret_quantile",
     "short_wait_regret_quantile",
     "long_entry_local_rank_bin",
@@ -82,6 +93,7 @@ POLICY_REGRESSION_TARGETS = [
 POLICY_CLASSIFICATION_TARGETS = [
     "long_profit_barrier_hit",
     "short_profit_barrier_hit",
+    *PROFIT_BARRIER_HORIZON_TARGETS,
     "label",
 ]
 

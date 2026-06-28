@@ -1746,3 +1746,31 @@ validation 4foldのhigh-turnover gridを、新しいtrade-analysis diagnostic列
 - `data/reports/backtests/20260628_124813_diagnostic_gate_threshold_comparison.csv`
 
 次は exit timing target、risk target、expected pnl calibration を改善する。
+
+### 2026-06-28 12:58 JST Time-Limited Profit Barrier Targets
+
+作業:
+
+- `long_profit_barrier_hit_60m/240m/720m` と `short_profit_barrier_hit_60m/240m/720m` をdataset targetに追加した。
+- `target-set policy` / `full` のclassification targetへ追加した。
+- 既存の `--long-profit-barrier-column` / `--short-profit-barrier-column` に `pred_long_profit_barrier_hit_240m_prob` のような列を差し替えられるようにした。
+- report: `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`
+
+Smoke:
+
+- `/tmp` に 2025-01 から 2025-03 のdatasetを生成。
+- 2025-01では、60m targetはlong `0.0023` / short `0.0063` と希少。
+- 240m targetはlong `0.0665` / short `0.0420`、720m targetはlong `0.3255` / short `0.1196`。
+- 軽量HGB smoke `experiments/20260628_035801_exit_target_smoke/` で新targetの学習と確率列保存を確認。
+
+判断:
+
+- 60m targetはhard gateには早い。class weightingやpositive supportを検討するまでは診断扱い。
+- 240m/720m targetは、24h targetより短いexit依存を落とすfilterとしてvalidationで比較する価値がある。
+- 主datasetはまだ再生成していない。次は本番dataset再生成、policy再学習、cost-aware validation sweep。
+
+検証:
+
+- `python3 -m unittest tests.test_dataset tests.test_modeling`: 25 tests OK。
+- `python3 -m unittest discover tests`: 71 tests OK。
+- `git diff --check`: OK。

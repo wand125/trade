@@ -107,12 +107,14 @@ class ModelingTests(unittest.TestCase):
         self.assertIn("long_wait_regret", regression_targets)
         self.assertIn("short_entry_local_rank", regression_targets)
         self.assertIn("long_profit_barrier_hit", classification_targets)
+        self.assertIn("long_profit_barrier_hit_60m", classification_targets)
 
     def test_full_target_set_includes_fixed_exit_horizon_targets(self):
-        regression_targets, _ = resolve_target_names("full")
+        regression_targets, classification_targets = resolve_target_names("full")
 
         self.assertIn("long_fixed_60m_adjusted_pnl", regression_targets)
         self.assertIn("short_fixed_720m_adjusted_pnl", regression_targets)
+        self.assertIn("long_profit_barrier_hit_240m", classification_targets)
 
     def test_filter_available_target_names_drops_missing_research_targets(self):
         frame = pd.DataFrame(
