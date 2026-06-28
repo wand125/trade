@@ -221,6 +221,10 @@ TRADE_SOURCE_SHORT_EV_COLUMN = "pred_trade_source_short_ev"
 TRADE_QUALITY_LONG_COLUMN = "pred_trade_quality_long_adjusted_pnl"
 TRADE_QUALITY_SHORT_COLUMN = "pred_trade_quality_short_adjusted_pnl"
 TRADE_QUALITY_TAKEN_COLUMN = "pred_trade_quality_taken_adjusted_pnl"
+TRADE_QUALITY_LONG_OVERESTIMATE_COLUMN = "pred_trade_quality_long_overestimate"
+TRADE_QUALITY_SHORT_OVERESTIMATE_COLUMN = "pred_trade_quality_short_overestimate"
+TRADE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN = "pred_trade_quality_long_overestimate_risk"
+TRADE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN = "pred_trade_quality_short_overestimate_risk"
 TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS = [
     "side",
     "pred_taken_ev",
@@ -1194,6 +1198,16 @@ def add_trade_quality_columns(
         TRADE_SOURCE_SHORT_EV_COLUMN,
         calibrator,
     )
+    long_overestimate = (
+        output[TRADE_SOURCE_LONG_EV_COLUMN].astype(float) - output[TRADE_QUALITY_LONG_COLUMN].astype(float)
+    ).clip(lower=0.0)
+    short_overestimate = (
+        output[TRADE_SOURCE_SHORT_EV_COLUMN].astype(float) - output[TRADE_QUALITY_SHORT_COLUMN].astype(float)
+    ).clip(lower=0.0)
+    output[TRADE_QUALITY_LONG_OVERESTIMATE_COLUMN] = long_overestimate
+    output[TRADE_QUALITY_SHORT_OVERESTIMATE_COLUMN] = short_overestimate
+    output[TRADE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN] = -long_overestimate
+    output[TRADE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN] = -short_overestimate
     return output
 
 

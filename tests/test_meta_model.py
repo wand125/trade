@@ -426,6 +426,10 @@ class MetaModelTests(unittest.TestCase):
 
         self.assertEqual(output["pred_trade_quality_long_adjusted_pnl"].tolist(), [2.0, 2.0, 2.0])
         self.assertEqual(output["pred_trade_quality_short_adjusted_pnl"].tolist(), [9.0, 9.0, 9.0])
+        self.assertEqual(output["pred_trade_quality_long_overestimate"].tolist(), [7.0, 16.0, 4.0])
+        self.assertEqual(output["pred_trade_quality_short_overestimate"].tolist(), [0.0, 0.0, 5.0])
+        self.assertEqual(output["pred_trade_quality_long_overestimate_risk"].tolist(), [-7.0, -16.0, -4.0])
+        self.assertEqual(output["pred_trade_quality_short_overestimate_risk"].tolist(), [-0.0, -0.0, -5.0])
         self.assertAlmostEqual(metrics["calibrated_bias"], 0.0)
 
     def test_trade_quality_model_adds_side_quality_columns(self):

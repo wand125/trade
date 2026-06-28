@@ -3270,3 +3270,41 @@ Artifacts:
 - 校正済みqualityをEVへ全面置換すると、平均biasは下がるがentry rankingとtrade数を壊す。
 - 直前hybrid基準 min `81.5352` / sum `396.9782` から大きく劣るため、標準採用しない。
 - 次は全面置換ではなく、過大評価soft penalty、または `large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret` のtrade failure分類targetへ進む。
+
+### 2026-06-28 23:39 JST Selected Trade Quality Overestimate Soft Penalty
+
+作業:
+
+- `add_trade_quality_columns` に `pred_trade_quality_*_overestimate` と `pred_trade_quality_*_overestimate_risk` を追加した。
+- `overestimate = max(raw_ev - calibrated_quality, 0)`、`overestimate_risk = -overestimate` とし、既存 `risk_penalty` で部分的にEVから引けるようにした。
+- validation 4foldで risk penalty `0,0.1,0.25,0.5,0.75,1` をsweepした。
+- validation topとrisk別代表を2024-12 / 2025-02 fixed holdoutへ適用した。
+- report: `docs/reports/00077_2026-06-28_selected_trade_quality_overestimate_soft_penalty.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+Artifacts:
+
+- calibration 2024-12 apply: `data/reports/modeling/20260628_143330_selected_trade_quality_hybrid_session_p20_overestimate_risk_2024_12/`
+- calibration 2025-02 apply: `data/reports/modeling/20260628_143330_selected_trade_quality_hybrid_session_p20_overestimate_risk_2025_02/`
+- validation sweeps: `data/reports/backtests/selected_trade_quality_overestimate_soft_penalty_validation/`
+- validation summary: `data/reports/backtests/selected_trade_quality_overestimate_soft_penalty_summary/20260628_143730_model_sweep_summary/`
+- fixed tests: `data/reports/backtests/selected_trade_quality_overestimate_soft_penalty_fixed_tests/`
+
+結果:
+
+| item | value |
+|---|---:|
+| validation top risk penalty | `0.25` |
+| validation top min pnl | `86.9174` |
+| validation top sum pnl | `442.9766` |
+| validation top min trades | `36` |
+| fixed 2024-12, risk 0.25 | `-128.2556` |
+| fixed 2025-02, risk 0.25 | `43.2518` |
+| fixed 2024-12, risk 0.10 | `-222.7318` |
+| fixed 2024-12, risk 0.50 | `-77.5040` |
+
+判断:
+
+- soft penaltyはvalidation上の見た目を改善したが、fixed 2024-12で既存baseline `-54.6032` より悪化した。
+- EV overestimate平均もvalidation topで `15.6220` とほぼ下がらず、失敗原因の直接制御になっていない。
+- selected-trade quality由来の回帰的penaltyはいったん止め、次は `large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high` の実行trade failure分類targetへ進む。
