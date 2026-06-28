@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 05:38 Exit holding holdout stress
+
+- `00099` でvalidation最上位だった `bin_expected cap=480` を、2024-12 / 2025-02 / 2025-03 / 2025-04の固定holdoutへ適用した。
+- 比較のため `raw_event cap=480` も同じ固定entry条件で評価した。固定条件は `entry=12`, short offset `6`, side margin `5`, rank `0.5`, short low-vol penalty `down5/up10/range5`, profit/loss `1.0/1.20`。
+- base groupでは `bin_expected` が min pnl `-223.7292`, sum pnl `-116.0564`。`raw_event` は min pnl `-157.1394`, sum pnl `-52.2202`。
+- high cost groupでは `bin_expected` が min pnl `-200.9822`, sum pnl `-186.3262`。`raw_event` は min pnl `-167.4006`, sum pnl `-163.4272`。
+- 2025-04 baseの `bin_expected` は `-223.7292` まで崩れた。損失は `short:range_normal_vol` `-145.5636`, `short:up_normal_vol` `-144.7394`, `long:range_normal_vol` `-110.9304`、sessionでは `rollover` `-206.7266`, `ny_late` `-127.7102` に集中した。
+- 判断: `bin_expected cap=480` はvalidationでは有望だが、fixed holdout stressでは標準昇格しない。exit holding表現だけではなくentry/side selectionがnormal-volと時間帯で壊れている。
+- 次は2025-04へ直接合わせず、validation fold内でnormal-vol / rollover / ny_late riskを事前登録したcost-aware診断・rankingを試す。log-derived holding比較はlog列入りartifact再生成後に別枠で行う。
+- report: `docs/reports/00100_2026-06-29_exit_holding_holdout_stress.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 05:28 Exit holding multifold comparison
 
 - 既存の4ヶ月validation prediction `experiments/20260628_101740_policy_combined_side_exit_p1_l1p2/predictions_valid.parquet` を使い、exit holding sourceを同じgridで比較した。
