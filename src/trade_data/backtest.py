@@ -556,11 +556,10 @@ def breakout_signal(df: pd.DataFrame, window: int) -> pd.Series:
     return pd.Series(values, index=df.index, dtype="int8")
 
 
-def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame:
+def prediction_required_columns(config: ModelPolicyConfig) -> list[str]:
     if config.policy == "fixed_horizon_ev":
         validate_fixed_horizon_config(config)
     required_columns = ["decision_timestamp", config.long_column, config.short_column]
-    optional_columns: list[str] = []
     if config.risk_penalty > 0:
         required_columns.extend([config.long_risk_column, config.short_risk_column])
     if config.policy == "timed_ev":
@@ -577,8 +576,6 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
     ]
     if config.require_profit_barrier or config.profit_barrier_miss_penalty > 0:
         required_columns.extend(profit_barrier_prediction_columns)
-    else:
-        optional_columns.extend(optional_parquet_columns(path, profit_barrier_prediction_columns))
     time_exit_prediction_columns = [
         config.long_time_exit_column,
         config.short_time_exit_column,
@@ -589,8 +586,6 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         or np.isfinite(config.time_exit_exit_threshold)
     ):
         required_columns.extend(time_exit_prediction_columns)
-    else:
-        optional_columns.extend(optional_parquet_columns(path, time_exit_prediction_columns))
     loss_first_prediction_columns = [
         config.long_loss_first_column,
         config.short_loss_first_column,
@@ -601,8 +596,6 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         or np.isfinite(config.loss_first_exit_threshold)
     ):
         required_columns.extend(loss_first_prediction_columns)
-    else:
-        optional_columns.extend(optional_parquet_columns(path, loss_first_prediction_columns))
     side_confidence_prediction_columns = [
         config.long_side_confidence_column,
         config.short_side_confidence_column,
@@ -614,28 +607,87 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         or config.side_confidence_overfit_penalty_rules
     ):
         required_columns.extend(side_confidence_prediction_columns)
-    else:
-        optional_columns.extend(optional_parquet_columns(path, side_confidence_prediction_columns))
     trade_quality_prediction_columns = [
         config.long_trade_quality_column,
         config.short_trade_quality_column,
     ]
     if np.isfinite(config.min_trade_quality):
         required_columns.extend(trade_quality_prediction_columns)
-    else:
-        optional_columns.extend(optional_parquet_columns(path, trade_quality_prediction_columns))
     required_columns.extend(extra_side_margin_rule_columns(config))
     required_columns.extend(side_rule_columns(config))
     required_columns.extend([column for column, _ in blocked_regime_columns(config)])
+    return list(dict.fromkeys(required_columns))
+
+
+def prediction_optional_columns(path: Path, config: ModelPolicyConfig) -> list[str]:
+    optional_columns: list[str] = []
+    profit_barrier_prediction_columns = [
+        config.long_profit_barrier_column,
+        config.short_profit_barrier_column,
+    ]
+    if not (config.require_profit_barrier or config.profit_barrier_miss_penalty > 0):
+        optional_columns.extend(optional_parquet_columns(path, profit_barrier_prediction_columns))
+    time_exit_prediction_columns = [
+        config.long_time_exit_column,
+        config.short_time_exit_column,
+    ]
+    if not (
+        config.time_exit_penalty > 0
+        or config.time_exit_holding_shrink > 0
+        or np.isfinite(config.time_exit_exit_threshold)
+    ):
+        optional_columns.extend(optional_parquet_columns(path, time_exit_prediction_columns))
+    loss_first_prediction_columns = [
+        config.long_loss_first_column,
+        config.short_loss_first_column,
+    ]
+    if not (
+        config.loss_first_penalty > 0
+        or config.loss_first_holding_shrink > 0
+        or np.isfinite(config.loss_first_exit_threshold)
+    ):
+        optional_columns.extend(optional_parquet_columns(path, loss_first_prediction_columns))
+    side_confidence_prediction_columns = [
+        config.long_side_confidence_column,
+        config.short_side_confidence_column,
+    ]
+    if not (
+        config.min_side_confidence > 0
+        or config.side_confidence_penalty > 0
+        or config.side_confidence_penalty_rules
+        or config.side_confidence_overfit_penalty_rules
+    ):
+        optional_columns.extend(optional_parquet_columns(path, side_confidence_prediction_columns))
+    trade_quality_prediction_columns = [
+        config.long_trade_quality_column,
+        config.short_trade_quality_column,
+    ]
+    if not np.isfinite(config.min_trade_quality):
+        optional_columns.extend(optional_parquet_columns(path, trade_quality_prediction_columns))
     optional_columns.extend(optional_parquet_columns(path, ANALYSIS_PREDICTION_COLUMNS))
     optional_columns.extend(optional_parquet_columns(path, PROFIT_BARRIER_LABEL_COLUMNS))
     optional_columns.extend(optional_parquet_columns(path, REGIME_COLUMNS))
-    columns = list(dict.fromkeys([*required_columns, *optional_columns]))
-    predictions = pd.read_parquet(path, columns=columns)
+    return list(dict.fromkeys(optional_columns))
+
+
+def normalize_prediction_frame(
+    predictions: pd.DataFrame,
+    required_columns: list[str],
+    path: Path,
+    *,
+    drop_required_na: bool = True,
+) -> pd.DataFrame:
+    predictions = predictions.copy()
     missing = sorted(set(required_columns) - set(predictions.columns))
     if missing:
         raise ValueError(f"{path} is missing columns: {', '.join(missing)}")
-    predictions = predictions.dropna(subset=required_columns).sort_values("decision_timestamp")
+    if not pd.api.types.is_datetime64_any_dtype(predictions["decision_timestamp"]):
+        predictions["decision_timestamp"] = pd.to_datetime(
+            predictions["decision_timestamp"],
+            utc=True,
+        )
+    subset = required_columns if drop_required_na else ["decision_timestamp"]
+    predictions = predictions.dropna(subset=subset).sort_values("decision_timestamp")
     if predictions["decision_timestamp"].dt.tz is None:
         predictions["decision_timestamp"] = predictions["decision_timestamp"].dt.tz_localize("UTC")
     else:
@@ -645,6 +697,24 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         duplicated_count = int(duplicated.sum())
         raise ValueError(f"{path} has duplicated decision_timestamp values: {duplicated_count}")
     return predictions.reset_index(drop=True)
+
+
+def read_prediction_frame(
+    path: Path,
+    config: ModelPolicyConfig,
+    *,
+    drop_required_na: bool = True,
+) -> pd.DataFrame:
+    required_columns = prediction_required_columns(config)
+    optional_columns = prediction_optional_columns(path, config)
+    columns = list(dict.fromkeys([*required_columns, *optional_columns]))
+    predictions = pd.read_parquet(path, columns=columns)
+    return normalize_prediction_frame(
+        predictions,
+        required_columns,
+        path,
+        drop_required_na=drop_required_na,
+    )
 
 
 def blocked_regime_columns(config: ModelPolicyConfig) -> list[tuple[str, tuple[str, ...]]]:
@@ -1948,8 +2018,32 @@ def parse_optional_csv_strings(value: str | None) -> tuple[str, ...]:
     return tuple(dict.fromkeys(part.strip() for part in value.split(",") if part.strip()))
 
 
+def parse_optional_rule_sets(
+    value: str | None,
+    fallback: tuple[str, ...] = (),
+) -> list[tuple[str, ...]]:
+    if value is None:
+        return [fallback]
+    rule_sets: list[tuple[str, ...]] = []
+    for part in value.split(";"):
+        text = part.strip()
+        if not text or text.lower() in {"none", "empty", "-"}:
+            rules: tuple[str, ...] = ()
+        else:
+            rules = parse_optional_csv_strings(text)
+        if rules not in rule_sets:
+            rule_sets.append(rules)
+    if not rule_sets:
+        return [()]
+    return rule_sets
+
+
 def regime_values_to_string(values: Iterable[str]) -> str:
     return ",".join(values)
+
+
+def flatten_rule_sets(rule_sets: Iterable[Iterable[str]]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(rule for rule_set in rule_sets for rule in rule_set))
 
 
 def regime_blocks_from_args(args: argparse.Namespace) -> dict[str, tuple[str, ...]]:
@@ -2495,8 +2589,16 @@ def run_model_policy(
     df: pd.DataFrame,
     backtest_config: BacktestConfig,
     model_policy_config: ModelPolicyConfig,
+    predictions: pd.DataFrame | None = None,
 ) -> tuple[dict[str, object], pd.DataFrame, pd.DataFrame, pd.Series]:
-    predictions = read_prediction_frame(model_policy_config.predictions, model_policy_config)
+    if predictions is None:
+        predictions = read_prediction_frame(model_policy_config.predictions, model_policy_config)
+    else:
+        predictions = normalize_prediction_frame(
+            predictions,
+            prediction_required_columns(model_policy_config),
+            model_policy_config.predictions,
+        )
     signal = model_signal_from_predictions(df, predictions, model_policy_config)
     trades = trades_to_frame(run_backtest(df, signal, backtest_config))
     strategy_name = f"model_{model_policy_config.policy}"
@@ -2820,8 +2922,91 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     require_profit_barriers = parse_csv_bools(args.require_profit_barriers)
     profit_barrier_thresholds = parse_csv_floats(args.profit_barrier_thresholds)
     regime_blocks = regime_blocks_from_args(args)
+    side_extra_margin_rule_sets = parse_optional_rule_sets(
+        args.side_extra_margin_rule_sets,
+        parse_optional_csv_strings(args.side_extra_margin_rules),
+    )
+    side_block_rule_sets = parse_optional_rule_sets(
+        args.side_block_rule_sets,
+        parse_optional_csv_strings(args.side_block_rules),
+    )
 
     run_dir = make_run_dir(args.output_dir, f"model_sweep_{args.month}")
+    preloaded_predictions: pd.DataFrame | None = None
+    if len(policies) == 1:
+        finite_wait_regrets = [value for value in max_wait_regrets if np.isfinite(value)]
+        finite_trade_qualities = [value for value in min_trade_qualities if np.isfinite(value)]
+        finite_time_exit_exit_thresholds = [
+            value for value in time_exit_exit_thresholds if np.isfinite(value)
+        ]
+        finite_loss_first_exit_thresholds = [
+            value for value in loss_first_exit_thresholds if np.isfinite(value)
+        ]
+        read_config = ModelPolicyConfig(
+            predictions=args.predictions,
+            policy=policies[0],
+            long_column=args.long_column,
+            short_column=args.short_column,
+            long_risk_column=args.long_risk_column,
+            short_risk_column=args.short_risk_column,
+            risk_penalty=max(risk_penalties),
+            long_holding_column=args.long_holding_column,
+            short_holding_column=args.short_holding_column,
+            fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
+            long_fixed_horizon_columns=parse_csv_string_tuple(args.long_fixed_horizon_columns),
+            short_fixed_horizon_columns=parse_csv_string_tuple(args.short_fixed_horizon_columns),
+            fixed_horizon_score_mode=fixed_horizon_score_modes[0],
+            long_wait_regret_column=args.long_wait_regret_column,
+            short_wait_regret_column=args.short_wait_regret_column,
+            long_entry_rank_column=args.long_entry_rank_column,
+            short_entry_rank_column=args.short_entry_rank_column,
+            long_profit_barrier_column=args.long_profit_barrier_column,
+            short_profit_barrier_column=args.short_profit_barrier_column,
+            long_time_exit_column=args.long_time_exit_column,
+            short_time_exit_column=args.short_time_exit_column,
+            long_loss_first_column=args.long_loss_first_column,
+            short_loss_first_column=args.short_loss_first_column,
+            long_side_confidence_column=args.long_side_confidence_column,
+            short_side_confidence_column=args.short_side_confidence_column,
+            long_trade_quality_column=args.long_trade_quality_column,
+            short_trade_quality_column=args.short_trade_quality_column,
+            max_wait_regret=min(finite_wait_regrets) if finite_wait_regrets else float("inf"),
+            min_entry_rank=max(min_entry_ranks),
+            min_trade_quality=max(finite_trade_qualities) if finite_trade_qualities else -float("inf"),
+            profit_barrier_miss_penalty=max(profit_barrier_miss_penalties),
+            time_exit_penalty=max(time_exit_penalties),
+            loss_first_penalty=max(loss_first_penalties),
+            time_exit_holding_shrink=max(time_exit_holding_shrinks),
+            loss_first_holding_shrink=max(loss_first_holding_shrinks),
+            time_exit_exit_threshold=(
+                min(finite_time_exit_exit_thresholds)
+                if finite_time_exit_exit_thresholds
+                else float("inf")
+            ),
+            loss_first_exit_threshold=(
+                min(finite_loss_first_exit_thresholds)
+                if finite_loss_first_exit_thresholds
+                else float("inf")
+            ),
+            side_confidence_penalty=max(side_confidence_penalties),
+            side_confidence_penalty_rules=parse_optional_csv_strings(
+                args.side_confidence_penalty_rules
+            ),
+            side_confidence_overfit_penalty_rules=parse_optional_csv_strings(
+                args.side_confidence_overfit_penalty_rules
+            ),
+            min_side_confidence=max(min_side_confidences),
+            require_profit_barrier=any(require_profit_barriers),
+            extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
+            side_extra_margin_rules=flatten_rule_sets(side_extra_margin_rule_sets),
+            side_block_rules=flatten_rule_sets(side_block_rule_sets),
+            **regime_blocks,
+        )
+        preloaded_predictions = read_prediction_frame(
+            args.predictions,
+            read_config,
+            drop_required_na=False,
+        )
     rows: list[dict[str, object]] = []
     base_grid = product(
         policies,
@@ -2846,6 +3031,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_confidence_penalties,
         min_side_confidences,
         require_profit_barriers,
+        side_extra_margin_rule_sets,
+        side_block_rule_sets,
     )
     for (
         policy,
@@ -2870,6 +3057,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_confidence_penalty,
         min_side_confidence,
         require_profit_barrier,
+        side_extra_margin_rules,
+        side_block_rules,
     ) in base_grid:
         if max_predicted_hold_minutes < min_predicted_hold_minutes:
             raise SystemExit(
@@ -2942,11 +3131,16 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     require_profit_barrier=require_profit_barrier,
                     profit_barrier_threshold=profit_barrier_threshold,
                     extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
-                    side_extra_margin_rules=parse_optional_csv_strings(args.side_extra_margin_rules),
-                    side_block_rules=parse_optional_csv_strings(args.side_block_rules),
+                    side_extra_margin_rules=side_extra_margin_rules,
+                    side_block_rules=side_block_rules,
                     **regime_blocks,
                 )
-                metrics, _, _, _ = run_model_policy(df, backtest_config, model_policy_config)
+                metrics, _, _, _ = run_model_policy(
+                    df,
+                    backtest_config,
+                    model_policy_config,
+                    predictions=preloaded_predictions,
+                )
                 forced_exit_rate = (
                     0.0
                     if metrics["trade_count"] == 0
@@ -3044,7 +3238,13 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "profit_barrier_thresholds": profit_barrier_thresholds,
         "extra_side_margin_rules": parse_optional_csv_strings(args.extra_side_margin_rules),
         "side_extra_margin_rules": parse_optional_csv_strings(args.side_extra_margin_rules),
+        "side_extra_margin_rule_sets": [
+            regime_values_to_string(values) for values in side_extra_margin_rule_sets
+        ],
         "side_block_rules": parse_optional_csv_strings(args.side_block_rules),
+        "side_block_rule_sets": [
+            regime_values_to_string(values) for values in side_block_rule_sets
+        ],
         **{field: list(values) for field, values in regime_blocks.items()},
         "min_trades": args.min_trades,
         "max_forced_exit_rate": args.max_forced_exit_rate,
@@ -4257,11 +4457,27 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     model_sweep.add_argument(
+        "--side-extra-margin-rule-sets",
+        default=None,
+        help=(
+            "semicolon-separated side-extra-margin rule sets; each set uses comma-separated "
+            "side:column=value+...:margin rules, with none/empty/- for no rules"
+        ),
+    )
+    model_sweep.add_argument(
         "--side-block-rules",
         default="",
         help=(
             "comma-separated side:column=value+... rules that block entries only when the "
             "selected side and all conditions match"
+        ),
+    )
+    model_sweep.add_argument(
+        "--side-block-rule-sets",
+        default=None,
+        help=(
+            "semicolon-separated side-block rule sets; each set uses comma-separated "
+            "side:column=value+... rules, with none/empty/- for no rules"
         ),
     )
     model_sweep.add_argument("--min-trades", type=int, default=0)

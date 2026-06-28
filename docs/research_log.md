@@ -2993,3 +2993,49 @@ Artifacts:
 - group gate60はvalidation group lossを抑えたが、edgeを削り、2024-12固定testを悪化させた。
 - 2024-12の主な崩れは引き続き `long:ny_late`。ただしposthoc blockは後付けなので採用しない。
 - 次は `long:session_regime=ny_late` と `long:combined_regime=range_low_vol` をvalidation gridの候補軸として事前に入れ、2024-12を見ずに候補選定する。
+
+### 2026-06-28 21:14 JST Long Rule Validation Grid
+
+作業:
+
+- `model-sweep` に `--side-block-rule-sets` / `--side-extra-margin-rule-sets` を追加した。
+- 単一policyの `model-sweep` ではprediction parquetを1回だけ読み、各grid候補で使い回すようにした。
+- preload時は欠損行を広いread configで落とさず、候補ごとの必須列で評価直前にdropするようにした。
+- `long:session_regime=ny_late` と `long:combined_regime=range_low_vol` をhard block / extra marginのvalidation local gridに入れた。
+- validation top近傍の非空rule候補を2024-12へ固定適用した。
+- report: `docs/reports/00065_2026-06-28_long_rule_validation_grid.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- hard block local sweeps: `data/reports/backtests/hgb_entry_mlp_exit_long_block_rule_local_sweep/`
+- hard block selection: `data/reports/backtests/hgb_entry_mlp_exit_long_block_rule_local_selection/20260628_121018_model_candidate_selection/`
+- extra margin local sweeps: `data/reports/backtests/hgb_entry_mlp_exit_long_margin_rule_local_sweep/`
+- extra margin selection: `data/reports/backtests/hgb_entry_mlp_exit_long_margin_rule_local_selection/20260628_121238_model_candidate_selection/`
+- fixed 2024-12 tests: `data/reports/backtests/hgb_entry_mlp_exit_long_rule_validation_candidates_2024_12/`
+
+結果:
+
+| item | value |
+|---|---:|
+| validation top rule | none |
+| validation top min pnl | `81.5352` |
+| validation top sum pnl | `396.9782` |
+| best `long:ny_late` block min pnl | `79.7192` |
+| best `long:ny_late` block sum pnl | `370.9706` |
+| `long:ny_late` block rank0.5 validation min pnl | `78.0572` |
+| best `long:range_low_vol` block min pnl | `75.7566` |
+| best `long:range_low_vol:+10` margin min pnl | `76.9566` |
+| 2024-12 prior hybrid top | `-54.6032` |
+| 2024-12 `long:ny_late` block rank0 | `-15.0538` |
+| 2024-12 `long:ny_late` block rank0.5 | `-5.4938` |
+| 2024-12 `long:range_low_vol` block | `-141.5698` |
+| 2024-12 `long:range_low_vol:+10` margin | `-144.2494` |
+
+判断:
+
+- `long:ny_late` blockはposthocだけでなくvalidationでもtop近傍に残る。
+- ただしvalidation全体topはruleなしで、`long:ny_late` はsum pnlとEV overestimateが劣る。
+- 2024-12では大きく改善するがNoTradeには届かないため、標準policyへ昇格しない。
+- `long:range_low_vol` hard block / extra marginは2024-12で悪化したため棄却する。
+- 次は単体rule採用ではなく、top min pnlからの許容劣化幅とrisk reductionをselection基準に入れるか検討する。

@@ -13,10 +13,12 @@ from trade_data.backtest import (
     fixed_horizon_scores,
     model_signal_from_predictions,
     normalize_sweep_metrics,
+    parse_optional_rule_sets,
     prepare_analysis_predictions,
     profit_barrier_calibration_diagnostics,
     profit_barrier_diagnostics,
     run_backtest,
+    run_model_policy,
     summarize_candidate_selection,
     summarize_trades,
     summarize_sweep_frames,
@@ -41,6 +43,59 @@ def frame_with_opens(opens, start="2025-01-01 00:00:00+00:00"):
 
 
 class BacktestTests(unittest.TestCase):
+    def test_parse_optional_rule_sets_supports_empty_and_multiple_sets(self):
+        rule_sets = parse_optional_rule_sets(
+            "none;long:session_regime=ny_late;long:combined_regime=range_low_vol,"
+            "long:session_regime=ny_late;long:session_regime=ny_late",
+        )
+
+        self.assertEqual(
+            rule_sets,
+            [
+                (),
+                ("long:session_regime=ny_late",),
+                ("long:combined_regime=range_low_vol", "long:session_regime=ny_late"),
+            ],
+        )
+
+    def test_parse_optional_rule_sets_uses_fallback_for_existing_single_rule_arg(self):
+        fallback = ("long:session_regime=ny_late",)
+
+        self.assertEqual(parse_optional_rule_sets(None, fallback), [fallback])
+
+    def test_run_model_policy_filters_preloaded_predictions_by_candidate_requirements(self):
+        df = frame_with_opens([100, 101, 102, 103])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": [df["timestamp"].iloc[0]],
+                "pred_long_best_adjusted_pnl": [20.0],
+                "pred_short_best_adjusted_pnl": [0.0],
+                "pred_long_best_holding_minutes": [float("nan")],
+                "pred_short_best_holding_minutes": [60.0],
+            }
+        )
+        backtest_config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+        policy_config = ModelPolicyConfig(
+            predictions=Path("preloaded.parquet"),
+            policy="timed_ev",
+            entry_threshold=10.0,
+            side_margin=0.0,
+        )
+
+        metrics, trades, _, signal = run_model_policy(
+            df,
+            backtest_config,
+            policy_config,
+            predictions=predictions,
+        )
+
+        self.assertEqual(metrics["trade_count"], 0)
+        self.assertTrue(trades.empty)
+        self.assertEqual(signal.tolist(), [0, 0, 0, 0])
+
     def test_next_open_execution_and_adjusted_pnl(self):
         df = frame_with_opens([100, 101, 105, 106, 107])
         signal = pd.Series([1, 1, 0, 0, 0])
