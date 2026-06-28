@@ -4,6 +4,15 @@
 
 ## 2026-06-29 JST
 
+### 04:06 Cost-aware low-vol selection holdout
+
+- short low-vol rule set gridをmoderate cost (`spread=0.1`, `slippage=0.05`, `delay=1`) でも4fold validation評価した。
+- strict candidate selectionでは `down5,up10,range5` がtop。validation base min pnl `138.3706`, cost min pnl `121.9972`, max drawdown `86.9156`。
+- ただし固定holdout cost stressでは2024-12 no-cost `-0.0572`, moderate cost `-11.7670`, high cost `-32.4176`。2025-03もhigh cost `-15.6634`、stress worst `-34.6572`。
+- 判断: cost-aware validation selectionは前進だが標準採用には未達。rule set探索を広げず、stress-aware drawdown、月別下振れ、局所direction/session損失、EV overestimateをrankingへ入れる。
+- report: `docs/reports/00092_2026-06-29_cost_aware_lowvol_selection_holdout.md`
+- 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 03:59 Short low-vol side EV penalty cost stress
 
 - 2025-03 baselineのselected tradesを診断。longは `+47.6936`、shortは `-96.3762` で、最悪groupは `short:asia -67.7956` と `short:rollover -37.6094`。

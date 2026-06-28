@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 03:59 JST
+最終更新: 2026-06-29 04:06 JST
 
 ## 現在の状態
 
@@ -160,6 +160,8 @@ prefixed candidate quality componentを合成する `combine-candidate-quality-c
 
 2025-03のshort偏重と `short:asia` 損失集中を受けて、side-confidence gate、side-confidence penalty、short combined-regime side EV penalty、entry tightening、cost stressを確認済み。side-confidence hard/soft gateはvalidationを壊したため採用しない。`short:combined_regime=down_low_vol:5,short:combined_regime=up_low_vol:15,short:combined_regime=range_low_vol:10` はzero-cost固定holdout 2024-12/2025-02/2025-03を全てプラスにしたが、2024-12はmoderate costで `-22.8348`、high costで `-53.7684` へ落ちるため標準採用しない。`entry=16` tighteningも2024-12/2025-02をzero-cost時点で壊した。今後はcost-aware validationを選定基準に組み込み、side EV penalty探索を広げすぎずmulti-feature stacking/rankingへ進む。詳細は `docs/reports/00091_2026-06-29_short_lowvol_side_ev_penalty_cost_stress.md`。
 
+short low-vol rule set gridをmoderate cost validationでも再評価し、既存 `model-candidate-selection` でbase/cost両方を満たす候補を選定済み。strict selection topは `short:combined_regime=down_low_vol:5,short:combined_regime=up_low_vol:10,short:combined_regime=range_low_vol:5` で、validation base min `138.3706`, cost min `121.9972`。しかし固定holdout cost stressでは2024-12 no-cost `-0.0572`, moderate cost `-11.7670`、2025-03 high cost `-15.6634` と崩れた。cost-aware selectionは前進だが、標準採用には未達。次はrule set探索を広げず、stress-aware drawdown、月別下振れ、局所direction/session損失、EV overestimateを同時にrankingへ入れる。詳細は `docs/reports/00092_2026-06-29_cost_aware_lowvol_selection_holdout.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -221,6 +223,7 @@ prefixed candidate quality componentを合成する `combine-candidate-quality-c
 38. 2025-03ではHGB entry/sideが崩れ、short偏重と `short:asia` 損失集中が出ている。次はquality hard gateを深掘りせず、side/entry calibration、short exposure concentration、direction/session別risk検知、またはcandidate quality componentをmulti-feature stackingで扱う。
 39. side-confidence hard/soft gateは標準採用しない。short low-vol side EV comboはzero-costでは有望だが、cost stressで脆いため標準採用しない。
 40. 次はzero-costだけでなくmoderate costのvalidation min pnlを同時に満たす選定基準を使う。entry thresholdを単純に上げる方向はholdoutで悪化したため、本流から外す。
+41. cost-aware validation selection topも固定holdout cost stressで未達。次はrule set数を増やすのではなく、stress-aware drawdownと月別下振れを候補rankingへ組み込む。
 
 ## 未決定事項
 
