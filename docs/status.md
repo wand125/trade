@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 17:56 JST
+最終更新: 2026-06-28 18:06 JST
 
 ## 現在の状態
 
@@ -82,7 +82,9 @@ candidate selectionへ group-loss soft ranking penaltyを追加済み。`--group
 
 `profit-barrier-calibrate` を追加済み。side別・probability bucket別の実測hit率をLaplace smoothingし、`pred_*_profit_barrier_hit_calibrated_prob` / `*_lower` / support/source列を保存できる。`--oof-column dataset_month` による月別OOF診断では、global Brierが raw `0.2272` から calibrated `0.2250` に改善し、全体biasも `-0.0439` から `-0.0027` へ縮んだ。一方、calibrated `>=0.5` は actual `0.4106` / predicted `0.5234` で過大評価、月×sideでも 2024-11 long `+0.1378`、2024-11 short `-0.1228` と不安定。校正列は診断・tie-break候補として使い、hard gate直結はしない。詳細は `docs/reports/00050_2026-06-28_profit_barrier_bucket_calibration.md`。
 
-`docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` と通し番号を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
+calibrated/lower profit-barrier列を `model-policy` / `model-sweep` に渡してvalidation比較済み。policy validの月別OOFではBrierが raw `0.2270` から calibrated `0.2191` に改善したが、valid全体fitを2024-12へ外挿すると raw `0.2310` に対して calibrated `0.2488` / lower `0.2484` と悪化。validation gridでもcalibrated/lowerは2024-11で adjusted pnl `-48.8580` になりbasic gateを満たさない。rawはvalidation上 `entry=10`, short offset `8`, threshold `0.35`, max hold `720` がbasic eligibleだが、2024-12では adjusted pnl `-184.9344` と崩れた。profit-barrier probabilityはhard gateへ昇格せず、penalty/tie-break用途へ回す。詳細は `docs/reports/00051_2026-06-28_profit_barrier_policy_column_validation.md`。
+
+`docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
 
@@ -113,7 +115,7 @@ candidate selectionへ group-loss soft ranking penaltyを追加済み。`--group
 8. `side-confidence-report` をより広いwalk-forward OOF予測へ適用し、representative smokeの過大確信が安定して出るか確認する。
 9. side-confidence penalty tuningは、まずviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。
 10. diagnostic gateとgroup-loss penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。
-11. calibrated profit-barrier probability / lower probability列を `model-policy` / `model-sweep` へ渡し、raw probability gateとの差分をvalidationで比較する。hard gate化はblind前の事前登録なしに行わない。
+11. profit-barrier probabilityをhard gateではなく、raw/calibrated/lower probabilityを使ったEV penaltyやtie-breakとして検証する。2024-12で崩れたthresholdを後付けで選び直さない。
 12. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項

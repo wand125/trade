@@ -2462,3 +2462,38 @@ threshold subset:
 - ただし校正後 `>=0.5` はlong偏重になり、強い過大評価が残る。
 - 月×sideでは 2024-11 long `+0.1378`、2024-11 short `-0.1228`、2025-01 long `-0.0974` と不安定。
 - 校正列は採用するが、policy hard gateへ直結しない。次は raw / calibrated / lower を同一validation条件で `model-policy` に渡して比較する。
+
+### 2026-06-28 18:06 JST Profit Barrier Policy Column Validation
+
+作業:
+
+- policy exit-event probabilityモデルのvalid/test予測に対し、profit-barrier raw / calibrated / conservative lower列を同一条件で比較した。
+- policy valid 4ヶ月では `--oof-column dataset_month` による月別OOF calibrationを使い、test 2024-12ではvalid全体fitのcalibrationを適用した。
+- `model-sweep` は `timed_ev`, exit-event holding minutes, `entry=5,10`, short offset `8,12`, barrier threshold `0.35,0.40,0.45,0.50`, max hold `480,720` で比較した。
+- report: `docs/reports/00051_2026-06-28_profit_barrier_policy_column_validation.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- valid month-OOF calibration: `data/reports/modeling/20260628_090051_policy_valid_month_oof_profit_barrier_calibration/`
+- test-applied calibration: `data/reports/modeling/20260628_090105_policy_valid_fit_test_profit_barrier_calibration/`
+- validation summary: `data/reports/backtests/20260628_profit_barrier_column_validation_summary.csv`
+- 2024-12 raw diagnostic: `data/reports/backtests/20260628_090555_model_timed_ev_2024-12/`
+- 2024-12 calibrated diagnostic: `data/reports/backtests/20260628_090556_model_timed_ev_2024-12/`
+- 2024-12 lower diagnostic: `data/reports/backtests/20260628_090558_model_timed_ev_2024-12/`
+
+結果:
+
+| variant | validation basic eligible | validation min pnl | test 2024-12 adjusted pnl | trades | profit factor |
+|---|---|---:|---:|---:|---:|
+| raw | `true` | `25.5832` | `-184.9344` | `54` | `0.4738` |
+| calibrated | `false` | `-48.8580` | `-215.7914` | `54` | `0.4226` |
+| lower | `false` | `-48.8580` | `-215.7914` | `54` | `0.4226` |
+
+判断:
+
+- policy valid内OOFではcalibrationのBrierが raw `0.2270` から calibrated `0.2191` に改善した。
+- ただしvalid全体fitを2024-12へ外挿すると、Brierは raw `0.2310` に対して calibrated `0.2488`, lower `0.2484` と悪化した。
+- calibrated/lower列はvalidation内でlong-only化し、2024-11の adjusted pnl `-48.8580` によりbasic gateを満たさない。
+- raw列はvalidation上はbasic eligibleだが、2024-12で adjusted pnl `-184.9344` と大きく崩れた。
+- profit-barrier probabilityはhard gateへ昇格しない。次は `penalty * (1 - calibrated_probability_lower)` のようなEV score penalty / tie-break / uncertainty penaltyとして試す。

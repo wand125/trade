@@ -71,7 +71,7 @@ adjusted_pnl = 0              if raw_pnl = 0
 - 最新の研究状態は `docs/status.md` を読めば分かる。
 - 次にやる作業は `docs/status.md` と `docs/research_plan.md` に書かれている。
 - 実験の設定と結果は `docs/reports/` に残る。
-- `docs/reports/` の各レポートファイル名は `00001_YYYY-MM-DD_slug.md` の通し番号形式にする。番号はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で採番する。
+- `docs/reports/` の各レポートファイル名は `00001_YYYY-MM-DD_slug.md` の通し番号形式にする。番号はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で採番する。再採番・最新判断・既存レポート確認でも、必ずファイル内の `日時` を正とする。
 - `docs/reports/` の各レポート冒頭には `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を置く。本文の `日時` は作成時刻、`更新日時` は最終更新時刻として扱う。
 - 仕様変更や重要判断は `docs/decisions/` に残る。
 - 未検証アイデアは `docs/ideas.md` に集約する。
