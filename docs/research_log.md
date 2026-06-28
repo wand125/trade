@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 08:42 Stateful candidate examples
+
+- `model-trade-delta` に `stateful_candidate_examples.csv` 出力を追加した。candidate policyで実際に取った取引を、candidate-quality-styleの学習入力として保存する。
+- 追加列: `target`, `stateful_entry_value`, `stateful_positive_cost_value`, `blocking_cost`, `positive_blocking_cost`, `replacement_regret`, `positive_replacement_regret`, `side`, `candidate_side`, `decision_timestamp`, `pred_side_gap`, `decision_hour_sin/cos`。
+- `--stateful-example-target` を追加。defaultは `stateful_net = candidate_adjusted_pnl - blocked_base_adjusted_pnl`。`stateful_positive_cost` と `candidate_pnl` も選べる。
+- 2024-12/2025-03 smokeでは `stateful_candidate_examples.csv` は220行。target meanは2024-12 `0.5921`, 2025-03 `-0.4640`。positive-cost target meanは2024-12 `-0.5883`, 2025-03 `-0.7904`。
+- `candidate-quality-report` でraw EVとstateful targetのずれを測ると、support `220`, target mean `-0.0655`, raw predicted mean `18.4353`, raw bias `18.5008`, raw overestimate mean `18.7974`。raw EVはstateful targetにも大きく過大評価。
+- 判断: `stateful_candidate_examples.csv` を次の学習入力として採用。次は代表validation月で同じ形式を作り、月抜きOOFでstateful value modelを学習する。
+- report: `docs/reports/00116_2026-06-29_stateful_candidate_examples.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 08:35 Stateful blocking diagnostics
 
 - `model-trade-delta` にstateful blocking診断を追加した。candidate取引の保有中に消えたbase-only取引を `blocking_pairs.csv` と `group_by_blocking_candidate_*` に出力する。

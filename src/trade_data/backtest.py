@@ -5165,6 +5165,89 @@ def trade_delta_blocking_group_summary(frame: pd.DataFrame, group_columns: list[
     return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
 
 
+def add_decision_hour_features(frame: pd.DataFrame, timestamp_column: str) -> tuple[pd.Series, pd.Series]:
+    if timestamp_column not in frame.columns:
+        zeros = pd.Series(0.0, index=frame.index, dtype="float64")
+        return zeros, zeros
+    hours = pd.to_datetime(frame[timestamp_column], utc=True, errors="coerce").dt.hour.astype(float)
+    radians = 2.0 * np.pi * hours / 24.0
+    return (
+        pd.Series(np.sin(radians), index=frame.index).fillna(0.0),
+        pd.Series(np.cos(radians), index=frame.index).fillna(0.0),
+    )
+
+
+def stateful_example_target_column(target_mode: str) -> str:
+    if target_mode == "stateful_net":
+        return "candidate_stateful_net_adjusted_pnl"
+    if target_mode == "stateful_positive_cost":
+        return "candidate_stateful_positive_cost_adjusted_pnl"
+    if target_mode == "candidate_pnl":
+        return "candidate_adjusted_pnl"
+    raise ValueError(f"unknown stateful example target mode: {target_mode}")
+
+
+def stateful_candidate_examples_from_delta(
+    delta: pd.DataFrame,
+    target_mode: str = "stateful_net",
+) -> pd.DataFrame:
+    if delta.empty:
+        return pd.DataFrame()
+    target_column = stateful_example_target_column(target_mode)
+    if target_column not in delta.columns:
+        raise ValueError(f"trade delta frame missing target column: {target_column}")
+
+    candidates = delta[delta["candidate_present"].fillna(False).astype(bool)].copy()
+    if candidates.empty:
+        return candidates
+    direction = candidates["direction"].astype(str).str.lower()
+    candidates["side"] = direction.map({"long": 1.0, "short": -1.0}).fillna(0.0)
+    candidates["candidate_side"] = direction
+    candidates["candidate_source_index"] = candidates["trade_delta_row_id"].astype(str)
+    candidates["decision_timestamp"] = candidates["entry_decision_timestamp"]
+    candidates["pred_side_gap"] = (
+        pd.to_numeric(candidates["pred_taken_ev"], errors="coerce").fillna(0.0)
+        - pd.to_numeric(candidates["pred_opposite_ev"], errors="coerce").fillna(0.0)
+    )
+    candidates["pred_abs_side_gap"] = candidates["pred_side_gap"].abs()
+    candidates["decision_hour_sin"], candidates["decision_hour_cos"] = add_decision_hour_features(
+        candidates,
+        "entry_decision_timestamp",
+    )
+    candidates["candidate_actual_adjusted_pnl"] = pd.to_numeric(
+        candidates["candidate_adjusted_pnl"],
+        errors="coerce",
+    )
+    candidates["stateful_entry_value"] = pd.to_numeric(
+        candidates["candidate_stateful_net_adjusted_pnl"],
+        errors="coerce",
+    )
+    candidates["stateful_positive_cost_value"] = pd.to_numeric(
+        candidates["candidate_stateful_positive_cost_adjusted_pnl"],
+        errors="coerce",
+    )
+    blocked_base = pd.to_numeric(
+        candidates["candidate_blocked_base_adjusted_pnl"],
+        errors="coerce",
+    ).fillna(0.0)
+    blocked_positive = pd.to_numeric(
+        candidates["candidate_blocked_base_positive_pnl"],
+        errors="coerce",
+    ).fillna(0.0)
+    candidate_pnl = pd.to_numeric(candidates["candidate_adjusted_pnl"], errors="coerce").fillna(0.0)
+    candidates["blocking_cost"] = blocked_base.clip(lower=0.0)
+    candidates["positive_blocking_cost"] = blocked_positive.clip(lower=0.0)
+    candidates["replacement_regret"] = blocked_base - candidate_pnl
+    candidates["positive_replacement_regret"] = blocked_positive - candidate_pnl
+    candidates["target"] = pd.to_numeric(candidates[target_column], errors="coerce")
+    numeric_columns = candidates.select_dtypes(include=[np.number]).columns
+    candidates.loc[:, numeric_columns] = candidates.loc[:, numeric_columns].replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+    return candidates.dropna(subset=["target"]).reset_index(drop=True)
+
+
 def read_model_trade_delta_frames(
     base_paths: list[Path],
     candidate_paths: list[Path],
@@ -6029,10 +6112,15 @@ def handle_model_trade_delta(args: argparse.Namespace) -> int:
     )
     delta = pd.concat(delta_frames, ignore_index=True) if delta_frames else pd.DataFrame()
     delta, blocking_pairs = add_trade_delta_blocking_diagnostics(delta)
+    stateful_examples = stateful_candidate_examples_from_delta(
+        delta,
+        args.stateful_example_target,
+    )
 
     run_dir = make_run_dir(args.output_dir, args.label)
     delta.to_csv(run_dir / "trade_delta_rows.csv", index=False)
     blocking_pairs.to_csv(run_dir / "blocking_pairs.csv", index=False)
+    stateful_examples.to_csv(run_dir / "stateful_candidate_examples.csv", index=False)
     group_specs = {
         "month": ["month"],
         "month_status": ["month", "delta_status"],
@@ -6092,6 +6180,7 @@ def handle_model_trade_delta(args: argparse.Namespace) -> int:
         "candidate_runs": [str(path) for path in candidate_paths],
         "gate_long_quality_column": args.gate_long_quality_column,
         "gate_short_quality_column": args.gate_short_quality_column,
+        "stateful_example_target": args.stateful_example_target,
         "label": args.label,
         "top_n": args.top_n,
     }
@@ -6157,6 +6246,17 @@ def handle_model_trade_delta(args: argparse.Namespace) -> int:
                 column for column in blocking_columns if column in blocking_worst.columns
             ]
             print(blocking_worst.loc[:, existing_blocking_columns].to_string(index=False))
+    if not stateful_examples.empty:
+        example_summary = stateful_examples.groupby("month", dropna=False).agg(
+            candidate_count=("target", "size"),
+            target_mean=("target", "mean"),
+            stateful_entry_value_mean=("stateful_entry_value", "mean"),
+            stateful_positive_cost_value_mean=("stateful_positive_cost_value", "mean"),
+            blocking_cost_sum=("blocking_cost", "sum"),
+            positive_blocking_cost_sum=("positive_blocking_cost", "sum"),
+        ).reset_index()
+        print("stateful candidate examples:")
+        print(example_summary.to_string(index=False))
     print(f"artifacts: {run_dir}")
     return 0
 
@@ -6894,6 +6994,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--gate-short-quality-column",
         default="",
         help="optional gate quality short column; defaults to each candidate run config",
+    )
+    model_trade_delta.add_argument(
+        "--stateful-example-target",
+        choices=("stateful_net", "stateful_positive_cost", "candidate_pnl"),
+        default="stateful_net",
+        help="target column used in stateful_candidate_examples.csv",
     )
     model_trade_delta.add_argument(
         "--output-dir",

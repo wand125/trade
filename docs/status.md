@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 08:35 JST
+最終更新: 2026-06-29 08:42 JST
 
 ## 現在の状態
 
@@ -37,6 +37,8 @@ side-outcome/component列をcandidate-quality二段目modelの特徴量へ追加
 raw vs stack gateの取引差分診断 `model-trade-delta` を追加済み。`entry_decision_timestamp + direction` で `common` / `only_base` / `only_candidate` を分解し、candidate側のquality列も結合する。2025-03悪化の主因は、`only_base long` の利益 `+73.4000` を失い、`only_candidate short` `-45.9878` と `only_candidate long` `-18.8318` を追加したこと。`only_base` のquality `0-5` bucketにも `+51.0784` の利益があり、hard gateは一玉制約の経路依存で後続の良い取引を壊す。次は hard gateではなく、近接候補の優先順位、risk budget、`blocking_cost` / `replacement_regret` / `stateful_entry_value` 系教師へ進む。詳細は `docs/reports/00114_2026-06-29_side_outcome_stack_trade_delta.md`。
 
 `model-trade-delta` にstateful blocking診断を追加済み。candidate取引の保有中に消えたbase-only取引を `blocking_pairs.csv` と `group_by_blocking_candidate_*` に出力する。2025-03では `only_candidate long` が自身 `-18.8318` に加えbase側純利益 `+51.0776` をブロックし、stateful net `-69.9094`。`only_candidate short` もstateful net `-53.1846`。品質meanは正なので、pointwise qualityは「保有中に逃す機会」を見ていない。次は `stateful_entry_value` / `stateful_positive_cost_value` をOOFで作り、hard gateではなくranking/tie-breakまたはEV補正として検証する。詳細は `docs/reports/00115_2026-06-29_stateful_blocking_diagnostics.md`。
+
+`model-trade-delta` は `stateful_candidate_examples.csv` も出力する。候補例は `target`, `stateful_entry_value`, `stateful_positive_cost_value`, `blocking_cost`, `replacement_regret`, `side`, `decision_timestamp` などを持ち、candidate-quality-styleの学習入力として使える。2024-12/2025-03 smokeでは220例、target mean `-0.0655`、raw EV mean `18.4353`、raw bias `18.5008`。2025-03 `only_candidate long` はtarget sum `-69.9094`、blocking cost `75.3170`。次は代表validation月で同じexamplesを作り、月抜きOOFでstateful value modelを学習する。詳細は `docs/reports/00116_2026-06-29_stateful_candidate_examples.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

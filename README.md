@@ -510,6 +510,9 @@ change the trade path and block later opportunities, so evaluate `only_base` and
 The command also writes `blocking_pairs.csv` and
 `group_by_blocking_candidate_*` summaries, which estimate the base-policy
 opportunities blocked while a candidate-policy trade was open.
+`stateful_candidate_examples.csv` is a candidate-quality-style training frame
+with `target`, `stateful_entry_value`, `stateful_positive_cost_value`,
+`blocking_cost`, and `replacement_regret` columns.
 
 ## Rebuild Generated Artifacts
 

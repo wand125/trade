@@ -31,6 +31,7 @@ from trade_data.backtest import (
     summarize_candidate_selection_jackknife,
     summarize_trades,
     summarize_sweep_frames,
+    stateful_candidate_examples_from_delta,
     trade_analysis_summary,
     trade_delta_blocking_group_summary,
     trade_delta_group_summary,
@@ -2950,6 +2951,11 @@ class BacktestTests(unittest.TestCase):
                 delta,
                 ["month", "delta_status", "direction"],
             )
+            stateful_examples = stateful_candidate_examples_from_delta(delta)
+            positive_cost_examples = stateful_candidate_examples_from_delta(
+                delta,
+                target_mode="stateful_positive_cost",
+            )
 
         self.assertEqual(delta["delta_status"].value_counts().to_dict(), {
             "common": 1,
@@ -2976,6 +2982,19 @@ class BacktestTests(unittest.TestCase):
             only_candidate_blocking["candidate_stateful_net_adjusted_pnl"],
             -11.8,
         )
+        self.assertEqual(len(stateful_examples), 2)
+        only_candidate_example = stateful_examples[
+            stateful_examples["delta_status"] == "only_candidate"
+        ].iloc[0]
+        self.assertAlmostEqual(only_candidate_example["side"], -1.0)
+        self.assertAlmostEqual(only_candidate_example["target"], -11.8)
+        self.assertAlmostEqual(only_candidate_example["stateful_entry_value"], -11.8)
+        self.assertAlmostEqual(only_candidate_example["blocking_cost"], 7.0)
+        self.assertIn("decision_hour_sin", stateful_examples.columns)
+        positive_cost_only_candidate = positive_cost_examples[
+            positive_cost_examples["delta_status"] == "only_candidate"
+        ].iloc[0]
+        self.assertAlmostEqual(positive_cost_only_candidate["target"], -11.8)
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")
