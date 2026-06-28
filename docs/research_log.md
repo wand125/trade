@@ -1883,3 +1883,35 @@ Artifacts:
 - global bias calibrationはtarget biasを下げるが、trade selection後のEV overestimateを下げないため採用保留。
 - strict gateを緩めるとglobal bias候補は3件残るが、profit-barrier missとforced exitを悪化させているため、採用ではなく診断扱い。
 - 次はtrade selection後の実現PnL penalty、profit-barrier missを直接下げるexit target、hazard/survival型exit timing targetへ進む。
+
+### 2026-06-28 14:39 JST Profit Barrier Miss Penalty Sweep
+
+作業:
+
+- `fixed_horizon_ev` のentry scoreに `profit_barrier_miss_penalty * (1 - side_profit_barrier_hit_probability)` を引くsoft penaltyを追加した。
+- `model-policy --profit-barrier-miss-penalty` と `model-sweep --profit-barrier-miss-penalties` を追加した。
+- 古いsweep metricsには `profit_barrier_miss_penalty=0.0` を補完する。
+- report: `docs/reports/00036_2026-06-28_profit_barrier_miss_penalty_sweep.md`
+- 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- no-cost sweeps: `data/reports/backtests/20260628_053518_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- cost delay0 sweeps: `data/reports/backtests/20260628_053731_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- candidate selection delay0: `data/reports/backtests/20260628_053757_model_candidate_selection/`
+- cost delay1 sweeps: `data/reports/backtests/20260628_053602_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- candidate selection delay1: `data/reports/backtests/20260628_053630_model_candidate_selection/`
+
+結果:
+
+| cost case | eligible penalty | best cost min pnl | min trades | smoothed miss max | EV overestimate max |
+|---|---:|---:|---:|---:|---:|
+| delay0 | `0.0` | `27.2158` | 47 | `0.454545` | `15.692745` |
+| delay1 | `0.0` | `23.4720` | 48 | `0.492308` | `14.766051` |
+
+判断:
+
+- penalty `2/4/6/8` は、delay0 / delay1 のどちらでもstrict candidate selectionに残らなかった。
+- 線形miss penaltyはtrade集合の実現品質を改善せず、smoothed missやEV overestimateを悪化させた。
+- 実装は探索軸として残すが、標準設定は `profit_barrier_miss_penalty=0.0` を維持する。
+- 次はselected tradesの実現PnL、actual barrier miss、exit regretを直接targetにする二段階モデル、またはhazard/survival型exit timing targetへ進む。

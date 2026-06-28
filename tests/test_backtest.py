@@ -521,6 +521,38 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(default_signal.tolist(), [1, 1, 0])
         self.assertEqual(conservative_signal.tolist(), [0, 0, 0])
 
+    def test_profit_barrier_miss_penalty_reduces_low_probability_side_ev(self):
+        df = frame_with_opens([100, 101])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [18.0, 18.0],
+                "pred_long_profit_barrier_hit": [0.0, 1.0],
+                "pred_short_profit_barrier_hit": [1.0, 0.0],
+            }
+        )
+        common_config = {
+            "predictions": Path("unused"),
+            "policy": "stateless_ev",
+            "entry_threshold": 10.0,
+            "side_margin": 0.1,
+        }
+
+        unpenalized_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config),
+        )
+        penalized_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config, profit_barrier_miss_penalty=5.0),
+        )
+
+        self.assertEqual(unpenalized_signal.tolist(), [1, 1])
+        self.assertEqual(penalized_signal.tolist(), [-1, 1])
+
     def test_sweep_metrics_normalization_adds_missing_risk_penalty(self):
         frame = pd.DataFrame(
             {
@@ -540,6 +572,7 @@ class BacktestTests(unittest.TestCase):
         normalized = normalize_sweep_metrics(frame, "fold_a")
 
         self.assertEqual(normalized["risk_penalty"].tolist(), [0.0])
+        self.assertEqual(normalized["profit_barrier_miss_penalty"].tolist(), [0.0])
         self.assertEqual(normalized["fixed_horizon_score_mode"].tolist(), ["max"])
         self.assertEqual(normalized["long_entry_threshold_offset"].tolist(), [0.0])
         self.assertEqual(normalized["short_entry_threshold_offset"].tolist(), [0.0])
