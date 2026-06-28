@@ -3806,6 +3806,7 @@ def summarize_sweep_frames(
         "total_adjusted_pnl_median": ("total_adjusted_pnl", "median"),
         "total_adjusted_pnl_min": ("total_adjusted_pnl", "min"),
         "total_adjusted_pnl_sum": ("total_adjusted_pnl", "sum"),
+        "total_adjusted_pnl_std": ("total_adjusted_pnl", "std"),
         "total_raw_pnl_mean": ("total_raw_pnl", "mean"),
         "total_raw_pnl_min": ("total_raw_pnl", "min"),
         "trade_count_mean": ("trade_count", "mean"),
@@ -3845,6 +3846,7 @@ def summarize_sweep_frames(
     summary = grouped.agg(
         **aggregations,
     ).reset_index()
+    summary["total_adjusted_pnl_std"] = summary["total_adjusted_pnl_std"].fillna(0.0)
     summary["eligible"] = (
         (summary["fold_count"] >= min_folds)
         & (summary["eligible_fold_count"] == summary["fold_count"])
@@ -3981,6 +3983,7 @@ def summarize_candidate_selection(
     near_top_exit_regret_weight: float = 1.0,
     near_top_actual_miss_weight: float = 100.0,
     near_top_side_share_weight: float = 100.0,
+    near_top_pnl_stability_weight: float = 0.0,
     stress_cost_pnl_sum_reward_weight: float = 0.0,
     stress_base_pnl_sum_reward_weight: float = 0.0,
     min_base_folds: int | None = None,
@@ -4060,6 +4063,8 @@ def summarize_candidate_selection(
         raise ValueError("near_top_actual_miss_weight must be non-negative")
     if near_top_side_share_weight < 0:
         raise ValueError("near_top_side_share_weight must be non-negative")
+    if near_top_pnl_stability_weight < 0:
+        raise ValueError("near_top_pnl_stability_weight must be non-negative")
     if stress_cost_pnl_sum_reward_weight < 0:
         raise ValueError("stress_cost_pnl_sum_reward_weight must be non-negative")
     if stress_base_pnl_sum_reward_weight < 0:
@@ -4162,6 +4167,11 @@ def summarize_candidate_selection(
         ["max_drawdown_max_base", "max_drawdown_max_cost"],
         0.0,
     )
+    merged["pnl_stability_risk_all"] = row_max_or_default(
+        merged,
+        ["total_adjusted_pnl_std_base", "total_adjusted_pnl_std_cost"],
+        0.0,
+    ).fillna(0.0)
     merged["short_trade_share_max_all"] = row_max_or_default(
         merged,
         ["short_trade_share_max_base", "short_trade_share_max_cost"],
@@ -4356,6 +4366,7 @@ def summarize_candidate_selection(
         + near_top_exit_regret_weight * merged["exit_regret_mean_max_all"]
         + near_top_actual_miss_weight * merged["actual_profit_barrier_miss_rate_smoothed_max_all"]
         + near_top_side_share_weight * merged["max_side_trade_share_max_all"]
+        + near_top_pnl_stability_weight * merged["pnl_stability_risk_all"]
     )
     merged["stress_risk_score"] = (
         merged["near_top_risk_score"]
@@ -4823,6 +4834,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         near_top_exit_regret_weight=args.near_top_exit_regret_weight,
         near_top_actual_miss_weight=args.near_top_actual_miss_weight,
         near_top_side_share_weight=args.near_top_side_share_weight,
+        near_top_pnl_stability_weight=args.near_top_pnl_stability_weight,
         stress_cost_pnl_sum_reward_weight=args.stress_cost_pnl_sum_reward_weight,
         stress_base_pnl_sum_reward_weight=args.stress_base_pnl_sum_reward_weight,
     )
@@ -4888,6 +4900,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "near_top_exit_regret_weight": args.near_top_exit_regret_weight,
         "near_top_actual_miss_weight": args.near_top_actual_miss_weight,
         "near_top_side_share_weight": args.near_top_side_share_weight,
+        "near_top_pnl_stability_weight": args.near_top_pnl_stability_weight,
         "stress_cost_pnl_sum_reward_weight": args.stress_cost_pnl_sum_reward_weight,
         "stress_base_pnl_sum_reward_weight": args.stress_base_pnl_sum_reward_weight,
         "plateau_column": args.plateau_column,
@@ -5554,6 +5567,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=100.0,
         help="weight for dominant side trade share in near_top_risk score",
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-pnl-stability-weight",
+        type=float,
+        default=0.0,
+        help=(
+            "weight for fold-to-fold adjusted-PnL standard deviation in near_top_risk "
+            "and stress_score ranking; 0 keeps historical ranking"
+        ),
     )
     model_candidate_selection.add_argument(
         "--stress-cost-pnl-sum-reward-weight",

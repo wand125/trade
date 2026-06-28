@@ -2198,6 +2198,96 @@ class BacktestTests(unittest.TestCase):
             stress_summary.iloc[1]["stress_risk_score"],
         )
 
+    def test_candidate_selection_can_rank_near_top_by_pnl_stability(self):
+        def fold(values):
+            rows = []
+            for offset, pnl in values:
+                rows.append(
+                    {
+                        "policy": "timed_ev",
+                        "entry_threshold": 15,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 5,
+                        "risk_penalty": 0,
+                        "max_wait_regret": float("inf"),
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": 20,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "direction_session_adjusted_pnl_min": 0.0,
+                        "ev_overestimate_vs_realized_mean": 5.0,
+                        "exit_regret_mean": 5.0,
+                        "actual_profit_barrier_miss_rate_smoothed": 0.4,
+                        "max_side_trade_share": 0.7,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_a = fold([(6, 150), (8, 86)])
+        base_b = fold([(6, 50), (8, 84)])
+        cost_a = fold([(6, 100), (8, 79)])
+        cost_b = fold([(6, 80), (8, 78)])
+
+        default_summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=100.0,
+            max_side_loss_per_fold=100.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+        stability_summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=100.0,
+            max_side_loss_per_fold=100.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+            candidate_rank_mode="near_top_risk",
+            near_top_cost_pnl_tolerance=5.0,
+            near_top_pnl_stability_weight=1.0,
+        )
+
+        self.assertEqual(default_summary.iloc[0]["short_entry_threshold_offset"], 6)
+        self.assertEqual(stability_summary.iloc[0]["short_entry_threshold_offset"], 8)
+        self.assertGreater(
+            stability_summary.iloc[1]["pnl_stability_risk_all"],
+            stability_summary.iloc[0]["pnl_stability_risk_all"],
+        )
+        self.assertLess(
+            stability_summary.iloc[0]["near_top_risk_score"],
+            stability_summary.iloc[1]["near_top_risk_score"],
+        )
+
     def test_holdout_run_frame_reads_model_policy_config_keys(self):
         with TemporaryDirectory() as tmp:
             run_dir = Path(tmp)

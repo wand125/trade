@@ -464,6 +464,11 @@ This mode is a tie-breaker for validation-close candidates; it is not evidence
 by itself. If only one risk metric changes the selected candidate, treat that as
 a sensitivity diagnostic rather than a promotion rule.
 
+For fold-to-fold robustness diagnostics, `near_top_risk` and `stress_score` also
+accept `--near-top-pnl-stability-weight`. This penalizes the max base/cost
+standard deviation of fold adjusted PnL. Keep the default `0` unless using it as
+a pre-registered sensitivity check.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:

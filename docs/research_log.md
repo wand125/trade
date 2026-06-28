@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 07:03 PnL stability candidate ranking
+
+- `model-sweep-summary` にfold別 `total_adjusted_pnl` の標準偏差 `total_adjusted_pnl_std` を追加した。
+- `model-candidate-selection` に `--near-top-pnl-stability-weight` を追加し、`near_top_risk` / `stress_score` のnear-top候補rankingへbase/costのfold-to-fold adjusted PnL標準偏差をpenaltyとして入れられるようにした。defaultは `0` で既存ranking互換。
+- 既存のbase 4fold + moderate/high cost 8fold validationで、`near_top_pnl_stability_weight=0/0.5/1.0` を比較した。topはいずれも `short:combined_regime=down_low_vol:5,short:combined_regime=up_low_vol:10` のまま。
+- top候補の `pnl_stability_risk_all` は `28.4510` でnear-top内では低い。一方 `down10,up10,range10` は `45.3052`、`down5,up10,range10` は `50.1692` と不安定性が高く、weight追加で順位が下がる。
+- 判断: PnL安定性rankingは採用するが、今回のvalidationでは標準候補を変える根拠にはしない。既存holdoutに合わせてweightを調整するとpost-hocになるため、診断・事前登録tie-breakとして扱う。
+- report: `docs/reports/00107_2026-06-29_pnl_stability_candidate_ranking.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 06:56 Entry timing calibration
 
 - `00105` の続きとして、`wait_regret` hard gateではなくside / `combined_regime` / predicted wait-regret bucket別にactual wait regretをOOF校正する `trade_data.meta_model entry-timing-calibration` を追加した。
