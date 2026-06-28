@@ -3238,3 +3238,35 @@ Artifacts:
 - risk topは2024-12防御として有効だが、2025-02ではbaselineをわずかに下回るため、標準policyへ昇格しない。
 - PnL topは高コスト + delay 1でマイナス化するため、risk topより弱い。
 - 次は `short:up_low_vol` / short偏重riskを、複数holdoutを同時に見るselectionで扱う。
+
+### 2026-06-28 23:27 JST Selected Trade Quality EV Replacement
+
+作業:
+
+- 前回の selected-trade quality calibration を、`min_trade_quality` hard gate ではなく entry EV column replacement として検証した。
+- `pred_trade_quality_long_adjusted_pnl` / `pred_trade_quality_short_adjusted_pnl` を `timed_ev` の long/short EV として使い、entry threshold `-2,0,1,2,3,4,5` を代表4ヶ月でsweepした。
+- report: `docs/reports/00076_2026-06-28_selected_trade_quality_ev_replacement.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+Artifacts:
+
+- validation sweeps: `data/reports/backtests/selected_trade_quality_ev_replacement_validation/`
+- validation summary: `data/reports/backtests/selected_trade_quality_ev_replacement_summary/20260628_142622_model_sweep_summary/`
+- fixed tests: `data/reports/backtests/selected_trade_quality_ev_replacement_fixed_tests/`
+
+結果:
+
+| item | value |
+|---|---:|
+| strict eligible candidates | `0` |
+| best near-miss validation min pnl | `-4.1156` |
+| best near-miss validation sum pnl | `36.1418` |
+| best near-miss min trades | `5` |
+| fixed 2024-12 adjusted pnl | `-24.2766` |
+| fixed 2025-02 adjusted pnl | `-41.1456` |
+
+判断:
+
+- 校正済みqualityをEVへ全面置換すると、平均biasは下がるがentry rankingとtrade数を壊す。
+- 直前hybrid基準 min `81.5352` / sum `396.9782` から大きく劣るため、標準採用しない。
+- 次は全面置換ではなく、過大評価soft penalty、または `large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret` のtrade failure分類targetへ進む。
