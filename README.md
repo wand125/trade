@@ -222,7 +222,9 @@ python -m trade_data.meta_model oof-candidate-failure-model \
 ```
 
 Train candidate-entry realized-PnL mean and lower-quantile models from every row
-that passes the entry candidate filter:
+that passes the entry candidate filter. The default target is hindsight best
+adjusted PnL; use `barrier_event_adjusted_pnl` when the target should respect
+profit/loss barrier order and time-exit PnL:
 
 ```bash
 python -m trade_data.meta_model oof-candidate-quality-model \
@@ -233,6 +235,9 @@ python -m trade_data.meta_model oof-candidate-quality-model \
   --source-mode columns \
   --long-column pred_long_best_adjusted_pnl \
   --short-column pred_short_best_adjusted_pnl \
+  --target-mode barrier_event_adjusted_pnl \
+  --min-adjusted-edge 15 \
+  --time-exit-target-minutes 720 \
   --lower-quantile 0.25 \
   --entry-threshold 12 \
   --short-entry-threshold-offset 6 \

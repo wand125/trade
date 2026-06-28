@@ -3523,3 +3523,54 @@ Artifacts:
 - 下方分位はEV過大評価を抑えるが、entry decisionに使うと保守化しすぎる。
 - risk penaltyは2024-12だけを救い、2025-02とvalidation robustnessを壊す。
 - 標準採用しない。candidate quality列は診断・calibration補助として残し、次はexit timing、barrier到達順、forced exit、EV calibration誤差を含むtarget設計へ進む。
+
+### 2026-06-29 01:56 JST Candidate quality barrier target
+
+作業:
+
+- `oof-candidate-quality-model` に `--target-mode barrier_event_adjusted_pnl` を追加した。
+- targetはprofit firstを `+min_adjusted_edge`、loss firstを `-min_adjusted_edge`、time exitをforced adjusted PnLで扱う。
+- 現在のhybrid prediction parquetには `*_forced_adjusted_pnl` が無いため、time exitは `*_fixed_720m_adjusted_pnl` へfallbackした。
+- candidate examplesに `candidate_actual_exit_event`, `candidate_actual_exit_event_minutes`, `candidate_actual_time_exit_adjusted_pnl`, `candidate_actual_time_exit_source` を残すようにした。
+- mean/lower direct EV、barrier overestimate risk、fixed 2024-12 / 2025-02 smokeを確認した。
+- report: `docs/reports/00083_2026-06-29_candidate_quality_barrier_target.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- candidate barrier quality 2024-12 apply: `data/reports/modeling/20260628_164936_candidate_quality_barrier_q25_720m_2024_12/`
+- candidate barrier quality 2025-02 apply: `data/reports/modeling/20260628_165001_candidate_quality_barrier_q25_720m_2025_02/`
+- barrier risk validation summary: `data/reports/backtests/candidate_quality_barrier_overestimate_risk_summary/20260628_165132_model_sweep_summary/`
+- barrier mean direct summary: `data/reports/backtests/candidate_quality_barrier_mean_direct_summary/20260628_165417_model_sweep_summary/`
+- barrier lower direct summary: `data/reports/backtests/candidate_quality_barrier_lower_direct_summary/20260628_165559_model_sweep_summary/`
+- fixed smoke: `data/reports/backtests/candidate_quality_barrier_overestimate_risk_fixed/`
+
+結果:
+
+| item | value |
+|---|---:|
+| candidate count | `9091` |
+| target mean | `1.5739` |
+| raw bias | `20.4316` |
+| mean bias | `0.9855` |
+| lower bias | `-16.4275` |
+| raw overestimate mean | `20.4382` |
+| mean overestimate mean | `7.7639` |
+| lower overestimate mean | `0.1186` |
+| mean MAE | `14.5424` |
+| mean R2 | `-0.1730` |
+| lower coverage | `0.9925` |
+| risk0 validation min pnl | `82.7176` |
+| risk0.10 validation min pnl | `27.1240` |
+| risk0.25 validation min pnl | `1.2864` |
+| mean direct best min pnl | `-8.7380` |
+| lower direct best min pnl | `-50.9794` |
+| fixed 2024-12 risk0.10 | `-2.2914` |
+| fixed 2025-02 risk0.10 | `-17.9024` |
+
+判断:
+
+- barrier targetはraw EV過大評価を強く可視化するが、現モデルの順位付け性能は足りない。
+- mean direct EVは方向ミスとDDが大きく、lower direct EVは保守的すぎる。
+- overestimate riskは2024-12の損失を縮める局面があるが、validation最良はrisk `0`、2025-02も削る。
+- 標準採用しない。次はprediction artifactにforced PnLを残すか、exit event class、time-to-event、fixed horizon PnL、EV calibration誤差をjoint targetとして扱う。

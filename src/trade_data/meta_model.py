@@ -304,6 +304,9 @@ class CandidateQualityModelConfig:
     short_entry_threshold_offset: float
     side_margin: float
     min_entry_rank: float
+    target_mode: str = "best_adjusted_pnl"
+    min_adjusted_edge: float = 15.0
+    time_exit_target_minutes: int = 720
     long_entry_rank_column: str = "pred_long_entry_local_rank"
     short_entry_rank_column: str = "pred_short_entry_local_rank"
 
@@ -337,6 +340,10 @@ TRADE_FAILURE_TARGET_NAMES = (
     "any_failure",
 )
 CANDIDATE_FAILURE_TARGET_NAMES = ("large_adverse",)
+CANDIDATE_QUALITY_TARGET_MODES = ("best_adjusted_pnl", "barrier_event_adjusted_pnl")
+CANDIDATE_EXIT_EVENT_TIME = 0
+CANDIDATE_EXIT_EVENT_PROFIT = 1
+CANDIDATE_EXIT_EVENT_LOSS = 2
 TRADE_SOURCE_LONG_EV_COLUMN = "pred_trade_source_long_ev"
 TRADE_SOURCE_SHORT_EV_COLUMN = "pred_trade_source_short_ev"
 TRADE_QUALITY_LONG_COLUMN = "pred_trade_quality_long_adjusted_pnl"
@@ -2163,12 +2170,23 @@ def build_candidate_quality_training_frame(
     long_column: str,
     short_column: str,
 ) -> pd.DataFrame:
+    if config.target_mode not in CANDIDATE_QUALITY_TARGET_MODES:
+        raise ValueError(f"unknown candidate quality target mode: {config.target_mode}")
+    if config.min_adjusted_edge <= 0:
+        raise ValueError("min_adjusted_edge must be positive")
     required_columns = {
         long_column,
         short_column,
         SIDE_COLUMNS["long"]["target"],
         SIDE_COLUMNS["short"]["target"],
     }
+    if config.target_mode == "barrier_event_adjusted_pnl":
+        required_columns.update({"long_exit_event", "short_exit_event"})
+        for side_name in ("long", "short"):
+            forced_column = f"{side_name}_forced_adjusted_pnl"
+            fixed_column = f"{side_name}_fixed_{config.time_exit_target_minutes}m_adjusted_pnl"
+            if forced_column not in predictions.columns:
+                required_columns.add(fixed_column)
     if config.min_entry_rank > 0:
         required_columns.update(
             {
@@ -2201,7 +2219,43 @@ def build_candidate_quality_training_frame(
             side_predictions,
             target_column,
         )
-        features["target"] = features["candidate_actual_adjusted_pnl"]
+        if f"{side_name}_exit_event" in side_predictions.columns:
+            features["candidate_actual_exit_event"] = side_predictions[f"{side_name}_exit_event"].astype(
+                float
+            )
+        if f"{side_name}_exit_event_minutes" in side_predictions.columns:
+            features["candidate_actual_exit_event_minutes"] = finite_float_series(
+                side_predictions,
+                f"{side_name}_exit_event_minutes",
+            )
+        if f"{side_name}_forced_adjusted_pnl" in side_predictions.columns:
+            features["candidate_actual_forced_adjusted_pnl"] = finite_float_series(
+                side_predictions,
+                f"{side_name}_forced_adjusted_pnl",
+            )
+        if config.target_mode == "barrier_event_adjusted_pnl":
+            exit_event = side_predictions[f"{side_name}_exit_event"].astype(float)
+            forced_column = f"{side_name}_forced_adjusted_pnl"
+            fixed_column = f"{side_name}_fixed_{config.time_exit_target_minutes}m_adjusted_pnl"
+            time_exit_column = forced_column if forced_column in side_predictions.columns else fixed_column
+            time_exit_adjusted = finite_float_series(side_predictions, time_exit_column)
+            features["candidate_actual_time_exit_adjusted_pnl"] = time_exit_adjusted
+            features["candidate_actual_time_exit_source"] = time_exit_column
+            features["target"] = np.select(
+                [
+                    exit_event == CANDIDATE_EXIT_EVENT_PROFIT,
+                    exit_event == CANDIDATE_EXIT_EVENT_LOSS,
+                    exit_event == CANDIDATE_EXIT_EVENT_TIME,
+                ],
+                [
+                    config.min_adjusted_edge,
+                    -config.min_adjusted_edge,
+                    time_exit_adjusted,
+                ],
+                default=np.nan,
+            )
+        else:
+            features["target"] = features["candidate_actual_adjusted_pnl"]
         frames.append(features)
 
     if not frames:
@@ -2220,6 +2274,8 @@ def fit_candidate_quality_model_from_frame(
         raise ValueError("prediction_shrinkage must be in [0, 1]")
     if not 0.0 < config.lower_quantile < 0.5:
         raise ValueError("lower_quantile must be in (0, 0.5)")
+    if config.target_mode not in CANDIDATE_QUALITY_TARGET_MODES:
+        raise ValueError(f"unknown candidate quality target mode: {config.target_mode}")
 
     mappings = category_mappings(frame, TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS)
     encoded = encode_trade_quality_features(frame, mappings)
@@ -2392,7 +2448,7 @@ def candidate_quality_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
     mean_error = mean_pred - target
     lower_error = lower_pred - target
     mean_r2 = float(r2_score(target, mean_pred)) if len(scored) >= 2 else 0.0
-    return {
+    metrics = {
         "candidate_count": int(len(scored)),
         "target_mean": float(target.mean()),
         "raw_predicted_mean": float(raw_pred.mean()),
@@ -2409,6 +2465,15 @@ def candidate_quality_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
         "mean_r2": mean_r2,
         "lower_coverage": float((lower_pred <= target).mean()),
     }
+    if "candidate_actual_exit_event" in scored.columns:
+        event_counts = scored["candidate_actual_exit_event"].value_counts(dropna=False).sort_index()
+        for event, count in event_counts.items():
+            if pd.isna(event):
+                key = "nan"
+            else:
+                key = str(int(event))
+            metrics[f"exit_event_{key}_count"] = int(count)
+    return metrics
 
 
 def trade_failure_calibrated_prob_column(target_name: str, side_name: str) -> str:
@@ -3883,6 +3948,9 @@ def candidate_quality_model_config_from_args(args: argparse.Namespace) -> Candid
         short_entry_threshold_offset=args.short_entry_threshold_offset,
         side_margin=args.side_margin,
         min_entry_rank=args.min_entry_rank,
+        target_mode=args.target_mode,
+        min_adjusted_edge=args.min_adjusted_edge,
+        time_exit_target_minutes=args.time_exit_target_minutes,
         long_entry_rank_column=args.long_entry_rank_column,
         short_entry_rank_column=args.short_entry_rank_column,
     )
@@ -4979,6 +5047,30 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.25,
         help="lower-tail quantile target for conservative candidate quality estimates",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--target-mode",
+        choices=CANDIDATE_QUALITY_TARGET_MODES,
+        default="best_adjusted_pnl",
+        help=(
+            "candidate quality target: hindsight best adjusted PnL, or first "
+            "profit/loss barrier with forced PnL on time exit"
+        ),
+    )
+    candidate_quality_model_parser.add_argument(
+        "--min-adjusted-edge",
+        type=float,
+        default=15.0,
+        help="adjusted PnL assigned to profit/loss barrier exits in barrier_event_adjusted_pnl mode",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--time-exit-target-minutes",
+        type=int,
+        default=720,
+        help=(
+            "fixed-horizon adjusted PnL column to use for time-exit targets when "
+            "forced adjusted PnL columns are not present"
+        ),
     )
     add_trade_source_args(candidate_quality_model_parser)
     add_trade_quality_model_args(candidate_quality_model_parser)

@@ -749,6 +749,118 @@ class MetaModelTests(unittest.TestCase):
         self.assertFalse(scored[CANDIDATE_QUALITY_TAKEN_COLUMN].isna().any())
         self.assertFalse(scored[CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN].isna().any())
 
+    def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions["long_exit_event"] = [1, 2, 0]
+        predictions["short_exit_event"] = [2, 1, 0]
+        predictions["long_forced_adjusted_pnl"] = [3.0, -4.0, 5.0]
+        predictions["short_forced_adjusted_pnl"] = [-3.0, 4.0, -6.0]
+        config = CandidateQualityModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            lower_quantile=0.25,
+            entry_threshold=7.0,
+            long_entry_threshold_offset=0.0,
+            short_entry_threshold_offset=0.0,
+            side_margin=1.0,
+            min_entry_rank=0.0,
+            target_mode="barrier_event_adjusted_pnl",
+            min_adjusted_edge=15.0,
+        )
+
+        examples = build_candidate_quality_training_frame(
+            predictions,
+            config,
+            long_column="pred_trade_source_long_ev",
+            short_column="pred_trade_source_short_ev",
+        )
+
+        self.assertEqual(len(examples), 3)
+        self.assertEqual(examples["target"].tolist(), [15.0, -15.0, -6.0])
+        self.assertEqual(examples["candidate_actual_adjusted_pnl"].tolist(), [10.0, 20.0, 15.0])
+        self.assertEqual(examples["candidate_actual_forced_adjusted_pnl"].tolist(), [3.0, -4.0, -6.0])
+        self.assertEqual(examples["candidate_actual_exit_event"].tolist(), [1.0, 2.0, 0.0])
+
+    def test_candidate_quality_barrier_event_target_falls_back_to_fixed_time_exit(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions["long_exit_event"] = [1, 2, 0]
+        predictions["short_exit_event"] = [2, 1, 0]
+        predictions["long_fixed_720m_adjusted_pnl"] = [2.0, -3.0, 4.0]
+        predictions["short_fixed_720m_adjusted_pnl"] = [-2.0, 3.0, -7.0]
+        config = CandidateQualityModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            lower_quantile=0.25,
+            entry_threshold=7.0,
+            long_entry_threshold_offset=0.0,
+            short_entry_threshold_offset=0.0,
+            side_margin=1.0,
+            min_entry_rank=0.0,
+            target_mode="barrier_event_adjusted_pnl",
+            min_adjusted_edge=15.0,
+            time_exit_target_minutes=720,
+        )
+
+        examples = build_candidate_quality_training_frame(
+            predictions,
+            config,
+            long_column="pred_trade_source_long_ev",
+            short_column="pred_trade_source_short_ev",
+        )
+
+        self.assertEqual(examples["target"].tolist(), [15.0, -15.0, -7.0])
+        self.assertEqual(examples["candidate_actual_time_exit_adjusted_pnl"].tolist(), [2.0, -3.0, -7.0])
+        self.assertEqual(
+            examples["candidate_actual_time_exit_source"].tolist(),
+            [
+                "long_fixed_720m_adjusted_pnl",
+                "long_fixed_720m_adjusted_pnl",
+                "short_fixed_720m_adjusted_pnl",
+            ],
+        )
+
     def test_trade_failure_probability_calibration_adds_side_prob_and_risk_columns(self):
         predictions = prediction_frame().copy()
         predictions[trade_failure_prob_column("large_loss", "long")] = [0.2, 0.9, 0.1]
