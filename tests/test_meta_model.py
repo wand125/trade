@@ -6,9 +6,12 @@ import pandas as pd
 from trade_data.meta_model import (
     GroupEVCalibrationConfig,
     MetaModelConfig,
+    TradeQualityModelConfig,
     add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
+    add_trade_quality_model_columns,
+    add_trade_quality_model_values_to_enriched,
     add_trade_quality_columns,
     add_trade_source_ev_columns,
     available_feature_columns,
@@ -17,6 +20,7 @@ from trade_data.meta_model import (
     combine_fit_predictions,
     fit_group_target_calibrator,
     fit_group_ev_calibrator,
+    fit_trade_quality_model,
     fit_trade_quality_calibrator,
     filter_months,
     fixed_horizon_target_specs,
@@ -273,6 +277,67 @@ class MetaModelTests(unittest.TestCase):
         self.assertEqual(output["pred_trade_quality_long_adjusted_pnl"].tolist(), [2.0, 2.0, 2.0])
         self.assertEqual(output["pred_trade_quality_short_adjusted_pnl"].tolist(), [9.0, 9.0, 9.0])
         self.assertAlmostEqual(metrics["calibrated_bias"], 0.0)
+
+    def test_trade_quality_model_adds_side_quality_columns(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "long", "short", "short"],
+                "direction_sign": [1, 1, -1, -1],
+                "adjusted_pnl": [1.0, 3.0, 9.0, 7.0],
+                "pred_taken_ev": [11.0, 13.0, 12.0, 10.0],
+                "pred_opposite_ev": [8.0, 9.0, 4.0, 5.0],
+                "pred_best_ev": [11.0, 13.0, 12.0, 10.0],
+                "pred_taken_best_holding_minutes": [10.0, 20.0, 30.0, 40.0],
+                "pred_taken_max_adverse_pnl": [-1.0, -2.0, -3.0, -4.0],
+                "pred_taken_wait_regret": [0.1, 0.2, 0.3, 0.4],
+                "pred_taken_entry_local_rank": [0.8, 0.7, 0.9, 0.6],
+                "pred_taken_profit_barrier_hit": [1.0, 1.0, 1.0, 0.0],
+                "entry_decision_timestamp": pd.date_range(
+                    "2025-01-01",
+                    periods=4,
+                    freq="h",
+                    tz="UTC",
+                ),
+                "dataset_month": ["2024-07", "2024-07", "2024-09", "2024-09"],
+                "session_regime": ["asia", "asia", "ny_late", "ny_late"],
+                "volatility_regime": ["low_vol", "low_vol", "normal_vol", "normal_vol"],
+            }
+        )
+        config = TradeQualityModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+        )
+
+        bundle = fit_trade_quality_model(trades, config)
+        output = add_trade_quality_model_columns(predictions, bundle)
+        scored = add_trade_quality_model_values_to_enriched(trades, bundle)
+
+        self.assertIn("pred_trade_quality_long_adjusted_pnl", output.columns)
+        self.assertIn("pred_trade_quality_short_adjusted_pnl", output.columns)
+        self.assertFalse(output["pred_trade_quality_long_adjusted_pnl"].isna().any())
+        self.assertFalse(scored["pred_trade_quality_taken_adjusted_pnl"].isna().any())
 
 
 if __name__ == "__main__":

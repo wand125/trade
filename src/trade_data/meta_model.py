@@ -148,11 +148,64 @@ class TradeQualityCalibrator:
     group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]]
 
 
+@dataclass(frozen=True)
+class TradeQualityModelConfig:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    max_depth: int | None
+    min_samples_leaf: int
+    l2_regularization: float
+    max_features: float
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
+    random_seed: int
+    target_clip_quantile: float
+    sample_weighting: str
+    prediction_shrinkage: float
+
+
+@dataclass
+class TradeQualityModelBundle:
+    config: TradeQualityModelConfig
+    model: HistGradientBoostingRegressor
+    feature_columns: list[str]
+    category_mappings: dict[str, dict[str, int]]
+    target_mean: float
+
+
 FIXED_HORIZON_MINUTES = (60, 240, 720)
 TRADE_SOURCE_LONG_EV_COLUMN = "pred_trade_source_long_ev"
 TRADE_SOURCE_SHORT_EV_COLUMN = "pred_trade_source_short_ev"
 TRADE_QUALITY_LONG_COLUMN = "pred_trade_quality_long_adjusted_pnl"
 TRADE_QUALITY_SHORT_COLUMN = "pred_trade_quality_short_adjusted_pnl"
+TRADE_QUALITY_TAKEN_COLUMN = "pred_trade_quality_taken_adjusted_pnl"
+TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS = [
+    "side",
+    "pred_taken_ev",
+    "pred_opposite_ev",
+    "pred_best_ev",
+    "pred_side_gap",
+    "pred_abs_side_gap",
+    "pred_taken_best_holding_minutes",
+    "pred_taken_max_adverse_pnl",
+    "pred_taken_wait_regret",
+    "pred_taken_entry_local_rank",
+    "pred_taken_profit_barrier_hit",
+    "trend_score_240",
+    "volatility_score_60",
+    "decision_hour_sin",
+    "decision_hour_cos",
+]
+TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS = [
+    "trend_regime",
+    "volatility_regime",
+    "session_regime",
+    "gap_regime",
+    "combined_regime",
+]
 
 
 def fixed_horizon_target_specs(
@@ -714,6 +767,261 @@ def trade_quality_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
         "calibrated_rmse": float(mean_squared_error(target, calibrated_pred) ** 0.5),
         "calibrated_r2": calibrated_r2,
     }
+
+
+def finite_float_series(frame: pd.DataFrame, column: str, default: float = 0.0) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(default, index=frame.index, dtype="float64")
+    values = pd.to_numeric(frame[column], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    return values.fillna(default).astype(float)
+
+
+def timestamp_hour_features(frame: pd.DataFrame, timestamp_column: str) -> tuple[pd.Series, pd.Series]:
+    if timestamp_column not in frame.columns:
+        zeros = pd.Series(0.0, index=frame.index)
+        return zeros, zeros
+    hours = pd.to_datetime(frame[timestamp_column], utc=True).dt.hour.astype(float)
+    radians = 2.0 * np.pi * hours / 24.0
+    return (
+        pd.Series(np.sin(radians), index=frame.index),
+        pd.Series(np.cos(radians), index=frame.index),
+    )
+
+
+def trade_quality_features_from_enriched(enriched: pd.DataFrame) -> pd.DataFrame:
+    output = pd.DataFrame(index=enriched.index)
+    output["side"] = finite_float_series(enriched, "direction_sign")
+    output["pred_taken_ev"] = finite_float_series(enriched, "pred_taken_ev")
+    output["pred_opposite_ev"] = finite_float_series(enriched, "pred_opposite_ev")
+    output["pred_best_ev"] = finite_float_series(enriched, "pred_best_ev")
+    output["pred_side_gap"] = output["pred_taken_ev"] - output["pred_opposite_ev"]
+    output["pred_abs_side_gap"] = output["pred_side_gap"].abs()
+    for column in [
+        "pred_taken_best_holding_minutes",
+        "pred_taken_max_adverse_pnl",
+        "pred_taken_wait_regret",
+        "pred_taken_entry_local_rank",
+        "pred_taken_profit_barrier_hit",
+        "trend_score_240",
+        "volatility_score_60",
+    ]:
+        output[column] = finite_float_series(enriched, column)
+    output["decision_hour_sin"], output["decision_hour_cos"] = timestamp_hour_features(
+        enriched,
+        "entry_decision_timestamp",
+    )
+    for column in TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS:
+        if column in enriched.columns:
+            output[column] = enriched[column].astype("string").fillna("__missing__")
+        else:
+            output[column] = "__missing__"
+    if "dataset_month" in enriched.columns:
+        output["dataset_month"] = enriched["dataset_month"].astype(str)
+    output["target"] = finite_float_series(enriched, "adjusted_pnl")
+    return output
+
+
+def side_prediction_series(
+    predictions: pd.DataFrame,
+    side_name: str,
+    column_stem: str,
+    default: float = 0.0,
+) -> pd.Series:
+    column = f"pred_{side_name}_{column_stem}"
+    return finite_float_series(predictions, column, default)
+
+
+def side_profit_barrier_series(predictions: pd.DataFrame, side_name: str) -> pd.Series:
+    for column in [
+        f"pred_{side_name}_profit_barrier_hit_prob",
+        f"pred_{side_name}_profit_barrier_hit",
+    ]:
+        if column in predictions.columns:
+            return finite_float_series(predictions, column)
+    return pd.Series(0.0, index=predictions.index)
+
+
+def trade_quality_features_from_predictions(
+    predictions: pd.DataFrame,
+    side_name: str,
+) -> pd.DataFrame:
+    side_value = 1.0 if side_name == "long" else -1.0
+    side_ev_column = TRADE_SOURCE_LONG_EV_COLUMN if side_name == "long" else TRADE_SOURCE_SHORT_EV_COLUMN
+    opposite_ev_column = TRADE_SOURCE_SHORT_EV_COLUMN if side_name == "long" else TRADE_SOURCE_LONG_EV_COLUMN
+    output = pd.DataFrame(index=predictions.index)
+    output["side"] = side_value
+    output["pred_taken_ev"] = finite_float_series(predictions, side_ev_column)
+    output["pred_opposite_ev"] = finite_float_series(predictions, opposite_ev_column)
+    output["pred_best_ev"] = pd.concat(
+        [
+            finite_float_series(predictions, TRADE_SOURCE_LONG_EV_COLUMN),
+            finite_float_series(predictions, TRADE_SOURCE_SHORT_EV_COLUMN),
+        ],
+        axis=1,
+    ).max(axis=1)
+    output["pred_side_gap"] = output["pred_taken_ev"] - output["pred_opposite_ev"]
+    output["pred_abs_side_gap"] = output["pred_side_gap"].abs()
+    output["pred_taken_best_holding_minutes"] = side_prediction_series(
+        predictions,
+        side_name,
+        "best_holding_minutes",
+    )
+    output["pred_taken_max_adverse_pnl"] = side_prediction_series(
+        predictions,
+        side_name,
+        "max_adverse_pnl",
+    )
+    output["pred_taken_wait_regret"] = side_prediction_series(predictions, side_name, "wait_regret")
+    output["pred_taken_entry_local_rank"] = side_prediction_series(
+        predictions,
+        side_name,
+        "entry_local_rank",
+    )
+    output["pred_taken_profit_barrier_hit"] = side_profit_barrier_series(predictions, side_name)
+    output["trend_score_240"] = finite_float_series(predictions, "trend_score_240")
+    output["volatility_score_60"] = finite_float_series(predictions, "volatility_score_60")
+    output["decision_hour_sin"], output["decision_hour_cos"] = timestamp_hour_features(
+        predictions,
+        "decision_timestamp",
+    )
+    for column in TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS:
+        if column in predictions.columns:
+            output[column] = predictions[column].astype("string").fillna("__missing__")
+        else:
+            output[column] = "__missing__"
+    return output
+
+
+def category_mappings(frame: pd.DataFrame, columns: list[str]) -> dict[str, dict[str, int]]:
+    mappings: dict[str, dict[str, int]] = {}
+    for column in columns:
+        values = sorted(str(value) for value in frame[column].astype("string").fillna("__missing__").unique())
+        mappings[column] = {value: index for index, value in enumerate(values)}
+    return mappings
+
+
+def encode_trade_quality_features(
+    frame: pd.DataFrame,
+    mappings: dict[str, dict[str, int]],
+) -> pd.DataFrame:
+    output = pd.DataFrame(index=frame.index)
+    for column in TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS:
+        output[column] = finite_float_series(frame, column)
+    for column in TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS:
+        mapping = mappings.get(column, {})
+        output[f"{column}_code"] = (
+            frame[column].astype("string").fillna("__missing__").map(mapping).fillna(-1).astype(float)
+        )
+    return output.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+
+def trade_quality_feature_columns(encoded: pd.DataFrame) -> list[str]:
+    return [
+        *TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS,
+        *[f"{column}_code" for column in TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS],
+    ]
+
+
+def build_trade_quality_training_frame(enriched: pd.DataFrame) -> pd.DataFrame:
+    frame = trade_quality_features_from_enriched(enriched)
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(subset=["target"])
+
+
+def trade_quality_sample_weights(frame: pd.DataFrame, weighting: str) -> np.ndarray | None:
+    if weighting == "none":
+        return None
+    weights = pd.Series(1.0, index=frame.index, dtype="float64")
+    if weighting == "month":
+        if "dataset_month" not in frame.columns:
+            raise ValueError("month sample weighting requires dataset_month")
+        weights *= 1.0 / frame.groupby("dataset_month")["target"].transform("size")
+    elif weighting == "side":
+        weights *= 1.0 / frame.groupby("side")["target"].transform("size")
+    elif weighting == "month_side":
+        if "dataset_month" not in frame.columns:
+            raise ValueError("month_side sample weighting requires dataset_month")
+        weights *= 1.0 / frame.groupby(["dataset_month", "side"])["target"].transform("size")
+    else:
+        raise ValueError(f"unknown sample weighting: {weighting}")
+    weights = weights / weights.mean()
+    return weights.to_numpy(dtype="float64")
+
+
+def fit_trade_quality_model(
+    enriched: pd.DataFrame,
+    config: TradeQualityModelConfig,
+) -> TradeQualityModelBundle:
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    frame = build_trade_quality_training_frame(enriched)
+    if frame.empty:
+        raise ValueError("trade quality model training frame is empty")
+    mappings = category_mappings(frame, TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS)
+    encoded = encode_trade_quality_features(frame, mappings)
+    feature_columns = trade_quality_feature_columns(encoded)
+    model = HistGradientBoostingRegressor(
+        max_iter=config.max_iter,
+        learning_rate=config.learning_rate,
+        max_leaf_nodes=config.max_leaf_nodes,
+        max_depth=config.max_depth,
+        min_samples_leaf=config.min_samples_leaf,
+        l2_regularization=config.l2_regularization,
+        max_features=config.max_features,
+        early_stopping=config.early_stopping,
+        validation_fraction=config.validation_fraction,
+        n_iter_no_change=config.n_iter_no_change,
+        tol=config.tol,
+        random_state=config.random_seed,
+    )
+    model.fit(
+        encoded[feature_columns].astype("float32").to_numpy(),
+        clipped_target(frame["target"], config.target_clip_quantile),
+        sample_weight=trade_quality_sample_weights(frame, config.sample_weighting),
+    )
+    return TradeQualityModelBundle(
+        config=config,
+        model=model,
+        feature_columns=feature_columns,
+        category_mappings=mappings,
+        target_mean=float(frame["target"].mean()),
+    )
+
+
+def predict_trade_quality_features(raw_features: pd.DataFrame, bundle: TradeQualityModelBundle) -> np.ndarray:
+    encoded = encode_trade_quality_features(raw_features, bundle.category_mappings)
+    predictions = bundle.model.predict(encoded[bundle.feature_columns].astype("float32").to_numpy())
+    if bundle.config.prediction_shrinkage < 1.0:
+        predictions = (
+            bundle.config.prediction_shrinkage * predictions
+            + (1.0 - bundle.config.prediction_shrinkage) * bundle.target_mean
+        )
+    return predictions
+
+
+def add_trade_quality_model_columns(
+    predictions: pd.DataFrame,
+    bundle: TradeQualityModelBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    output[TRADE_QUALITY_LONG_COLUMN] = predict_trade_quality_features(
+        trade_quality_features_from_predictions(output, "long"),
+        bundle,
+    )
+    output[TRADE_QUALITY_SHORT_COLUMN] = predict_trade_quality_features(
+        trade_quality_features_from_predictions(output, "short"),
+        bundle,
+    )
+    return output
+
+
+def add_trade_quality_model_values_to_enriched(
+    enriched: pd.DataFrame,
+    bundle: TradeQualityModelBundle,
+) -> pd.DataFrame:
+    output = enriched.copy()
+    predictions = predict_trade_quality_features(trade_quality_features_from_enriched(output), bundle)
+    output[TRADE_QUALITY_TAKEN_COLUMN] = predictions
+    return output
 
 
 def side_examples(df: pd.DataFrame, side_name: str) -> pd.DataFrame:
@@ -1453,6 +1761,158 @@ def oof_trade_quality_calibration(args: argparse.Namespace) -> int:
     return 0
 
 
+def trade_quality_model_config_from_args(args: argparse.Namespace) -> TradeQualityModelConfig:
+    return TradeQualityModelConfig(
+        max_iter=args.max_iter,
+        learning_rate=args.learning_rate,
+        max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
+        min_samples_leaf=args.min_samples_leaf,
+        l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
+        random_seed=args.random_seed,
+        target_clip_quantile=args.target_clip_quantile,
+        sample_weighting=args.sample_weighting,
+        prediction_shrinkage=args.prediction_shrinkage,
+    )
+
+
+def oof_trade_quality_model(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF trade quality model")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+    validation_trades = read_trade_frames(parse_csv_paths(args.validation_trades))
+    validation_enriched = enrich_trades_for_trade_quality(validation_trades, validation_predictions)
+    validation_enriched = validation_enriched[
+        validation_enriched["dataset_month"].isin(validation_months)
+    ].copy()
+    if validation_enriched.empty:
+        raise ValueError("validation selected-trade frame is empty after month filtering")
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    config = trade_quality_model_config_from_args(args)
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_trade_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for fold_index, holdout_month in enumerate(validation_months):
+        fit_trades = validation_enriched[validation_enriched["dataset_month"] != holdout_month].copy()
+        holdout_trades = validation_enriched[validation_enriched["dataset_month"] == holdout_month].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_trades.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build trade quality model OOF fold for {holdout_month}")
+        fold_config = TradeQualityModelConfig(
+            **{
+                **asdict(config),
+                "random_seed": config.random_seed + fold_index,
+            }
+        )
+        fold_bundle = fit_trade_quality_model(fit_trades, fold_config)
+        holdout_prediction_output = add_trade_quality_model_columns(holdout_predictions, fold_bundle)
+        holdout_trade_output = add_trade_quality_model_values_to_enriched(holdout_trades, fold_bundle)
+        fold_prediction_outputs.append(holdout_prediction_output)
+        fold_trade_outputs.append(holdout_trade_output)
+        fold_metrics[holdout_month] = {
+            "fit_trades": int(len(fit_trades)),
+            "holdout_trades": int(len(holdout_trades)),
+            "holdout_predictions": int(len(holdout_predictions)),
+            "holdout": trade_quality_scored_metrics(holdout_trade_output),
+            "target_mean": fold_bundle.target_mean,
+            "feature_columns": fold_bundle.feature_columns,
+            "category_mappings": fold_bundle.category_mappings,
+        }
+
+    validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+    validation_oof_trades = pd.concat(fold_trade_outputs, ignore_index=True)
+    if "entry_timestamp" in validation_oof_trades.columns:
+        validation_oof_trades = validation_oof_trades.sort_values("entry_timestamp")
+
+    final_bundle = fit_trade_quality_model(validation_enriched, config)
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_trade_quality_model_columns(apply_predictions, final_bundle)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_trade_quality_model.parquet",
+        index=False,
+    )
+    validation_oof_trades.to_csv(run_dir / "validation_oof_model_enriched_trades.csv", index=False)
+    validation_enriched.to_csv(run_dir / "validation_fit_enriched_trades.csv", index=False)
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_trade_quality_model.parquet",
+            index=False,
+        )
+    joblib.dump(final_bundle, run_dir / "trade_quality_model.joblib")
+    metrics = {
+        "mode": "validation_oof_trade_quality_model",
+        "config": asdict(config),
+        "validation_trades": [str(path) for path in parse_csv_paths(args.validation_trades)],
+        "validation_predictions": str(args.validation_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "validation_predictions": int(len(validation_predictions)),
+            "validation_trades": int(len(validation_enriched)),
+            "validation_oof": int(len(validation_oof)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_predictions": month_counts(validation_predictions),
+            "validation_trades": month_counts(validation_enriched),
+            "validation_oof": month_counts(validation_oof),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "final_model": {
+            "target_mean": final_bundle.target_mean,
+            "feature_columns": final_bundle.feature_columns,
+            "category_mappings": final_bundle.category_mappings,
+        },
+        "folds": fold_metrics,
+        "validation_oof": trade_quality_scored_metrics(validation_oof_trades),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def fit(args: argparse.Namespace) -> int:
     config = MetaModelConfig(
         max_iter=args.max_iter,
@@ -1582,6 +2042,27 @@ def build_parser() -> argparse.ArgumentParser:
             default="max",
         )
 
+    def add_trade_quality_model_args(model_parser: argparse.ArgumentParser) -> None:
+        model_parser.add_argument("--max-iter", type=int, default=80)
+        model_parser.add_argument("--learning-rate", type=float, default=0.03)
+        model_parser.add_argument("--max-leaf-nodes", type=int, default=5)
+        model_parser.add_argument("--max-depth", type=int, default=2, help="<=0 disables depth limit")
+        model_parser.add_argument("--min-samples-leaf", type=int, default=20)
+        model_parser.add_argument("--l2-regularization", type=float, default=1.0)
+        model_parser.add_argument("--max-features", type=float, default=0.8)
+        model_parser.add_argument("--early-stopping", type=parse_bool, default=True)
+        model_parser.add_argument("--validation-fraction", type=float, default=0.2)
+        model_parser.add_argument("--n-iter-no-change", type=int, default=10)
+        model_parser.add_argument("--tol", type=float, default=1e-6)
+        model_parser.add_argument("--random-seed", type=int, default=31)
+        model_parser.add_argument("--target-clip-quantile", type=float, default=0.98)
+        model_parser.add_argument(
+            "--sample-weighting",
+            choices=["none", "month", "side", "month_side"],
+            default="month_side",
+        )
+        model_parser.add_argument("--prediction-shrinkage", type=float, default=0.7)
+
     fit_parser = subparsers.add_parser("fit", help="fit a meta EV model and apply it")
     fit_parser.add_argument("--train-predictions", type=Path, required=True)
     fit_parser.add_argument("--apply-predictions", type=Path, required=True)
@@ -1697,6 +2178,33 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(trade_quality_oof_parser)
     add_group_calibration_args(trade_quality_oof_parser, "trade_quality_calibration")
     trade_quality_oof_parser.set_defaults(func=oof_trade_quality_calibration)
+
+    trade_quality_model_parser = subparsers.add_parser(
+        "oof-trade-quality-model",
+        help="build validation OOF selected-trade realized-PnL model columns",
+    )
+    trade_quality_model_parser.add_argument(
+        "--validation-trades",
+        required=True,
+        help="comma-separated model-policy trades.csv files for validation months",
+    )
+    trade_quality_model_parser.add_argument("--validation-predictions", type=Path, required=True)
+    trade_quality_model_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation-trade model",
+    )
+    trade_quality_model_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    trade_quality_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    trade_quality_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    trade_quality_model_parser.add_argument("--label", default="trade_quality_model")
+    add_trade_source_args(trade_quality_model_parser)
+    add_trade_quality_model_args(trade_quality_model_parser)
+    trade_quality_model_parser.set_defaults(func=oof_trade_quality_model)
     return parser
 
 

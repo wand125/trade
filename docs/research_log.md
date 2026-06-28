@@ -1950,3 +1950,37 @@ Artifacts:
 - `min_trade_quality` gateはtop候補を改善しない。`0` 以上ではcost min pnlが大きく悪化する。
 - 実装は残すが、標準候補には採用しない。標準は `min_trade_quality=-inf`。
 - 次はgroup平均ではなく小型モデルでselected-trade targetを学習するか、hazard/survival型exit timing targetへ進む。
+
+### 2026-06-28 15:11 JST Selected Trade Quality Model
+
+作業:
+
+- selected tradesの実現PnLを小型HGBで学習する `TradeQualityModelConfig` / `TradeQualityModelBundle` を追加した。
+- `trade_data.meta_model oof-trade-quality-model` を追加し、validation月leave-one-month-outでHGB版 `pred_trade_quality_long/short_adjusted_pnl` を生成できるようにした。
+- report: `docs/reports/00038_2026-06-28_selected_trade_quality_model.md`
+- 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- HGB OOF quality predictions: `experiments/20260628_060718_trade_quality_model_oof_fixed_horizon/`
+- no-cost quality sweeps: `data/reports/backtests/20260628_060955_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- cost quality sweeps: `data/reports/backtests/20260628_061047_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- candidate selection: `data/reports/backtests/20260628_061118_model_candidate_selection/`
+
+結果:
+
+| min trade quality | eligible | best cost min pnl | best base min pnl | min trades | best smoothed miss | best EV overestimate |
+|---:|---:|---:|---:|---:|---:|---:|
+| `-inf` | 7 | `27.2158` | `39.7538` | 47 | `0.454545` | `14.377795` |
+| `-1.0` | 7 | `27.2158` | `39.7538` | 47 | `0.454545` | `14.377795` |
+| `0.0` | 7 | `27.2158` | `39.7538` | 47 | `0.459016` | `14.411078` |
+| `0.5` | 0 | `-15.5310` | `-10.3410` | 23 | `0.450000` | `17.109478` |
+| `1.0` | 4 | `1.7620` | `4.1220` | 10 | `0.477612` | `18.353985` |
+
+判断:
+
+- HGB版selected-trade qualityはgroup補正よりMAEを少し下げたが、bias/R2は悪く、安定した個別trade識別器にはなっていない。
+- `min_trade_quality=0.0` はtop候補を壊さないが、改善もしない。
+- `1.0` 以上はtrade数とfold最低PnLを大きく削る。
+- selected-trade quality modelは診断・探索基盤として残すが、標準候補には採用しない。標準は引き続き `min_trade_quality=-inf`。
+- 次はtrade後品質の単発gateより、exit timing targetを直接増やす。特に利確/損切り/時間切れの時刻をhazard/survival型またはtime-bucket classificationで扱う。
