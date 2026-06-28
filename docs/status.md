@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 10:21 JST
+最終更新: 2026-06-28 10:37 JST
 
 ## 現在の状態
 
@@ -28,7 +28,7 @@ no-cost/cost-aware validationを同時に評価する `model-candidate-selection
 
 profit barrier probability列と閾値gateを追加済み。2025-03 blindでは損失を `-49.7004` から `-29.5462` へ縮めたが、NoTradeには届かないため採用しない。
 
-side-specific regime suppressionを追加済み。`short:session_regime=asia` はvalidation選択候補として2025-03 blind adjusted pnl `+18.0748`、35 trades、profit factor `1.2700` まで改善した。2025-04 / 2025-05の追加blindでも、それぞれ `+56.3148` / `+83.0630` とNoTradeを上回り、blockなしの同条件は `-24.5976` / `-57.6474` に崩れた。暫定採用候補へ昇格するが、方向予測自体はまだ弱いため、標準評価にはcost sensitivityとside/session別PnLを必ず含める。
+side-specific regime suppressionを追加済み。`short:session_regime=asia` は2025-03 / 2025-04 / 2025-05 blindではNoTradeを上回ったが、2025-06 blindで adjusted pnl `-100.4662`、short pnl `-101.0232`、worst direction/session `short:london` `-101.2102` と崩れた。したがって暫定採用候補から降格する。session hard blockを増やすと実質NoTradeに近づくため、次はshort exposure concentration、direction/session loss、support-aware barrier calibrationをvalidation側で扱う。
 
 candidate selectionへ direction/session別損失集中gateを追加済み。`model-sweep` metricsに `direction_session_adjusted_pnl_min` / `worst_direction_session` を保存し、`model-candidate-selection --max-direction-session-loss-per-fold` で `short:asia` のような局所崩れを落とせる。2025-05 smokeではblockなし候補が `worst_direction_session=short:asia`, `-100.5254` で落ち、blockあり候補がeligibleに残った。
 
@@ -57,13 +57,14 @@ profit barrier probability bucket別のactual hit rate診断を追加済み。`m
 
 ## 次の作業
 
-1. 2025-06以降もblind holdoutとして追加し、`short:session_regime=asia` を継続検証する。
-2. validation fold全体で、PnL、direction/session損失、actual miss率、calibration overestimateのどれをhard gateにするか台地を見る。
-3. exit timing targetを fixed horizon、barrier time、hazard-like close probability へ拡張する。
-4. profit barrier probabilityのcalibrationを継続する。ただし2025-03 blindを見た後の閾値採用は禁止する。
+1. candidate selectionへ short exposure concentration を診断として追加し、short-only dependenceを可視化する。
+2. actual miss / calibration gateをsupport-awareにする。小さいfoldで miss率やoverestimate maxが1.0になる問題をそのままhard gateにしない。
+3. validation fold全体で、PnL、direction/session損失、short exposure、actual miss率、calibration overestimateのどれをhard gateにするか台地を見る。
+4. exit timing targetを fixed horizon、barrier time、hazard-like close probability へ拡張する。
 5. コスト条件を標準選択に入れる。少なくとも spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
-6. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
-7. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+6. 2025-07以降のblindは、新しいvalidation選択基準を固定してから見る。
+7. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
+8. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項
 
@@ -139,6 +140,8 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 
 2026-06-28 10:21 JST 更新: profit barrier probability bucket別のactual hit rateを `model-sweep` metricsへ追加し、`model-candidate-selection` に `--max-profit-barrier-calibration-overestimate` を追加した。2025-05 smokeでは、blockなし候補は calibration overestimate `0.054305`、`short:session_regime=asia` blockあり候補は `0.248089`。blockあり候補はPnLが良いがbarrier probabilityは過大評価しているため、このgateは当面hard採用せず診断軸として扱う。詳細は `docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`。
 
+2026-06-28 10:37 JST 更新: 2025-06 blindを追加した。事前登録候補 `short:session_regime=asia` blockは adjusted pnl `-100.4662`, 15 trades, profit factor `0.3444`, max drawdown `133.5832` でNoTradeに大きく負けた。損失中心は `short:london` で、direction error rate `0.6000`、profit barrier miss 7 trades / adjusted pnl `-152.0642`。post-hocにLondon shortもblockすると損失は消えるがtrade数は2以下で実質NoTradeに近い。validation back-checkでもLondon blockは事前支持されなかったため、`short:session_regime=asia` は暫定採用候補から降格する。詳細は `docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`。
+
 ## 直近の実験
 
 - `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
@@ -149,6 +152,11 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00023_2026-06-28_direction_session_candidate_gate.md`
 - `docs/reports/00024_2026-06-28_profit_barrier_miss_candidate_gate.md`
 - `docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
+- `docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
+- `experiments/20260628_013141_full_fixed_horizon_blind_2025_06_barrier_prob_p1_l1p2/`
+- `data/reports/backtests/20260628_013232_model_fixed_horizon_ev_2025-06_1/`
+- `data/reports/backtests/20260628_013257_side_specific_asia_short_block_2025-06/`
+- `data/reports/backtests/20260628_013608_model_candidate_selection/`
 - `data/reports/backtests/20260628_011509_model_candidate_selection/`
 - `data/reports/backtests/20260628_010550_model_candidate_selection/`
 - `data/reports/backtests/20260628_005032_model_candidate_selection/`

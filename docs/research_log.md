@@ -1471,3 +1471,57 @@ Artifacts:
 - calibration overestimateは、barrier threshold通過後の過大評価を検出する診断軸として有効。
 - ただし今回のsmokeでは、PnLが良いblockあり候補のほうがcalibration overestimateは悪い。
 - したがって `--max-profit-barrier-calibration-overestimate 0.2` は採用閾値にしない。validation fold全体で台地を見るまでhard gateではなく診断値として扱う。
+
+### 2026-06-28 10:37 JST 2025-06 Blind Holdout Failure
+
+作業:
+
+- 2025-06 の p1/l1.2 fixed horizon datasetを追加生成した。
+- 同じtrain/validation設定で、2025-06 blind modelを学習した。
+- report: `docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
+
+Artifacts:
+
+- dataset: `data/processed/datasets/xauusd_m1_p1_l1p2/xauusd_m1_2025-06_h24_edge15.parquet`
+- model: `experiments/20260628_013141_full_fixed_horizon_blind_2025_06_barrier_prob_p1_l1p2/`
+- selected asia short block: `data/reports/backtests/20260628_013232_model_fixed_horizon_ev_2025-06_1/`
+- no block: `data/reports/backtests/20260628_013232_model_fixed_horizon_ev_2025-06/`
+- offset8 reference: `data/reports/backtests/20260628_013232_model_fixed_horizon_ev_2025-06_2/`
+- cost sensitivity: `data/reports/backtests/20260628_013232_model_cost_sensitivity_2025-06/`
+- failure analysis: `data/reports/backtests/20260628_013257_side_specific_asia_short_block_2025-06/`
+- validation back-check candidate selection: `data/reports/backtests/20260628_013608_model_candidate_selection/`
+
+結果:
+
+- 2025-06 dataset rows: `28,889`
+- label counts: short `14,763`, flat `953`, long `13,173`
+- selected `short:session_regime=asia` block: adjusted pnl `-100.4662`, raw pnl `-74.9250`, 15 trades, profit factor `0.3444`, max DD `133.5832`
+- no block: adjusted pnl `-109.9862`, 18 trades
+- offset8 reference: adjusted pnl `-80.9672`, 11 trades
+- selectedの short pnlは `-101.0232`
+- worst direction/sessionは `short:london`, adjusted pnl `-101.2102`
+- actual profit barrier miss rateは `0.4667`
+- calibration overestimate maxは `0.4667`
+- direction error rateは `0.6000`
+- profit barrier missは 7 trades / adjusted pnl `-152.0642`
+
+Post-hoc diagnostics:
+
+- `short:london` block only: adjusted pnl `-36.2062`, 12 trades
+- `short:asia,london` block: adjusted pnl `+0.7440`, 2 trades
+- all short sessions blocked in this candidate: adjusted pnl `+0.5570`, 1 trade
+
+Validation back-check:
+
+- no block、`short:asia`、`short:london`、`short:asia,london` を4 validation monthsへ戻して確認した。
+- どの条件もeligibleではなかった。
+- `short:london` はvalidation base mean pnl `+3.9695` だが min pnl `-19.9560`、min trades `2` で採用根拠にならない。
+- `short:asia,london` はvalidation mean pnl `-6.3636` で、London blockを事前選択する根拠はない。
+
+判断:
+
+- `short:session_regime=asia` は暫定採用候補から降格する。
+- 2025-04 / 2025-05の改善は、asia shortの局所損失を避けた効果であって、方向予測そのものの改善ではなかった。
+- 2025-06では同じshort過大評価が London shortへ移動した。
+- session hard blockを増やすとNoTradeへ近づくだけなので、本流にはしない。
+- 次は short exposure concentration、support-aware actual miss / calibration、exit timing targetを優先する。

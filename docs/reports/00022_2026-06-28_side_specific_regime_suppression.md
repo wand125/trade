@@ -1,7 +1,7 @@
 # Side-Specific Regime Suppression
 
 日時: 2026-06-28 09:26 JST
-更新日時: 2026-06-28 09:51 JST
+更新日時: 2026-06-28 10:37 JST
 
 ## 目的
 
@@ -364,3 +364,26 @@ Report:
 - `model-candidate-selection` に `--max-direction-session-loss-per-fold` を追加した。
 - 2025-05 smokeでは、blockなし候補の `worst_direction_session=short:asia`, `direction_session_adjusted_pnl_min=-100.5254` を検出し、`direction_session_loss_ok=False` でeligibleから落とせた。
 - `short:session_regime=asia` blockあり候補は `direction_session_adjusted_pnl_min=+19.8400` でeligibleに残った。
+
+## 更新: 2026-06-28 10:37 JST
+
+2025-06 blindを追加した結果、`short:session_regime=asia` は暫定採用候補から降格する。
+
+詳細:
+
+- `docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
+
+主な結果:
+
+- 2025-06 selected asia short blockは adjusted pnl `-100.4662`, 15 trades, profit factor `0.3444`。
+- short adjusted pnlは `-101.0232`。
+- worst direction/sessionは `short:london`, adjusted pnl `-101.2102`。
+- direction error rateは `0.6000`。
+- post-hocに `short:london` もblockすると損失は消えるが、trade数は2以下で実質NoTradeに近い。
+- validation back-checkでも `short:london` blockは事前支持されなかった。
+
+判断:
+
+- 2025-04 / 2025-05 の改善は、asia shortの局所損失を避けた効果であり、方向予測そのものの改善ではなかった。
+- session hard blockを増やす方向はいったん止める。
+- 次は short exposure concentration、support-aware actual miss / calibration、exit timing targetを優先する。
