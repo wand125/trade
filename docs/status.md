@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 20:38 JST
+最終更新: 2026-06-28 20:45 JST
 
 ## 現在の状態
 
@@ -108,6 +108,8 @@ shared MLP代表4fold pilotを実施済み。exit timing targetは `R2 ~= 0.34` 
 
 HGB entry/side + MLP exit timing hybridを検証済み。validationではHGB holding baseのtop min pnl `78.4344` / sum `369.5736` に対し、MLP holding hybridは min pnl `81.5352` / sum `396.9782` へ小幅改善した。しかし2024-12固定testではhybrid top + MLP holdingでも adjusted pnl `-54.6032`、direction error `0.6327`、EV over realized `23.0714` でNoTradeに負けた。MLP exit timingは補助信号として残すが、標準policyへ昇格しない。詳細は `docs/reports/00063_2026-06-28_hgb_mlp_exit_hybrid.md`。
 
+group-loss / diagnostic reselectionを実施済み。soft penaltyはhybrid topを変えず、group gate60は validation eligible を11件まで絞ったが、2024-12固定testでは MLP holding `-97.6568`、HGB holding `-69.0240` と悪化した。posthocに `long:session_regime=ny_late` をblockすると2024-12は `-5.4938` まで縮むが、これは後付け診断であり採用証拠ではない。次は `long:ny_late` / `long:range_low_vol` をvalidation gridの事前候補として入れ、2024-12を見ずに再選定する。詳細は `docs/reports/00064_2026-06-28_group_loss_gate_posthoc_failure.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -143,7 +145,8 @@ HGB entry/side + MLP exit timing hybridを検証済み。validationではHGB hol
 12. 次はside/entry calibrationとprofit-barrier missの同時制御へ戻る。exit timingだけで負け月を救う方向には寄せすぎない。
 13. `oof-shared-mlp` の代表validation 4foldは完了。exit timing signalはあるが、EV/side予測が弱く、strict横断候補は0件だったため標準policyへ昇格しない。
 14. HGB entry/side + MLP exit timing hybridは、validationでは小幅改善したが2024-12でNoTradeに負けたため標準採用しない。
-15. 次はexit timingではなく、2024-12で崩れた `long:ny_late` と `range_low_vol` を直接扱うentry/side risk control、EV過大評価抑制、side classifier改善へ戻る。
+15. group-loss hard gate / soft penaltyは、2024-12の `long:ny_late` failureを事前に止められなかったため標準採用しない。
+16. 次はexit timingではなく、`long:ny_late` と `long:range_low_vol` のhard blockまたはextra marginをvalidation gridへ事前登録し、2024-12固定testの前に候補選定する。あわせてEV過大評価抑制、side classifier改善へ戻る。
 
 ## 未決定事項
 
@@ -154,6 +157,8 @@ HGB entry/side + MLP exit timing hybridを検証済み。validationではHGB hol
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-28 20:45 JST 更新: hybrid候補にgroup-loss / diagnostic reselectionをかけたが、soft penaltyはtopを変えず、group gate60 topは2024-12で MLP holding `-97.6568` / HGB holding `-69.0240` と悪化した。posthocの `long:ny_late` blockは `-5.4938` まで損失を縮めるが、後付けなので採用不可。次は `long:session_regime=ny_late` と `long:combined_regime=range_low_vol` をvalidation gridに入れて、2024-12を見る前に選ぶ。
 
 2026-06-28 20:38 JST 更新: HGB entry/side + MLP exit timing hybridを検証。validation strict selectionではhybrid topが base topを min pnl `78.4344` から `81.5352`、sum pnl `369.5736` から `396.9782` へ改善した。ただし2024-12固定testでは hybrid top + MLP holding が adjusted pnl `-54.6032` でNoTradeに届かず、direction error `0.6327` とEV過大評価 `23.0714` が残った。MLP exit timingは補助信号として残すが、本流はentry/side calibrationへ戻す。
 

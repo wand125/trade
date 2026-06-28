@@ -2950,3 +2950,46 @@ Artifacts:
 - 2024-12でも損失を縮めるが、NoTradeには届かない。
 - 主因はexit timingではなく、direction errorとEV過大評価。MLP exit timingだけでは壊れたentry/sideを救えない。
 - hybridは標準policyへ昇格しない。MLP exit timingは補助信号として残し、本流はentry/side risk controlとEV calibrationへ戻す。
+
+### 2026-06-28 20:45 JST Group Loss Gate And Posthoc Failure Analysis
+
+作業:
+
+- HGB entry/side + MLP exit timing hybridのvalidation sweepsに対して、group-loss / diagnostic penaltyで候補を再選定した。
+- `group_loss_penalty_weight=1.0`、group gate60、group gate50、diagnostic soft penaltyを比較した。
+- group gate60 topを2024-12へ固定適用し、HGB holding / MLP holdingを比較した。
+- 2024-12の失敗箇所を仮説化するため、posthoc限定で `long:ny_late` と `range_low_vol` blockを診断した。
+- report: `docs/reports/00064_2026-06-28_group_loss_gate_posthoc_failure.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- group soft selection: `data/reports/backtests/hgb_entry_mlp_exit_hybrid_selection_group_soft/20260628_114255_model_candidate_selection/`
+- group gate60 selection: `data/reports/backtests/hgb_entry_mlp_exit_hybrid_selection_group_gate60/20260628_114255_model_candidate_selection/`
+- group gate50 selection: `data/reports/backtests/hgb_entry_mlp_exit_hybrid_selection_group_gate50/20260628_114255_model_candidate_selection/`
+- diagnostic soft selection: `data/reports/backtests/hgb_entry_mlp_exit_hybrid_selection_diag_soft/20260628_114255_model_candidate_selection/`
+- group gate60 fixed test: `data/reports/backtests/hgb_entry_mlp_exit_group_gate_2024_12/`
+- posthoc block diagnostics: `data/reports/backtests/hgb_entry_mlp_exit_posthoc_blocks_2024_12/`
+
+結果:
+
+| item | value |
+|---|---:|
+| baseline eligible | `58` |
+| group soft eligible | `58` |
+| group gate60 eligible | `11` |
+| group gate50 eligible | `0` |
+| diagnostic soft eligible | `58` |
+| baseline / group soft top min pnl | `81.5352` |
+| group gate60 top min pnl | `23.1484` |
+| previous hybrid top 2024-12 MLP holding | `-54.6032` |
+| group gate60 top 2024-12 HGB holding | `-69.0240` |
+| group gate60 top 2024-12 MLP holding | `-97.6568` |
+| posthoc `long:ny_late` block 2024-12 | `-5.4938` |
+
+判断:
+
+- soft group-loss / diagnostic penaltyはtop候補を変えなかった。
+- group gate60はvalidation group lossを抑えたが、edgeを削り、2024-12固定testを悪化させた。
+- 2024-12の主な崩れは引き続き `long:ny_late`。ただしposthoc blockは後付けなので採用しない。
+- 次は `long:session_regime=ny_late` と `long:combined_regime=range_low_vol` をvalidation gridの候補軸として事前に入れ、2024-12を見ずに候補選定する。
