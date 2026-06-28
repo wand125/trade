@@ -2866,3 +2866,48 @@ Artifacts:
 - shared MLP blocked OOFの配線は動いた。
 - 2% sample、max_iter 2のsmokeなので性能採用には使わない。
 - 両月のexecutable pnlはプラスだが、取引数が多く、2024-07はshort signalが少ない。代表4fold本実験ではturnoverとside balanceを主要診断にする。
+
+### 2026-06-28 20:20 JST Shared MLP 4fold Pilot
+
+作業:
+
+- `oof-shared-mlp` を代表validation 4ヶ月 `2024-07,2024-09,2024-11,2025-01` で実行した。
+- `sample_frac=0.15`, `max_iter=40`, hidden layers `32,16`, `alpha=0.01`, `learning_rate_init=0.001`。
+- purge/embargoは `purge_label_overlap=true`, `embargo_hours=24`。
+- OOF予測を `timed_ev` fixed policyと4fold sweepへ接続した。
+- strict candidate selectionと、片側偏りだけを緩めたdiagnostic selectionを比較した。
+- report: `docs/reports/00062_2026-06-28_shared_mlp_4fold_pilot.md`
+- 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- OOF model: `experiments/20260628_111106_shared_mlp_oof_4fold_pilot/`
+- fixed backtests: `data/reports/backtests/shared_mlp_oof_4fold_pilot/`
+- sweeps: `data/reports/backtests/shared_mlp_oof_4fold_pilot_sweep/`
+- strict selection: `data/reports/backtests/shared_mlp_oof_4fold_pilot_selection/20260628_111815_model_candidate_selection/`
+- relaxed side diagnostic: `data/reports/backtests/shared_mlp_oof_4fold_pilot_selection_relaxed_side/20260628_111910_model_candidate_selection/`
+
+結果:
+
+| item | value |
+|---|---:|
+| OOF rows | `119241` |
+| folds | `4` |
+| fold n_iter | `40/40` all hit max_iter |
+| long best adjusted pnl R2 | `-0.003462` |
+| short best adjusted pnl R2 | `-0.164505` |
+| long exit event minutes R2 | `0.338873` |
+| short exit event minutes R2 | `0.345407` |
+| side score R2 | `-0.151357` |
+| OOF oracle side accuracy | `0.590860` |
+| fixed policy total adjusted pnl | `-1.8770` |
+| fixed policy worst month | `2024-11 -171.2478` |
+| strict selection eligible | `0` |
+| relaxed side selection eligible | `4` |
+
+判断:
+
+- shared MLPはexit timingには信号を持つが、entry EVとside scoreはまだ弱い。
+- fixed policyは高turnoverでコスト負けし、2024-11の崩れが大きい。
+- strict selectionでは採用候補なし。片側偏りを100%許容すれば候補は残るが、未知regimeへの頑健性としては採用不可。
+- shared MLPを標準policyへ昇格しない。次はexit timing専用化、entry/side calibration、HGB classifierとのhybrid、またはshared classifier追加を検証する。

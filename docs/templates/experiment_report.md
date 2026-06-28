@@ -4,6 +4,8 @@
 日時: YYYY-MM-DD HH:MM JST
 更新日時: YYYY-MM-DD HH:MM JST
 
+採番メモ: 通し番号、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、本文内の `日時` を参照する。
+
 ## Summary
 
 - Experiment ID:
