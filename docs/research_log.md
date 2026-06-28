@@ -4,6 +4,14 @@
 
 ## 2026-06-28 JST
 
+### 22:47 Support-aware lower EV calibration
+
+- `GroupEVCalibrationConfig.lower_z` と support-aware lower EV columnsを追加。`prior_strength > 0` では `target_std * sqrt(prior/(support+prior))` をmarginに使い、`pred_regime_calibrated_*_best_adjusted_pnl_lower` を出力する。
+- validation OOF上は lower EVで selected rowsが `107001` から `73694` に減り、selected avg adjusted pnlは `18.9940` から `19.5499`、side accuracyは `0.6066` から `0.6163` へ改善。
+- しかし executable validationでは `lower_z=0.5` が2024-11で崩れ、4fold min adjusted pnlは `-127.7796` / `-134.5254`。eligible fold countは2/4のみ。
+- fixed holdoutでは2025-02は `+135.2708` / `+106.2222` と強いが、2024-12は `-101.7542` / `-133.4082` で既存baselineより悪化。
+- 判断: support-aware lower EV columnsは残すが、std-margin lower EVは標準policyへ採用しない。次は一律lower boundではなく、side/regime別のcalibration residual targetやregime-conditioned side confidenceへ進む。
+
 ### 22:28 Multi-holdout audit
 
 - `model-holdout-audit` を追加。`model-policy` / `model-cost-sensitivity` artifactから候補keyを復元し、validation summaryとmergeして複数holdout月・cost caseを同時監査できるようにした。

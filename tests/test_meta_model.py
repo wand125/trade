@@ -229,6 +229,35 @@ class MetaModelTests(unittest.TestCase):
         side_mean = df["long_best_adjusted_pnl"].mean()
         self.assertTrue((output["pred_regime_calibrated_long_best_adjusted_pnl"] == side_mean).all())
 
+    def test_group_ev_calibration_adds_support_aware_lower_columns(self):
+        df = prediction_frame()
+        df["long_best_adjusted_pnl"] = [2.0, 4.0, 20.0]
+        df["pred_long_best_adjusted_pnl"] = [20.0, 22.0, 20.0]
+        config = GroupEVCalibrationConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            prediction_shrinkage=0.0,
+            lower_z=1.0,
+        )
+
+        calibrator = fit_group_ev_calibrator(df, config)
+        output = add_group_calibrated_ev_columns(df, calibrator)
+
+        self.assertIn("pred_regime_calibrated_long_best_adjusted_pnl_lower", output.columns)
+        self.assertEqual(
+            output["pred_regime_calibrated_long_best_adjusted_pnl_support"].tolist(),
+            [2, 2, 1],
+        )
+        self.assertEqual(
+            output["pred_regime_calibrated_long_best_adjusted_pnl_source"].tolist(),
+            ["group", "group", "group"],
+        )
+        self.assertAlmostEqual(
+            output["pred_regime_calibrated_long_best_adjusted_pnl_lower"].iloc[0],
+            3.0 - (1.0 / (2**0.5)),
+        )
+
     def test_fixed_horizon_group_calibration_adds_regime_adjusted_columns(self):
         df = prediction_frame()
         config = GroupEVCalibrationConfig(
@@ -244,6 +273,38 @@ class MetaModelTests(unittest.TestCase):
 
         self.assertEqual(output["pred_regime_calibrated_long_fixed_60m_adjusted_pnl"].tolist(), [2.0, 2.0, 9.0])
         self.assertEqual(output["pred_regime_calibrated_short_fixed_60m_adjusted_pnl"].tolist(), [6.0, 6.0, 2.0])
+
+    def test_fixed_horizon_group_calibration_adds_support_aware_lower_columns(self):
+        df = prediction_frame()
+        config = GroupEVCalibrationConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            prediction_shrinkage=0.0,
+            lower_z=1.0,
+        )
+        specs = fixed_horizon_target_specs((60,))
+
+        calibrator = fit_group_target_calibrator(df, config, specs)
+        output = add_group_calibrated_fixed_horizon_columns(df, calibrator)
+
+        self.assertIn("pred_regime_calibrated_long_fixed_60m_adjusted_pnl_lower", output.columns)
+        self.assertEqual(
+            output["pred_regime_calibrated_long_fixed_60m_adjusted_pnl_support"].tolist(),
+            [2, 2, 1],
+        )
+        self.assertEqual(
+            output["pred_regime_calibrated_long_fixed_60m_adjusted_pnl_source"].tolist(),
+            ["group", "group", "group"],
+        )
+        self.assertAlmostEqual(
+            output["pred_regime_calibrated_long_fixed_60m_adjusted_pnl_lower"].iloc[0],
+            2.0 - (1.0 / (2**0.5)),
+        )
+        self.assertAlmostEqual(
+            output["pred_regime_calibrated_short_fixed_60m_adjusted_pnl_lower"].iloc[0],
+            6.0 - (2.0 / (2**0.5)),
+        )
 
     def test_trade_quality_calibration_adds_side_quality_columns(self):
         predictions = add_trade_source_ev_columns(

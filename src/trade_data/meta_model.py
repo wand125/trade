@@ -108,6 +108,7 @@ class GroupEVCalibrationConfig:
     min_group_size: int
     prior_strength: float
     prediction_shrinkage: float
+    lower_z: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,8 @@ class GroupEVStats:
     n: int
     pred_mean: float
     target_mean: float
+    target_std: float = 0.0
+    target_standard_error: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -381,6 +384,30 @@ def group_key_series(df: pd.DataFrame, group_columns: tuple[str, ...]) -> pd.Ser
     return df.loc[:, list(group_columns)].astype("string").fillna("__missing__").apply(tuple, axis=1)
 
 
+def target_std(values: pd.Series) -> float:
+    numeric = values.astype(float).replace([np.inf, -np.inf], np.nan).dropna()
+    if len(numeric) < 2:
+        return 0.0
+    return float(numeric.std(ddof=0))
+
+
+def target_standard_error(values: pd.Series) -> float:
+    numeric = values.astype(float).replace([np.inf, -np.inf], np.nan).dropna()
+    if len(numeric) < 2:
+        return 0.0
+    return float(numeric.std(ddof=0) / (len(numeric) ** 0.5))
+
+
+def support_aware_lower_margin(stats: pd.DataFrame, config: GroupEVCalibrationConfig) -> pd.Series:
+    if config.lower_z <= 0:
+        return pd.Series(0.0, index=stats.index, dtype="float64")
+    if config.prior_strength > 0:
+        support = pd.to_numeric(stats["support"], errors="coerce").fillna(0.0).clip(lower=0.0)
+        support_factor = (config.prior_strength / (support + config.prior_strength)).pow(0.5)
+        return config.lower_z * pd.to_numeric(stats["target_std"], errors="coerce").fillna(0.0) * support_factor
+    return config.lower_z * pd.to_numeric(stats["target_standard_error"], errors="coerce").fillna(0.0)
+
+
 def fit_group_ev_calibrator(
     predictions: pd.DataFrame,
     config: GroupEVCalibrationConfig,
@@ -391,6 +418,8 @@ def fit_group_ev_calibrator(
         raise ValueError("prior_strength must be non-negative")
     if not 0.0 <= config.prediction_shrinkage <= 1.0:
         raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if config.lower_z < 0:
+        raise ValueError("lower_z must be non-negative")
     missing_group_columns = sorted(set(config.group_columns) - set(predictions.columns))
     if missing_group_columns:
         raise ValueError(f"predictions missing group columns: {', '.join(missing_group_columns)}")
@@ -412,6 +441,8 @@ def fit_group_ev_calibrator(
             n=int(len(frame)),
             pred_mean=float(frame["pred"].mean()),
             target_mean=float(frame["target"].mean()),
+            target_std=target_std(frame["target"]),
+            target_standard_error=target_standard_error(frame["target"]),
         )
         side_stats[side_name] = side_stat
         group_stats[side_name] = {}
@@ -429,8 +460,43 @@ def fit_group_ev_calibrator(
                 target_mean=float(
                     weight * group["target"].mean() + (1.0 - weight) * side_stat.target_mean
                 ),
+                target_std=target_std(group["target"]),
+                target_standard_error=target_standard_error(group["target"]),
             )
     return GroupEVCalibrator(config=config, side_stats=side_stats, group_stats=group_stats)
+
+
+def group_ev_stats_frame(
+    predictions: pd.DataFrame,
+    side_name: str,
+    calibrator: GroupEVCalibrator,
+    index: pd.Index | None = None,
+) -> pd.DataFrame:
+    index = predictions.index if index is None else index
+    side_stat = calibrator.side_stats[side_name]
+    stats = pd.DataFrame(
+        {
+            "pred_mean": side_stat.pred_mean,
+            "target_mean": side_stat.target_mean,
+            "support": side_stat.n,
+            "target_std": side_stat.target_std,
+            "target_standard_error": side_stat.target_standard_error,
+            "source": "side",
+        },
+        index=index,
+    ).reset_index(drop=True)
+    if calibrator.config.group_columns:
+        keys = group_key_series(predictions, calibrator.config.group_columns).reset_index(drop=True)
+        for key, group_stat in calibrator.group_stats[side_name].items():
+            mask = keys == key
+            if mask.any():
+                stats.loc[mask, "pred_mean"] = group_stat.pred_mean
+                stats.loc[mask, "target_mean"] = group_stat.target_mean
+                stats.loc[mask, "support"] = group_stat.n
+                stats.loc[mask, "target_std"] = group_stat.target_std
+                stats.loc[mask, "target_standard_error"] = group_stat.target_standard_error
+                stats.loc[mask, "source"] = "group"
+    return stats
 
 
 def calibrated_group_ev_values(
@@ -440,20 +506,7 @@ def calibrated_group_ev_values(
 ) -> pd.Series:
     spec = SIDE_COLUMNS[side_name]
     raw = predictions[spec["ev"]].astype(float).reset_index(drop=True)
-    stats = pd.DataFrame(
-        {
-            "pred_mean": calibrator.side_stats[side_name].pred_mean,
-            "target_mean": calibrator.side_stats[side_name].target_mean,
-        },
-        index=predictions.index,
-    ).reset_index(drop=True)
-    if calibrator.config.group_columns:
-        keys = group_key_series(predictions, calibrator.config.group_columns).reset_index(drop=True)
-        for key, group_stat in calibrator.group_stats[side_name].items():
-            mask = keys == key
-            if mask.any():
-                stats.loc[mask, "pred_mean"] = group_stat.pred_mean
-                stats.loc[mask, "target_mean"] = group_stat.target_mean
+    stats = group_ev_stats_frame(predictions, side_name, calibrator)
     values = stats["target_mean"] + calibrator.config.prediction_shrinkage * (raw - stats["pred_mean"])
     return pd.Series(values.to_numpy(), index=predictions.index)
 
@@ -463,16 +516,32 @@ def add_group_calibrated_ev_columns(
     calibrator: GroupEVCalibrator,
 ) -> pd.DataFrame:
     output = predictions.copy()
-    output["pred_regime_calibrated_long_best_adjusted_pnl"] = calibrated_group_ev_values(
-        predictions,
-        "long",
-        calibrator,
-    )
-    output["pred_regime_calibrated_short_best_adjusted_pnl"] = calibrated_group_ev_values(
-        predictions,
-        "short",
-        calibrator,
-    )
+    for side_name in ("long", "short"):
+        spec = SIDE_COLUMNS[side_name]
+        output_column = f"pred_regime_calibrated_{side_name}_best_adjusted_pnl"
+        raw = predictions[spec["ev"]].astype(float).reset_index(drop=True)
+        stats = group_ev_stats_frame(predictions, side_name, calibrator)
+        calibrated = (
+            stats["target_mean"] + calibrator.config.prediction_shrinkage * (raw - stats["pred_mean"])
+        )
+        lower_margin = support_aware_lower_margin(stats, calibrator.config)
+        output[output_column] = pd.Series(calibrated.to_numpy(), index=predictions.index)
+        output[f"{output_column}_lower"] = pd.Series(
+            (calibrated - lower_margin).to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{output_column}_support"] = pd.Series(
+            stats["support"].to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{output_column}_lower_margin"] = pd.Series(
+            lower_margin.to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{output_column}_source"] = pd.Series(
+            stats["source"].to_numpy(),
+            index=predictions.index,
+        )
     return output
 
 
@@ -489,6 +558,8 @@ def fit_group_target_calibrator(
         raise ValueError("prior_strength must be non-negative")
     if not 0.0 <= config.prediction_shrinkage <= 1.0:
         raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if config.lower_z < 0:
+        raise ValueError("lower_z must be non-negative")
 
     required_columns = set(config.group_columns)
     for spec in specs:
@@ -515,6 +586,8 @@ def fit_group_target_calibrator(
             n=int(len(frame)),
             pred_mean=float(frame["pred"].mean()),
             target_mean=float(frame["target"].mean()),
+            target_std=target_std(frame["target"]),
+            target_standard_error=target_standard_error(frame["target"]),
         )
         target_stats[spec.name] = global_stat
         group_stats[spec.name] = {}
@@ -532,6 +605,8 @@ def fit_group_target_calibrator(
                 target_mean=float(
                     weight * group["target"].mean() + (1.0 - weight) * global_stat.target_mean
                 ),
+                target_std=target_std(group["target"]),
+                target_standard_error=target_standard_error(group["target"]),
             )
     return GroupTargetCalibrator(
         config=config,
@@ -541,16 +616,20 @@ def fit_group_target_calibrator(
     )
 
 
-def calibrated_group_target_values(
+def group_target_stats_frame(
     predictions: pd.DataFrame,
     spec: GroupTargetSpec,
     calibrator: GroupTargetCalibrator,
-) -> pd.Series:
-    raw = predictions[spec.prediction_column].astype(float).reset_index(drop=True)
+) -> pd.DataFrame:
+    global_stat = calibrator.target_stats[spec.name]
     stats = pd.DataFrame(
         {
-            "pred_mean": calibrator.target_stats[spec.name].pred_mean,
-            "target_mean": calibrator.target_stats[spec.name].target_mean,
+            "pred_mean": global_stat.pred_mean,
+            "target_mean": global_stat.target_mean,
+            "support": global_stat.n,
+            "target_std": global_stat.target_std,
+            "target_standard_error": global_stat.target_standard_error,
+            "source": "target",
         },
         index=predictions.index,
     ).reset_index(drop=True)
@@ -561,6 +640,20 @@ def calibrated_group_target_values(
             if mask.any():
                 stats.loc[mask, "pred_mean"] = group_stat.pred_mean
                 stats.loc[mask, "target_mean"] = group_stat.target_mean
+                stats.loc[mask, "support"] = group_stat.n
+                stats.loc[mask, "target_std"] = group_stat.target_std
+                stats.loc[mask, "target_standard_error"] = group_stat.target_standard_error
+                stats.loc[mask, "source"] = "group"
+    return stats
+
+
+def calibrated_group_target_values(
+    predictions: pd.DataFrame,
+    spec: GroupTargetSpec,
+    calibrator: GroupTargetCalibrator,
+) -> pd.Series:
+    raw = predictions[spec.prediction_column].astype(float).reset_index(drop=True)
+    stats = group_target_stats_frame(predictions, spec, calibrator)
     values = stats["target_mean"] + calibrator.config.prediction_shrinkage * (raw - stats["pred_mean"])
     return pd.Series(values.to_numpy(), index=predictions.index)
 
@@ -571,7 +664,29 @@ def add_group_calibrated_target_columns(
 ) -> pd.DataFrame:
     output = predictions.copy()
     for spec in calibrator.specs:
-        output[spec.output_column] = calibrated_group_target_values(predictions, spec, calibrator)
+        raw = predictions[spec.prediction_column].astype(float).reset_index(drop=True)
+        stats = group_target_stats_frame(predictions, spec, calibrator)
+        calibrated = (
+            stats["target_mean"] + calibrator.config.prediction_shrinkage * (raw - stats["pred_mean"])
+        )
+        lower_margin = support_aware_lower_margin(stats, calibrator.config)
+        output[spec.output_column] = pd.Series(calibrated.to_numpy(), index=predictions.index)
+        output[f"{spec.output_column}_lower"] = pd.Series(
+            (calibrated - lower_margin).to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{spec.output_column}_support"] = pd.Series(
+            stats["support"].to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{spec.output_column}_lower_margin"] = pd.Series(
+            lower_margin.to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{spec.output_column}_source"] = pd.Series(
+            stats["source"].to_numpy(),
+            index=predictions.index,
+        )
     return output
 
 
@@ -592,6 +707,8 @@ def fit_trade_quality_calibrator(
         raise ValueError("prior_strength must be non-negative")
     if not 0.0 <= config.prediction_shrinkage <= 1.0:
         raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if config.lower_z < 0:
+        raise ValueError("lower_z must be non-negative")
 
     required_columns = {
         "direction",
@@ -615,6 +732,8 @@ def fit_trade_quality_calibrator(
         n=int(len(working)),
         pred_mean=float(working["pred"].mean()),
         target_mean=float(working["target"].mean()),
+        target_std=target_std(working["target"]),
+        target_standard_error=target_standard_error(working["target"]),
     )
     keys = group_key_series(working, config.group_columns)
     side_stats: dict[str, GroupEVStats] = {}
@@ -628,6 +747,8 @@ def fit_trade_quality_calibrator(
             n=int(len(side_frame)),
             pred_mean=float(side_frame["pred"].mean()),
             target_mean=float(side_frame["target"].mean()),
+            target_std=target_std(side_frame["target"]),
+            target_standard_error=target_standard_error(side_frame["target"]),
         )
         side_keys = keys.loc[side_frame.index]
         side_working = side_frame.assign(_key=side_keys)
@@ -646,6 +767,8 @@ def fit_trade_quality_calibrator(
                 target_mean=float(
                     weight * group["target"].mean() + (1.0 - weight) * side_stat.target_mean
                 ),
+                target_std=target_std(group["target"]),
+                target_standard_error=target_standard_error(group["target"]),
             )
     return TradeQualityCalibrator(
         config=config,
@@ -1195,7 +1318,7 @@ def split_meta_metrics(df: pd.DataFrame, entry_threshold: float) -> dict[str, ob
 
 
 def split_group_calibration_metrics(df: pd.DataFrame, entry_threshold: float) -> dict[str, object]:
-    return {
+    metrics: dict[str, object] = {
         "long": regression_metrics(
             df["long_best_adjusted_pnl"],
             df["pred_regime_calibrated_long_best_adjusted_pnl"].to_numpy(),
@@ -1211,6 +1334,41 @@ def split_group_calibration_metrics(df: pd.DataFrame, entry_threshold: float) ->
             short_column="pred_regime_calibrated_short_best_adjusted_pnl",
         ),
     }
+    if (
+        "pred_regime_calibrated_long_best_adjusted_pnl_lower" in df.columns
+        and "pred_regime_calibrated_short_best_adjusted_pnl_lower" in df.columns
+    ):
+        long_lower_error = (
+            df["pred_regime_calibrated_long_best_adjusted_pnl_lower"].astype(float)
+            - df["long_best_adjusted_pnl"].astype(float)
+        )
+        short_lower_error = (
+            df["pred_regime_calibrated_short_best_adjusted_pnl_lower"].astype(float)
+            - df["short_best_adjusted_pnl"].astype(float)
+        )
+        metrics["long_lower"] = regression_metrics(
+            df["long_best_adjusted_pnl"],
+            df["pred_regime_calibrated_long_best_adjusted_pnl_lower"].to_numpy(),
+        )
+        metrics["short_lower"] = regression_metrics(
+            df["short_best_adjusted_pnl"],
+            df["pred_regime_calibrated_short_best_adjusted_pnl_lower"].to_numpy(),
+        )
+        metrics["lower_selection"] = selection_metrics(
+            df,
+            threshold=entry_threshold,
+            long_column="pred_regime_calibrated_long_best_adjusted_pnl_lower",
+            short_column="pred_regime_calibrated_short_best_adjusted_pnl_lower",
+        )
+        metrics["lower_bias"] = {
+            "long": float(long_lower_error.mean()),
+            "short": float(short_lower_error.mean()),
+        }
+        metrics["lower_overestimate_mean"] = {
+            "long": float(long_lower_error.clip(lower=0).mean()),
+            "short": float(short_lower_error.clip(lower=0).mean()),
+        }
+    return metrics
 
 
 def split_group_target_calibration_metrics(
@@ -1238,6 +1396,16 @@ def split_group_target_calibration_metrics(
             "calibrated_bias": float(calibrated_error.mean()),
             "bias_reduction": float(abs(pred_error.mean()) - abs(calibrated_error.mean())),
         }
+        lower_column = f"{spec.output_column}_lower"
+        if lower_column in df.columns:
+            lower_error = df[lower_column].astype(float) - df[spec.target_column].astype(float)
+            metrics["lower"] = regression_metrics(
+                df[spec.target_column],
+                df[lower_column].to_numpy(),
+            )
+            metrics["lower_bias"] = float(lower_error.mean())
+            metrics["lower_overestimate_mean"] = float(lower_error.clip(lower=0).mean())
+            metrics["lower_margin_mean"] = float(df[f"{spec.output_column}_lower_margin"].mean())
         per_target[spec.name] = metrics
         all_targets.append(df[spec.target_column].astype(float))
         all_predictions.append(df[spec.output_column].astype(float).to_numpy())
@@ -1338,6 +1506,7 @@ def fit_group_calibration(args: argparse.Namespace) -> int:
         min_group_size=args.min_group_size,
         prior_strength=args.prior_strength,
         prediction_shrinkage=args.prediction_shrinkage,
+        lower_z=args.lower_z,
     )
     validate_group_columns(fit_predictions, apply_predictions, config.group_columns)
     calibrator = fit_group_ev_calibrator(fit_predictions, config)
@@ -1403,6 +1572,7 @@ def oof_group_calibration(args: argparse.Namespace) -> int:
         min_group_size=args.min_group_size,
         prior_strength=args.prior_strength,
         prediction_shrinkage=args.prediction_shrinkage,
+        lower_z=args.lower_z,
     )
     validate_group_columns(validation_predictions, test_predictions, config.group_columns)
     if base_fit_predictions is not None:
@@ -1519,6 +1689,7 @@ def oof_fixed_horizon_calibration(args: argparse.Namespace) -> int:
         min_group_size=args.min_group_size,
         prior_strength=args.prior_strength,
         prediction_shrinkage=args.prediction_shrinkage,
+        lower_z=args.lower_z,
     )
     if base_fit_predictions is not None:
         validate_group_columns(base_fit_predictions, validation_predictions, config.group_columns)
@@ -1670,6 +1841,7 @@ def oof_trade_quality_calibration(args: argparse.Namespace) -> int:
         min_group_size=args.min_group_size,
         prior_strength=args.prior_strength,
         prediction_shrinkage=args.prediction_shrinkage,
+        lower_z=args.lower_z,
     )
     validate_group_columns(validation_predictions, validation_predictions, config.group_columns)
     if apply_predictions is not None:
@@ -2015,6 +2187,15 @@ def build_parser() -> argparse.ArgumentParser:
         group_parser.add_argument("--min-group-size", type=int, default=500)
         group_parser.add_argument("--prior-strength", type=float, default=2000.0)
         group_parser.add_argument("--prediction-shrinkage", type=float, default=0.65)
+        group_parser.add_argument(
+            "--lower-z",
+            type=float,
+            default=0.0,
+            help=(
+                "non-negative margin weight for support-aware lower EV columns; with prior_strength > 0 "
+                "the margin uses target std scaled by sqrt(prior/(support+prior))"
+            ),
+        )
         group_parser.add_argument("--entry-threshold", type=float, default=15.0)
         group_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
         group_parser.add_argument("--label", default=default_label)
