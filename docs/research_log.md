@@ -2420,3 +2420,45 @@ Artifacts:
 - ただし short側と `>=0.5` 高信頼bucketは過大評価しており、profit-barrier確率を単純なhard gateとして採用するのは危険。
 - global calibration補正も危険。全体平均は過小評価だが、side/bucketごとに符号が違う。
 - 次は side別・bucket別・support-aware なOOF calibrationを作り、raw probabilityではなくsmoothed actual hit rate / uncertainty / supportを候補選定へ入れる。
+
+### 2026-06-28 17:56 JST Profit Barrier Bucket Calibration
+
+作業:
+
+- `trade_data.modeling profit-barrier-calibrate` を追加した。
+- side別・probability bucket別の実測profit-barrier hit rateをLaplace smoothingし、calibrated probability列をprediction parquetへ追加できるようにした。
+- `min_bucket_rows` 未満のbucketはside全体へfallbackする。
+- `calibrated_prob_lower`, support, source, bucket列も保存する。
+- `--oof-column dataset_month` を追加し、月別holdoutでfitから抜いた月へ校正を当てる診断を可能にした。
+- report: `docs/reports/00050_2026-06-28_profit_barrier_bucket_calibration.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- `data/reports/modeling/20260628_085552_profit_barrier_oof_month_bucket_calibration_smoke_v2/`
+- calibrated predictions: `data/reports/modeling/20260628_085552_profit_barrier_oof_month_bucket_calibration_smoke_v2/predictions_profit_barrier_calibrated.parquet`
+- OOF calibration table: `data/reports/modeling/20260628_085552_profit_barrier_oof_month_bucket_calibration_smoke_v2/oof_calibration_table.csv`
+
+結果:
+
+| probability | actual hit | predicted mean | calibration error | Brier | threshold accuracy |
+|---|---:|---:|---:|---:|---:|
+| raw | `0.3734` | `0.3295` | `-0.0439` | `0.2272` | `0.6166` |
+| calibrated | `0.3734` | `0.3707` | `-0.0027` | `0.2250` | `0.6129` |
+| conservative lower | `0.3734` | `0.3684` | `-0.0050` | `0.2251` | `0.6129` |
+
+threshold subset:
+
+| signal | side | rows | actual hit | predicted mean | error |
+|---|---|---:|---:|---:|---:|
+| raw `>=0.4` | short | `11165` | `0.3376` | `0.4545` | `0.1169` |
+| calibrated `>=0.4` | long | `115742` | `0.4859` | `0.4808` | `-0.0051` |
+| calibrated `>=0.5` | long | `43362` | `0.4106` | `0.5234` | `0.1128` |
+| lower `>=0.5` | long | `43362` | `0.4106` | `0.5208` | `0.1102` |
+
+判断:
+
+- 月別OOFでもglobalにはBrierとbiasが改善した。
+- ただし校正後 `>=0.5` はlong偏重になり、強い過大評価が残る。
+- 月×sideでは 2024-11 long `+0.1378`、2024-11 short `-0.1228`、2025-01 long `-0.0974` と不安定。
+- 校正列は採用するが、policy hard gateへ直結しない。次は raw / calibrated / lower を同一validation条件で `model-policy` に渡して比較する。

@@ -207,6 +207,22 @@ class LinearCalibrator:
     intercept: float
 
 
+@dataclass(frozen=True)
+class ProfitBarrierBucketCalibrator:
+    bucket_count: int
+    min_probability: float
+    alpha: float
+    min_bucket_rows: int
+    lower_z: float
+    long_actual_column: str
+    short_actual_column: str
+    long_probability_column: str
+    short_probability_column: str
+    calibration_rows: list[dict[str, object]]
+    side_rows: list[dict[str, object]]
+    overall_row: dict[str, object]
+
+
 def dataset_path(dataset_dir: Path, month: str, horizon_hours: float, edge: float) -> Path:
     return dataset_dir / f"{output_stem(month, horizon_hours, edge)}.parquet"
 
@@ -1014,6 +1030,244 @@ def profit_barrier_bucket_metrics(
     return pd.DataFrame(rows)
 
 
+def profit_barrier_bucket_edges(bucket_count: int, min_probability: float) -> np.ndarray:
+    if bucket_count <= 0:
+        raise ValueError("bucket_count must be positive")
+    if not 0 <= min_probability < 1:
+        raise ValueError("min_probability must be in [0, 1)")
+    return np.linspace(min_probability, 1.0, bucket_count + 1)
+
+
+def profit_barrier_bucket_indexes(probabilities: pd.Series, edges: np.ndarray) -> np.ndarray:
+    bucket_indexes = np.searchsorted(edges, probabilities.astype(float).clip(0.0, 1.0), side="right") - 1
+    return np.clip(bucket_indexes, 0, len(edges) - 2)
+
+
+def smoothed_probability_row(
+    actual: pd.Series,
+    probability: pd.Series,
+    alpha: float,
+    lower_z: float,
+) -> dict[str, object]:
+    if alpha < 0:
+        raise ValueError("alpha must be non-negative")
+    if lower_z < 0:
+        raise ValueError("lower_z must be non-negative")
+    count = int(len(actual))
+    hit_count = float(actual.astype(float).sum())
+    denominator = count + 2.0 * alpha
+    smoothed = float((hit_count + alpha) / denominator) if denominator > 0 else 0.5
+    standard_error = float((smoothed * (1.0 - smoothed) / max(denominator, 1.0)) ** 0.5)
+    return {
+        "count": count,
+        "hit_count": hit_count,
+        "actual_hit_rate": float(actual.astype(float).mean()) if count else 0.0,
+        "predicted_probability_mean": float(probability.astype(float).mean()) if count else 0.0,
+        "calibrated_probability": smoothed,
+        "calibrated_probability_lower": float(max(0.0, smoothed - lower_z * standard_error)),
+        "calibration_standard_error": standard_error,
+    }
+
+
+def fit_profit_barrier_bucket_calibrator(
+    predictions: pd.DataFrame,
+    bucket_count: int = 5,
+    min_probability: float = 0.0,
+    alpha: float = 1.0,
+    min_bucket_rows: int = 100,
+    lower_z: float = 1.0,
+    long_actual_column: str = "long_profit_barrier_hit",
+    short_actual_column: str = "short_profit_barrier_hit",
+    long_probability_column: str = "pred_long_profit_barrier_hit_prob_1",
+    short_probability_column: str = "pred_short_profit_barrier_hit_prob_1",
+) -> ProfitBarrierBucketCalibrator:
+    if min_bucket_rows < 0:
+        raise ValueError("min_bucket_rows must be non-negative")
+    edges = profit_barrier_bucket_edges(bucket_count, min_probability)
+    frame = profit_barrier_frame(
+        predictions,
+        long_actual_column=long_actual_column,
+        short_actual_column=short_actual_column,
+        long_probability_column=long_probability_column,
+        short_probability_column=short_probability_column,
+    )
+    frame = frame.copy()
+    frame["probability_bucket_index"] = profit_barrier_bucket_indexes(
+        frame["profit_barrier_probability"],
+        edges,
+    )
+
+    overall_row = smoothed_probability_row(
+        frame["profit_barrier_actual"],
+        frame["profit_barrier_probability"],
+        alpha=alpha,
+        lower_z=lower_z,
+    )
+    overall_row.update({"barrier_side": "all", "source": "overall"})
+
+    side_rows: list[dict[str, object]] = []
+    for side, side_frame in frame.groupby("barrier_side", dropna=False, sort=True):
+        row = smoothed_probability_row(
+            side_frame["profit_barrier_actual"],
+            side_frame["profit_barrier_probability"],
+            alpha=alpha,
+            lower_z=lower_z,
+        )
+        row.update({"barrier_side": str(side), "source": "side"})
+        side_rows.append(row)
+    side_by_name = {str(row["barrier_side"]): row for row in side_rows}
+
+    calibration_rows: list[dict[str, object]] = []
+    for side in ["long", "short"]:
+        side_frame = frame.loc[frame["barrier_side"] == side]
+        fallback_row = side_by_name.get(side, overall_row)
+        for bucket_index in range(bucket_count):
+            lower = float(edges[bucket_index])
+            upper = float(edges[bucket_index + 1])
+            bucket_frame = side_frame.loc[side_frame["probability_bucket_index"] == bucket_index]
+            bucket_row = smoothed_probability_row(
+                bucket_frame["profit_barrier_actual"],
+                bucket_frame["profit_barrier_probability"],
+                alpha=alpha,
+                lower_z=lower_z,
+            )
+            use_bucket = int(bucket_row["count"]) >= min_bucket_rows
+            source_row = bucket_row if use_bucket else fallback_row
+            source = "bucket" if use_bucket else "side_fallback"
+            if source_row is overall_row:
+                source = "overall_fallback"
+            calibration_rows.append(
+                {
+                    "barrier_side": side,
+                    "bucket_index": bucket_index,
+                    "bucket_lower": lower,
+                    "bucket_upper": upper,
+                    "bucket_label": f"{lower:.2f}-{upper:.2f}",
+                    "source": source,
+                    "count": int(bucket_row["count"]),
+                    "hit_count": float(bucket_row["hit_count"]),
+                    "actual_hit_rate": float(bucket_row["actual_hit_rate"]),
+                    "predicted_probability_mean": float(bucket_row["predicted_probability_mean"]),
+                    "calibrated_probability": float(source_row["calibrated_probability"]),
+                    "calibrated_probability_lower": float(source_row["calibrated_probability_lower"]),
+                    "calibration_standard_error": float(source_row["calibration_standard_error"]),
+                    "support_count": int(source_row["count"]),
+                }
+            )
+
+    return ProfitBarrierBucketCalibrator(
+        bucket_count=bucket_count,
+        min_probability=min_probability,
+        alpha=alpha,
+        min_bucket_rows=min_bucket_rows,
+        lower_z=lower_z,
+        long_actual_column=long_actual_column,
+        short_actual_column=short_actual_column,
+        long_probability_column=long_probability_column,
+        short_probability_column=short_probability_column,
+        calibration_rows=calibration_rows,
+        side_rows=side_rows,
+        overall_row=overall_row,
+    )
+
+
+def add_profit_barrier_calibrated_columns(
+    predictions: pd.DataFrame,
+    calibrator: ProfitBarrierBucketCalibrator,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    edges = profit_barrier_bucket_edges(calibrator.bucket_count, calibrator.min_probability)
+    row_by_key = {
+        (str(row["barrier_side"]), int(row["bucket_index"])): row
+        for row in calibrator.calibration_rows
+    }
+    for side, probability_column in [
+        ("long", calibrator.long_probability_column),
+        ("short", calibrator.short_probability_column),
+    ]:
+        if probability_column not in output.columns:
+            raise ValueError(f"missing probability column: {probability_column}")
+        bucket_indexes = profit_barrier_bucket_indexes(output[probability_column], edges)
+        calibrated: list[float] = []
+        conservative: list[float] = []
+        support: list[int] = []
+        source: list[str] = []
+        bucket_label: list[str] = []
+        for bucket_index in bucket_indexes:
+            row = row_by_key[(side, int(bucket_index))]
+            calibrated.append(float(row["calibrated_probability"]))
+            conservative.append(float(row["calibrated_probability_lower"]))
+            support.append(int(row["support_count"]))
+            source.append(str(row["source"]))
+            bucket_label.append(str(row["bucket_label"]))
+        output[f"pred_{side}_profit_barrier_hit_calibrated_prob"] = calibrated
+        output[f"pred_{side}_profit_barrier_hit_calibrated_prob_lower"] = conservative
+        output[f"pred_{side}_profit_barrier_hit_calibration_support"] = support
+        output[f"pred_{side}_profit_barrier_hit_calibration_source"] = source
+        output[f"pred_{side}_profit_barrier_hit_calibration_bucket"] = bucket_label
+    return output
+
+
+def oof_profit_barrier_calibrated_predictions(
+    predictions: pd.DataFrame,
+    oof_column: str,
+    bucket_count: int = 5,
+    min_probability: float = 0.0,
+    alpha: float = 1.0,
+    min_bucket_rows: int = 100,
+    lower_z: float = 1.0,
+    long_actual_column: str = "long_profit_barrier_hit",
+    short_actual_column: str = "short_profit_barrier_hit",
+    long_probability_column: str = "pred_long_profit_barrier_hit_prob_1",
+    short_probability_column: str = "pred_short_profit_barrier_hit_prob_1",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if oof_column not in predictions.columns:
+        raise ValueError(f"missing OOF column: {oof_column}")
+    fold_values = sorted(predictions[oof_column].dropna().astype(str).unique())
+    if len(fold_values) < 2:
+        raise ValueError("at least two OOF folds are required")
+    outputs: list[pd.DataFrame] = []
+    calibration_rows: list[dict[str, object]] = []
+    ordered = predictions.copy()
+    ordered["_profit_barrier_original_order"] = np.arange(len(ordered))
+    fold_keys = ordered[oof_column].astype(str)
+    for fold_value in fold_values:
+        holdout_mask = fold_keys == fold_value
+        fit_predictions = ordered.loc[~holdout_mask].drop(columns=["_profit_barrier_original_order"])
+        holdout_predictions = ordered.loc[holdout_mask].drop(columns=["_profit_barrier_original_order"])
+        if fit_predictions.empty or holdout_predictions.empty:
+            continue
+        calibrator = fit_profit_barrier_bucket_calibrator(
+            fit_predictions,
+            bucket_count=bucket_count,
+            min_probability=min_probability,
+            alpha=alpha,
+            min_bucket_rows=min_bucket_rows,
+            lower_z=lower_z,
+            long_actual_column=long_actual_column,
+            short_actual_column=short_actual_column,
+            long_probability_column=long_probability_column,
+            short_probability_column=short_probability_column,
+        )
+        holdout_output = add_profit_barrier_calibrated_columns(holdout_predictions, calibrator)
+        holdout_output["_profit_barrier_original_order"] = ordered.loc[holdout_mask, "_profit_barrier_original_order"]
+        holdout_output["profit_barrier_calibration_oof_column"] = oof_column
+        holdout_output["profit_barrier_calibration_oof_fold"] = fold_value
+        outputs.append(holdout_output)
+        for row in calibrator.calibration_rows:
+            row_output = dict(row)
+            row_output["oof_column"] = oof_column
+            row_output["oof_fold"] = fold_value
+            row_output["fit_rows"] = int(len(fit_predictions))
+            row_output["holdout_rows"] = int(len(holdout_predictions))
+            calibration_rows.append(row_output)
+    if not outputs:
+        raise ValueError("OOF calibration produced no holdout predictions")
+    output = pd.concat(outputs, ignore_index=True)
+    output = output.sort_values("_profit_barrier_original_order").drop(columns=["_profit_barrier_original_order"])
+    return output.reset_index(drop=True), pd.DataFrame(calibration_rows)
+
+
 def load_report_predictions(paths: list[Path]) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
     for path in paths:
@@ -1120,6 +1374,164 @@ def handle_profit_barrier_report(args: argparse.Namespace) -> int:
     with (output_dir / "summary.json").open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, ensure_ascii=False, indent=2)
     print(json.dumps(summary["overall"], ensure_ascii=False, indent=2))
+    print(f"artifacts: {output_dir}")
+    return 0
+
+
+def handle_profit_barrier_calibrate(args: argparse.Namespace) -> int:
+    fit_predictions = load_report_predictions(args.fit_predictions)
+    apply_paths = args.apply_predictions or args.fit_predictions
+    if args.oof_column and args.apply_predictions:
+        raise ValueError("--apply-predictions cannot be used with --oof-column")
+    apply_predictions = fit_predictions if args.oof_column else load_report_predictions(apply_paths)
+    calibrator = fit_profit_barrier_bucket_calibrator(
+        fit_predictions,
+        bucket_count=args.bucket_count,
+        min_probability=args.min_probability,
+        alpha=args.alpha,
+        min_bucket_rows=args.min_bucket_rows,
+        lower_z=args.lower_z,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column=args.long_probability_column,
+        short_probability_column=args.short_probability_column,
+    )
+    oof_calibration_rows = pd.DataFrame()
+    if args.oof_column:
+        calibrated_predictions, oof_calibration_rows = oof_profit_barrier_calibrated_predictions(
+            fit_predictions,
+            args.oof_column,
+            bucket_count=args.bucket_count,
+            min_probability=args.min_probability,
+            alpha=args.alpha,
+            min_bucket_rows=args.min_bucket_rows,
+            lower_z=args.lower_z,
+            long_actual_column=args.long_actual_column,
+            short_actual_column=args.short_actual_column,
+            long_probability_column=args.long_probability_column,
+            short_probability_column=args.short_probability_column,
+        )
+    else:
+        calibrated_predictions = add_profit_barrier_calibrated_columns(apply_predictions, calibrator)
+    group_columns = parse_csv_strings(args.group_columns)
+    raw_group_metrics = profit_barrier_group_metrics(
+        apply_predictions,
+        group_columns,
+        min_rows=args.min_group_rows,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column=args.long_probability_column,
+        short_probability_column=args.short_probability_column,
+    )
+    calibrated_group_metrics = profit_barrier_group_metrics(
+        calibrated_predictions,
+        group_columns,
+        min_rows=args.min_group_rows,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column="pred_long_profit_barrier_hit_calibrated_prob",
+        short_probability_column="pred_short_profit_barrier_hit_calibrated_prob",
+    )
+    raw_bucket_metrics = profit_barrier_bucket_metrics(
+        apply_predictions,
+        bucket_count=args.bucket_count,
+        min_probability=args.min_probability,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column=args.long_probability_column,
+        short_probability_column=args.short_probability_column,
+    )
+    calibrated_bucket_metrics = profit_barrier_bucket_metrics(
+        calibrated_predictions,
+        bucket_count=args.bucket_count,
+        min_probability=args.min_probability,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column="pred_long_profit_barrier_hit_calibrated_prob",
+        short_probability_column="pred_short_profit_barrier_hit_calibrated_prob",
+    )
+    conservative_group_metrics = profit_barrier_group_metrics(
+        calibrated_predictions,
+        group_columns,
+        min_rows=args.min_group_rows,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column="pred_long_profit_barrier_hit_calibrated_prob_lower",
+        short_probability_column="pred_short_profit_barrier_hit_calibrated_prob_lower",
+    )
+    conservative_bucket_metrics = profit_barrier_bucket_metrics(
+        calibrated_predictions,
+        bucket_count=args.bucket_count,
+        min_probability=args.min_probability,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column="pred_long_profit_barrier_hit_calibrated_prob_lower",
+        short_probability_column="pred_short_profit_barrier_hit_calibrated_prob_lower",
+    )
+    output_dir = make_run_dir(args.output_dir, args.label or "profit_barrier_calibration")
+    calibrated_predictions.to_parquet(output_dir / "predictions_profit_barrier_calibrated.parquet", index=False)
+    pd.DataFrame(calibrator.calibration_rows).to_csv(output_dir / "calibration_table.csv", index=False)
+    pd.DataFrame(calibrator.side_rows).to_csv(output_dir / "side_calibration.csv", index=False)
+    pd.DataFrame([calibrator.overall_row]).to_csv(output_dir / "overall_calibration.csv", index=False)
+    if not oof_calibration_rows.empty:
+        oof_calibration_rows.to_csv(output_dir / "oof_calibration_table.csv", index=False)
+    raw_group_metrics.to_csv(output_dir / "raw_group_metrics.csv", index=False)
+    calibrated_group_metrics.to_csv(output_dir / "calibrated_group_metrics.csv", index=False)
+    conservative_group_metrics.to_csv(output_dir / "conservative_group_metrics.csv", index=False)
+    raw_bucket_metrics.to_csv(output_dir / "raw_bucket_metrics.csv", index=False)
+    calibrated_bucket_metrics.to_csv(output_dir / "calibrated_bucket_metrics.csv", index=False)
+    conservative_bucket_metrics.to_csv(output_dir / "conservative_bucket_metrics.csv", index=False)
+
+    raw_overall = raw_group_metrics.iloc[0].to_dict()
+    calibrated_overall = calibrated_group_metrics.iloc[0].to_dict()
+    conservative_overall = conservative_group_metrics.iloc[0].to_dict()
+    raw_brier = float(raw_overall["brier_score"])
+    calibrated_brier = float(calibrated_overall["brier_score"])
+    summary = {
+        "fit_prediction_files": [str(path) for path in args.fit_predictions],
+        "apply_prediction_files": [str(path) for path in apply_paths],
+        "fit_rows": int(len(fit_predictions)),
+        "apply_rows": int(len(apply_predictions)),
+        "stacked_apply_rows": int(raw_overall["rows"]),
+        "bucket_count": args.bucket_count,
+        "min_probability": args.min_probability,
+        "alpha": args.alpha,
+        "min_bucket_rows": args.min_bucket_rows,
+        "lower_z": args.lower_z,
+        "threshold": args.threshold,
+        "oof_column": args.oof_column,
+        "raw_overall": raw_overall,
+        "calibrated_overall": calibrated_overall,
+        "conservative_overall": conservative_overall,
+        "brier_delta": raw_brier - calibrated_brier,
+        "conservative_brier_delta": raw_brier - float(conservative_overall["brier_score"]),
+        "calibration_table_rows": int(len(calibrator.calibration_rows)),
+        "output_predictions": str(output_dir / "predictions_profit_barrier_calibrated.parquet"),
+    }
+    with (output_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2)
+    print(
+        json.dumps(
+            {
+                key: summary[key]
+                for key in [
+                    "raw_overall",
+                    "calibrated_overall",
+                    "conservative_overall",
+                    "brier_delta",
+                    "conservative_brier_delta",
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     print(f"artifacts: {output_dir}")
     return 0
 
@@ -1817,6 +2229,54 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profit_barrier_report.add_argument("--top-n", type=int, default=20)
     profit_barrier_report.set_defaults(func=handle_profit_barrier_report)
+
+    profit_barrier_calibrate = subparsers.add_parser(
+        "profit-barrier-calibrate",
+        help="fit side/bucket support-aware profit-barrier probability calibration and apply it",
+    )
+    profit_barrier_calibrate.add_argument(
+        "--fit-predictions",
+        type=Path,
+        action="append",
+        required=True,
+        help="prediction parquet used to fit the calibration table; pass multiple times to combine files",
+    )
+    profit_barrier_calibrate.add_argument(
+        "--apply-predictions",
+        type=Path,
+        action="append",
+        help="prediction parquet to score; defaults to the fit prediction files",
+    )
+    profit_barrier_calibrate.add_argument(
+        "--oof-column",
+        default="",
+        help="optional column, such as dataset_month, to leave out when fitting each calibration fold",
+    )
+    profit_barrier_calibrate.add_argument("--output-dir", type=Path, default=Path("data/reports/modeling"))
+    profit_barrier_calibrate.add_argument("--label", default="profit_barrier_calibration")
+    profit_barrier_calibrate.add_argument(
+        "--group-columns",
+        default="prediction_split,dataset_month,barrier_side,session_regime,volatility_regime,trend_regime,combined_regime",
+        help="comma-separated columns to summarize independently",
+    )
+    profit_barrier_calibrate.add_argument("--min-group-rows", type=int, default=100)
+    profit_barrier_calibrate.add_argument("--bucket-count", type=int, default=5)
+    profit_barrier_calibrate.add_argument("--min-probability", type=float, default=0.0)
+    profit_barrier_calibrate.add_argument("--alpha", type=float, default=1.0)
+    profit_barrier_calibrate.add_argument("--min-bucket-rows", type=int, default=500)
+    profit_barrier_calibrate.add_argument("--lower-z", type=float, default=1.0)
+    profit_barrier_calibrate.add_argument("--threshold", type=float, default=0.5)
+    profit_barrier_calibrate.add_argument("--long-actual-column", default="long_profit_barrier_hit")
+    profit_barrier_calibrate.add_argument("--short-actual-column", default="short_profit_barrier_hit")
+    profit_barrier_calibrate.add_argument(
+        "--long-probability-column",
+        default="pred_long_profit_barrier_hit_prob_1",
+    )
+    profit_barrier_calibrate.add_argument(
+        "--short-probability-column",
+        default="pred_short_profit_barrier_hit_prob_1",
+    )
+    profit_barrier_calibrate.set_defaults(func=handle_profit_barrier_calibrate)
     return parser
 
 

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 17:44 JST
+最終更新: 2026-06-28 17:56 JST
 
 ## 現在の状態
 
@@ -80,6 +80,8 @@ candidate selectionへ group-loss soft ranking penaltyを追加済み。`--group
 
 `profit_barrier` target setを追加し、代表4ヶ月blocked OOFでprofit-barrier確率を診断済み。OOF全体は actual hit `0.3734` / predicted mean `0.3295` で過小評価、`0.4-0.6` bucketも actual `0.4759` / predicted `0.4341` で前回testの崩れは全体再現しなかった。一方、`probability>=0.4` のshort側は actual `0.3376` / predicted `0.4545`、`probability>=0.5` はlong/shortとも約 `0.19-0.21` 過大評価。profit-barrier確率は単純なhard gateではなく、side別・bucket別・support-aware calibrationへ進める。詳細は `docs/reports/00049_2026-06-28_profit_barrier_oof_representative.md`。
 
+`profit-barrier-calibrate` を追加済み。side別・probability bucket別の実測hit率をLaplace smoothingし、`pred_*_profit_barrier_hit_calibrated_prob` / `*_lower` / support/source列を保存できる。`--oof-column dataset_month` による月別OOF診断では、global Brierが raw `0.2272` から calibrated `0.2250` に改善し、全体biasも `-0.0439` から `-0.0027` へ縮んだ。一方、calibrated `>=0.5` は actual `0.4106` / predicted `0.5234` で過大評価、月×sideでも 2024-11 long `+0.1378`、2024-11 short `-0.1228` と不安定。校正列は診断・tie-break候補として使い、hard gate直結はしない。詳細は `docs/reports/00050_2026-06-28_profit_barrier_bucket_calibration.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` と通し番号を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -111,7 +113,7 @@ candidate selectionへ group-loss soft ranking penaltyを追加済み。`--group
 8. `side-confidence-report` をより広いwalk-forward OOF予測へ適用し、representative smokeの過大確信が安定して出るか確認する。
 9. side-confidence penalty tuningは、まずviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。
 10. diagnostic gateとgroup-loss penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。
-11. profit-barrier確率のside別 calibrated probabilityをOOFで作り、low support bucketにはLaplace smoothingまたは信頼区間penaltyを入れる。
+11. calibrated profit-barrier probability / lower probability列を `model-policy` / `model-sweep` へ渡し、raw probability gateとの差分をvalidationで比較する。hard gate化はblind前の事前登録なしに行わない。
 12. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項

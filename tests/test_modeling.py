@@ -6,12 +6,15 @@ import pandas as pd
 from trade_data.dataset import iter_months
 from trade_data.modeling import (
     add_calibrated_ev_columns,
+    add_profit_barrier_calibrated_columns,
     apply_split_purging,
     build_sample_weights,
     chunk_months,
     evaluate_models,
     filter_available_target_names,
     fit_linear_calibrator,
+    fit_profit_barrier_bucket_calibrator,
+    oof_profit_barrier_calibrated_predictions,
     parse_csv_months,
     prediction_frame,
     prediction_frame_evaluation_metrics,
@@ -168,6 +171,88 @@ class ModelingTests(unittest.TestCase):
 
         self.assertEqual(set(buckets["prediction_split"]), {"valid", "test"})
         self.assertTrue((buckets["rows"] > 0).all())
+
+    def test_profit_barrier_bucket_calibrator_adds_side_bucket_probabilities(self):
+        predictions = pd.DataFrame(
+            {
+                "long_profit_barrier_hit": [1, 1, 0, 0],
+                "short_profit_barrier_hit": [0, 0, 1, 0],
+                "pred_long_profit_barrier_hit_prob_1": [0.1, 0.2, 0.7, 0.8],
+                "pred_short_profit_barrier_hit_prob_1": [0.2, 0.25, 0.6, 0.65],
+            }
+        )
+
+        calibrator = fit_profit_barrier_bucket_calibrator(
+            predictions,
+            bucket_count=2,
+            alpha=1.0,
+            min_bucket_rows=2,
+            lower_z=0.0,
+        )
+        output = add_profit_barrier_calibrated_columns(predictions, calibrator)
+
+        self.assertEqual(
+            output["pred_long_profit_barrier_hit_calibrated_prob"].tolist(),
+            [0.75, 0.75, 0.25, 0.25],
+        )
+        self.assertEqual(
+            output["pred_short_profit_barrier_hit_calibrated_prob"].tolist(),
+            [0.25, 0.25, 0.5, 0.5],
+        )
+        self.assertEqual(set(output["pred_long_profit_barrier_hit_calibration_source"]), {"bucket"})
+        self.assertEqual(output["pred_long_profit_barrier_hit_calibration_support"].tolist(), [2, 2, 2, 2])
+
+    def test_profit_barrier_bucket_calibrator_uses_side_fallback_for_low_support(self):
+        predictions = pd.DataFrame(
+            {
+                "long_profit_barrier_hit": [1, 1, 0, 0],
+                "short_profit_barrier_hit": [0, 0, 1, 0],
+                "pred_long_profit_barrier_hit_prob_1": [0.1, 0.2, 0.7, 0.8],
+                "pred_short_profit_barrier_hit_prob_1": [0.2, 0.25, 0.6, 0.65],
+            }
+        )
+
+        calibrator = fit_profit_barrier_bucket_calibrator(
+            predictions,
+            bucket_count=2,
+            alpha=1.0,
+            min_bucket_rows=3,
+            lower_z=0.0,
+        )
+        output = add_profit_barrier_calibrated_columns(predictions, calibrator)
+
+        self.assertEqual(output["pred_long_profit_barrier_hit_calibrated_prob"].tolist(), [0.5] * 4)
+        self.assertEqual(
+            output["pred_short_profit_barrier_hit_calibrated_prob"].tolist(),
+            [2.0 / 6.0] * 4,
+        )
+        self.assertEqual(set(output["pred_short_profit_barrier_hit_calibration_source"]), {"side_fallback"})
+        self.assertEqual(output["pred_short_profit_barrier_hit_calibration_support"].tolist(), [4, 4, 4, 4])
+
+    def test_oof_profit_barrier_calibration_leaves_out_each_group(self):
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01", "2024-01", "2024-02", "2024-02"],
+                "long_profit_barrier_hit": [1, 0, 0, 1],
+                "short_profit_barrier_hit": [0, 1, 1, 0],
+                "pred_long_profit_barrier_hit_prob_1": [0.2, 0.8, 0.2, 0.8],
+                "pred_short_profit_barrier_hit_prob_1": [0.8, 0.2, 0.8, 0.2],
+            }
+        )
+
+        output, calibration_rows = oof_profit_barrier_calibrated_predictions(
+            predictions,
+            "dataset_month",
+            bucket_count=2,
+            alpha=1.0,
+            min_bucket_rows=1,
+            lower_z=0.0,
+        )
+
+        self.assertEqual(len(output), len(predictions))
+        self.assertEqual(output["profit_barrier_calibration_oof_fold"].tolist(), predictions["dataset_month"].tolist())
+        self.assertEqual(set(calibration_rows["oof_fold"]), {"2024-01", "2024-02"})
+        self.assertIn("pred_long_profit_barrier_hit_calibrated_prob", output.columns)
 
     def test_linear_calibrator_maps_prediction_scale(self):
         calibrator = fit_linear_calibrator(
