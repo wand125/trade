@@ -2200,3 +2200,43 @@ Artifacts:
 - side-confidence gateは損失と取引数を減らすが、NoTradeには負けるため採用しない。
 - `best_side` は方向選択の診断 target としては有用。ただし2024-12ではbelow-randomなので、hard gateにするにはwalk-forward OOFの確認が必須。
 - 次は広い期間のdatasetに反映し、side confidenceをcalibration/diagnosticとして使う。
+
+### 2026-06-28 16:55 JST Side Confidence Calibration Report
+
+作業:
+
+- `trade_data.modeling side-confidence-report` を追加した。
+- 予測済みparquetから `best_side` 確率のaccuracy、balanced accuracy、confidence、overconfidence、predicted/actual long shareを集計する。
+- `prediction_split`, `dataset_month`, `session_regime`, `volatility_regime`, `trend_regime`, `combined_regime` 別とconfidence bucket別の診断CSVを出す。
+- 直近の `best_side` smoke valid/testに適用した。
+- report: `docs/reports/00044_2026-06-28_side_confidence_calibration_report.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- diagnostic: `data/reports/modeling/20260628_075447_side_confidence_smoke/`
+- inputs:
+  - `experiments/20260628_074412_best_side_confidence_smoke/predictions_valid.parquet`
+  - `experiments/20260628_074412_best_side_confidence_smoke/predictions_test.parquet`
+
+結果:
+
+| scope | rows | accuracy | confidence mean | overconfidence |
+|---|---:|---:|---:|---:|
+| valid+test | `54725` | `0.5089` | `0.5861` | `0.0772` |
+| valid | `25962` | `0.5443` | `0.5880` | `0.0437` |
+| test | `28763` | `0.4770` | `0.5844` | `0.1074` |
+
+worst groups:
+
+| group | rows | accuracy | confidence | overconfidence |
+|---|---:|---:|---:|---:|
+| test `range_normal_vol` | `2075` | `0.3817` | `0.5771` | `0.1954` |
+| test `london` | `7559` | `0.4046` | `0.5806` | `0.1760` |
+| valid `down_low_vol` | `3204` | `0.4498` | `0.6192` | `0.1694` |
+
+判断:
+
+- `best_side` probabilityはglobal thresholdで使うには危険。2024-12 testでは高confidence bucketほど悪くなる箇所がある。
+- side confidenceは、hard gateではなくOOF regime-aware calibrationの対象にする。
+- 次は広い期間のdataset/predictionsへこの診断を適用し、過大確信が月固有か構造的かを確認する。

@@ -19,6 +19,9 @@ from trade_data.modeling import (
     resolve_target_names,
     resolve_split_months,
     selection_metrics,
+    side_confidence_bucket_metrics,
+    side_confidence_frame,
+    side_confidence_group_metrics,
     validate_disjoint_splits,
 )
 
@@ -42,6 +45,56 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(metrics["selected_trade_count"], 2)
         self.assertAlmostEqual(metrics["selected_oracle_exit_adjusted_pnl"], 43.0)
         self.assertAlmostEqual(metrics["selected_side_accuracy"], 1.0)
+
+    def test_side_confidence_frame_uses_probability_winning_side(self):
+        predictions = pd.DataFrame(
+            {
+                "best_side": [1, -1, -1],
+                "pred_best_side_prob_1": [0.8, 0.6, 0.3],
+                "pred_best_side_prob_-1": [0.2, 0.4, 0.7],
+            }
+        )
+
+        output = side_confidence_frame(predictions)
+
+        self.assertEqual(output["side_confidence_predicted_side"].tolist(), [1, 1, -1])
+        self.assertEqual(output["side_confidence_hit"].tolist(), [True, False, True])
+        self.assertEqual(output["side_confidence"].tolist(), [0.8, 0.6, 0.7])
+
+    def test_side_confidence_group_metrics_exposes_overconfidence(self):
+        predictions = pd.DataFrame(
+            {
+                "best_side": [1, -1, -1, -1],
+                "pred_best_side_prob_1": [0.8, 0.8, 0.7, 0.2],
+                "pred_best_side_prob_-1": [0.2, 0.2, 0.3, 0.8],
+                "dataset_month": ["2024-01", "2024-01", "2024-02", "2024-02"],
+            }
+        )
+
+        metrics = side_confidence_group_metrics(predictions, ["dataset_month"], min_rows=1)
+        month_1 = metrics.loc[
+            (metrics["group_key"] == "dataset_month") & (metrics["group_value"] == "2024-01")
+        ].iloc[0]
+
+        self.assertEqual(int(month_1["rows"]), 2)
+        self.assertAlmostEqual(month_1["accuracy"], 0.5)
+        self.assertAlmostEqual(month_1["confidence_mean"], 0.8)
+        self.assertAlmostEqual(month_1["overconfidence"], 0.3)
+
+    def test_side_confidence_bucket_metrics_groups_by_split_when_available(self):
+        predictions = pd.DataFrame(
+            {
+                "best_side": [1, -1, -1],
+                "pred_best_side_prob_1": [0.55, 0.8, 0.1],
+                "pred_best_side_prob_-1": [0.45, 0.2, 0.9],
+                "prediction_split": ["valid", "valid", "test"],
+            }
+        )
+
+        buckets = side_confidence_bucket_metrics(predictions, bucket_count=5, min_confidence=0.5)
+
+        self.assertEqual(set(buckets["prediction_split"]), {"valid", "test"})
+        self.assertTrue((buckets["rows"] > 0).all())
 
     def test_linear_calibrator_maps_prediction_scale(self):
         calibrator = fit_linear_calibrator(

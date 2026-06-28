@@ -202,6 +202,7 @@ short_utility > long_utility なら short
 - exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。
 - HGBの予測済みtargetを入力にした二段階meta modelを作り、executable trade outcomeをvalidationでcalibrateする。
 - meta model は同じvalidation月でfitとpolicy selectionをしない。validation内walk-forwardで、meta fit月、policy selection月、test月を分ける。
+- `best_side` probability は `side-confidence-report` で月/regime/bucket別に校正を見る。2024-12 smokeでは高confidenceでもbelow-randomになるbucketがあるため、global `min_side_confidence` gateは標準採用しない。使う場合はwalk-forward OOF上のregime-aware calibrationを通し、executable backtestで確認する。
 
 深層学習:
 

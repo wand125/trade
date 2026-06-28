@@ -664,6 +664,214 @@ def selection_metrics(
     }
 
 
+def prediction_split_from_path(path: Path) -> str:
+    stem = path.stem
+    if stem.startswith("predictions_"):
+        return stem.removeprefix("predictions_")
+    return stem
+
+
+def side_confidence_frame(
+    predictions: pd.DataFrame,
+    long_probability_column: str = "pred_best_side_prob_1",
+    short_probability_column: str = "pred_best_side_prob_-1",
+) -> pd.DataFrame:
+    required_columns = ["best_side", long_probability_column, short_probability_column]
+    missing_columns = [column for column in required_columns if column not in predictions.columns]
+    if missing_columns:
+        raise ValueError(f"missing side confidence columns: {', '.join(missing_columns)}")
+
+    output = predictions.copy()
+    long_probability = output[long_probability_column].astype(float)
+    short_probability = output[short_probability_column].astype(float)
+    output["side_confidence_predicted_side"] = np.where(long_probability >= short_probability, 1, -1)
+    output["side_confidence"] = np.where(
+        output["side_confidence_predicted_side"] == 1,
+        long_probability,
+        short_probability,
+    )
+    output["side_confidence_margin"] = (long_probability - short_probability).abs()
+    output["side_confidence_hit"] = (
+        output["side_confidence_predicted_side"].astype(int) == output["best_side"].astype(int)
+    )
+    return output
+
+
+def safe_side_balanced_accuracy(actual: pd.Series, predicted: pd.Series) -> float:
+    actual_values = actual.astype(int)
+    predicted_values = predicted.astype(int)
+    recalls: list[float] = []
+    for class_value in sorted(actual_values.dropna().unique()):
+        class_mask = actual_values == class_value
+        if class_mask.any():
+            recalls.append(float((predicted_values[class_mask] == class_value).mean()))
+    return float(np.mean(recalls)) if recalls else 0.0
+
+
+def side_confidence_summary_row(frame: pd.DataFrame, group_key: str, group_value: str) -> dict[str, object]:
+    if frame.empty:
+        return {
+            "group_key": group_key,
+            "group_value": group_value,
+            "rows": 0,
+            "accuracy": 0.0,
+            "balanced_accuracy": 0.0,
+            "confidence_mean": 0.0,
+            "confidence_median": 0.0,
+            "calibration_error": 0.0,
+            "overconfidence": 0.0,
+            "underconfidence": 0.0,
+            "predicted_long_share": 0.0,
+            "actual_long_share": 0.0,
+            "high_confidence_share": 0.0,
+        }
+    accuracy = float(frame["side_confidence_hit"].mean())
+    confidence_mean = float(frame["side_confidence"].mean())
+    calibration_error = confidence_mean - accuracy
+    return {
+        "group_key": group_key,
+        "group_value": group_value,
+        "rows": int(len(frame)),
+        "accuracy": accuracy,
+        "balanced_accuracy": safe_side_balanced_accuracy(
+            frame["best_side"],
+            frame["side_confidence_predicted_side"],
+        ),
+        "confidence_mean": confidence_mean,
+        "confidence_median": float(frame["side_confidence"].median()),
+        "calibration_error": float(calibration_error),
+        "overconfidence": float(max(calibration_error, 0.0)),
+        "underconfidence": float(max(-calibration_error, 0.0)),
+        "predicted_long_share": float((frame["side_confidence_predicted_side"] == 1).mean()),
+        "actual_long_share": float((frame["best_side"].astype(int) == 1).mean()),
+        "high_confidence_share": float((frame["side_confidence"] >= 0.75).mean()),
+    }
+
+
+def side_confidence_group_metrics(
+    predictions: pd.DataFrame,
+    group_columns: list[str],
+    min_rows: int = 1,
+) -> pd.DataFrame:
+    frame = side_confidence_frame(predictions)
+    rows = [side_confidence_summary_row(frame, "overall", "all")]
+    available_columns = [column for column in group_columns if column in frame.columns]
+    for column in available_columns:
+        grouped = frame.groupby(column, dropna=False, sort=True)
+        for value, group in grouped:
+            if len(group) >= min_rows:
+                rows.append(side_confidence_summary_row(group, column, str(value)))
+    if "prediction_split" in frame.columns:
+        for column in available_columns:
+            if column == "prediction_split":
+                continue
+            grouped = frame.groupby(["prediction_split", column], dropna=False, sort=True)
+            for (split, value), group in grouped:
+                if len(group) >= min_rows:
+                    rows.append(
+                        side_confidence_summary_row(
+                            group,
+                            f"prediction_split:{column}",
+                            f"{split}|{value}",
+                        )
+                    )
+    return pd.DataFrame(rows)
+
+
+def side_confidence_bucket_metrics(
+    predictions: pd.DataFrame,
+    bucket_count: int = 5,
+    min_confidence: float = 0.5,
+) -> pd.DataFrame:
+    if bucket_count <= 0:
+        raise ValueError("bucket_count must be positive")
+    if not 0 <= min_confidence < 1:
+        raise ValueError("min_confidence must be in [0, 1)")
+    frame = side_confidence_frame(predictions)
+    edges = np.linspace(min_confidence, 1.0, bucket_count + 1)
+    bucket_indexes = np.searchsorted(edges, frame["side_confidence"], side="right") - 1
+    frame = frame.copy()
+    frame["confidence_bucket_index"] = np.clip(bucket_indexes, 0, bucket_count - 1)
+    rows: list[dict[str, object]] = []
+    grouping_columns = ["confidence_bucket_index"]
+    if "prediction_split" in frame.columns:
+        grouping_columns = ["prediction_split", "confidence_bucket_index"]
+    for keys, group in frame.groupby(grouping_columns, dropna=False, sort=True):
+        if isinstance(keys, tuple):
+            split, bucket_index = keys
+        else:
+            split, bucket_index = "all", keys
+        bucket_index = int(bucket_index)
+        lower = float(edges[bucket_index])
+        upper = float(edges[bucket_index + 1])
+        row = side_confidence_summary_row(group, "confidence_bucket", f"{lower:.2f}-{upper:.2f}")
+        row.update(
+            {
+                "prediction_split": str(split),
+                "bucket_index": bucket_index,
+                "bucket_lower": lower,
+                "bucket_upper": upper,
+            }
+        )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def load_side_confidence_predictions(paths: list[Path]) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for path in paths:
+        frame = pd.read_parquet(path)
+        frame["prediction_file"] = str(path)
+        frame["prediction_split"] = prediction_split_from_path(path)
+        frames.append(frame)
+    if not frames:
+        raise ValueError("at least one prediction file is required")
+    return pd.concat(frames, ignore_index=True)
+
+
+def parse_csv_strings(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def handle_side_confidence_report(args: argparse.Namespace) -> int:
+    predictions = load_side_confidence_predictions(args.predictions)
+    group_columns = parse_csv_strings(args.group_columns)
+    group_metrics = side_confidence_group_metrics(
+        predictions,
+        group_columns,
+        min_rows=args.min_group_rows,
+    )
+    bucket_metrics = side_confidence_bucket_metrics(
+        predictions,
+        bucket_count=args.bucket_count,
+        min_confidence=args.min_confidence,
+    )
+    eligible_groups = group_metrics.loc[group_metrics["rows"] >= args.min_group_rows].copy()
+    worst_groups = eligible_groups.sort_values(
+        ["overconfidence", "rows"],
+        ascending=[False, False],
+    ).head(args.top_n)
+    output_dir = make_run_dir(args.output_dir, args.label or "side_confidence_report")
+    group_metrics.to_csv(output_dir / "group_metrics.csv", index=False)
+    bucket_metrics.to_csv(output_dir / "bucket_metrics.csv", index=False)
+    worst_groups.to_csv(output_dir / "worst_groups.csv", index=False)
+    summary = {
+        "prediction_files": [str(path) for path in args.predictions],
+        "rows": int(len(predictions)),
+        "group_columns": group_columns,
+        "min_group_rows": args.min_group_rows,
+        "bucket_count": args.bucket_count,
+        "min_confidence": args.min_confidence,
+        "overall": group_metrics.iloc[0].to_dict(),
+        "worst_groups": worst_groups.to_dict(orient="records"),
+    }
+    with (output_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2)
+    print(json.dumps(summary["overall"], ensure_ascii=False, indent=2))
+    print(f"artifacts: {output_dir}")
+    return 0
+
+
 def fit_linear_calibrator(y_true: pd.Series, y_pred: pd.Series) -> LinearCalibrator:
     frame = pd.DataFrame({"y_true": y_true, "y_pred": y_pred}).replace([np.inf, -np.inf], np.nan).dropna()
     if len(frame) < 2:
@@ -1287,6 +1495,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="full trains all research targets; policy trains only columns needed by executable policy sweeps",
     )
     oof_parser.set_defaults(func=oof)
+
+    side_confidence_report = subparsers.add_parser(
+        "side-confidence-report",
+        help="summarize best_side probability calibration from saved predictions",
+    )
+    side_confidence_report.add_argument(
+        "--predictions",
+        type=Path,
+        action="append",
+        required=True,
+        help="prediction parquet; pass multiple times to combine valid/test/OOF files",
+    )
+    side_confidence_report.add_argument("--output-dir", type=Path, default=Path("data/reports/modeling"))
+    side_confidence_report.add_argument("--label", default="side_confidence_report")
+    side_confidence_report.add_argument(
+        "--group-columns",
+        default="prediction_split,dataset_month,session_regime,volatility_regime,trend_regime,combined_regime",
+        help="comma-separated columns to summarize independently",
+    )
+    side_confidence_report.add_argument("--min-group-rows", type=int, default=100)
+    side_confidence_report.add_argument("--bucket-count", type=int, default=5)
+    side_confidence_report.add_argument("--min-confidence", type=float, default=0.5)
+    side_confidence_report.add_argument("--top-n", type=int, default=20)
+    side_confidence_report.set_defaults(func=handle_side_confidence_report)
     return parser
 
 

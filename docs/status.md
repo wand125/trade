@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 16:48 JST
+最終更新: 2026-06-28 16:55 JST
 
 ## 現在の状態
 
@@ -68,6 +68,8 @@ delay `1` full-gridを新しいcombined regime診断付きで再生成し、`com
 
 `best_side` auxiliary targetとside-confidence policy gateを追加済み。`best_side` は no-trade edge を満たすかとは独立に、long/short のどちらが相対的に有利だったかを保持する。2024-09..2024-12 smokeでは `best_side` balanced accuracy が validation `0.5464`、test `0.4797`。side-confidence gateは2024-12 testの損失を `-220.5348` から `-109.8978` へ縮めたが、NoTradeには負けるため採用せず、診断・calibration信号として扱う。詳細は `docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`。
 
+`side-confidence-report` を追加済み。予測済みparquetから `best_side` 確率のaccuracy、confidence、overconfidence、月/regime/bucket別の壊れ方を集計できる。smoke valid+testではconfidence平均 `0.5861` に対してaccuracy `0.5089`、2024-12 testではaccuracy `0.4770` / overconfidence `0.1074`。testの `range_normal_vol` と `london`、validの `down_low_vol` で過大確信が大きく、単純な `min_side_confidence` gateは危険。詳細は `docs/reports/00044_2026-06-28_side_confidence_calibration_report.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認や再採番でも、ファイルシステムのmtimeではなく本文内の `日時` を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -96,9 +98,10 @@ delay `1` full-gridを新しいcombined regime診断付きで再生成し、`com
 5. exit-event datasetを2025-02以降にも拡張し、候補固定後に複数blind月へ適用する。
 6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。
 7. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
-8. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
-9. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
-10. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+8. `side-confidence-report` を広いwalk-forward OOF予測へ適用し、global confidence gateではなくregime-aware calibrationの可否を確認する。
+9. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
+10. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
+11. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項
 
@@ -224,6 +227,7 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00041_2026-06-28_holding_cap_sweep.md`
 - `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`
 - `docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`
+- `docs/reports/00044_2026-06-28_side_confidence_calibration_report.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
 - `experiments/20260628_062101_exit_event_target_smoke/`
