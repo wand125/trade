@@ -218,7 +218,6 @@ test:
 - raw pnl はわずかにプラスでも、利益 0.9 倍・損失 1.3 倍の補正後はマイナスになる。
 - valid 最良設定でも valid adjusted pnl がマイナスなので、このモデルは no_trade をまだ超えていない。
 - 2025-01 の trading baseline では `rsi_reversal` が -56.5288 だったため、model policy の -35.8255 は既存 trading baseline より損失が小さい。
-- 次は exit timing target、risk target、expected pnl calibration を改善する。
 
 ### 過学習対策の方針整理
 
@@ -1713,3 +1712,37 @@ Artifacts:
 - 2025-07の失敗要因を、post-hoc分析だけでなくvalidation候補選定へ戻せるようになった。
 - ただし、この閾値は2025-07を見た後のsmoke値なので採用基準ではない。次はvalidation 4foldで閾値台地を確認する。
 - `ny_overlap` / `low_vol` の直接blockではなく、direction error、exit regret、EV overestimateのような構造的な失敗指標を使う。
+
+### 2026-06-28 12:48 JST Diagnostic Gate Validation
+
+validation 4foldのhigh-turnover gridを、新しいtrade-analysis diagnostic列入りで再生成した。
+
+確認したdiagnostic gate:
+
+- direction error rate
+- predicted side error rate
+- no-edge rate
+- exit regret mean
+- EV overestimate vs realized mean
+
+結果:
+
+- no diagnostic / lenient / balanced gate: eligible `5`
+- focused gate: eligible `2`
+- strict gate: eligible `1`
+- 2025-07 smoke-like gate (`exit_regret_mean<=15`, `EV overestimate<=10`): eligible `0`
+
+判断:
+
+- 2025-07の失敗をpost-hocで落とせた厳しいgateは、validationでは候補を全滅させるため採用しない。
+- 現時点ではdiagnosticを主hard gateにせず、tie-breakと失敗分析に使う。
+- 既存 `docs/reports/*.md` 30本について、ファイル更新時刻ではなく本文内 `日時` 順で採番が一致することを確認した。
+
+成果物:
+
+- `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`
+- `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
+- `data/reports/backtests/20260628_034513_model_candidate_selection/`
+- `data/reports/backtests/20260628_124813_diagnostic_gate_threshold_comparison.csv`
+
+次は exit timing target、risk target、expected pnl calibration を改善する。

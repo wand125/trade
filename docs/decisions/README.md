@@ -28,3 +28,4 @@
 - `0005_dense_entry_quality_targets.md`: entry timingを密な品質ターゲットに分解
 - `0006_loss_multiplier_120_standard.md`: 評価倍率 1.0 / 1.20 へ統一
 - `0007_high_turnover_gate_selection.md`: 2025-07 blind前のhigh-turnover gate選定基準
+- `0008_trade_analysis_diagnostic_gate_policy.md`: diagnostic gateをpost-hoc閾値でhard採用しない
