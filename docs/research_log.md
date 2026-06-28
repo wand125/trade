@@ -1816,3 +1816,37 @@ classifier診断:
 - 24h profit barrier probability threshold `0.2` は、現validation上ではまだ上位候補。
 - 次はtime-limited binary probabilityよりも、exit regret / EV overestimateを直接下げるtarget、またはhazard / survival形式のexit timing targetを優先する。
 - レポート採番は、引き続きファイル更新時刻や `更新日時` ではなく、ファイル本文の `日時` を基準にする。
+
+### 2026-06-28 14:10 JST Fixed Horizon Score Mode Validation
+
+作業:
+
+- `fixed_horizon_ev` に `fixed_horizon_score_mode` を追加した。
+- `model-policy --fixed-horizon-score-mode` と `model-sweep --fixed-horizon-score-modes` を追加した。
+- modeは `max`, `mean`, `median`, `min`。
+- `SWEEP_KEY_COLUMNS` に `fixed_horizon_score_mode` を追加し、古いsweep metricsには `max` を補完する。
+- validation 4foldで `max/mean/median/min` を比較した。
+- report: `docs/reports/00034_2026-06-28_fixed_horizon_score_mode_validation.md`
+
+Artifacts:
+
+- base sweeps: `data/reports/backtests/20260628_050708_model_sweep_2024-07/`, `20260628_050721_model_sweep_2024-09/`, `20260628_050733_model_sweep_2024-11/`, `20260628_050745_model_sweep_2025-01/`
+- cost sweeps: `data/reports/backtests/20260628_050757_model_sweep_2024-07/`, `20260628_050809_model_sweep_2024-09/`, `20260628_050822_model_sweep_2024-11/`, `20260628_050834_model_sweep_2025-01/`
+- candidate selection: `data/reports/backtests/20260628_050919_horizon_score_mode_candidate_selection/`
+- summary: `data/reports/backtests/20260628_horizon_score_mode_candidate_selection_summary.csv`
+
+結果:
+
+| mode | eligible | top cost min pnl | top cost min trades | short share max | EV overestimate max | exit regret max |
+|---|---:|---:|---:|---:|---:|---:|
+| `max` | 7 | `27.2158` | 47 | `0.170213` | `15.692745` | `25.465302` |
+| `mean` | 0 | `-57.7550` | 92 | `0.065217` | `16.620512` | `22.515032` |
+| `median` | 0 | `-53.7286` | 77 | `0.064935` | `16.457595` | `22.309429` |
+| `min` | 0 | `-46.6480` | 57 | `0.000000` | `16.510913` | `21.548846` |
+
+判断:
+
+- 単純な保守的horizon集約は採用しない。
+- `mean/median/min` はshort exposureを強く落とすが、EV overestimateは大きく改善せず、long-only寄りでfold最低PnLを壊す。
+- `fixed_horizon_score_mode=max` を維持する。
+- EV過大評価対策は、horizon集約ではなくOOFで実現PnLに対するcalibration/penaltyを学習する方向へ進める。

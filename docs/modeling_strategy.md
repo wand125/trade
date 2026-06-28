@@ -196,6 +196,7 @@ short_utility > long_utility なら short
 
 - fixed horizon return を追加し、oracle best exit だけに依存しない。
 - 時間別profit barrier target (`60m`, `240m`, `720m`) を使い、24h以内なら遅くてもよいentryと、短時間で利益バリアを取れるentryを分ける。
+- `fixed_horizon_ev` の固定horizon集約は `max/mean/median/min` を比較できる。ただし 2026-06-28 14:10 JST のvalidationでは `mean/median/min` が全てeligible 0件で、従来の `max` のみ残った。単純な保守的集約は採用せず、診断・ablation用に留める。
 - long/short 別、regime 別の calibration を追加する。
 - 直近数日トレンド、ボラティリティ、ATR percentile、MA乖離、drawdown などの regime feature を追加する。
 - exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。

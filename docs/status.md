@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 13:57 JST
+最終更新: 2026-06-28 14:10 JST
 
 ## 現在の状態
 
@@ -48,6 +48,8 @@ validation 4foldのhigh-turnover gridを新diagnostic列入りで再生成し、
 
 時間別profit barrier targetを追加済み。`long_profit_barrier_hit_60m/240m/720m` と `short_profit_barrier_hit_60m/240m/720m` をdatasetに生成し、`target-set policy` / `full` のclassification targetへ追加した。主datasetを 2023-01 から 2025-07 まで再生成し、policy HGBを再学習した。240m/720m probabilityのvalidation sweepでは候補は残ったが、topはthreshold `0.0` のままで、24h probability threshold `0.2` 候補のcost-aware validationを超えなかった。現時点ではtime-limited barrierをhard gateへ昇格しない。詳細は `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md` と `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`。
 
+`fixed_horizon_ev` の固定horizon score aggregation modeを追加済み。`max/mean/median/min` をvalidation 4foldで比較したが、eligibleに残ったのは従来の `max` のみ。`mean/median/min` はshort exposureを強く落とし、ほぼlong-only化してfold最低PnLを壊した。単純な保守的horizon集約は採用せず、EV過大評価対策はOOF calibration/penaltyへ進める。詳細は `docs/reports/00034_2026-06-28_fixed_horizon_score_mode_validation.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -69,10 +71,10 @@ validation 4foldのhigh-turnover gridを新diagnostic列入りで再生成し、
 
 ## 次の作業
 
-1. 次のblindを見る前に、24h profit barrier probability threshold `0.2` を含む候補を再固定するか、exit timing targetをもう一段改善してから固定するかを決める。
+1. 次のblindを見る前に、`fixed_horizon_score_mode=max` と 24h profit barrier probability threshold `0.2` を含む候補固定基準を書き出す。
 2. cost-aware評価を主目的にした候補選定基準を再固定する。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
 3. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
-4. time-limited barrier probabilityは採用保留にし、exit regret / EV overestimate を直接下げるtargetを優先する。
+4. time-limited barrier probabilityと保守的horizon集約は採用保留にし、exit regret / EV overestimate を直接下げるOOF calibration/penaltyを優先する。
 5. PnL, trade count, side/session loss, short share, smoothed barrier miss, cost-aware成績を同時に満たす候補を固定する。
 6. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
 7. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
@@ -171,6 +173,8 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 
 2026-06-28 13:53 JST 更新: 主dataset `data/processed/datasets/xauusd_m1_p1_l1p2/` を時間別profit barrier target込みで 2023-01 から 2025-07 まで再生成し、policy HGBを再学習した。`target-set policy` に固定horizon回帰targetが不足していたため、`EXIT_FIXED_HORIZON_TARGETS` を追加した。240m/720m probabilityをprofit barrier columnに使ったvalidation sweepではeligible候補は残ったが、topはthreshold `0.0` のまま。fine thresholdでも 240m `0.02` / 720m `0.1` が少数残るだけで、24h probability threshold `0.2` のcost min pnl `27.2158` を超えなかった。time-limited barrier probabilityはhard gateへ昇格せず、診断・tie-breakに留める。詳細は `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`。
 
+2026-06-28 14:10 JST 更新: `fixed_horizon_ev` に `--fixed-horizon-score-mode(s)` を追加し、60/240/720m固定horizon予測のentry scoreを `max/mean/median/min` で切り替えられるようにした。validation 4foldのcandidate selectionでは `max` のみeligible 7件、`mean/median/min` はeligible 0件。保守的集約はEV過大評価を十分下げず、short exposureを落としすぎてlong-only寄りの損失を増やした。採用候補は `max` 維持。詳細は `docs/reports/00034_2026-06-28_fixed_horizon_score_mode_validation.md`。
+
 ## 直近の実験
 
 - `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
@@ -189,8 +193,11 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`
 - `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`
 - `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`
+- `docs/reports/00034_2026-06-28_fixed_horizon_score_mode_validation.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
+- `data/reports/backtests/20260628_050919_horizon_score_mode_candidate_selection/`
+- `data/reports/backtests/20260628_horizon_score_mode_candidate_selection_summary.csv`
 - `experiments/20260628_040828_policy_timebarrier_p1_l1p2/`
 - `data/reports/backtests/20260628_timebarrier_candidate_selection_summary.csv`
 - `data/reports/backtests/20260628_timebarrier_fine_candidate_selection_summary.csv`

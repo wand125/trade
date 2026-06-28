@@ -417,6 +417,33 @@ class BacktestTests(unittest.TestCase):
         self.assertTrue(pd.isna(scores.iloc[1]))
         self.assertTrue(pd.isna(minutes.iloc[1]))
 
+    def test_fixed_horizon_scores_can_use_conservative_aggregation(self):
+        frame = pd.DataFrame(
+            {
+                "h60": [30.0, 5.0],
+                "h240": [0.0, 5.0],
+                "h720": [-15.0, float("nan")],
+            }
+        )
+
+        mean_scores, mean_minutes = fixed_horizon_scores(
+            frame,
+            (60.0, 240.0, 720.0),
+            score_mode="mean",
+        )
+        min_scores, min_minutes = fixed_horizon_scores(
+            frame,
+            (60.0, 240.0, 720.0),
+            score_mode="min",
+        )
+
+        self.assertAlmostEqual(mean_scores.iloc[0], 5.0)
+        self.assertAlmostEqual(mean_scores.iloc[1], 5.0)
+        self.assertAlmostEqual(min_scores.iloc[0], -15.0)
+        self.assertAlmostEqual(min_scores.iloc[1], 5.0)
+        self.assertEqual(mean_minutes.iloc[0], 60.0)
+        self.assertEqual(min_minutes.iloc[0], 60.0)
+
     def test_fixed_horizon_model_signal_uses_best_horizon_as_exit_time(self):
         df = frame_with_opens(
             [100, 101, 102, 103, 104, 105],
@@ -452,6 +479,48 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [1, 1, 1, 1, 0, 1])
 
+    def test_fixed_horizon_model_signal_can_use_mean_score_mode(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [0, 0, 0],
+                "pred_short_best_adjusted_pnl": [0, 0, 0],
+                "pred_long_fixed_1m_adjusted_pnl": [30, 30, 30],
+                "pred_long_fixed_3m_adjusted_pnl": [0, 0, 0],
+                "pred_short_fixed_1m_adjusted_pnl": [1, 1, 1],
+                "pred_short_fixed_3m_adjusted_pnl": [1, 1, 1],
+            }
+        )
+        common_config = {
+            "predictions": Path("unused"),
+            "policy": "fixed_horizon_ev",
+            "entry_threshold": 20,
+            "fixed_horizon_minutes": (1.0, 3.0),
+            "long_fixed_horizon_columns": (
+                "pred_long_fixed_1m_adjusted_pnl",
+                "pred_long_fixed_3m_adjusted_pnl",
+            ),
+            "short_fixed_horizon_columns": (
+                "pred_short_fixed_1m_adjusted_pnl",
+                "pred_short_fixed_3m_adjusted_pnl",
+            ),
+        }
+
+        default_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config),
+        )
+        conservative_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config, fixed_horizon_score_mode="mean"),
+        )
+
+        self.assertEqual(default_signal.tolist(), [1, 1, 0])
+        self.assertEqual(conservative_signal.tolist(), [0, 0, 0])
+
     def test_sweep_metrics_normalization_adds_missing_risk_penalty(self):
         frame = pd.DataFrame(
             {
@@ -471,6 +540,7 @@ class BacktestTests(unittest.TestCase):
         normalized = normalize_sweep_metrics(frame, "fold_a")
 
         self.assertEqual(normalized["risk_penalty"].tolist(), [0.0])
+        self.assertEqual(normalized["fixed_horizon_score_mode"].tolist(), ["max"])
         self.assertEqual(normalized["long_entry_threshold_offset"].tolist(), [0.0])
         self.assertEqual(normalized["short_entry_threshold_offset"].tolist(), [0.0])
         self.assertEqual(normalized["max_wait_regret"].tolist(), [float("inf")])
