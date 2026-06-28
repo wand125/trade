@@ -3117,3 +3117,36 @@ Artifacts:
 - side/regime EV penaltyはhard blockよりも滑らかなrisk controlとして有効な探索軸。
 - 今回はvalidationと2024-12の両方でruleなしより改善したが、NoTrade `0` を超えないため標準policyへは昇格しない。
 - 次は別holdout月、コスト/遅延ストレス、penalty幅の周辺台地を確認する。
+
+### 2026-06-28 21:52 JST Side EV Penalty Cost Stress
+
+作業:
+
+- 2024-12のHGB entry/side + MLP exit hybrid predictionで、ruleなしbaseline、`long:session_regime=ny_late:15` PnL top、同risk topをcost/delay stressした。
+- stress gridは spread `0,0.1,0.2`, slippage `0,0.05,0.1`, execution delay bars `0,1`。
+- report: `docs/reports/00068_2026-06-28_side_ev_penalty_cost_stress.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- cost stress runs: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_cost_stress_2024_12/`
+- risk top: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_cost_stress_2024_12/20260628_124906_model_cost_sensitivity_2024-12/`
+- PnL top: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_cost_stress_2024_12/20260628_124906_model_cost_sensitivity_2024-12_1/`
+- baseline: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_cost_stress_2024_12/20260628_124906_model_cost_sensitivity_2024-12_2/`
+
+結果:
+
+| item | baseline | PnL top | risk top |
+|---|---:|---:|---:|
+| standard adjusted pnl | `-54.6032` | `-15.0538` | `-5.4938` |
+| delay1 no-cost adjusted pnl | `-45.9842` | `-10.6880` | `+3.6670` |
+| high cost delay0 adjusted pnl | `-76.3910` | `-28.6638` | `-26.0816` |
+| standard trades | `49` | `31` | `46` |
+| standard profit factor | `0.7504` | `0.9154` | `0.9658` |
+| standard max DD | `97.3520` | `69.6900` | `61.1556` |
+
+判断:
+
+- risk topはbaselineより大きく壊れにくいが、NoTrade `0` を安定して超えないため標準policyへ昇格しない。
+- delay1のプラスは約定遅延に依存した偶然改善として扱い、edgeとはみなさない。
+- 現在のhybrid prediction artifactは2024-12までなので、次は別holdout月のdataset追加、HGB/MLP再学習、hybrid prediction生成を行う。
