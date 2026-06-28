@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 07:03 JST
+最終更新: 2026-06-29 07:10 JST
 
 ## 現在の状態
 
@@ -21,6 +21,8 @@ entry timingの `wait_regret` hard gateを再検証済み。`max_wait_regret=4` 
 entry timingのsupport-aware calibrationを追加済み。`entry-timing-calibration` はactual/predicted wait regretをside / regime / predicted bucket別にOOF校正し、`bad_wait_prob_risk` / `wait_excess_risk` / `wait_underestimate_risk` を出力できる。実装は診断・ranking特徴として採用するが、代表4ヶ月validationではrisk `0` が最上位で、soft penaltyはsum/min monthとEV overestimateを悪化させたため標準policyには採用しない。詳細は `docs/reports/00106_2026-06-29_entry_timing_calibration.md`。
 
 候補選定rankingへfold-to-fold PnL安定性診断を追加済み。`model-sweep-summary` は `total_adjusted_pnl_std` を出力し、`model-candidate-selection --near-top-pnl-stability-weight` でbase/costのfold別adjusted PnL標準偏差の大きいnear-top候補を下げられる。既存base + moderate/high cost validationではweight `0/0.5/1.0` のtopは同じ `down5,up10` で、安定性は採用ルールではなく診断・tie-breakとして扱う。詳細は `docs/reports/00107_2026-06-29_pnl_stability_candidate_ranking.md`。
+
+候補選定のleave-one-fold-out診断を追加済み。`model-candidate-selection-jackknife` は保存済みselection `config.json` を読み、各validation月を1つ抜いて候補を再選定し、抜いた月のbase/costで評価する。`00107` のw0/w1 selectionでは4fold全てholdout pass、3/4foldでfull top一致。2024-11を抜いたときだけ `down5,range5` に変わったが、抜いた2024-11でもcost min `86.0172` で通過した。詳細は `docs/reports/00108_2026-06-29_candidate_selection_jackknife.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

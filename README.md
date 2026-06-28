@@ -469,6 +469,18 @@ accept `--near-top-pnl-stability-weight`. This penalizes the max base/cost
 standard deviation of fold adjusted PnL. Keep the default `0` unless using it as
 a pre-registered sensitivity check.
 
+After saving a candidate-selection run, run a leave-one-fold-out check from the
+saved `config.json` without repeating the long option list:
+
+```bash
+python -m trade_data.backtest model-candidate-selection-jackknife \
+  --selection-config data/reports/backtests/<selection_run>/config.json
+```
+
+This reselects candidates with one validation fold removed, then evaluates the
+selected candidate on the removed fold. Treat it as a robustness diagnostic, not
+as a substitute for unseen holdout months.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:

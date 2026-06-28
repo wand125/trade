@@ -24,6 +24,7 @@ from trade_data.backtest import (
     run_model_policy,
     summarize_holdout_audit,
     summarize_candidate_selection,
+    summarize_candidate_selection_jackknife,
     summarize_trades,
     summarize_sweep_frames,
     trade_analysis_summary,
@@ -2287,6 +2288,85 @@ class BacktestTests(unittest.TestCase):
             stability_summary.iloc[0]["near_top_risk_score"],
             stability_summary.iloc[1]["near_top_risk_score"],
         )
+
+    def test_candidate_selection_jackknife_evaluates_left_out_fold(self):
+        def fold(month, values):
+            rows = []
+            for offset, pnl in values:
+                rows.append(
+                    {
+                        "policy": "timed_ev",
+                        "entry_threshold": 12,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 5,
+                        "risk_penalty": 0,
+                        "max_wait_regret": float("inf"),
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "side_ev_penalty_rules": "",
+                        "period_start": f"{month}-01T00:00:00+00:00",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": 20,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "direction_session_adjusted_pnl_min": 0.0,
+                        "ev_overestimate_vs_realized_mean": 5.0,
+                        "exit_regret_mean": 5.0,
+                        "actual_profit_barrier_miss_rate_smoothed": 0.4,
+                        "max_side_trade_share": 0.7,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_frames = [
+            fold("2024-01", [(6, 100), (8, 90)]),
+            fold("2024-02", [(6, 95), (8, 90)]),
+            fold("2024-03", [(6, -10), (8, 85)]),
+        ]
+        cost_frames = [
+            fold("2024-01", [(6, 90), (8, 80)]),
+            fold("2024-02", [(6, 85), (8, 80)]),
+            fold("2024-03", [(6, -20), (8, 75)]),
+        ]
+        summary = summarize_candidate_selection_jackknife(
+            base_frames=base_frames,
+            cost_frames=cost_frames,
+            selection_config={
+                "min_folds": 3,
+                "min_base_folds": 3,
+                "min_cost_folds": 3,
+                "min_trades_per_fold": 20,
+                "max_forced_exit_rate": 0.0,
+                "max_drawdown": 100.0,
+                "min_base_adjusted_pnl_per_fold": 0.0,
+                "min_cost_adjusted_pnl_per_fold": 0.0,
+                "max_cost_pnl_drop": 100.0,
+                "max_side_loss_per_fold": 100.0,
+                "plateau_column": "short_entry_threshold_offset",
+                "plateau_radius": 2.0,
+                "min_plateau_neighbors": 0,
+            },
+        )
+
+        self.assertEqual(set(summary["left_out_fold"]), {"2024-01", "2024-02", "2024-03"})
+        held_out_march = summary.loc[summary["left_out_fold"] == "2024-03"].iloc[0]
+        self.assertEqual(held_out_march["short_entry_threshold_offset"], 6)
+        self.assertEqual(held_out_march["holdout_cost_total_adjusted_pnl_min"], -20)
+        self.assertFalse(bool(held_out_march["holdout_pass"]))
+        self.assertFalse(bool(held_out_march["matches_full_top"]))
 
     def test_holdout_run_frame_reads_model_policy_config_keys(self):
         with TemporaryDirectory() as tmp:

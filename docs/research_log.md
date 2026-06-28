@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 07:10 Candidate selection jackknife
+
+- `model-candidate-selection-jackknife` を追加した。保存済み `model-candidate-selection` の `config.json` を入力にし、同じbase/cost sweepと選定条件で各validation foldを1つずつ抜いて再選定する。
+- 抜いたfoldは選定に使わず、選ばれた候補をその抜いたfoldのbase/cost sweepで評価する。`min_base_folds` / `min_cost_folds` は残りfold数に合わせて下げるため、4fold selectionなら3foldで再選定する。
+- `00107` の `near_top_pnl_stability_weight=0` と `1.0` のconfigで実行した。両者のjackknife結果は同じ。
+- 4fold全てで `holdout_pass=True`。3foldはfull top `down5,up10` と一致し、2024-11を抜いた場合だけ `down5,range5` が選ばれた。
+- 抜いたfoldでのworst minは `86.0172`、4foldの抜きfoldmin合計は `456.5626`。2024-11抜きで候補が変わっても、抜いた2024-11のbase/costは `94.6622 / 86.0172` で通過した。
+- 判断: この診断は候補選定の単月依存を調べる基盤として採用する。今回の4fold内では強いfold依存は見えないが、これは未使用holdoutの代替ではない。次は追加walk-forward foldまたは未使用月で同じ事前条件を確認する。
+- report: `docs/reports/00108_2026-06-29_candidate_selection_jackknife.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 07:03 PnL stability candidate ranking
 
 - `model-sweep-summary` にfold別 `total_adjusted_pnl` の標準偏差 `total_adjusted_pnl_std` を追加した。

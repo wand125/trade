@@ -4914,6 +4914,312 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
     return 0
 
 
+CANDIDATE_SELECTION_CONFIG_DEFAULTS: dict[str, object] = {
+    "min_folds": 2,
+    "min_base_folds": None,
+    "min_cost_folds": None,
+    "min_trades_per_fold": 30,
+    "max_forced_exit_rate": 0.0,
+    "max_drawdown": 100.0,
+    "min_base_adjusted_pnl_per_fold": 0.0,
+    "min_cost_adjusted_pnl_per_fold": 0.0,
+    "max_cost_pnl_drop": 1e100,
+    "max_side_loss_per_fold": 1e100,
+    "max_direction_session_loss_per_fold": 1e100,
+    "max_combined_regime_loss_per_fold": 1e100,
+    "max_direction_combined_regime_loss_per_fold": 1e100,
+    "max_predicted_profit_barrier_miss_rate": 1.0,
+    "max_actual_profit_barrier_miss_rate": 1.0,
+    "max_profit_barrier_calibration_overestimate": 1.0,
+    "max_short_trade_share": 1.0,
+    "max_side_trade_share": 1.0,
+    "max_smoothed_actual_profit_barrier_miss_rate": 1.0,
+    "max_smoothed_profit_barrier_calibration_overestimate": 1.0,
+    "max_direction_error_rate": 1.0,
+    "max_predicted_side_error_rate": 1.0,
+    "max_no_edge_rate": 1.0,
+    "max_exit_regret_mean": 1e100,
+    "max_ev_overestimate_vs_realized_mean": 1e100,
+    "group_loss_penalty_weight": 0.0,
+    "diagnostic_penalty_weight": 0.0,
+    "diagnostic_direction_error_rate_threshold": 1.0,
+    "diagnostic_actual_profit_barrier_miss_rate_threshold": 1.0,
+    "diagnostic_ev_overestimate_vs_realized_mean_threshold": 1e100,
+    "diagnostic_direction_error_rate_scale": 100.0,
+    "diagnostic_actual_profit_barrier_miss_rate_scale": 100.0,
+    "diagnostic_ev_overestimate_vs_realized_mean_scale": 1.0,
+    "candidate_rank_mode": "pnl",
+    "near_top_cost_pnl_tolerance": 0.0,
+    "near_top_group_loss_weight": 1.0,
+    "near_top_drawdown_weight": 1.0,
+    "near_top_ev_overestimate_weight": 1.0,
+    "near_top_exit_regret_weight": 1.0,
+    "near_top_actual_miss_weight": 100.0,
+    "near_top_side_share_weight": 100.0,
+    "near_top_pnl_stability_weight": 0.0,
+    "stress_cost_pnl_sum_reward_weight": 0.0,
+    "stress_base_pnl_sum_reward_weight": 0.0,
+    "plateau_column": "short_entry_threshold_offset",
+    "plateau_radius": 0.0,
+    "min_plateau_neighbors": 0,
+}
+
+
+def candidate_selection_kwargs_from_mapping(mapping: dict[str, object]) -> dict[str, object]:
+    return {
+        key: mapping.get(key, default)
+        for key, default in CANDIDATE_SELECTION_CONFIG_DEFAULTS.items()
+    }
+
+
+def candidate_key_frame(row: pd.Series) -> pd.DataFrame:
+    return normalize_sweep_key_columns(
+        pd.DataFrame([{column: row[column] for column in SWEEP_KEY_COLUMNS}])
+    )
+
+
+def candidate_keys_equal(left: pd.Series, right: pd.Series) -> bool:
+    left_key = candidate_key_frame(left).iloc[0]
+    right_key = candidate_key_frame(right).iloc[0]
+    return all(left_key[column] == right_key[column] for column in SWEEP_KEY_COLUMNS)
+
+
+def sweep_fold_label(frame: pd.DataFrame) -> str:
+    if "period_start" in frame.columns:
+        values = frame["period_start"].dropna().astype(str).str.slice(0, 7).unique()
+        if len(values) == 1 and values[0]:
+            return str(values[0])
+    if "sweep_source" in frame.columns:
+        values = frame["sweep_source"].dropna().astype(str).unique()
+        if len(values) == 1:
+            return str(values[0])
+    return f"frame_{id(frame)}"
+
+
+def candidate_summary_row(summary: pd.DataFrame, candidate: pd.Series) -> pd.Series | None:
+    if summary.empty:
+        return None
+    key = candidate_key_frame(candidate)
+    merged = normalize_sweep_key_columns(summary).merge(key, on=SWEEP_KEY_COLUMNS, how="inner")
+    if merged.empty:
+        return None
+    return merged.iloc[0]
+
+
+def selected_candidate_fold_summary(
+    frames: list[pd.DataFrame],
+    candidate: pd.Series,
+    min_trades_per_fold: int,
+    max_forced_exit_rate: float,
+    max_drawdown: float,
+    min_adjusted_pnl_per_fold: float,
+) -> pd.Series | None:
+    if not frames:
+        return None
+    summary = summarize_sweep_frames(
+        frames=frames,
+        min_folds=len(frames),
+        min_trades_per_fold=min_trades_per_fold,
+        max_forced_exit_rate=max_forced_exit_rate,
+        max_drawdown=max_drawdown,
+        min_adjusted_pnl_per_fold=min_adjusted_pnl_per_fold,
+        sort_by="min_pnl",
+    )
+    return candidate_summary_row(summary, candidate)
+
+
+def add_fold_summary_metrics(
+    row: dict[str, object],
+    prefix: str,
+    summary: pd.Series | None,
+) -> None:
+    if summary is None:
+        row[f"{prefix}_fold_count"] = 0
+        row[f"{prefix}_eligible"] = False
+        row[f"{prefix}_total_adjusted_pnl_min"] = np.nan
+        row[f"{prefix}_total_adjusted_pnl_sum"] = np.nan
+        row[f"{prefix}_trade_count_min"] = np.nan
+        row[f"{prefix}_max_drawdown_max"] = np.nan
+        row[f"{prefix}_forced_exit_rate_max"] = np.nan
+        return
+    row[f"{prefix}_fold_count"] = int(summary.get("fold_count", 0))
+    row[f"{prefix}_eligible"] = bool(summary.get("eligible", False))
+    row[f"{prefix}_total_adjusted_pnl_min"] = float(
+        summary.get("total_adjusted_pnl_min", np.nan)
+    )
+    row[f"{prefix}_total_adjusted_pnl_sum"] = float(
+        summary.get("total_adjusted_pnl_sum", np.nan)
+    )
+    row[f"{prefix}_trade_count_min"] = float(summary.get("trade_count_min", np.nan))
+    row[f"{prefix}_max_drawdown_max"] = float(summary.get("max_drawdown_max", np.nan))
+    row[f"{prefix}_forced_exit_rate_max"] = float(
+        summary.get("forced_exit_rate_max", np.nan)
+    )
+
+
+def summarize_candidate_selection_jackknife(
+    base_frames: list[pd.DataFrame],
+    cost_frames: list[pd.DataFrame],
+    selection_config: dict[str, object],
+) -> pd.DataFrame:
+    if len(base_frames) < 2:
+        raise ValueError("at least two base frames are required for jackknife")
+    if len(cost_frames) < 2:
+        raise ValueError("at least two cost frames are required for jackknife")
+
+    kwargs = candidate_selection_kwargs_from_mapping(selection_config)
+    full_summary = summarize_candidate_selection(
+        base_frames=base_frames,
+        cost_frames=cost_frames,
+        **kwargs,
+    )
+    full_top = full_summary.iloc[0] if not full_summary.empty else None
+    base_labeled = [(sweep_fold_label(frame), frame) for frame in base_frames]
+    cost_labeled = [(sweep_fold_label(frame), frame) for frame in cost_frames]
+    fold_labels = sorted({label for label, _ in base_labeled} | {label for label, _ in cost_labeled})
+
+    rows: list[dict[str, object]] = []
+    for fold_label in fold_labels:
+        train_base = [frame for label, frame in base_labeled if label != fold_label]
+        train_cost = [frame for label, frame in cost_labeled if label != fold_label]
+        holdout_base = [frame for label, frame in base_labeled if label == fold_label]
+        holdout_cost = [frame for label, frame in cost_labeled if label == fold_label]
+        row: dict[str, object] = {
+            "left_out_fold": fold_label,
+            "train_base_fold_count": len(train_base),
+            "train_cost_fold_count": len(train_cost),
+            "holdout_base_fold_count": len(holdout_base),
+            "holdout_cost_fold_count": len(holdout_cost),
+        }
+        if not train_base or not train_cost:
+            row["status"] = "insufficient_train_folds"
+            rows.append(row)
+            continue
+
+        train_kwargs = dict(kwargs)
+        train_kwargs["min_base_folds"] = min(
+            int(train_kwargs["min_base_folds"] or train_kwargs["min_folds"]),
+            len(train_base),
+        )
+        train_kwargs["min_cost_folds"] = min(
+            int(train_kwargs["min_cost_folds"] or train_kwargs["min_folds"]),
+            len(train_cost),
+        )
+        train_kwargs["min_folds"] = min(
+            int(train_kwargs["min_folds"]),
+            int(train_kwargs["min_base_folds"]),
+            int(train_kwargs["min_cost_folds"]),
+        )
+        train_summary = summarize_candidate_selection(
+            base_frames=train_base,
+            cost_frames=train_cost,
+            **train_kwargs,
+        )
+        row["train_candidate_count"] = len(train_summary)
+        row["train_eligible_count"] = (
+            int(train_summary["eligible"].sum()) if "eligible" in train_summary.columns else 0
+        )
+        if train_summary.empty:
+            row["status"] = "no_candidates"
+            rows.append(row)
+            continue
+
+        selected = train_summary.iloc[0]
+        row["status"] = "selected"
+        row["selected_train_eligible"] = bool(selected.get("eligible", False))
+        row["matches_full_top"] = (
+            bool(candidate_keys_equal(selected, full_top)) if full_top is not None else False
+        )
+        for column in SWEEP_KEY_COLUMNS:
+            row[column] = selected[column]
+        for column in [
+            "total_adjusted_pnl_min_base",
+            "total_adjusted_pnl_sum_base",
+            "total_adjusted_pnl_min_cost",
+            "total_adjusted_pnl_sum_cost",
+            "total_adjusted_pnl_std_base",
+            "total_adjusted_pnl_std_cost",
+            "pnl_stability_risk_all",
+            "near_top_risk_score",
+            "stress_risk_score",
+            "max_drawdown_max_all",
+            "group_loss_penalty",
+        ]:
+            if column in selected:
+                row[f"train_{column}"] = selected[column]
+
+        holdout_base_summary = selected_candidate_fold_summary(
+            holdout_base,
+            selected,
+            min_trades_per_fold=int(kwargs["min_trades_per_fold"]),
+            max_forced_exit_rate=float(kwargs["max_forced_exit_rate"]),
+            max_drawdown=float(kwargs["max_drawdown"]),
+            min_adjusted_pnl_per_fold=float(kwargs["min_base_adjusted_pnl_per_fold"]),
+        )
+        holdout_cost_summary = selected_candidate_fold_summary(
+            holdout_cost,
+            selected,
+            min_trades_per_fold=int(kwargs["min_trades_per_fold"]),
+            max_forced_exit_rate=float(kwargs["max_forced_exit_rate"]),
+            max_drawdown=float(kwargs["max_drawdown"]),
+            min_adjusted_pnl_per_fold=float(kwargs["min_cost_adjusted_pnl_per_fold"]),
+        )
+        add_fold_summary_metrics(row, "holdout_base", holdout_base_summary)
+        add_fold_summary_metrics(row, "holdout_cost", holdout_cost_summary)
+        holdout_mins = [
+            row["holdout_base_total_adjusted_pnl_min"],
+            row["holdout_cost_total_adjusted_pnl_min"],
+        ]
+        row["holdout_total_adjusted_pnl_min_all"] = float(np.nanmin(holdout_mins))
+        row["holdout_pass"] = bool(row["holdout_base_eligible"] and row["holdout_cost_eligible"])
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+def resolve_config_path(path: Path) -> Path:
+    return path / "config.json" if path.is_dir() else path
+
+
+def handle_model_candidate_selection_jackknife(args: argparse.Namespace) -> int:
+    config_path = resolve_config_path(args.selection_config)
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    base_paths = [Path(path) for path in config["base_sweeps"]]
+    cost_paths = [Path(path) for path in config["cost_sweeps"]]
+    base_frames = read_sweep_frames(base_paths)
+    cost_frames = read_sweep_frames(cost_paths)
+    summary = summarize_candidate_selection_jackknife(
+        base_frames=base_frames,
+        cost_frames=cost_frames,
+        selection_config=config,
+    )
+    run_dir = make_run_dir(args.output_dir, "model_candidate_selection_jackknife")
+    summary.to_csv(run_dir / "metrics.csv", index=False)
+    metadata = {
+        "selection_config": str(config_path),
+        "base_sweeps": [str(path) for path in base_paths],
+        "cost_sweeps": [str(path) for path in cost_paths],
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2)
+    display_columns = [
+        "left_out_fold",
+        "status",
+        "matches_full_top",
+        "side_ev_penalty_rules",
+        "train_total_adjusted_pnl_min_cost",
+        "train_pnl_stability_risk_all",
+        "holdout_base_total_adjusted_pnl_min",
+        "holdout_cost_total_adjusted_pnl_min",
+        "holdout_total_adjusted_pnl_min_all",
+        "holdout_pass",
+    ]
+    existing_display_columns = [column for column in display_columns if column in summary.columns]
+    print(summary.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def handle_model_holdout_audit(args: argparse.Namespace) -> int:
     holdout_paths = parse_csv_paths(args.holdout_runs)
     holdout_frames = read_holdout_run_frames(holdout_paths)
@@ -5598,6 +5904,26 @@ def build_parser() -> argparse.ArgumentParser:
     model_candidate_selection.add_argument("--min-plateau-neighbors", type=int, default=0)
     model_candidate_selection.add_argument("--top-n", type=int, default=10)
     model_candidate_selection.set_defaults(func=handle_model_candidate_selection)
+
+    model_candidate_selection_jackknife = subparsers.add_parser(
+        "model-candidate-selection-jackknife",
+        help="rerun candidate selection while leaving out one validation fold at a time",
+    )
+    model_candidate_selection_jackknife.add_argument(
+        "--selection-config",
+        type=Path,
+        required=True,
+        help="model-candidate-selection config.json or its run directory",
+    )
+    model_candidate_selection_jackknife.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_candidate_selection_jackknife.add_argument("--top-n", type=int, default=20)
+    model_candidate_selection_jackknife.set_defaults(
+        func=handle_model_candidate_selection_jackknife
+    )
 
     model_holdout_audit = subparsers.add_parser(
         "model-holdout-audit",
