@@ -150,6 +150,14 @@ class ResidualPenaltyConfig:
     prior_strength: float
     penalty_weight: float
     min_excess_overestimate: float = 0.0
+    candidate_entry_only: bool = False
+    entry_threshold: float = 15.0
+    long_entry_threshold_offset: float = 0.0
+    short_entry_threshold_offset: float = 0.0
+    side_margin: float = 0.0
+    min_entry_rank: float = 0.0
+    long_entry_rank_column: str = "pred_long_entry_local_rank"
+    short_entry_rank_column: str = "pred_short_entry_local_rank"
 
 
 @dataclass(frozen=True)
@@ -789,6 +797,10 @@ def validate_residual_penalty_inputs(
         raise ValueError("penalty_weight must be non-negative")
     if config.min_excess_overestimate < 0:
         raise ValueError("min_excess_overestimate must be non-negative")
+    if config.side_margin < 0:
+        raise ValueError("side_margin must be non-negative")
+    if config.min_entry_rank < 0:
+        raise ValueError("min_entry_rank must be non-negative")
     required_columns = {
         long_column,
         short_column,
@@ -796,9 +808,50 @@ def validate_residual_penalty_inputs(
         SIDE_COLUMNS["short"]["target"],
         *config.group_columns,
     }
+    if config.candidate_entry_only and config.min_entry_rank > 0:
+        required_columns.update(
+            {
+                config.long_entry_rank_column,
+                config.short_entry_rank_column,
+            }
+        )
     missing_columns = sorted(required_columns - set(predictions.columns))
     if missing_columns:
         raise ValueError(f"predictions missing residual penalty columns: {', '.join(missing_columns)}")
+
+
+def candidate_entry_side_masks(
+    predictions: pd.DataFrame,
+    config: ResidualPenaltyConfig,
+    *,
+    long_column: str,
+    short_column: str,
+) -> dict[str, pd.Series]:
+    long_score = predictions[long_column].astype(float)
+    short_score = predictions[short_column].astype(float)
+    valid = long_score.notna() & short_score.notna()
+    side_gap = (long_score - short_score).abs()
+    long_mask = (
+        valid
+        & (long_score >= short_score)
+        & (long_score > config.entry_threshold + config.long_entry_threshold_offset)
+        & (side_gap >= config.side_margin)
+    )
+    short_mask = (
+        valid
+        & (short_score > long_score)
+        & (short_score > config.entry_threshold + config.short_entry_threshold_offset)
+        & (side_gap >= config.side_margin)
+    )
+    if config.min_entry_rank > 0:
+        long_rank = predictions[config.long_entry_rank_column].astype(float)
+        short_rank = predictions[config.short_entry_rank_column].astype(float)
+        long_mask &= long_rank.notna() & (long_rank >= config.min_entry_rank)
+        short_mask &= short_rank.notna() & (short_rank >= config.min_entry_rank)
+    return {
+        "long": pd.Series(long_mask.to_numpy(), index=predictions.index),
+        "short": pd.Series(short_mask.to_numpy(), index=predictions.index),
+    }
 
 
 def fit_residual_penalty_calibrator(
@@ -813,8 +866,22 @@ def fit_residual_penalty_calibrator(
     side_stats: dict[str, ResidualPenaltyStats] = {}
     group_stats: dict[str, dict[tuple[str, ...], ResidualPenaltyStats]] = {}
     keys = group_key_series(predictions, config.group_columns)
+    candidate_masks = (
+        candidate_entry_side_masks(
+            predictions,
+            config,
+            long_column=long_column,
+            short_column=short_column,
+        )
+        if config.candidate_entry_only
+        else {
+            "long": pd.Series(True, index=predictions.index),
+            "short": pd.Series(True, index=predictions.index),
+        }
+    )
     for side_name, score_column in [("long", long_column), ("short", short_column)]:
         target_column = SIDE_COLUMNS[side_name]["target"]
+        side_mask = candidate_masks[side_name]
         side_frame = (
             pd.DataFrame(
                 {
@@ -823,6 +890,7 @@ def fit_residual_penalty_calibrator(
                     "key": keys,
                 }
             )
+            .loc[side_mask]
             .replace([np.inf, -np.inf], np.nan)
             .dropna(subset=["pred", "target"])
         )
@@ -1984,6 +2052,14 @@ def oof_residual_penalty(args: argparse.Namespace) -> int:
         prior_strength=args.prior_strength,
         penalty_weight=args.penalty_weight,
         min_excess_overestimate=args.min_excess_overestimate,
+        candidate_entry_only=args.candidate_entry_only,
+        entry_threshold=args.entry_threshold,
+        long_entry_threshold_offset=args.long_entry_threshold_offset,
+        short_entry_threshold_offset=args.short_entry_threshold_offset,
+        side_margin=args.side_margin,
+        min_entry_rank=args.min_entry_rank,
+        long_entry_rank_column=args.long_entry_rank_column,
+        short_entry_rank_column=args.short_entry_rank_column,
     )
     validate_residual_penalty_inputs(
         validation_predictions,
@@ -2690,9 +2766,21 @@ def build_parser() -> argparse.ArgumentParser:
             default=0.0,
             help="ignored excess overestimate before the residual penalty starts",
         )
+        penalty_parser.add_argument(
+            "--candidate-entry-only",
+            type=parse_bool,
+            default=False,
+            help="fit residual stats only on rows that pass the configured entry-side filter",
+        )
         penalty_parser.add_argument("--long-column", default="pred_long_best_adjusted_pnl")
         penalty_parser.add_argument("--short-column", default="pred_short_best_adjusted_pnl")
         penalty_parser.add_argument("--entry-threshold", type=float, default=15.0)
+        penalty_parser.add_argument("--long-entry-threshold-offset", type=float, default=0.0)
+        penalty_parser.add_argument("--short-entry-threshold-offset", type=float, default=0.0)
+        penalty_parser.add_argument("--side-margin", type=float, default=0.0)
+        penalty_parser.add_argument("--min-entry-rank", type=float, default=0.0)
+        penalty_parser.add_argument("--long-entry-rank-column", default="pred_long_entry_local_rank")
+        penalty_parser.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
         penalty_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
         penalty_parser.add_argument("--label", default=default_label)
 

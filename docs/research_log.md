@@ -4,6 +4,15 @@
 
 ## 2026-06-28 JST
 
+### 23:11 Candidate-entry residual penalty
+
+- `ResidualPenaltyConfig` に `candidate_entry_only`, side別entry offset, `side_margin`, `min_entry_rank` を追加し、`candidate_entry_side_masks` でentry候補行だけをfit対象にできるようにした。
+- `session_regime`, candidate-only, weight `10`, rank `0.5` は2024-12/2025-02 applyのrow-level selected avgを改善したが、validation OOF selected avg `19.0855 -> 17.7061`、side accuracy `0.5449 -> 0.5016` と壊れたため棄却。
+- `session_regime`, candidate-only, weight `1`, rank `0.5` はvalidation 4foldで min adjusted pnl `50.5324`, sum `412.1412`。fixed holdoutは2024-12 `-17.1780`, 2025-02 `+78.0748`。
+- 判断: 2024-12は raw hybrid baseline `-54.6032` より改善したが、validation minは既存baseline `81.5352` や `long:ny_late:15` risk top `85.7834` より弱い。標準採用せず、次はselected trade realized residual / side failureへ進む。
+- report: `docs/reports/00074_2026-06-28_candidate_entry_residual_penalty.md`
+- 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 23:01 Regime residual penalty
 
 - `ResidualPenaltyCalibrator` と `oof-residual-penalty` CLIを追加。side平均より過大評価が大きいregimeだけ `penalty_weight * excess_overestimate` をEVから差し引く列を生成する。

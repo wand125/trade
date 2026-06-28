@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 23:01 JST
+最終更新: 2026-06-28 23:11 JST
 
 ## 現在の状態
 
@@ -124,6 +124,8 @@ support-aware lower EV calibration列を追加済み。`pred_regime_calibrated_*
 
 regime residual penalty列を追加済み。`pred_regime_residual_penalized_*_best_adjusted_pnl` はside平均より過大評価が大きいregimeだけEVを減点する。`session_regime`, weight `10` はvalidation 4foldでeligible、min adjusted pnl `85.7296` / `81.0356` だったが、fixed holdoutでは2024-12が `-156.1742` / `-159.1944` と大幅悪化。`volatility_regime,session_regime`, weight `10` も2024-12 `-166.4110` / `-159.6254` で弱い。row-level residualは実行売買の壊れる方向を十分に表さないため標準採用しない。詳細は `docs/reports/00073_2026-06-28_regime_residual_penalty.md`。
 
+candidate-entry residual penaltyを追加済み。`candidate_entry_only=true` では、side別entry threshold offset、side margin、entry local rankを通った候補行だけで residual overestimate をfitする。`session_regime`, weight `1`, rank `0.5` は2024-12 fixed holdoutを raw hybrid baseline `-54.6032` から `-17.1780` へ改善したが、validation 4fold min adjusted pnlは `50.5324` で既存baseline `81.5352` や `long:ny_late:15` risk top `85.7834` より弱い。2025-02も baseline `+81.8334` に対し `+78.0748`。標準採用せず、selected trade realized residual / side failureの診断基盤として残す。詳細は `docs/reports/00074_2026-06-28_candidate_entry_residual_penalty.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -167,6 +169,7 @@ regime residual penalty列を追加済み。`pred_regime_residual_penalized_*_be
 20. `model-holdout-audit` による2ヶ月同時監査では現候補が全滅した。次はside EV penalty探索を広げず、entry/side EV calibrationとsupport-aware realized-PnL targetへ戻る。
 21. support-aware lower EVは、OOF selected-side品質を改善しても executable validationを壊した。次はEV全体を一律に下げず、side/regime別calibration residual targetやregime-conditioned side confidenceで「壊れる方向」を学習する。
 22. row-level residual penaltyはvalidation OOFのselected avgを上げても、fixed holdoutで2024-12を大きく悪化させた。次は全rowの教師ではなく、entry条件通過候補または実行tradeに限定した residual/failure target を作る。
+23. candidate-entry residual penaltyは2024-12を一部改善したが、validation robustnessが弱く標準採用しない。次は候補行のgroup平均ではなく、1玉制約で実際に選ばれたtradeの realized residual / side failure / exit regret をOOFまたはwalk-forwardで学習する。
 
 ## 未決定事項
 
@@ -177,6 +180,8 @@ regime residual penalty列を追加済み。`pred_regime_residual_penalized_*_be
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-28 23:11 JST 更新: candidate-entry residual penaltyを追加し、entry条件を通った候補行だけでsession別の過大評価をfitした。weight `1`, rank `0.5` は2024-12を `-17.1780` まで縮めたが、validation 4fold min pnlは `50.5324` に落ち、2025-02もbaselineを超えない。標準採用せず、次はcandidate rowではなく実行trade単位の realized residual / side failure / exit regret を学習対象にする。
 
 2026-06-28 23:01 JST 更新: `oof-residual-penalty` と residual penalized EV列を追加し、session / vol-session粒度で検証した。session weight `10` はvalidation上eligibleだが、2024-12 fixed holdout `-156.1742` / `-159.1944` で既存baselineより大きく悪化。row-level residualは実行売買の壊れ方を表さないため標準採用せず、次は selected-trade / candidate-entry residual targetへ進む。
 

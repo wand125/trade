@@ -19,6 +19,7 @@ from trade_data.meta_model import (
     available_feature_columns,
     build_training_frame,
     build_sample_weights,
+    candidate_entry_side_masks,
     combine_fit_predictions,
     fit_group_target_calibrator,
     fit_group_ev_calibrator,
@@ -350,6 +351,49 @@ class MetaModelTests(unittest.TestCase):
         self.assertEqual(output[f"{long_output}_source"].tolist(), ["group", "group", "group", "group"])
         self.assertAlmostEqual(metrics["penalty_mean"]["long"], 5.0)
         self.assertAlmostEqual(metrics["penalty_positive_rate"]["long"], 0.5)
+
+    def test_residual_penalty_can_fit_only_candidate_entry_rows(self):
+        df = pd.DataFrame(
+            {
+                "long_best_adjusted_pnl": [0.0, 0.0, 0.0, 0.0],
+                "short_best_adjusted_pnl": [0.0, 0.0, 0.0, 0.0],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 10.0, 20.0],
+                "pred_short_best_adjusted_pnl": [0.0, 25.0, 0.0, 0.0],
+                "pred_long_entry_local_rank": [0.9, 0.9, 0.9, 0.2],
+                "pred_short_entry_local_rank": [0.1, 0.9, 0.1, 0.1],
+                "session_regime": ["asia", "asia", "asia", "london"],
+            }
+        )
+        config = ResidualPenaltyConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            penalty_weight=1.0,
+            candidate_entry_only=True,
+            entry_threshold=15.0,
+            side_margin=5.0,
+            min_entry_rank=0.5,
+        )
+
+        masks = candidate_entry_side_masks(
+            df,
+            config,
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+        )
+        calibrator = fit_residual_penalty_calibrator(
+            df,
+            config,
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+        )
+
+        self.assertEqual(masks["long"].tolist(), [True, False, False, False])
+        self.assertEqual(masks["short"].tolist(), [False, True, False, False])
+        self.assertEqual(calibrator.side_stats["long"].n, 1)
+        self.assertEqual(calibrator.side_stats["short"].n, 1)
+        self.assertEqual(set(calibrator.group_stats["long"].keys()), {("asia",)})
+        self.assertEqual(set(calibrator.group_stats["short"].keys()), {("asia",)})
 
     def test_trade_quality_calibration_adds_side_quality_columns(self):
         predictions = add_trade_source_ev_columns(
