@@ -56,6 +56,6 @@
 2. `docs/status.md` の「現在の状態」と「次の作業」を読む。
 3. `docs/trading_ml_generalization_principles.md` のチェックリストを読む。
 4. `docs/research_log.md` の最新エントリを読む。
-5. 直近の実験がある場合は `docs/reports/` の最新レポートを読む。
+5. 直近の実験がある場合は `docs/reports/` の最新レポートを読む。最新判断はファイル更新時刻ではなく、ファイル名の通し番号と本文冒頭の `日時` を基準にする。
 6. 作業前に、変更する仕様や新しい仮説を `docs/research_log.md` に記録する。
 7. 作業後に、結果、スコア、失敗、次の一手を記録する。

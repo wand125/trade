@@ -2313,3 +2313,16 @@ Artifacts:
 - regime-aware penaltyは探索軸として実装したが、このsmokeでは採用しない。
 - 悪化の中心は引き続き `long:london` で、confidence penaltyだけではentry集合の質を改善できなかった。
 - side confidenceは、NoTradeに大きく負ける候補を救う道具ではなく、既にviableな候補のtie-break/penaltyとして検証すべき。
+
+### 2026-06-28 17:24 JST Report Time Reference Clarification
+
+作業:
+
+- レポートの通し番号、再採番、直近レポート参照では、ファイルシステムの更新時刻ではなく、各ファイル本文冒頭の `日時` を参照する運用を再確認した。
+- `docs/README.md` と `docs/experiment_protocol.md` の「最新レポート」参照を、本文 `日時` と通し番号基準だと明記した。
+- `docs/status.md` のレポート運用記述も同じ表現へ更新した。
+
+判断:
+
+- `更新日時` は追記・修正履歴を見るための補助情報であり、採番・直近判定・再採番の基準には使わない。
+- `tests/test_docs_reports.py` は本文 `日時` を抽出して番号順を検証しているため、mtime依存の検証にはなっていない。

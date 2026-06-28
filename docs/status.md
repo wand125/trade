@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 17:20 JST
+最終更新: 2026-06-28 17:24 JST
 
 ## 現在の状態
 
@@ -74,7 +74,7 @@ delay `1` full-gridを新しいcombined regime診断付きで再生成し、`com
 
 regime-aware side-confidence penalty ruleを追加済み。`--side-confidence-penalty-rules` は matching regimeで `penalty * (1 - confidence)`、`--side-confidence-overfit-penalty-rules` は `penalty * confidence` をEVから引く。ただし2024-12 smokeでは prior global confidence gate `-109.8978` に対し、low-confidence rule `-222.3816`、overfit rule `-249.2666` と悪化したため採用しない。詳細は `docs/reports/00046_2026-06-28_regime_side_confidence_penalty_smoke.md`。
 
-`docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認や再採番でも、ファイルシステムのmtimeではなく本文内の `日時` を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
+`docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなく本文内の `日時` と通し番号を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
 
