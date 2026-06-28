@@ -29,7 +29,7 @@ DEFAULT_SHORT_FIXED_HORIZON_COLUMNS = tuple(
     f"pred_short_fixed_{int(minutes)}m_adjusted_pnl" for minutes in DEFAULT_FIXED_HORIZON_MINUTES
 )
 FIXED_HORIZON_SCORE_MODES = ("max", "mean", "median", "min")
-CANDIDATE_RANK_MODES = ("pnl", "near_top_risk")
+CANDIDATE_RANK_MODES = ("pnl", "near_top_risk", "stress_score")
 
 TRADE_COLUMNS = [
     "direction",
@@ -3840,6 +3840,8 @@ def summarize_candidate_selection(
     near_top_exit_regret_weight: float = 1.0,
     near_top_actual_miss_weight: float = 100.0,
     near_top_side_share_weight: float = 100.0,
+    stress_cost_pnl_sum_reward_weight: float = 0.0,
+    stress_base_pnl_sum_reward_weight: float = 0.0,
     min_base_folds: int | None = None,
     min_cost_folds: int | None = None,
 ) -> pd.DataFrame:
@@ -3917,6 +3919,10 @@ def summarize_candidate_selection(
         raise ValueError("near_top_actual_miss_weight must be non-negative")
     if near_top_side_share_weight < 0:
         raise ValueError("near_top_side_share_weight must be non-negative")
+    if stress_cost_pnl_sum_reward_weight < 0:
+        raise ValueError("stress_cost_pnl_sum_reward_weight must be non-negative")
+    if stress_base_pnl_sum_reward_weight < 0:
+        raise ValueError("stress_base_pnl_sum_reward_weight must be non-negative")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
     base_min_folds = min_folds if min_base_folds is None else min_base_folds
@@ -4210,6 +4216,11 @@ def summarize_candidate_selection(
         + near_top_actual_miss_weight * merged["actual_profit_barrier_miss_rate_smoothed_max_all"]
         + near_top_side_share_weight * merged["max_side_trade_share_max_all"]
     )
+    merged["stress_risk_score"] = (
+        merged["near_top_risk_score"]
+        - stress_cost_pnl_sum_reward_weight * merged["total_adjusted_pnl_sum_cost"]
+        - stress_base_pnl_sum_reward_weight * merged["total_adjusted_pnl_sum_base"]
+    )
 
     if candidate_rank_mode == "near_top_risk":
         sort_columns = [
@@ -4248,6 +4259,67 @@ def summarize_candidate_selection(
             True,
             True,
             True,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+        ]
+    elif candidate_rank_mode == "stress_score":
+        sort_columns = [
+            "eligible",
+            "near_top_cost_pnl_ok",
+            "stress_risk_score",
+            "max_drawdown_max_all",
+            "group_loss_penalty",
+            "ev_overestimate_vs_realized_mean_max_all",
+            "exit_regret_mean_max_all",
+            "total_adjusted_pnl_sum_cost",
+            "total_adjusted_pnl_sum_base",
+            "total_adjusted_pnl_min_cost",
+            "total_adjusted_pnl_min_base",
+            "near_top_cost_pnl_gap",
+            "plateau_support_count",
+            "side_adjusted_pnl_min_all",
+            "direction_session_adjusted_pnl_min_all",
+            "combined_regime_adjusted_pnl_min_all",
+            "direction_combined_regime_adjusted_pnl_min_all",
+            "direction_error_rate_max_all",
+            "predicted_side_error_rate_max_all",
+            "no_edge_rate_max_all",
+            "short_trade_share_max_all",
+            "max_side_trade_share_max_all",
+            "actual_profit_barrier_miss_rate_smoothed_max_all",
+            "actual_profit_barrier_miss_rate_max_all",
+            "profit_barrier_calibration_overestimate_smoothed_max_all",
+            "predicted_profit_barrier_miss_rate_max_all",
+            "profit_barrier_calibration_overestimate_max_all",
+            "cost_pnl_drop_min",
+        ]
+        ascending = [
+            False,
+            False,
+            True,
+            True,
+            True,
+            True,
+            True,
+            False,
+            False,
             False,
             False,
             True,
@@ -4369,8 +4441,6 @@ def read_holdout_run_frame(path: Path) -> pd.DataFrame:
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
     model_policy_config = config.get("model_policy_config")
-    if not isinstance(model_policy_config, dict):
-        raise ValueError(f"holdout run has no model_policy_config: {run_dir}")
 
     if metrics_path.suffix == ".csv":
         frame = pd.read_csv(metrics_path)
@@ -4379,9 +4449,12 @@ def read_holdout_run_frame(path: Path) -> pd.DataFrame:
     else:
         raise ValueError(f"unsupported holdout metrics file: {metrics_path}")
 
-    key_values = sweep_key_values_from_model_policy_config(model_policy_config)
-    for column, value in key_values.items():
-        frame[column] = value
+    if isinstance(model_policy_config, dict):
+        key_values = sweep_key_values_from_model_policy_config(model_policy_config)
+        for column, value in key_values.items():
+            frame[column] = value
+    elif metrics_path.suffix != ".csv":
+        raise ValueError(f"holdout run has no model_policy_config: {run_dir}")
     frame = normalize_sweep_metrics(frame, str(run_dir)).copy()
     frame["holdout_run"] = str(run_dir)
     return frame
@@ -4609,6 +4682,8 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         near_top_exit_regret_weight=args.near_top_exit_regret_weight,
         near_top_actual_miss_weight=args.near_top_actual_miss_weight,
         near_top_side_share_weight=args.near_top_side_share_weight,
+        stress_cost_pnl_sum_reward_weight=args.stress_cost_pnl_sum_reward_weight,
+        stress_base_pnl_sum_reward_weight=args.stress_base_pnl_sum_reward_weight,
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -4672,6 +4747,8 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "near_top_exit_regret_weight": args.near_top_exit_regret_weight,
         "near_top_actual_miss_weight": args.near_top_actual_miss_weight,
         "near_top_side_share_weight": args.near_top_side_share_weight,
+        "stress_cost_pnl_sum_reward_weight": args.stress_cost_pnl_sum_reward_weight,
+        "stress_base_pnl_sum_reward_weight": args.stress_base_pnl_sum_reward_weight,
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -5270,14 +5347,18 @@ def build_parser() -> argparse.ArgumentParser:
         choices=CANDIDATE_RANK_MODES,
         help=(
             "pnl keeps historical ranking; near_top_risk ranks candidates within the "
-            "near-top cost min-PnL tolerance by risk proxy"
+            "near-top cost min-PnL tolerance by risk proxy; stress_score also rewards "
+            "validation cost/base scenario sum PnL"
         ),
     )
     model_candidate_selection.add_argument(
         "--near-top-cost-pnl-tolerance",
         type=float,
         default=0.0,
-        help="allowed degradation from the best eligible cost min PnL for near_top_risk ranking",
+        help=(
+            "allowed degradation from the best eligible cost min PnL for near_top_risk "
+            "and stress_score ranking"
+        ),
     )
     model_candidate_selection.add_argument(
         "--near-top-group-loss-weight",
@@ -5314,6 +5395,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=100.0,
         help="weight for dominant side trade share in near_top_risk score",
+    )
+    model_candidate_selection.add_argument(
+        "--stress-cost-pnl-sum-reward-weight",
+        type=float,
+        default=0.0,
+        help="reward weight for cost scenario total adjusted PnL sum in stress_score ranking",
+    )
+    model_candidate_selection.add_argument(
+        "--stress-base-pnl-sum-reward-weight",
+        type=float,
+        default=0.0,
+        help="reward weight for base/no-cost total adjusted PnL sum in stress_score ranking",
     )
     model_candidate_selection.add_argument(
         "--plateau-column",

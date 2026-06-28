@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 04:26 Stress score ranking audit
+
+- `model-candidate-selection --candidate-rank-mode stress_score` を追加した。既存 `near_top_risk_score` に対して、validation cost/base scenario合計PnLをrewardするranking。
+- `model-holdout-audit` を `model-sweep` の `metrics.csv` gridにも対応させ、複数候補holdout sweepをvalidation summaryへmergeできるようにした。
+- base 4fold + moderate/high cost 8foldで stress score selectionを実行。topは `down5,up10`、cost min pnl `96.8776`, cost sum `1060.7086`, max DD `88.9514`。
+- 既存holdout stress監査では、全候補に負けcaseが残った。stress top `down5,up10` は holdout min pnl `-57.7402`, sum `473.2982`。`down10,up10,range10` は holdout min `-41.0256`, sum `569.9690`, max DD `127.9822` で相対的に良いが、validation stress scoreでは3位。
+- 判断: stress score実装は有用だが、この設定だけでは標準採用候補を作れない。既存holdoutに合わせてweight調整するとpost-hocになるため、次は2025-04以降へ同一形式predictionを生成して未使用holdoutで確認する。
+- report: `docs/reports/00094_2026-06-29_stress_score_ranking_audit.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 04:14 High-stress cost selection failure
 
 - validation側にもhigh cost (`spread=0.2`, `slippage=0.1`, `delay=1`) を追加し、base + moderate + high costを同時に満たすcandidate selectionを実行した。

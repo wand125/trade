@@ -2000,6 +2000,97 @@ class BacktestTests(unittest.TestCase):
             risk_summary.iloc[1]["near_top_risk_score"],
         )
 
+    def test_candidate_selection_can_rank_stress_score_with_cost_sum_reward(self):
+        def fold(values):
+            rows = []
+            for offset, pnl, drawdown in values:
+                rows.append(
+                    {
+                        "policy": "timed_ev",
+                        "entry_threshold": 15,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 5,
+                        "risk_penalty": 0,
+                        "max_wait_regret": float("inf"),
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": drawdown,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "direction_session_adjusted_pnl_min": 0.0,
+                        "ev_overestimate_vs_realized_mean": 5.0,
+                        "exit_regret_mean": 5.0,
+                        "actual_profit_barrier_miss_rate_smoothed": 0.4,
+                        "max_side_trade_share": 0.7,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_a = fold([(6, 90, 20), (8, 86, 20)])
+        base_b = fold([(6, 88, 20), (8, 84, 20)])
+        cost_a = fold([(6, 82, 20), (8, 150, 20)])
+        cost_b = fold([(6, 80, 20), (8, 75, 20)])
+
+        default_summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=100.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+        stress_summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=100.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+            candidate_rank_mode="stress_score",
+            near_top_cost_pnl_tolerance=10.0,
+            stress_cost_pnl_sum_reward_weight=1.0,
+        )
+
+        self.assertEqual(default_summary.iloc[0]["short_entry_threshold_offset"], 6)
+        self.assertEqual(stress_summary.iloc[0]["short_entry_threshold_offset"], 8)
+        self.assertTrue(bool(stress_summary.iloc[0]["near_top_cost_pnl_ok"]))
+        self.assertGreater(
+            stress_summary.iloc[0]["total_adjusted_pnl_sum_cost"],
+            stress_summary.iloc[1]["total_adjusted_pnl_sum_cost"],
+        )
+        self.assertLess(
+            stress_summary.iloc[0]["stress_risk_score"],
+            stress_summary.iloc[1]["stress_risk_score"],
+        )
+
     def test_holdout_run_frame_reads_model_policy_config_keys(self):
         with TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
@@ -2047,6 +2138,65 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(row["min_entry_rank"], 0.5)
         self.assertEqual(row["side_ev_penalty_rules"], "long:session_regime=ny_late:15")
         self.assertAlmostEqual(row["forced_exit_rate"], 0.0)
+
+    def test_holdout_run_frame_reads_model_sweep_metrics_grid(self):
+        with TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "config.json").write_text("{}", encoding="utf-8")
+            pd.DataFrame(
+                [
+                    {
+                        "policy": "timed_ev",
+                        "entry_threshold": 12,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": 6,
+                        "exit_threshold": 0,
+                        "side_margin": 5,
+                        "risk_penalty": 0,
+                        "max_wait_regret": float("inf"),
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "side_ev_penalty_rules": "",
+                        "period_start": "2025-03-01T00:00:00+00:00",
+                        "period_end": "2025-04-01T00:00:00+00:00",
+                        "total_adjusted_pnl": 12.0,
+                        "total_raw_pnl": 15.0,
+                        "trade_count": 30,
+                        "win_rate": 0.55,
+                        "max_drawdown": 20.0,
+                        "forced_exit_count": 0,
+                    },
+                    {
+                        "policy": "timed_ev",
+                        "entry_threshold": 12,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": 6,
+                        "exit_threshold": 0,
+                        "side_margin": 5,
+                        "risk_penalty": 0,
+                        "max_wait_regret": float("inf"),
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "side_ev_penalty_rules": "short:combined_regime=up_low_vol:10",
+                        "period_start": "2025-03-01T00:00:00+00:00",
+                        "period_end": "2025-04-01T00:00:00+00:00",
+                        "total_adjusted_pnl": 18.0,
+                        "total_raw_pnl": 21.0,
+                        "trade_count": 32,
+                        "win_rate": 0.58,
+                        "max_drawdown": 18.0,
+                        "forced_exit_count": 0,
+                    },
+                ]
+            ).to_csv(run_dir / "metrics.csv", index=False)
+
+            frame = read_holdout_run_frame(run_dir)
+
+        self.assertEqual(len(frame), 2)
+        self.assertEqual(frame.iloc[0]["policy"], "timed_ev")
+        self.assertEqual(frame.iloc[1]["side_ev_penalty_rules"], "short:combined_regime=up_low_vol:10")
+        self.assertAlmostEqual(frame.iloc[0]["forced_exit_rate"], 0.0)
+        self.assertEqual(frame.iloc[0]["holdout_run"], str(run_dir))
 
     def test_holdout_audit_requires_all_holdout_cases_to_pass(self):
         def holdout(month, values):
