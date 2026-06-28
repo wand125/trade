@@ -154,6 +154,8 @@ candidate-entry quality出力に `--prediction-prefix` を追加済み。timed/f
 
 prefixed candidate quality componentを合成する `combine-candidate-quality-components` を追加済み。`mean`, `min`, fixed成分重視 `weighted_mean(0.25,0.5,0.25)` をvalidation 4foldで試した。`component_fixed_weighted quality>=0` はbaselineと同じfold最低PnL `82.7176` を保ち、sum `406.6546 -> 410.7146`、EV overestimate mean `15.5226 -> 15.4567` と小改善。ただし改善幅は小さく、fixed holdout未適用のため標準採用はしない。tie-break候補として残し、次はprefixed applyを作って複数holdoutで確認する。詳細は `docs/reports/00088_2026-06-29_candidate_quality_component_composite.md`。
 
+`component_fixed_weighted` のprefixed applyを2024-12/2025-02へ生成して固定適用済み。事前選択候補 `quality>=0` は両holdoutでbaselineと完全に同じになり、filterとして働かなかったため標準採用しない。診断上は `quality>=2` が2024-12 `-31.7576 -> -16.4354`, 2025-02 `47.1824 -> 62.7588` と改善したが、validationでは min pnl `82.7176 -> 71.1944`, sum `410.7146 -> 363.5200` に悪化する。`quality>=5` は2024-12だけ良く、validation/2025-02を壊すpost-hoc overfit。次は同一HGB+MLP+forced形式の2025-03以降predictionを生成して、`quality>=2` を事前登録候補として確認する。詳細は `docs/reports/00089_2026-06-29_candidate_quality_component_holdout_apply.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -211,6 +213,7 @@ prefixed candidate quality componentを合成する `combine-candidate-quality-c
 34. joint成分をtimed barrier、fixed horizon、clipped bestへ分解しても、scalar risk penaltyではvalidation baselineを超えない。次はcomponentを潰さず、exit class、time-to-event、fixed horizon成分、side/regime別residualを別々の特徴またはmulti-output診断として扱う。
 35. component meanを単独quality gateとして使ってもbaselineを超えない。prefix付きcomponent列は残し、今後はhard gateではなく、diagnostic/tie-break/multi-feature stackingの入力として扱う。
 36. deterministic component ensembleでは `component_fixed_weighted quality>=0` だけがbaselineを小幅改善した。ただしfold最低PnLは同じで、fixed holdout未確認。標準採用せず、tie-break候補として複数holdoutへ進める。
+37. `component_fixed_weighted quality>=0` はfixed holdoutで取引を落とさずbaseline同一。`quality>=2` は2024-12/2025-02を改善するがvalidationを悪化させるため採用不可。次のblind holdoutで事前登録候補としてだけ扱う。
 
 ## 未決定事項
 
@@ -221,6 +224,8 @@ prefixed candidate quality componentを合成する `combine-candidate-quality-c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 03:24 JST 更新: `component_fixed_weighted` prefixed applyを2024-12/2025-02に生成し、固定policyへ適用した。validation選択の `quality>=0` は両holdoutでbaselineと完全に同じで、filterとして働かない。診断では `quality>=2` が2024-12 `-16.4354`, 2025-02 `62.7588` に改善したが、validation min pnlは `71.1944` へ下がる。標準採用せず、次は2025-03以降の同一HGB+MLP+forced predictionを生成して `quality>=2` を事前登録で確認する。
 
 2026-06-29 03:10 JST 更新: `combine-candidate-quality-components` を追加し、timed/fixed/clipped component列を `mean`, `min`, `weighted_mean` で合成できるようにした。validation 4foldでは `component_fixed_weighted quality>=0` がbaselineと同じ min pnl `82.7176` を維持しつつ、sum `410.7146`、EV overestimate mean `15.4567` に小改善。`component_min` はtrade数とPnLを壊す。標準採用せず、次はprefixed applyを生成して2024-12/2025-02と追加holdoutへ固定適用する。
 

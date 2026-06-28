@@ -3780,3 +3780,43 @@ Artifacts:
 - 改善幅は小さく、fixed holdout未確認なので標準採用しない。
 - `component_min` は絞りすぎてtrade数とPnLを壊すため採用しない。
 - 次はprefixed applyを生成し、2024-12 / 2025-02と追加holdoutへ固定適用する。
+
+### 2026-06-29 03:24 JST Candidate quality component holdout apply
+
+作業:
+
+- `component_fixed_weighted` のprefixed applyを2024-12 / 2025-02へ生成した。
+- timed / fixed / clipped best componentを順にapply parquetへ積み増し、`combine-candidate-quality-components` で `weighted_mean(0.25,0.5,0.25)` を作った。
+- validationで事前選択した `quality>=0` と、診断用の閾値 `-inf,0,2,5,8,10,12` を固定policyで比較した。
+- report: `docs/reports/00089_2026-06-29_candidate_quality_component_holdout_apply.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- composite apply predictions: `data/reports/modeling/20260629_candidate_quality_component_fixed_weighted_apply/`
+- no-gate fixed backtests: `data/reports/backtests/candidate_quality_component_fixed_weighted_apply_baseline/`
+- quality `0` fixed backtests: `data/reports/backtests/candidate_quality_component_fixed_weighted_apply_quality0/`
+- quality threshold diagnostic sweeps: `data/reports/backtests/candidate_quality_component_fixed_weighted_apply_quality_sweep/`
+
+結果:
+
+| scope | min quality | adjusted/min pnl | trades/min trades | note |
+|---|---:|---:|---:|---|
+| validation | `-inf` | `82.7176` | `24` | baseline |
+| validation | `0` | `82.7176` | `24` | sumだけ小改善 |
+| validation | `2` | `71.1944` | `21` | validationを悪化 |
+| 2024-12 | `-inf` | `-31.7576` | `52` | baseline |
+| 2024-12 | `0` | `-31.7576` | `52` | baseline同一 |
+| 2024-12 | `2` | `-16.4354` | `43` | 診断上は改善 |
+| 2024-12 | `5` | `29.9552` | `14` | 2024-12だけ良い |
+| 2025-02 | `-inf` | `47.1824` | `126` | baseline |
+| 2025-02 | `0` | `47.1824` | `126` | baseline同一 |
+| 2025-02 | `2` | `62.7588` | `125` | 診断上は改善 |
+| 2025-02 | `5` | `-27.1872` | `41` | 壊れる |
+
+判断:
+
+- `quality>=0` はholdoutで取引を落とさずbaseline同一。標準採用しない。
+- `quality>=2` は2024-12/2025-02を改善したが、validationでfold最低PnLとsumを落とす。採用ではなく、次のblind holdoutでの事前登録候補にする。
+- `quality>=5` はpost-hoc overfitの形なので採用しない。
+- 追加holdout 2025-03は、同一HGB entry + MLP exit hybrid prediction frameが現時点で存在しない。別モデルの2025-03 predictionを流用すると比較条件が変わるため、まず同一形式のprediction生成から行う。
