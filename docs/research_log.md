@@ -1636,3 +1636,40 @@ Artifacts:
 - smoothed calibrationはhard gateにしない。診断またはtie-breakに留める。
 - 暫定候補Aを、次の未見月 2025-07 で見る前に `docs/decisions/` へ固定する。
 - 固定記録は `docs/decisions/0007_high_turnover_gate_selection.md` に作成済み。
+
+### 2026-06-28 12:27 JST Blind 2025-07 Candidate A Evaluation
+
+作業:
+
+- 2025-07の1.0/1.20 datasetを追加生成した。
+- 2025-07をtest monthにしたblind modelを、候補A固定時と同じtrain/validation設定で学習した。
+- `docs/decisions/0007_high_turnover_gate_selection.md` で固定した候補Aを、no-costとstandard cost-aware caseで評価した。
+- `analyze-trades` と `model-cost-sensitivity` で失敗要因を分解した。
+- report: `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`
+
+Artifacts:
+
+- dataset summary: `data/processed/datasets/xauusd_m1_p1_l1p2/xauusd_m1_2025-07_h24_edge15.summary.json`
+- model: `experiments/20260628_032236_full_fixed_horizon_blind_2025_07_barrier_prob_p1_l1p2/`
+- comparison: `data/reports/backtests/20260628_032236_candidate_a_2025_07_blind_comparison.csv`
+- no-cost backtest: `data/reports/backtests/20260628_032312_model_fixed_horizon_ev_2025-07/`
+- cost-aware backtest: `data/reports/backtests/20260628_032314_model_fixed_horizon_ev_2025-07/`
+- cost analysis: `data/reports/backtests/20260628_032410_candidate_a_2025_07_cost_analysis/`
+- cost sensitivity: `data/reports/backtests/20260628_032641_model_cost_sensitivity_2025-07/`
+
+結果:
+
+- no-cost adjusted pnl `+1.5838`, raw pnl `+22.8040`, 66 trades, profit factor `1.0124`。
+- standard cost-aware adjusted pnl `-12.7764`, raw pnl `+9.6040`, 66 trades, profit factor `0.9049`。
+- short trade shareは `0.0758` で、short concentrationは回避した。
+- cost-awareの損失中心は long `-11.7354`, `ny_overlap` `-20.0054`, `low_vol` `-30.8756`, `down_low_vol` `-27.1054`。
+- direction error rate `0.5303`、actual profit barrier miss rate `0.6515`、EV overestimate vs realized mean `15.6821`。
+- spread/slippage感度では、no-cost `+1.5838` から slippage `0.05` だけで `-5.5862`、slippage `0.10` で `-12.7764`。
+
+判断:
+
+- 候補Aは2025-07 blindで失敗。採用候補から外す。
+- 2025-06のshort集中崩れは回避できたが、edgeがlong/low-vol側で消えた。
+- 次はcost-aware評価を主目的へ寄せ、profit barrier classifierとexit timing targetを作り直す。
+- `ny_overlap` や `low_vol` のpost-hoc blockは直接採用しない。validation foldで支持されるかを確認する。
+- レポート通し番号は、今後もファイル更新時刻や `更新日時` ではなく、本文冒頭の `日時` を基準にする。

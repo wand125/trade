@@ -51,6 +51,23 @@
 - smoothed calibrationは、候補の説明・tie-break・失敗分析には使うが、現時点ではhard gateにしない。
 - profit barrier threshold `0.0` が選ばれたことは、barrier probability targetの選別力が弱い兆候として別途分析する。
 
+## 2025-07 Blind結果
+
+更新日時: 2026-06-28 12:27 JST
+
+このdecisionは「2025-07を見る前の選定基準を固定した」記録として維持するが、候補A自体は2025-07 blindで失敗した。
+
+- no-cost adjusted pnl: `+1.5838`
+- standard cost-aware adjusted pnl: `-12.7764`
+- trades: `66`
+- profit factor: `0.9049`
+- short trade share: `0.0758`
+- worst direction/session: `long:ny_overlap`
+
+short concentrationは回避できたが、edgeが薄く、損失は long / `ny_overlap` / `low_vol` / `down_low_vol` に移った。候補Aは採用候補から外し、次の候補選定ではcost-aware評価を主目的へ寄せる。
+
+詳細は `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`。
+
 ## 代替案
 
 - `max-forced-exit-rate=0`: validation候補が全滅した。24h強制決済は仕様上あり得るため、現段階では厳しすぎる。
