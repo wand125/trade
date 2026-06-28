@@ -2911,3 +2911,42 @@ Artifacts:
 - fixed policyは高turnoverでコスト負けし、2024-11の崩れが大きい。
 - strict selectionでは採用候補なし。片側偏りを100%許容すれば候補は残るが、未知regimeへの頑健性としては採用不可。
 - shared MLPを標準policyへ昇格しない。次はexit timing専用化、entry/side calibration、HGB classifierとのhybrid、またはshared classifier追加を検証する。
+
+### 2026-06-28 20:38 JST HGB Entry With MLP Exit Hybrid
+
+作業:
+
+- HGB combined validation predictionsに、shared MLP OOFの `pred_*_exit_event_minutes` をmergeした。
+- HGB holding baseとHGB entry/side + MLP holding hybridを、同一4fold gridで比較した。
+- 同じHGB splitでfinal shared MLPをtrainし、2024-12 test用のMLP holdingを生成した。
+- validation top候補を2024-12へ固定適用し、HGB holding / MLP holdingを比較した。
+- report: `docs/reports/00063_2026-06-28_hgb_mlp_exit_hybrid.md`
+- 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- hybrid validation predictions: `data/reports/modeling/20260628_hgb_mlp_exit_hybrid/predictions_hgb_entry_mlp_exit_oof.parquet`
+- hybrid test predictions: `data/reports/modeling/20260628_hgb_mlp_exit_hybrid/predictions_hgb_entry_mlp_exit_2024_12.parquet`
+- MLP final model: `experiments/20260628_113707_shared_mlp_hgb_split_test_2024_12/`
+- base sweeps: `data/reports/backtests/hgb_exit_holding_base_sweep/`
+- hybrid sweeps: `data/reports/backtests/hgb_entry_mlp_exit_hybrid_sweep/`
+- fixed 2024-12 tests: `data/reports/backtests/hgb_vs_mlp_exit_holding_2024_12/`
+
+結果:
+
+| item | base | hybrid |
+|---|---:|---:|
+| validation eligible candidates | `51` | `58` |
+| validation top min pnl | `78.4344` | `81.5352` |
+| validation top sum pnl | `369.5736` | `396.9782` |
+| validation top max DD | `68.0340` | `60.0744` |
+| 2024-12 fixed adjusted pnl | `-91.5596` base top HGB holding | `-54.6032` hybrid top MLP holding |
+| 2024-12 direction error | `0.6250` | `0.6327` |
+| 2024-12 EV over realized | `22.3310` | `23.0714` |
+
+判断:
+
+- MLP holdingはvalidationでは小幅に改善する。
+- 2024-12でも損失を縮めるが、NoTradeには届かない。
+- 主因はexit timingではなく、direction errorとEV過大評価。MLP exit timingだけでは壊れたentry/sideを救えない。
+- hybridは標準policyへ昇格しない。MLP exit timingは補助信号として残し、本流はentry/side risk controlとEV calibrationへ戻す。
