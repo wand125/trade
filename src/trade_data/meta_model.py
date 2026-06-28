@@ -307,6 +307,12 @@ class CandidateQualityModelConfig:
     target_mode: str = "best_adjusted_pnl"
     min_adjusted_edge: float = 15.0
     time_exit_target_minutes: int = 720
+    joint_barrier_weight: float = 0.7
+    joint_fixed_horizon_weight: float = 0.2
+    joint_best_weight: float = 0.1
+    joint_time_decay: float = 0.25
+    joint_component_clip_multiple: float = 1.0
+    joint_fixed_horizon_minutes: tuple[int, ...] = (60, 240, 720)
     long_entry_rank_column: str = "pred_long_entry_local_rank"
     short_entry_rank_column: str = "pred_short_entry_local_rank"
 
@@ -340,7 +346,11 @@ TRADE_FAILURE_TARGET_NAMES = (
     "any_failure",
 )
 CANDIDATE_FAILURE_TARGET_NAMES = ("large_adverse",)
-CANDIDATE_QUALITY_TARGET_MODES = ("best_adjusted_pnl", "barrier_event_adjusted_pnl")
+CANDIDATE_QUALITY_TARGET_MODES = (
+    "best_adjusted_pnl",
+    "barrier_event_adjusted_pnl",
+    "joint_exit_adjusted_pnl",
+)
 CANDIDATE_EXIT_EVENT_TIME = 0
 CANDIDATE_EXIT_EVENT_PROFIT = 1
 CANDIDATE_EXIT_EVENT_LOSS = 2
@@ -2163,6 +2173,109 @@ def candidate_quality_mask_config(config: CandidateQualityModelConfig) -> Residu
     )
 
 
+def time_exit_target_column(
+    predictions: pd.DataFrame,
+    side_name: str,
+    time_exit_target_minutes: int,
+) -> str:
+    forced_column = f"{side_name}_forced_adjusted_pnl"
+    fixed_column = f"{side_name}_fixed_{time_exit_target_minutes}m_adjusted_pnl"
+    return forced_column if forced_column in predictions.columns else fixed_column
+
+
+def validate_joint_exit_target_config(config: CandidateQualityModelConfig) -> None:
+    if config.time_exit_target_minutes <= 0:
+        raise ValueError("time_exit_target_minutes must be positive")
+    if not 0.0 <= config.joint_time_decay <= 1.0:
+        raise ValueError("joint_time_decay must be in [0, 1]")
+    if config.joint_component_clip_multiple <= 0:
+        raise ValueError("joint_component_clip_multiple must be positive")
+    if any(minutes <= 0 for minutes in config.joint_fixed_horizon_minutes):
+        raise ValueError("joint_fixed_horizon_minutes must contain positive values")
+    if config.joint_fixed_horizon_weight > 0 and not config.joint_fixed_horizon_minutes:
+        raise ValueError("joint_fixed_horizon_minutes is required when joint_fixed_horizon_weight > 0")
+    weights = (
+        config.joint_barrier_weight,
+        config.joint_fixed_horizon_weight,
+        config.joint_best_weight,
+    )
+    if any(weight < 0 for weight in weights):
+        raise ValueError("joint target weights must be non-negative")
+    if sum(weights) <= 0:
+        raise ValueError("at least one joint target weight must be positive")
+
+
+def candidate_barrier_event_target(
+    side_predictions: pd.DataFrame,
+    side_name: str,
+    config: CandidateQualityModelConfig,
+    *,
+    time_decay: float = 0.0,
+) -> tuple[pd.Series, pd.Series, str]:
+    exit_event = side_predictions[f"{side_name}_exit_event"].astype(float)
+    time_exit_column = time_exit_target_column(
+        side_predictions,
+        side_name,
+        config.time_exit_target_minutes,
+    )
+    time_exit_adjusted = finite_float_series(side_predictions, time_exit_column)
+    if time_decay > 0:
+        minutes = finite_float_series(side_predictions, f"{side_name}_exit_event_minutes")
+        speed = (minutes / float(config.time_exit_target_minutes)).clip(lower=0.0, upper=1.0)
+        edge_multiplier = 1.0 - time_decay * speed
+    else:
+        edge_multiplier = pd.Series(1.0, index=side_predictions.index, dtype="float64")
+    target = np.select(
+        [
+            exit_event == CANDIDATE_EXIT_EVENT_PROFIT,
+            exit_event == CANDIDATE_EXIT_EVENT_LOSS,
+            exit_event == CANDIDATE_EXIT_EVENT_TIME,
+        ],
+        [
+            config.min_adjusted_edge * edge_multiplier,
+            -config.min_adjusted_edge * edge_multiplier,
+            time_exit_adjusted,
+        ],
+        default=np.nan,
+    )
+    return pd.Series(target, index=side_predictions.index), time_exit_adjusted, time_exit_column
+
+
+def candidate_joint_exit_target(
+    side_predictions: pd.DataFrame,
+    side_name: str,
+    config: CandidateQualityModelConfig,
+    actual_adjusted_pnl: pd.Series,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    validate_joint_exit_target_config(config)
+    barrier_component, _, _ = candidate_barrier_event_target(
+        side_predictions,
+        side_name,
+        config,
+        time_decay=config.joint_time_decay,
+    )
+    fixed_columns = [
+        f"{side_name}_fixed_{minutes}m_adjusted_pnl"
+        for minutes in config.joint_fixed_horizon_minutes
+    ]
+    fixed_component = side_predictions[fixed_columns].astype(float).mean(axis=1)
+    clip_value = config.min_adjusted_edge * config.joint_component_clip_multiple
+    barrier_component = barrier_component.clip(lower=-clip_value, upper=clip_value)
+    fixed_component = fixed_component.clip(lower=-clip_value, upper=clip_value)
+    best_component = actual_adjusted_pnl.clip(lower=-clip_value, upper=clip_value)
+    total_weight = (
+        config.joint_barrier_weight
+        + config.joint_fixed_horizon_weight
+        + config.joint_best_weight
+    )
+    target = (
+        config.joint_barrier_weight * barrier_component
+        + config.joint_fixed_horizon_weight * fixed_component
+        + config.joint_best_weight * best_component
+    ) / total_weight
+    return target, barrier_component, fixed_component
+
+
 def build_candidate_quality_training_frame(
     predictions: pd.DataFrame,
     config: CandidateQualityModelConfig,
@@ -2180,13 +2293,19 @@ def build_candidate_quality_training_frame(
         SIDE_COLUMNS["long"]["target"],
         SIDE_COLUMNS["short"]["target"],
     }
-    if config.target_mode == "barrier_event_adjusted_pnl":
+    if config.target_mode in {"barrier_event_adjusted_pnl", "joint_exit_adjusted_pnl"}:
         required_columns.update({"long_exit_event", "short_exit_event"})
         for side_name in ("long", "short"):
-            forced_column = f"{side_name}_forced_adjusted_pnl"
-            fixed_column = f"{side_name}_fixed_{config.time_exit_target_minutes}m_adjusted_pnl"
-            if forced_column not in predictions.columns:
-                required_columns.add(fixed_column)
+            if config.target_mode == "joint_exit_adjusted_pnl":
+                required_columns.add(f"{side_name}_exit_event_minutes")
+                for minutes in config.joint_fixed_horizon_minutes:
+                    required_columns.add(f"{side_name}_fixed_{minutes}m_adjusted_pnl")
+            time_exit_column = time_exit_target_column(
+                predictions,
+                side_name,
+                config.time_exit_target_minutes,
+            )
+            required_columns.add(time_exit_column)
     if config.min_entry_rank > 0:
         required_columns.update(
             {
@@ -2233,27 +2352,27 @@ def build_candidate_quality_training_frame(
                 side_predictions,
                 f"{side_name}_forced_adjusted_pnl",
             )
-        if config.target_mode == "barrier_event_adjusted_pnl":
-            exit_event = side_predictions[f"{side_name}_exit_event"].astype(float)
-            forced_column = f"{side_name}_forced_adjusted_pnl"
-            fixed_column = f"{side_name}_fixed_{config.time_exit_target_minutes}m_adjusted_pnl"
-            time_exit_column = forced_column if forced_column in side_predictions.columns else fixed_column
-            time_exit_adjusted = finite_float_series(side_predictions, time_exit_column)
+        if config.target_mode in {"barrier_event_adjusted_pnl", "joint_exit_adjusted_pnl"}:
+            barrier_target, time_exit_adjusted, time_exit_column = candidate_barrier_event_target(
+                side_predictions,
+                side_name,
+                config,
+            )
             features["candidate_actual_time_exit_adjusted_pnl"] = time_exit_adjusted
             features["candidate_actual_time_exit_source"] = time_exit_column
-            features["target"] = np.select(
-                [
-                    exit_event == CANDIDATE_EXIT_EVENT_PROFIT,
-                    exit_event == CANDIDATE_EXIT_EVENT_LOSS,
-                    exit_event == CANDIDATE_EXIT_EVENT_TIME,
-                ],
-                [
-                    config.min_adjusted_edge,
-                    -config.min_adjusted_edge,
-                    time_exit_adjusted,
-                ],
-                default=np.nan,
-            )
+            features["candidate_actual_barrier_target"] = barrier_target
+            if config.target_mode == "joint_exit_adjusted_pnl":
+                joint_target, timed_barrier_component, fixed_component = candidate_joint_exit_target(
+                    side_predictions,
+                    side_name,
+                    config,
+                    features["candidate_actual_adjusted_pnl"],
+                )
+                features["candidate_actual_timed_barrier_component"] = timed_barrier_component
+                features["candidate_actual_fixed_horizon_component"] = fixed_component
+                features["target"] = joint_target
+            else:
+                features["target"] = barrier_target
         else:
             features["target"] = features["candidate_actual_adjusted_pnl"]
         frames.append(features)
@@ -3951,6 +4070,12 @@ def candidate_quality_model_config_from_args(args: argparse.Namespace) -> Candid
         target_mode=args.target_mode,
         min_adjusted_edge=args.min_adjusted_edge,
         time_exit_target_minutes=args.time_exit_target_minutes,
+        joint_barrier_weight=args.joint_barrier_weight,
+        joint_fixed_horizon_weight=args.joint_fixed_horizon_weight,
+        joint_best_weight=args.joint_best_weight,
+        joint_time_decay=args.joint_time_decay,
+        joint_component_clip_multiple=args.joint_component_clip_multiple,
+        joint_fixed_horizon_minutes=tuple(parse_csv_ints(args.joint_fixed_horizon_minutes)),
         long_entry_rank_column=args.long_entry_rank_column,
         short_entry_rank_column=args.short_entry_rank_column,
     )
@@ -5053,8 +5178,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=CANDIDATE_QUALITY_TARGET_MODES,
         default="best_adjusted_pnl",
         help=(
-            "candidate quality target: hindsight best adjusted PnL, or first "
-            "profit/loss barrier with forced PnL on time exit"
+            "candidate quality target: hindsight best adjusted PnL, first "
+            "profit/loss barrier with forced PnL on time exit, or weighted joint exit target"
         ),
     )
     candidate_quality_model_parser.add_argument(
@@ -5071,6 +5196,41 @@ def build_parser() -> argparse.ArgumentParser:
             "fixed-horizon adjusted PnL column to use for time-exit targets when "
             "forced adjusted PnL columns are not present"
         ),
+    )
+    candidate_quality_model_parser.add_argument(
+        "--joint-barrier-weight",
+        type=float,
+        default=0.7,
+        help="joint_exit_adjusted_pnl weight for timed profit/loss/time-exit barrier target",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--joint-fixed-horizon-weight",
+        type=float,
+        default=0.2,
+        help="joint_exit_adjusted_pnl weight for actual fixed-horizon adjusted PnL",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--joint-best-weight",
+        type=float,
+        default=0.1,
+        help="joint_exit_adjusted_pnl weight for clipped hindsight best adjusted PnL",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--joint-time-decay",
+        type=float,
+        default=0.25,
+        help="joint_exit_adjusted_pnl decay applied to slower profit/loss barrier events",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--joint-component-clip-multiple",
+        type=float,
+        default=1.0,
+        help="clip joint target components to min_adjusted_edge times this multiple",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--joint-fixed-horizon-minutes",
+        default="60,240,720",
+        help="comma-separated fixed-horizon actual PnL minutes used by joint_exit_adjusted_pnl",
     )
     add_trade_source_args(candidate_quality_model_parser)
     add_trade_quality_model_args(candidate_quality_model_parser)

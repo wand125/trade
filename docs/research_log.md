@@ -3622,3 +3622,49 @@ Artifacts:
 - target semanticsは正しくなり、OOF biasとR2はわずかに改善したが、MAEは少し悪化した。
 - 実行policyではvalidation topがrisk `0` のままで、forced targetのrisk列は標準採用できない。
 - 次はforced target単独ではなく、exit event class、time-to-event、fixed horizon PnL、EV calibration誤差をjointに扱うtargetへ進む。
+
+### 2026-06-29 02:28 JST Joint exit candidate quality target
+
+作業:
+
+- `oof-candidate-quality-model --target-mode joint_exit_adjusted_pnl` を追加した。
+- targetはtimed barrier成分、fixed horizon実現PnL、clipped best PnLを `0.7/0.2/0.1` で混合する。
+- event time decay `0.25`、fixed horizon minutes `60,240,720`、component clip `min_adjusted_edge * 1.0` でsmokeした。
+- mean/lower overestimate riskをvalidation 4foldで比較し、fixed 2024-12 / 2025-02でも確認した。
+- report: `docs/reports/00085_2026-06-29_joint_exit_candidate_quality_target.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- joint quality 2024-12 apply: `data/reports/modeling/20260628_172218_candidate_quality_joint_exit_w721_2024_12/`
+- joint quality 2025-02 apply: `data/reports/modeling/20260628_172218_candidate_quality_joint_exit_w721_2025_02/`
+- mean-risk validation summary: `data/reports/backtests/candidate_quality_joint_exit_overestimate_risk_summary/20260628_172335_model_sweep_summary/`
+- lower-risk validation summary: `data/reports/backtests/candidate_quality_joint_exit_lower_overestimate_risk_summary/20260628_172653_model_sweep_summary/`
+- mean-risk fixed smoke: `data/reports/backtests/candidate_quality_joint_exit_overestimate_risk_fixed/`
+- lower-risk fixed smoke: `data/reports/backtests/candidate_quality_joint_exit_lower_overestimate_risk_fixed/`
+
+結果:
+
+| item | value |
+|---|---:|
+| candidate count | `9091` |
+| target mean | `2.3994` |
+| raw bias | `19.6061` |
+| mean bias | `0.6522` |
+| lower bias | `-9.5179` |
+| mean MAE | `10.7047` |
+| mean RMSE | `11.4542` |
+| mean R2 | `-0.1613` |
+| lower coverage | `0.6800` |
+| mean-risk validation risk0 min pnl | `82.7176` |
+| mean-risk validation risk0.05 min pnl | `35.4626` |
+| lower-risk validation risk0.05 min pnl | `10.8048` |
+| fixed 2024-12 lower risk0.05 | `-1.6336` |
+| fixed 2025-02 lower risk0.05 | `23.7418` |
+
+判断:
+
+- OOF回帰指標はforced barrier targetより明確に改善した。
+- ただし実行policyではrisk `0` がvalidation最良のままで、risk penalty化するとfold最低PnLが下がる。
+- fixed smokeでは2024-12改善と2025-02悪化が両立せず、月依存の挙動。
+- 標準採用しない。joint targetはtarget familyとして残し、次はscalar penaltyではなくexit class、time-to-event、fixed horizon成分、side/regime別residualへ分解して扱う。
