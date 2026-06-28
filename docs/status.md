@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 12:27 JST
+最終更新: 2026-06-28 12:37 JST
 
 ## 現在の状態
 
@@ -42,6 +42,8 @@ validation 4foldで high-turnover gate比較を実施済み。前回候補周辺
 
 固定済み候補Aを2025-07 blindで評価済み。no-costでは adjusted pnl `+1.5838` と薄く、standard cost-aware caseでは `-12.7764`, 66 trades, profit factor `0.9049` でNoTradeに負けた。short concentrationは避けたが、損失は long / `ny_overlap` / `low_vol` / `down_low_vol` に移った。候補Aは採用候補から外し、2025-07はblind failureとして扱う。詳細は `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`。
 
+trade-analysis diagnostic gateを追加済み。`model-sweep` metricsに `direction_error_rate`, `predicted_side_error_rate`, `exit_regret_mean`, `ev_overestimate_vs_realized_mean` などを保存し、`model-candidate-selection --max-direction-error-rate` / `--max-exit-regret-mean` / `--max-ev-overestimate-vs-realized-mean` などで候補を落とせる。2025-07候補Aのpost-hoc smokeでは、direction error `0.5303`, exit regret mean `17.4505`, EV overestimate vs realized `15.6821` によりeligibleから落ちた。詳細は `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -63,12 +65,12 @@ validation 4foldで high-turnover gate比較を実施済み。前回候補周辺
 
 ## 次の作業
 
-1. 2025-07 blind failureをvalidation設計へ戻す。post-hocに `ny_overlap` や `low_vol` を直接blockせず、validation foldで支持されるか確認する。
-2. cost-aware評価をtie-breakではなく主目的へ寄せる。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
-3. profit barrier threshold `0.0` が選ばれた理由を分析する。barrier probability targetの選別力が弱い可能性が高い。
-4. smoothed calibrationはhard gateにせず、診断/tie-breakとして残す。hard gate化するなら、2025-06既知月のB候補失敗と2025-07 cost failureを同時に避ける追加条件が必要。
-5. exit timing targetを fixed horizon、barrier time、hazard-like close probability、realized exit regret へ拡張する。
-6. EV calibrationに、realized PnLに対する過大評価penaltyを入れる。
+1. validation 4foldのhigh-turnover gridを、新diagnostic列入りで再生成する。
+2. `max-direction-error-rate`, `max-exit-regret-mean`, `max-ev-overestimate-vs-realized-mean` の閾値台地を見る。
+3. PnL, trade count, side/session loss, short share, smoothed barrier miss, trade-analysis diagnosticsを同時に満たす候補を固定する。
+4. cost-aware評価をtie-breakではなく主目的へ寄せる。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
+5. profit barrier threshold `0.0` が選ばれた理由を分析する。barrier probability targetの選別力が弱い可能性が高い。
+6. exit timing targetを fixed horizon、barrier time、hazard-like close probability、realized exit regret へ拡張する。
 7. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
 8. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
@@ -158,6 +160,8 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 
 2026-06-28 12:27 JST 更新: 固定済み候補Aを2025-07 blindに適用した。no-cost adjusted pnlは `+1.5838` だが、standard cost-aware caseは `-12.7764`, 66 trades, profit factor `0.9049` でNoTradeに負けた。short concentrationは回避した一方、損失は long / `ny_overlap` / `low_vol` / `down_low_vol` に移った。EV overestimate vs realized meanは `15.6821`、actual profit barrier miss rateは `0.6515`。候補Aは採用候補から外す。詳細は `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`。
 
+2026-06-28 12:37 JST 更新: `model-sweep` metricsへ trade-analysis diagnostic列を追加し、`model-candidate-selection` で direction error、predicted side error、no-edge rate、exit regret mean、EV overestimate vs realized meanをgateできるようにした。2025-07候補Aのpost-hoc smokeでは、`max-direction-error-rate=0.5`, `max-exit-regret-mean=15`, `max-ev-overestimate-vs-realized-mean=10` によりeligibleから落ちた。詳細は `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`。
+
 ## 直近の実験
 
 - `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
@@ -172,7 +176,11 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
 - `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`
 - `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`
+- `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
+- `data/reports/backtests/20260628_033639_model_sweep_2025-07/`
+- `data/reports/backtests/20260628_033650_model_sweep_2025-07/`
+- `data/reports/backtests/20260628_033702_model_candidate_selection/`
 - `experiments/20260628_032236_full_fixed_horizon_blind_2025_07_barrier_prob_p1_l1p2/`
 - `data/reports/backtests/20260628_032236_candidate_a_2025_07_blind_comparison.csv`
 - `data/reports/backtests/20260628_032312_model_fixed_horizon_ev_2025-07/`

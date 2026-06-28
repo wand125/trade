@@ -137,6 +137,19 @@ SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS = [
     "max_side_trade_share",
 ]
 
+TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS = [
+    "analysis_matched_prediction_rate",
+    "direction_error_rate",
+    "no_edge_rate",
+    "predicted_side_error_rate",
+    "exit_regret_sum",
+    "exit_regret_mean",
+    "best_side_regret_sum",
+    "best_side_regret_mean",
+    "ev_overestimate_vs_oracle_mean",
+    "ev_overestimate_vs_realized_mean",
+]
+
 PROFIT_BARRIER_LABEL_COLUMNS = [
     "long_profit_barrier_hit",
     "short_profit_barrier_hit",
@@ -212,6 +225,7 @@ COERCED_NUMERIC_DIAGNOSTIC_COLUMNS = {
     "direction_session_adjusted_pnl_min",
     "worst_direction_session_trade_count",
     *SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS,
+    *TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS,
     *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
     *PROFIT_BARRIER_CALIBRATION_COLUMNS,
 }
@@ -517,6 +531,7 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
     required_columns.extend(extra_side_margin_rule_columns(config))
     required_columns.extend(side_rule_columns(config))
     required_columns.extend([column for column, _ in blocked_regime_columns(config)])
+    optional_columns.extend(optional_parquet_columns(path, ANALYSIS_PREDICTION_COLUMNS))
     optional_columns.extend(optional_parquet_columns(path, PROFIT_BARRIER_LABEL_COLUMNS))
     optional_columns.extend(optional_parquet_columns(path, REGIME_COLUMNS))
     columns = list(dict.fromkeys([*required_columns, *optional_columns]))
@@ -1914,26 +1929,62 @@ def trade_analysis_summary(enriched: pd.DataFrame) -> dict[str, object]:
             "matched_prediction_count": 0,
             "total_adjusted_pnl": 0.0,
             "total_raw_pnl": 0.0,
+            "analysis_matched_prediction_rate": 0.0,
+            "direction_error_rate": 0.0,
+            "no_edge_rate": 0.0,
+            "predicted_side_error_rate": 0.0,
+            "exit_regret_sum": 0.0,
+            "exit_regret_mean": 0.0,
+            "best_side_regret_sum": 0.0,
+            "best_side_regret_mean": 0.0,
+            "ev_overestimate_vs_oracle_mean": 0.0,
+            "ev_overestimate_vs_realized_mean": 0.0,
+            "avg_holding_minutes": 0.0,
         }
     adjusted = enriched["adjusted_pnl"].astype(float)
     raw = enriched["raw_pnl"].astype(float)
+    exit_regret = enriched["exit_regret"].astype(float)
+    best_side_regret = enriched["best_side_regret"].astype(float)
     return {
         "trade_count": int(len(enriched)),
         "matched_prediction_count": int(enriched["matched_prediction"].sum()),
         "total_adjusted_pnl": float(adjusted.sum()),
         "total_raw_pnl": float(raw.sum()),
+        "analysis_matched_prediction_rate": float(numeric_indicator(enriched["matched_prediction"]).mean()),
         "win_rate": float((adjusted > 0).mean()),
         "long_adjusted_pnl": float(enriched.loc[enriched["is_long"], "adjusted_pnl"].sum()),
         "short_adjusted_pnl": float(enriched.loc[enriched["is_short"], "adjusted_pnl"].sum()),
         "direction_error_rate": float(numeric_indicator(enriched["direction_error"]).mean()),
         "no_edge_rate": float(numeric_indicator(enriched["no_edge_entry"]).mean()),
         "predicted_side_error_rate": float(numeric_indicator(enriched["predicted_side_error"]).mean()),
-        "exit_regret_sum": float(enriched["exit_regret"].sum()),
-        "best_side_regret_sum": float(enriched["best_side_regret"].sum()),
+        "exit_regret_sum": float(exit_regret.sum()),
+        "exit_regret_mean": float(exit_regret.mean()),
+        "best_side_regret_sum": float(best_side_regret.sum()),
+        "best_side_regret_mean": float(best_side_regret.mean()),
         "ev_overestimate_vs_oracle_mean": float(enriched["ev_overestimate_vs_oracle"].mean()),
         "ev_overestimate_vs_realized_mean": float(enriched["ev_overestimate_vs_realized"].mean()),
         "avg_holding_minutes": float(enriched["holding_minutes"].mean()),
     }
+
+
+def trade_prediction_diagnostics(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+    long_column: str = "pred_long_best_adjusted_pnl",
+    short_column: str = "pred_short_best_adjusted_pnl",
+) -> dict[str, float]:
+    try:
+        analysis_predictions = prepare_analysis_predictions(predictions, long_column, short_column)
+    except ValueError:
+        analysis_predictions = predictions
+    summary = trade_analysis_summary(enrich_trades_with_predictions(trades, analysis_predictions))
+    diagnostics: dict[str, float] = {}
+    for column in TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS:
+        value = summary.get(column, 0.0)
+        if value is None or not np.isfinite(float(value)):
+            value = 0.0
+        diagnostics[column] = float(value)
+    return diagnostics
 
 
 def strategy_config_from_args(args: argparse.Namespace, strategy: str | None = None) -> StrategyConfig:
@@ -2043,6 +2094,14 @@ def run_model_policy(
     metrics["signal_short_count"] = int((signal == -1).sum())
     metrics["signal_flat_count"] = int((signal == 0).sum())
     metrics.update(direction_session_diagnostics(trades, predictions))
+    metrics.update(
+        trade_prediction_diagnostics(
+            trades,
+            predictions,
+            model_policy_config.long_column,
+            model_policy_config.short_column,
+        )
+    )
     metrics.update(profit_barrier_diagnostics(trades, predictions, model_policy_config))
     metrics.update(profit_barrier_calibration_diagnostics(trades, predictions, model_policy_config))
     curve = equity_curve(trades, backtest_config.evaluation_start)
@@ -2432,6 +2491,9 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     for column in SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS:
         if column not in output.columns:
             output[column] = 0.0
+    for column in TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS:
+        if column not in output.columns:
+            output[column] = 0.0
     if {"long_trade_count", "trade_count"}.issubset(output.columns):
         trade_count = output["trade_count"].replace(0, np.nan)
         output["long_trade_share"] = output["long_trade_share"].mask(
@@ -2512,6 +2574,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     ].fillna(0)
     for column in SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS:
         output[column] = output[column].fillna(0.0)
+    for column in TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS:
+        output[column] = output[column].fillna(0.0)
     for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
         output[column] = output[column].fillna(0.0)
     for column in PROFIT_BARRIER_CALIBRATION_COLUMNS:
@@ -2587,6 +2651,7 @@ def summarize_sweep_frames(
         "execution_delay_bars",
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
+        *TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS,
     ]
@@ -2690,6 +2755,11 @@ def summarize_candidate_selection(
     max_side_trade_share: float = 1.0,
     max_smoothed_actual_profit_barrier_miss_rate: float = 1.0,
     max_smoothed_profit_barrier_calibration_overestimate: float = 1.0,
+    max_direction_error_rate: float = 1.0,
+    max_predicted_side_error_rate: float = 1.0,
+    max_no_edge_rate: float = 1.0,
+    max_exit_regret_mean: float = 1e100,
+    max_ev_overestimate_vs_realized_mean: float = 1e100,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -2713,6 +2783,16 @@ def summarize_candidate_selection(
         raise ValueError(
             "max_smoothed_profit_barrier_calibration_overestimate must be between 0 and 1"
         )
+    if not 0 <= max_direction_error_rate <= 1:
+        raise ValueError("max_direction_error_rate must be between 0 and 1")
+    if not 0 <= max_predicted_side_error_rate <= 1:
+        raise ValueError("max_predicted_side_error_rate must be between 0 and 1")
+    if not 0 <= max_no_edge_rate <= 1:
+        raise ValueError("max_no_edge_rate must be between 0 and 1")
+    if max_exit_regret_mean < 0:
+        raise ValueError("max_exit_regret_mean must be non-negative")
+    if max_ev_overestimate_vs_realized_mean < 0:
+        raise ValueError("max_ev_overestimate_vs_realized_mean must be non-negative")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -2786,6 +2866,34 @@ def summarize_candidate_selection(
         ],
         0.0,
     )
+    merged["direction_error_rate_max_all"] = row_max_or_default(
+        merged,
+        ["direction_error_rate_max_base", "direction_error_rate_max_cost"],
+        0.0,
+    )
+    merged["predicted_side_error_rate_max_all"] = row_max_or_default(
+        merged,
+        ["predicted_side_error_rate_max_base", "predicted_side_error_rate_max_cost"],
+        0.0,
+    )
+    merged["no_edge_rate_max_all"] = row_max_or_default(
+        merged,
+        ["no_edge_rate_max_base", "no_edge_rate_max_cost"],
+        0.0,
+    )
+    merged["exit_regret_mean_max_all"] = row_max_or_default(
+        merged,
+        ["exit_regret_mean_max_base", "exit_regret_mean_max_cost"],
+        0.0,
+    )
+    merged["ev_overestimate_vs_realized_mean_max_all"] = row_max_or_default(
+        merged,
+        [
+            "ev_overestimate_vs_realized_mean_max_base",
+            "ev_overestimate_vs_realized_mean_max_cost",
+        ],
+        0.0,
+    )
     merged["actual_profit_barrier_miss_rate_max_all"] = row_max_or_default(
         merged,
         [
@@ -2842,6 +2950,18 @@ def summarize_candidate_selection(
         merged["profit_barrier_calibration_overestimate_smoothed_max_all"]
         <= max_smoothed_profit_barrier_calibration_overestimate
     )
+    merged["direction_error_rate_ok"] = (
+        merged["direction_error_rate_max_all"] <= max_direction_error_rate
+    )
+    merged["predicted_side_error_rate_ok"] = (
+        merged["predicted_side_error_rate_max_all"] <= max_predicted_side_error_rate
+    )
+    merged["no_edge_rate_ok"] = merged["no_edge_rate_max_all"] <= max_no_edge_rate
+    merged["exit_regret_ok"] = merged["exit_regret_mean_max_all"] <= max_exit_regret_mean
+    merged["ev_overestimate_vs_realized_ok"] = (
+        merged["ev_overestimate_vs_realized_mean_max_all"]
+        <= max_ev_overestimate_vs_realized_mean
+    )
     merged["cost_drop_ok"] = merged["cost_pnl_drop_min"] <= max_cost_pnl_drop
     merged["pre_plateau_eligible"] = (
         merged["eligible_base"].astype(bool)
@@ -2855,6 +2975,11 @@ def summarize_candidate_selection(
         & merged["smoothed_actual_profit_barrier_miss_ok"]
         & merged["profit_barrier_calibration_ok"]
         & merged["smoothed_profit_barrier_calibration_ok"]
+        & merged["direction_error_rate_ok"]
+        & merged["predicted_side_error_rate_ok"]
+        & merged["no_edge_rate_ok"]
+        & merged["exit_regret_ok"]
+        & merged["ev_overestimate_vs_realized_ok"]
         & merged["cost_drop_ok"]
     )
     merged["plateau_support_count"] = plateau_support_counts(
@@ -2874,6 +2999,11 @@ def summarize_candidate_selection(
             "plateau_support_count",
             "side_adjusted_pnl_min_all",
             "direction_session_adjusted_pnl_min_all",
+            "ev_overestimate_vs_realized_mean_max_all",
+            "exit_regret_mean_max_all",
+            "direction_error_rate_max_all",
+            "predicted_side_error_rate_max_all",
+            "no_edge_rate_max_all",
             "short_trade_share_max_all",
             "max_side_trade_share_max_all",
             "actual_profit_barrier_miss_rate_smoothed_max_all",
@@ -2890,6 +3020,11 @@ def summarize_candidate_selection(
             False,
             False,
             False,
+            True,
+            True,
+            True,
+            True,
+            True,
             True,
             True,
             True,
@@ -2971,6 +3106,11 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         max_smoothed_profit_barrier_calibration_overestimate=(
             args.max_smoothed_profit_barrier_calibration_overestimate
         ),
+        max_direction_error_rate=args.max_direction_error_rate,
+        max_predicted_side_error_rate=args.max_predicted_side_error_rate,
+        max_no_edge_rate=args.max_no_edge_rate,
+        max_exit_regret_mean=args.max_exit_regret_mean,
+        max_ev_overestimate_vs_realized_mean=args.max_ev_overestimate_vs_realized_mean,
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -2997,6 +3137,11 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "max_smoothed_profit_barrier_calibration_overestimate": (
             args.max_smoothed_profit_barrier_calibration_overestimate
         ),
+        "max_direction_error_rate": args.max_direction_error_rate,
+        "max_predicted_side_error_rate": args.max_predicted_side_error_rate,
+        "max_no_edge_rate": args.max_no_edge_rate,
+        "max_exit_regret_mean": args.max_exit_regret_mean,
+        "max_ev_overestimate_vs_realized_mean": args.max_ev_overestimate_vs_realized_mean,
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -3324,6 +3469,36 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="maximum allowed Laplace-smoothed profit-barrier calibration overestimate",
+    )
+    model_candidate_selection.add_argument(
+        "--max-direction-error-rate",
+        type=float,
+        default=1.0,
+        help="maximum allowed actual opposite-side-better rate in any fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-predicted-side-error-rate",
+        type=float,
+        default=1.0,
+        help="maximum allowed predicted best side mismatch rate in any fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-no-edge-rate",
+        type=float,
+        default=1.0,
+        help="maximum allowed share of trades with non-positive oracle same-side edge",
+    )
+    model_candidate_selection.add_argument(
+        "--max-exit-regret-mean",
+        type=float,
+        default=1e100,
+        help="maximum allowed mean same-side oracle exit regret in any fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-ev-overestimate-vs-realized-mean",
+        type=float,
+        default=1e100,
+        help="maximum allowed mean predicted EV over realized adjusted PnL in any fold",
     )
     model_candidate_selection.add_argument(
         "--plateau-column",

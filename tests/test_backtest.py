@@ -482,6 +482,11 @@ class BacktestTests(unittest.TestCase):
         self.assertTrue(pd.isna(normalized["direction_session_adjusted_pnl_min"]).sum() == 0)
         self.assertEqual(normalized["worst_direction_session"].tolist(), [""])
         self.assertEqual(normalized["worst_direction_session_trade_count"].tolist(), [0])
+        self.assertEqual(normalized["direction_error_rate"].tolist(), [0.0])
+        self.assertEqual(normalized["predicted_side_error_rate"].tolist(), [0.0])
+        self.assertEqual(normalized["no_edge_rate"].tolist(), [0.0])
+        self.assertEqual(normalized["exit_regret_mean"].tolist(), [0.0])
+        self.assertEqual(normalized["ev_overestimate_vs_realized_mean"].tolist(), [0.0])
         self.assertEqual(normalized["predicted_profit_barrier_miss_rate"].tolist(), [0.0])
         self.assertEqual(normalized["actual_profit_barrier_miss_rate"].tolist(), [0.0])
         self.assertEqual(normalized["predicted_profit_barrier_miss_count"].tolist(), [0.0])
@@ -1064,6 +1069,83 @@ class BacktestTests(unittest.TestCase):
         offset8 = summary[summary["short_entry_threshold_offset"] == 8].iloc[0]
         self.assertFalse(bool(offset6["eligible"]))
         self.assertFalse(bool(offset6["short_trade_share_ok"]))
+        self.assertTrue(bool(offset8["eligible"]))
+        self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
+
+    def test_candidate_selection_can_gate_trade_analysis_diagnostics(self):
+        def fold(values):
+            rows = []
+            for offset, pnl, direction_error, exit_regret, ev_overestimate in values:
+                rows.append(
+                    {
+                        "policy": "fixed_horizon_ev",
+                        "entry_threshold": 0,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 1,
+                        "risk_penalty": 0,
+                        "max_wait_regret": 4,
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "True",
+                        "profit_barrier_threshold": 0.4,
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": 40,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "long_adjusted_pnl": 20,
+                        "short_adjusted_pnl": 10,
+                        "direction_error_rate": direction_error,
+                        "predicted_side_error_rate": direction_error,
+                        "no_edge_rate": 0.1,
+                        "exit_regret_mean": exit_regret,
+                        "ev_overestimate_vs_realized_mean": ev_overestimate,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_a = fold([(6, 45, 0.70, 25.0, 18.0), (8, 30, 0.35, 8.0, 6.0)])
+        base_b = fold([(6, 43, 0.65, 23.0, 17.0), (8, 28, 0.34, 9.0, 7.0)])
+        cost_a = fold([(6, 35, 0.72, 26.0, 19.0), (8, 24, 0.36, 10.0, 8.0)])
+        cost_b = fold([(6, 33, 0.66, 24.0, 18.0), (8, 22, 0.32, 9.0, 7.0)])
+
+        summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=20.0,
+            max_direction_error_rate=0.5,
+            max_predicted_side_error_rate=0.5,
+            max_exit_regret_mean=15.0,
+            max_ev_overestimate_vs_realized_mean=10.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+
+        offset6 = summary[summary["short_entry_threshold_offset"] == 6].iloc[0]
+        offset8 = summary[summary["short_entry_threshold_offset"] == 8].iloc[0]
+        self.assertFalse(bool(offset6["eligible"]))
+        self.assertFalse(bool(offset6["direction_error_rate_ok"]))
+        self.assertFalse(bool(offset6["exit_regret_ok"]))
+        self.assertFalse(bool(offset6["ev_overestimate_vs_realized_ok"]))
         self.assertTrue(bool(offset8["eligible"]))
         self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
 

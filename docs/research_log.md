@@ -1673,3 +1673,43 @@ Artifacts:
 - 次はcost-aware評価を主目的へ寄せ、profit barrier classifierとexit timing targetを作り直す。
 - `ny_overlap` や `low_vol` のpost-hoc blockは直接採用しない。validation foldで支持されるかを確認する。
 - レポート通し番号は、今後もファイル更新時刻や `更新日時` ではなく、本文冒頭の `日時` を基準にする。
+
+### 2026-06-28 12:37 JST Trade Analysis Diagnostic Gates
+
+作業:
+
+- `model-sweep` metricsへ trade-analysis diagnostic列を追加した。
+- 追加列は `direction_error_rate`, `no_edge_rate`, `predicted_side_error_rate`, `exit_regret_mean`, `ev_overestimate_vs_realized_mean` など。
+- `model-candidate-selection` に以下のgateを追加した。
+  - `--max-direction-error-rate`
+  - `--max-predicted-side-error-rate`
+  - `--max-no-edge-rate`
+  - `--max-exit-regret-mean`
+  - `--max-ev-overestimate-vs-realized-mean`
+- report: `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`
+
+Artifacts:
+
+- no-cost one-point sweep: `data/reports/backtests/20260628_033639_model_sweep_2025-07/`
+- cost-aware one-point sweep: `data/reports/backtests/20260628_033650_model_sweep_2025-07/`
+- candidate-selection smoke: `data/reports/backtests/20260628_033702_model_candidate_selection/`
+
+結果:
+
+- 2025-07候補Aのpost-hoc smokeで、新diagnosticが `analyze-trades` と一致することを確認した。
+- no-cost: direction error rate `0.5303`, exit regret mean `17.2330`, EV overestimate vs realized mean `15.4645`。
+- cost-aware: direction error rate `0.5303`, exit regret mean `17.4505`, EV overestimate vs realized mean `15.6821`。
+- `max-direction-error-rate=0.5`, `max-exit-regret-mean=15`, `max-ev-overestimate-vs-realized-mean=10` で候補Aは `eligible=false`。
+
+検証:
+
+- `python3 -m unittest tests.test_backtest`: 34 tests OK。
+- `python3 -m unittest discover tests`: 70 tests OK。
+- `python3 -m trade_data.backtest model-candidate-selection --help`: OK。
+- `git diff --check`: OK。
+
+判断:
+
+- 2025-07の失敗要因を、post-hoc分析だけでなくvalidation候補選定へ戻せるようになった。
+- ただし、この閾値は2025-07を見た後のsmoke値なので採用基準ではない。次はvalidation 4foldで閾値台地を確認する。
+- `ny_overlap` / `low_vol` の直接blockではなく、direction error、exit regret、EV overestimateのような構造的な失敗指標を使う。
