@@ -153,6 +153,7 @@ short_utility > long_utility なら short
 - regression で long/short expected adjusted pnl と side_score を予測する。
 - classification で分位点 bin と補助 `label` を予測する。
 - 現在のHGB実装はtargetごとの独立モデルであり、shared representationを持たない。そのため、dense entry quality targetはEV予測の表現改善には直接効かない。
+- `train-shared-mlp` で、scikit-learn `MLPRegressor` によるmulti-output regression prototypeを追加した。これはpolicy regression targetsを1つのshared modelで同時出力し、HGB独立fitとの差分を測るための入口。classification probabilityはまだ扱わない。
 - 現時点の selection metric は oracle exit を使うため、entry/side ranking の暫定評価に限る。
 - 次の評価では、予測値だけで entry/exit を実行する backtest policy に接続する。
 
@@ -209,6 +210,7 @@ short_utility > long_utility なら short
 深層学習:
 
 - 1D CNN
+- scikit-learn shared MLP regression prototype
 - TCN
 - LSTM
 - GRU

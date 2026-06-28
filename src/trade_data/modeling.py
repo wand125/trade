@@ -20,6 +20,10 @@ from sklearn.metrics import (
     mean_squared_error,
     r2_score,
 )
+from sklearn.neural_network import MLPRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.preprocessing import StandardScaler
 
 from trade_data.dataset import (
     EXIT_FIXED_HORIZON_MINUTES,
@@ -200,6 +204,25 @@ class ModelConfig:
     entry_threshold: float
     target_clip_quantile: float
     sample_weighting: str
+    target_set: str
+
+
+@dataclass(frozen=True)
+class SharedMLPConfig:
+    hidden_layer_sizes: tuple[int, ...]
+    activation: str
+    alpha: float
+    learning_rate_init: float
+    max_iter: int
+    batch_size: int | str
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
+    random_seed: int
+    sample_frac: float
+    entry_threshold: float
+    target_clip_quantile: float
     target_set: str
 
 
@@ -589,6 +612,57 @@ def model_config_from_args(args: argparse.Namespace) -> ModelConfig:
     )
 
 
+def parse_hidden_layer_sizes(value: str) -> tuple[int, ...]:
+    sizes: list[int] = []
+    for part in value.split(","):
+        stripped = part.strip()
+        if not stripped:
+            continue
+        try:
+            size = int(stripped)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("hidden layer sizes must be comma-separated integers") from exc
+        if size <= 0:
+            raise argparse.ArgumentTypeError("hidden layer sizes must be positive")
+        sizes.append(size)
+    if not sizes:
+        raise argparse.ArgumentTypeError("at least one hidden layer size is required")
+    return tuple(sizes)
+
+
+def parse_mlp_batch_size(value: str) -> int | str:
+    normalized = value.strip().lower()
+    if normalized == "auto":
+        return "auto"
+    try:
+        batch_size = int(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("batch size must be 'auto' or a positive integer") from exc
+    if batch_size <= 0:
+        raise argparse.ArgumentTypeError("batch size must be positive")
+    return batch_size
+
+
+def shared_mlp_config_from_args(args: argparse.Namespace) -> SharedMLPConfig:
+    return SharedMLPConfig(
+        hidden_layer_sizes=args.hidden_layers,
+        activation=args.activation,
+        alpha=args.alpha,
+        learning_rate_init=args.learning_rate_init,
+        max_iter=args.max_iter,
+        batch_size=args.batch_size,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
+        random_seed=args.random_seed,
+        sample_frac=args.sample_frac,
+        entry_threshold=args.entry_threshold,
+        target_clip_quantile=args.target_clip_quantile,
+        target_set=args.target_set,
+    )
+
+
 def regression_training_values(series: pd.Series, clip_quantile: float) -> np.ndarray:
     values = series.astype(float)
     if clip_quantile >= 1.0:
@@ -598,6 +672,20 @@ def regression_training_values(series: pd.Series, clip_quantile: float) -> np.nd
     lower = values.quantile(1.0 - clip_quantile)
     upper = values.quantile(clip_quantile)
     return values.clip(lower=lower, upper=upper).to_numpy()
+
+
+def shared_regression_training_values(
+    df: pd.DataFrame,
+    regression_targets: list[str],
+    clip_quantile: float,
+) -> np.ndarray:
+    if not regression_targets:
+        raise ValueError("shared regression requires at least one target")
+    values = [
+        regression_training_values(df[target], clip_quantile)
+        for target in regression_targets
+    ]
+    return np.column_stack(values)
 
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
@@ -1639,6 +1727,52 @@ def evaluate_models(
     return metrics, predictions
 
 
+def train_shared_mlp_regressor(config: SharedMLPConfig) -> TransformedTargetRegressor:
+    regressor = make_pipeline(
+        StandardScaler(),
+        MLPRegressor(
+            hidden_layer_sizes=config.hidden_layer_sizes,
+            activation=config.activation,
+            alpha=config.alpha,
+            learning_rate_init=config.learning_rate_init,
+            max_iter=config.max_iter,
+            batch_size=config.batch_size,
+            early_stopping=config.early_stopping,
+            validation_fraction=config.validation_fraction,
+            n_iter_no_change=config.n_iter_no_change,
+            tol=config.tol,
+            random_state=config.random_seed,
+        ),
+    )
+    return TransformedTargetRegressor(
+        regressor=regressor,
+        transformer=StandardScaler(),
+    )
+
+
+def evaluate_shared_mlp_regressor(
+    model: object,
+    df: pd.DataFrame,
+    feature_columns: list[str],
+    regression_targets: list[str],
+) -> tuple[dict[str, dict[str, float]], dict[str, np.ndarray]]:
+    x = as_matrix(df, feature_columns)
+    pred = np.asarray(model.predict(x))
+    if pred.ndim == 1:
+        pred = pred.reshape(-1, 1)
+    if pred.shape[1] != len(regression_targets):
+        raise ValueError(
+            f"shared MLP returned {pred.shape[1]} outputs for {len(regression_targets)} targets"
+        )
+    metrics: dict[str, dict[str, float]] = {"regression": {}, "classification": {}}
+    predictions: dict[str, np.ndarray] = {}
+    for index, target in enumerate(regression_targets):
+        target_pred = pred[:, index]
+        predictions[target] = target_pred
+        metrics["regression"][target] = regression_metrics(df[target].to_numpy(), target_pred)
+    return metrics, predictions
+
+
 def model_diagnostics(models: dict[str, object], config: ModelConfig) -> dict[str, dict[str, object]]:
     diagnostics: dict[str, dict[str, object]] = {}
     for target, model in models.items():
@@ -1656,6 +1790,24 @@ def model_diagnostics(models: dict[str, object], config: ModelConfig) -> dict[st
             else float(validation_score[-1]),
         }
     return diagnostics
+
+
+def shared_mlp_diagnostics(model: object, config: SharedMLPConfig) -> dict[str, object]:
+    regressor = model.regressor_.named_steps["mlpregressor"]
+    loss_curve = getattr(regressor, "loss_curve_", None)
+    validation_scores = getattr(regressor, "validation_scores_", None)
+    n_iter = int(getattr(regressor, "n_iter_", config.max_iter))
+    return {
+        "n_iter": n_iter,
+        "max_iter": config.max_iter,
+        "hit_max_iter": bool(n_iter >= config.max_iter),
+        "early_stopping_enabled": bool(config.early_stopping),
+        "loss_final": None if loss_curve is None or len(loss_curve) == 0 else float(loss_curve[-1]),
+        "validation_score_final": None
+        if validation_scores is None or len(validation_scores) == 0
+        else float(validation_scores[-1]),
+        "hidden_layer_sizes": list(config.hidden_layer_sizes),
+    }
 
 
 def fit_models(
@@ -1877,6 +2029,139 @@ def train(args: argparse.Namespace) -> int:
     return 0
 
 
+def train_shared_mlp(args: argparse.Namespace) -> int:
+    train_months, valid_months, test_months = split_months_from_args(args)
+    split = SplitConfig(
+        train_start=args.train_start,
+        train_end=args.train_end,
+        valid_start=args.valid_start,
+        valid_end=args.valid_end,
+        test_start=args.test_start,
+        test_end=args.test_end,
+        train_months=train_months,
+        valid_months=valid_months,
+        test_months=test_months,
+        horizon_hours=args.horizon_hours,
+        min_adjusted_edge=args.min_adjusted_edge,
+        purge_label_overlap=args.purge_label_overlap,
+        embargo_hours=args.embargo_hours,
+    )
+    model_config = shared_mlp_config_from_args(args)
+    regression_targets, classification_targets = resolve_target_names(args.target_set)
+
+    train_df, feature_columns = load_months(
+        args.dataset_dir,
+        train_months,
+        args.horizon_hours,
+        args.min_adjusted_edge,
+    )
+    valid_df, _ = load_months(args.dataset_dir, valid_months, args.horizon_hours, args.min_adjusted_edge)
+    test_df, _ = load_months(args.dataset_dir, test_months, args.horizon_hours, args.min_adjusted_edge)
+    regression_targets, available_classification_targets, missing_targets = filter_available_target_names(
+        [train_df, valid_df, test_df],
+        regression_targets,
+        classification_targets,
+    )
+    if not regression_targets:
+        raise ValueError("train-shared-mlp requires at least one available regression target")
+    train_df, valid_df, test_df, purge_stats = apply_split_purging(
+        train_df,
+        valid_df,
+        test_df,
+        horizon_hours=args.horizon_hours,
+        embargo_hours=args.embargo_hours,
+        enabled=args.purge_label_overlap,
+    )
+    train_df = maybe_sample(train_df, args.sample_frac, args.random_seed)
+
+    print(f"train shared MLP regressor: {', '.join(regression_targets)}")
+    model = train_shared_mlp_regressor(model_config)
+    model.fit(
+        as_matrix(train_df, feature_columns),
+        shared_regression_training_values(
+            train_df,
+            regression_targets,
+            args.target_clip_quantile,
+        ),
+    )
+
+    metrics: dict[str, object] = {
+        "mode": "shared_mlp_regression",
+        "split": asdict(split),
+        "model_config": asdict(model_config),
+        "rows": {
+            "train": int(len(train_df)),
+            "valid": int(len(valid_df)),
+            "test": int(len(test_df)),
+        },
+        "split_summary": {
+            "train": split_summary(train_df),
+            "valid": split_summary(valid_df),
+            "test": split_summary(test_df),
+        },
+        "months": {
+            "train": train_months,
+            "valid": valid_months,
+            "test": test_months,
+        },
+        "feature_count": len(feature_columns),
+        "target_set": args.target_set,
+        "regression_targets": regression_targets,
+        "classification_targets_requested_but_not_trained": available_classification_targets,
+        "missing_targets": missing_targets,
+        "purging": purge_stats,
+        "model_diagnostics": shared_mlp_diagnostics(model, model_config),
+    }
+    metrics_by_split: dict[str, dict[str, object]] = {}
+    predictions_by_split: dict[str, pd.DataFrame] = {}
+    for split_name, frame in [("train", train_df), ("valid", valid_df), ("test", test_df)]:
+        split_metrics, predictions = evaluate_shared_mlp_regressor(
+            model,
+            frame,
+            feature_columns,
+            regression_targets,
+        )
+        pred_frame = prediction_frame(frame, predictions)
+        if SELECTION_COLUMNS.issubset(pred_frame.columns):
+            split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
+        metrics_by_split[split_name] = split_metrics
+        predictions_by_split[split_name] = pred_frame
+
+    if set(EV_TARGETS).issubset(regression_targets):
+        calibrators = fit_ev_calibrators(predictions_by_split["valid"])
+        metrics["calibration"] = {target: asdict(calibrator) for target, calibrator in calibrators.items()}
+        for split_name, pred_frame in predictions_by_split.items():
+            pred_frame = add_calibrated_ev_columns(pred_frame, calibrators)
+            metrics_by_split[split_name]["selection_calibrated"] = selection_metrics(
+                pred_frame,
+                args.entry_threshold,
+                long_column="pred_calibrated_long_best_adjusted_pnl",
+                short_column="pred_calibrated_short_best_adjusted_pnl",
+            )
+            metrics_by_split[split_name]["regression_calibrated"] = calibrated_regression_metrics(pred_frame)
+            predictions_by_split[split_name] = pred_frame
+
+    for split_name, split_metrics in metrics_by_split.items():
+        metrics[split_name] = split_metrics
+
+    run_label = args.label or f"shared_mlp_{args.target_set}_edge{args.min_adjusted_edge:g}"
+    run_dir = make_run_dir(args.output_dir, run_label)
+    model_dir = run_dir / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, model_dir / "shared_regression_mlp.joblib")
+    for split_name, pred_frame in predictions_by_split.items():
+        pred_frame.to_parquet(run_dir / f"predictions_{split_name}.parquet", index=False)
+    with (run_dir / "feature_columns.json").open("w", encoding="utf-8") as handle:
+        json.dump(feature_columns, handle, ensure_ascii=False, indent=2)
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    write_shared_mlp_report(run_dir, metrics)
+    print(json.dumps(metrics["valid"], indent=2))
+    print(json.dumps(metrics["test"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def resolve_oof_months(args: argparse.Namespace) -> list[str]:
     if args.months:
         return parse_csv_months(args.months)
@@ -2052,6 +2337,79 @@ def write_report(run_dir: Path, metrics: dict[str, object]) -> None:
     (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_shared_mlp_report(run_dir: Path, metrics: dict[str, object]) -> None:
+    lines = [
+        "# Shared MLP Regression Model Report",
+        "",
+        f"- train months: {', '.join(metrics['months']['train'])}",
+        f"- valid months: {', '.join(metrics['months']['valid'])}",
+        f"- test months: {', '.join(metrics['months']['test'])}",
+        f"- feature count: {metrics['feature_count']}",
+        f"- train rows: {metrics['rows']['train']}",
+        f"- valid rows: {metrics['rows']['valid']}",
+        f"- test rows: {metrics['rows']['test']}",
+        f"- regression targets: {', '.join(metrics['regression_targets'])}",
+        "",
+        "This prototype trains one multi-output MLPRegressor for regression targets only. "
+        "Classification targets are intentionally not trained here, so probability-based "
+        "policy gates still require the HGB models or a later shared classifier.",
+    ]
+    if "selection" in metrics["valid"] and "selection" in metrics["test"]:
+        valid_selection = metrics["valid"]["selection"]
+        test_selection = metrics["test"]["selection"]
+        lines.extend(
+            [
+                "",
+                "## Selection Metrics",
+                "",
+                "| split | ev | trades | oracle-exit pnl | avg pnl | side acc | oracle upper bound |",
+                "|---|---|---:|---:|---:|---:|---:|",
+                (
+                    f"| valid | raw | {valid_selection['selected_trade_count']} | "
+                    f"{valid_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{valid_selection['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{valid_selection['selected_side_accuracy']:.4f} | "
+                    f"{valid_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+                (
+                    f"| test | raw | {test_selection['selected_trade_count']} | "
+                    f"{test_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{test_selection['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{test_selection['selected_side_accuracy']:.4f} | "
+                    f"{test_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+            ]
+        )
+    if "selection_calibrated" in metrics["valid"] and "selection_calibrated" in metrics["test"]:
+        valid_calibrated = metrics["valid"]["selection_calibrated"]
+        test_calibrated = metrics["test"]["selection_calibrated"]
+        lines.extend(
+            [
+                (
+                    f"| valid | calibrated | {valid_calibrated['selected_trade_count']} | "
+                    f"{valid_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{valid_calibrated['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{valid_calibrated['selected_side_accuracy']:.4f} | "
+                    f"{valid_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+                (
+                    f"| test | calibrated | {test_calibrated['selected_trade_count']} | "
+                    f"{test_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{test_calibrated['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{test_calibrated['selected_side_accuracy']:.4f} | "
+                    f"{test_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "Selection metrics still use oracle exits from target data and are not executable policy scores.",
+        ]
+    )
+    (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def write_oof_report(run_dir: Path, metrics: dict[str, object]) -> None:
     lines = [
         "# HistGradientBoosting Blocked OOF Report",
@@ -2154,6 +2512,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="full trains all research targets; policy trains only columns needed by executable policy sweeps",
     )
     train_parser.set_defaults(func=train)
+
+    shared_mlp_parser = subparsers.add_parser(
+        "train-shared-mlp",
+        help="train one shared multi-output MLP regressor for regression targets",
+    )
+    shared_mlp_parser.add_argument("--dataset-dir", type=Path, default=Path("data/processed/datasets/xauusd_m1"))
+    shared_mlp_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    shared_mlp_parser.add_argument("--label", default="", help="optional run label for the experiment directory")
+    shared_mlp_parser.add_argument("--train-start")
+    shared_mlp_parser.add_argument("--train-end")
+    shared_mlp_parser.add_argument("--valid-start")
+    shared_mlp_parser.add_argument("--valid-end")
+    shared_mlp_parser.add_argument("--test-start")
+    shared_mlp_parser.add_argument("--test-end")
+    shared_mlp_parser.add_argument("--train-months", help="comma-separated train months in YYYY-MM format")
+    shared_mlp_parser.add_argument("--valid-months", help="comma-separated validation months in YYYY-MM format")
+    shared_mlp_parser.add_argument("--test-months", help="comma-separated test months in YYYY-MM format")
+    shared_mlp_parser.add_argument("--horizon-hours", type=float, default=24.0)
+    shared_mlp_parser.add_argument("--min-adjusted-edge", type=float, default=15.0)
+    shared_mlp_parser.add_argument(
+        "--purge-label-overlap",
+        type=parse_bool,
+        default=True,
+        help="remove train/validation rows whose label horizon overlaps later validation/test windows",
+    )
+    shared_mlp_parser.add_argument(
+        "--embargo-hours",
+        type=float,
+        default=0.0,
+        help="extra time buffer around blocked validation/test label windows",
+    )
+    shared_mlp_parser.add_argument("--hidden-layers", type=parse_hidden_layer_sizes, default=(64, 32))
+    shared_mlp_parser.add_argument(
+        "--activation",
+        choices=["identity", "logistic", "tanh", "relu"],
+        default="relu",
+    )
+    shared_mlp_parser.add_argument("--alpha", type=float, default=0.001)
+    shared_mlp_parser.add_argument("--learning-rate-init", type=float, default=0.001)
+    shared_mlp_parser.add_argument("--max-iter", type=int, default=80)
+    shared_mlp_parser.add_argument("--batch-size", type=parse_mlp_batch_size, default="auto")
+    shared_mlp_parser.add_argument("--early-stopping", type=parse_bool, default=True)
+    shared_mlp_parser.add_argument("--validation-fraction", type=float, default=0.15)
+    shared_mlp_parser.add_argument("--n-iter-no-change", type=int, default=10)
+    shared_mlp_parser.add_argument("--tol", type=float, default=1e-5)
+    shared_mlp_parser.add_argument("--random-seed", type=int, default=7)
+    shared_mlp_parser.add_argument("--sample-frac", type=float, default=1.0)
+    shared_mlp_parser.add_argument("--entry-threshold", type=float, default=15.0)
+    shared_mlp_parser.add_argument("--target-clip-quantile", type=float, default=0.99)
+    shared_mlp_parser.add_argument(
+        "--target-set",
+        choices=sorted(TARGET_SETS),
+        default="policy",
+        help="regression targets from this set are trained jointly; classification targets are skipped",
+    )
+    shared_mlp_parser.set_defaults(func=train_shared_mlp)
 
     oof_parser = subparsers.add_parser(
         "oof",

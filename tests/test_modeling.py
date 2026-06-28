@@ -15,6 +15,8 @@ from trade_data.modeling import (
     fit_linear_calibrator,
     fit_profit_barrier_bucket_calibrator,
     oof_profit_barrier_calibrated_predictions,
+    parse_hidden_layer_sizes,
+    parse_mlp_batch_size,
     parse_csv_months,
     prediction_frame,
     prediction_frame_evaluation_metrics,
@@ -25,6 +27,8 @@ from trade_data.modeling import (
     resolve_target_names,
     resolve_split_months,
     selection_metrics,
+    shared_regression_training_values,
+    evaluate_shared_mlp_regressor,
     side_confidence_bucket_metrics,
     side_confidence_frame,
     side_confidence_group_metrics,
@@ -293,6 +297,35 @@ class ModelingTests(unittest.TestCase):
 
         self.assertEqual(values.tolist(), [0.0, 1.0, 2.0])
 
+    def test_shared_regression_training_values_stacks_targets(self):
+        frame = pd.DataFrame(
+            {
+                "long_best_adjusted_pnl": [0.0, 1.0, 100.0],
+                "short_best_adjusted_pnl": [3.0, 4.0, 5.0],
+            }
+        )
+
+        values = shared_regression_training_values(
+            frame,
+            ["long_best_adjusted_pnl", "short_best_adjusted_pnl"],
+            1.0,
+        )
+
+        self.assertEqual(values.shape, (3, 2))
+        self.assertEqual(values[:, 0].tolist(), [0.0, 1.0, 100.0])
+        self.assertEqual(values[:, 1].tolist(), [3.0, 4.0, 5.0])
+
+    def test_parse_hidden_layer_sizes(self):
+        self.assertEqual(parse_hidden_layer_sizes("64, 32"), (64, 32))
+
+    def test_parse_hidden_layer_sizes_rejects_empty(self):
+        with self.assertRaises(Exception):
+            parse_hidden_layer_sizes("")
+
+    def test_parse_mlp_batch_size_accepts_auto_or_positive_int(self):
+        self.assertEqual(parse_mlp_batch_size("auto"), "auto")
+        self.assertEqual(parse_mlp_batch_size("128"), 128)
+
     def test_parse_csv_months(self):
         self.assertEqual(parse_csv_months("2024-01,2024-03"), ["2024-01", "2024-03"])
 
@@ -498,6 +531,30 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(predictions["long_exit_event_prob_1"].tolist(), [0.3, 0.7])
         self.assertEqual(predictions["long_exit_event_prob_2"].tolist(), [0.1, 0.1])
         self.assertNotIn("long_exit_event_prob", predictions)
+
+    def test_evaluate_shared_mlp_regressor_maps_outputs_to_targets(self):
+        class MultiOutputRegressor:
+            def predict(self, x):
+                return np.array([[1.5, 2.5], [3.5, 4.5]])
+
+        frame = pd.DataFrame(
+            {
+                "feature": [1.0, 2.0],
+                "long_best_adjusted_pnl": [1.0, 3.0],
+                "short_best_adjusted_pnl": [2.0, 4.0],
+            }
+        )
+
+        metrics, predictions = evaluate_shared_mlp_regressor(
+            MultiOutputRegressor(),
+            frame,
+            ["feature"],
+            ["long_best_adjusted_pnl", "short_best_adjusted_pnl"],
+        )
+
+        self.assertEqual(predictions["long_best_adjusted_pnl"].tolist(), [1.5, 3.5])
+        self.assertEqual(predictions["short_best_adjusted_pnl"].tolist(), [2.5, 4.5])
+        self.assertIn("long_best_adjusted_pnl", metrics["regression"])
 
     def test_prediction_frame_evaluation_metrics_uses_available_targets(self):
         frame = pd.DataFrame(

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 19:52 JST
+最終更新: 2026-06-28 20:01 JST
 
 ## 現在の状態
 
@@ -100,6 +100,8 @@ side-confidence専用学習とtarget-aware weightingを検証済み。`target-se
 
 candidate selectionへ複合diagnostic soft penaltyを追加済み。direction error、actual profit barrier miss、EV overestimateが閾値を超えた分をpenalty化し、eligible候補の `robust_total_adjusted_pnl_min_cost` を下げて順位付けできる。`combined_side_miss_joint` 4foldではtopがholding shrink `0.25` からno-shrink entry penalty候補へ変わったが、2024-12反証月では adjusted pnl `-172.7944` とprior holding shrink combo `-159.0158` より悪化した。インフラはtie-break/診断として残すが、今回のrankingは標準policyへ昇格しない。詳細は `docs/reports/00059_2026-06-28_diagnostic_soft_penalty_ranking.md`。
 
+shared representation検証の入口として `train-shared-mlp` を追加済み。scikit-learn `MLPRegressor` をmulti-output regressionとして使い、policy regression targetsを1つのモデルで同時学習する。極小smokeではartifact生成と `timed_ev` 接続は成功したが、2024-12 executable backtestは adjusted pnl `-88.1778`, 689 trades, profit factor `0.8632` で、取引過多・long偏り・コスト負けが出た。これは接続確認であり採用実験ではない。詳細は `docs/reports/00060_2026-06-28_shared_mlp_regression_smoke.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -133,7 +135,7 @@ candidate selectionへ複合diagnostic soft penaltyを追加済み。direction e
 10. diagnostic gate、group-loss penalty、diagnostic soft penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。diagnostic soft penaltyの今回topは2024-12で悪化したため、標準policyへ昇格しない。
 11. profit-barrier probability単独のhard gate/global linear penalty探索は打ち切る。今後はdirection/sessionやcombined regimeのrisk penaltyと同時に扱う場合だけ再評価する。
 12. 次はside/entry calibrationとprofit-barrier missの同時制御へ戻る。exit timingだけで負け月を救う方向には寄せすぎない。
-13. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+13. `train-shared-mlp` を代表validation 4foldで本実験する。極小smokeでは接続は確認済みだが、取引過多・long偏り・コスト負けが出たため、turnover制御、side balance、executable backtestで評価する。classification probabilityが必要なpolicyはHGB classifierとのhybridかshared classifier追加を別途検証する。
 
 ## 未決定事項
 

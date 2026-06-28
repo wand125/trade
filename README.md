@@ -187,6 +187,22 @@ python -m trade_data.meta_model fit \
   --label meta_ev_dense_entry_quality
 ```
 
+Train a shared multi-output MLP regressor for policy regression targets:
+
+```bash
+python -m trade_data.modeling train-shared-mlp \
+  --dataset-dir data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined \
+  --train-months 2024-07 \
+  --valid-months 2024-09 \
+  --test-months 2024-12 \
+  --target-set policy \
+  --hidden-layers 64,32 \
+  --max-iter 80
+```
+
+This prototype trains regression targets only. Probability-based gates still
+require HGB classifier predictions or a later shared classifier.
+
 ## Backtest Saved Model Predictions
 
 Run an executable policy from saved model predictions:

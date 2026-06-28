@@ -2790,3 +2790,42 @@ Artifacts:
 - soft penaltyによりvalidation順位は変わったが、2024-12反証月では悪化した。
 - diagnostic soft penaltyはtie-break/診断基盤として残す。
 - 今回のrankingは標準policyへ昇格しない。post-hoc診断値の改善だけで候補を採用しない。
+
+### 2026-06-28 20:01 JST Shared MLP Regression Smoke
+
+作業:
+
+- `trade_data.modeling train-shared-mlp` を追加した。
+- scikit-learn `MLPRegressor` を `StandardScaler` と `TransformedTargetRegressor` で包み、複数回帰targetを1つのshared modelで同時出力する。
+- 既存HGBと同じprediction parquet / metrics / report artifactを出す。
+- `xauusd_m1_p1_l1p2_policy_combined` の2024-07 train、2024-09 valid、2024-12 testで極小smokeを実行した。
+- smoke predictionを `timed_ev` backtestへ接続した。
+- report: `docs/reports/00060_2026-06-28_shared_mlp_regression_smoke.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- MLP smoke model: `experiments/20260628_110048_shared_mlp_policy_smoke/`
+- executable smoke: `data/reports/backtests/shared_mlp_policy_smoke/20260628_110101_model_timed_ev_2024-12/`
+
+結果:
+
+| item | value |
+|---|---:|
+| train rows | `632` |
+| valid rows | `28885` |
+| test rows | `28763` |
+| targets | `19` regression targets |
+| MLP n_iter | `3/3` |
+| executable 2024-12 adjusted pnl | `-88.1778` |
+| executable 2024-12 raw pnl | `19.2880` |
+| trades | `689` |
+| profit factor | `0.8632` |
+| max drawdown | `155.4504` |
+
+判断:
+
+- shared MLP regressionの接続基盤は動いた。
+- 極小smokeは性能判断ではない。`max_iter=3` で未収束、sampleも2%のみ。
+- executable smokeでは取引過多、long偏り、コスト負けが明確。代表4fold本実験ではturnover制御とside balanceを必ず見る。
+- classification probabilityは未対応なので、exit-event/profit-barrier確率が必要なpolicyはHGB classifierとのhybridまたはshared classifier追加を別に検討する。
