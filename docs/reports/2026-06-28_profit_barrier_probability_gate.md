@@ -1,7 +1,7 @@
 # Profit Barrier Probability Gate
 
 日時: 2026-06-28 09:08 JST
-更新日時: 2026-06-28 09:26 JST
+更新日時: 2026-06-28 10:06 JST
 
 ## 目的
 
@@ -168,3 +168,17 @@ Report:
 - `short:volatility_regime=low_vol+session_regime=asia` も、`asia / normal_vol` shortへの再entryを許した。
 - `short:session_regime=asia` はvalidation選択候補で2025-03 blind adjusted pnl `+18.0748`、35 trades、profit factor `1.2700` まで改善した。
 - ただし、このruleは2025-03の失敗を見た後に作ったため、2025-03でのプラスを最終採用根拠にはしない。2025-04以降のblindで事前登録候補として検証する。
+
+## 更新: 2026-06-28 10:06 JST
+
+このレポートの次アクション4のうち、actual/predicted profit barrier miss率をcandidate selectionへ追加した。
+
+Report:
+
+- `docs/reports/2026-06-28_profit_barrier_miss_candidate_gate.md`
+
+主な結果:
+
+- `model-sweep` metricsへ `predicted_profit_barrier_miss_rate` と `actual_profit_barrier_miss_rate` 系の列を追加した。
+- `model-candidate-selection` に `--max-predicted-profit-barrier-miss-rate` と `--max-actual-profit-barrier-miss-rate` を追加した。
+- 2025-05 smokeでは、direction/session gateを緩めても、blockなし候補は `actual_profit_barrier_miss_rate_max_all=0.5000` で `actual_profit_barrier_miss_ok=False`、blockあり候補は `0.464286` でeligibleに残った。

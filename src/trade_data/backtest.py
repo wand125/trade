@@ -131,6 +131,28 @@ DIRECTION_SESSION_DIAGNOSTIC_COLUMNS = [
     "worst_direction_session_trade_count",
 ]
 
+PROFIT_BARRIER_LABEL_COLUMNS = [
+    "long_profit_barrier_hit",
+    "short_profit_barrier_hit",
+]
+
+PROFIT_BARRIER_DIAGNOSTIC_COLUMNS = [
+    "predicted_profit_barrier_miss_rate",
+    "predicted_profit_barrier_miss_count",
+    "predicted_profit_barrier_observed_count",
+    "predicted_profit_barrier_miss_adjusted_pnl",
+    "actual_profit_barrier_miss_rate",
+    "actual_profit_barrier_miss_count",
+    "actual_profit_barrier_observed_count",
+    "actual_profit_barrier_miss_adjusted_pnl",
+]
+
+COERCED_NUMERIC_DIAGNOSTIC_COLUMNS = {
+    "direction_session_adjusted_pnl_min",
+    "worst_direction_session_trade_count",
+    *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
+}
+
 
 @dataclass(frozen=True)
 class BacktestConfig:
@@ -409,29 +431,37 @@ def breakout_signal(df: pd.DataFrame, window: int) -> pd.Series:
 def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame:
     if config.policy == "fixed_horizon_ev":
         validate_fixed_horizon_config(config)
-    columns = ["decision_timestamp", config.long_column, config.short_column]
+    required_columns = ["decision_timestamp", config.long_column, config.short_column]
+    optional_columns: list[str] = []
     if config.risk_penalty > 0:
-        columns.extend([config.long_risk_column, config.short_risk_column])
+        required_columns.extend([config.long_risk_column, config.short_risk_column])
     if config.policy == "timed_ev":
-        columns.extend([config.long_holding_column, config.short_holding_column])
+        required_columns.extend([config.long_holding_column, config.short_holding_column])
     if config.policy == "fixed_horizon_ev":
-        columns.extend([*config.long_fixed_horizon_columns, *config.short_fixed_horizon_columns])
+        required_columns.extend([*config.long_fixed_horizon_columns, *config.short_fixed_horizon_columns])
     if np.isfinite(config.max_wait_regret):
-        columns.extend([config.long_wait_regret_column, config.short_wait_regret_column])
+        required_columns.extend([config.long_wait_regret_column, config.short_wait_regret_column])
     if config.min_entry_rank > 0:
-        columns.extend([config.long_entry_rank_column, config.short_entry_rank_column])
+        required_columns.extend([config.long_entry_rank_column, config.short_entry_rank_column])
+    profit_barrier_prediction_columns = [
+        config.long_profit_barrier_column,
+        config.short_profit_barrier_column,
+    ]
     if config.require_profit_barrier:
-        columns.extend([config.long_profit_barrier_column, config.short_profit_barrier_column])
-    columns.extend(extra_side_margin_rule_columns(config))
-    columns.extend(side_rule_columns(config))
-    columns.extend([column for column, _ in blocked_regime_columns(config)])
-    columns.extend(optional_parquet_columns(path, REGIME_COLUMNS))
-    columns = list(dict.fromkeys(columns))
+        required_columns.extend(profit_barrier_prediction_columns)
+    else:
+        optional_columns.extend(optional_parquet_columns(path, profit_barrier_prediction_columns))
+    required_columns.extend(extra_side_margin_rule_columns(config))
+    required_columns.extend(side_rule_columns(config))
+    required_columns.extend([column for column, _ in blocked_regime_columns(config)])
+    optional_columns.extend(optional_parquet_columns(path, PROFIT_BARRIER_LABEL_COLUMNS))
+    optional_columns.extend(optional_parquet_columns(path, REGIME_COLUMNS))
+    columns = list(dict.fromkeys([*required_columns, *optional_columns]))
     predictions = pd.read_parquet(path, columns=columns)
-    missing = sorted(set(columns) - set(predictions.columns))
+    missing = sorted(set(required_columns) - set(predictions.columns))
     if missing:
         raise ValueError(f"{path} is missing columns: {', '.join(missing)}")
-    predictions = predictions.dropna(subset=columns).sort_values("decision_timestamp")
+    predictions = predictions.dropna(subset=required_columns).sort_values("decision_timestamp")
     if predictions["decision_timestamp"].dt.tz is None:
         predictions["decision_timestamp"] = predictions["decision_timestamp"].dt.tz_localize("UTC")
     else:
@@ -967,6 +997,107 @@ def direction_session_diagnostics(
         "worst_direction_session": f"{worst['direction']}:{worst['session_regime']}",
         "worst_direction_session_trade_count": int(worst["trade_count"]),
     }
+
+
+def barrier_miss_summary(
+    trades: pd.DataFrame,
+    values: pd.Series,
+    threshold: float,
+    prefix: str,
+) -> dict[str, object]:
+    observed = values.notna()
+    if not observed.any():
+        return {
+            f"{prefix}_profit_barrier_miss_rate": None,
+            f"{prefix}_profit_barrier_miss_count": 0,
+            f"{prefix}_profit_barrier_observed_count": 0,
+            f"{prefix}_profit_barrier_miss_adjusted_pnl": 0.0,
+        }
+    miss = observed & (values.astype(float) < threshold)
+    return {
+        f"{prefix}_profit_barrier_miss_rate": float(miss.sum() / observed.sum()),
+        f"{prefix}_profit_barrier_miss_count": int(miss.sum()),
+        f"{prefix}_profit_barrier_observed_count": int(observed.sum()),
+        f"{prefix}_profit_barrier_miss_adjusted_pnl": float(
+            trades.loc[miss, "adjusted_pnl"].astype(float).sum()
+        ),
+    }
+
+
+def profit_barrier_diagnostics(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+    config: ModelPolicyConfig,
+) -> dict[str, object]:
+    if trades.empty:
+        return {
+            "predicted_profit_barrier_miss_rate": 0.0,
+            "predicted_profit_barrier_miss_count": 0,
+            "predicted_profit_barrier_observed_count": 0,
+            "predicted_profit_barrier_miss_adjusted_pnl": 0.0,
+            "actual_profit_barrier_miss_rate": 0.0,
+            "actual_profit_barrier_miss_count": 0,
+            "actual_profit_barrier_observed_count": 0,
+            "actual_profit_barrier_miss_adjusted_pnl": 0.0,
+        }
+
+    prediction_columns = [config.long_profit_barrier_column, config.short_profit_barrier_column]
+    label_columns = PROFIT_BARRIER_LABEL_COLUMNS
+    enriched = attach_trade_prediction_columns(trades, predictions, [*prediction_columns, *label_columns])
+    direction = enriched["direction"].astype(str).str.lower()
+    output: dict[str, object] = {}
+
+    if all(column in enriched.columns for column in prediction_columns):
+        predicted_values = side_values(
+            enriched,
+            direction,
+            config.long_profit_barrier_column,
+            config.short_profit_barrier_column,
+        )
+        output.update(
+            barrier_miss_summary(
+                enriched,
+                predicted_values,
+                threshold=config.profit_barrier_threshold,
+                prefix="predicted",
+            )
+        )
+    else:
+        output.update(
+            {
+                "predicted_profit_barrier_miss_rate": None,
+                "predicted_profit_barrier_miss_count": 0,
+                "predicted_profit_barrier_observed_count": 0,
+                "predicted_profit_barrier_miss_adjusted_pnl": 0.0,
+            }
+        )
+
+    if all(column in enriched.columns for column in label_columns):
+        actual_values = side_values(
+            enriched,
+            direction,
+            "long_profit_barrier_hit",
+            "short_profit_barrier_hit",
+        )
+        output.update(
+            barrier_miss_summary(
+                enriched,
+                actual_values,
+                threshold=0.5,
+                prefix="actual",
+            )
+        )
+    else:
+        output.update(
+            {
+                "actual_profit_barrier_miss_rate": None,
+                "actual_profit_barrier_miss_count": 0,
+                "actual_profit_barrier_observed_count": 0,
+                "actual_profit_barrier_miss_adjusted_pnl": 0.0,
+            }
+        )
+
+    return output
 
 
 def json_default(value: object) -> str:
@@ -1684,6 +1815,7 @@ def run_model_policy(
     metrics["signal_short_count"] = int((signal == -1).sum())
     metrics["signal_flat_count"] = int((signal == 0).sum())
     metrics.update(direction_session_diagnostics(trades, predictions))
+    metrics.update(profit_barrier_diagnostics(trades, predictions, model_policy_config))
     curve = equity_curve(trades, backtest_config.evaluation_start)
     return metrics, trades, curve, signal
 
@@ -2068,6 +2200,9 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["worst_direction_session"] = ""
     if "worst_direction_session_trade_count" not in output.columns:
         output["worst_direction_session_trade_count"] = 0
+    for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
+        if column not in output.columns:
+            output[column] = 0.0
     for field, _ in REGIME_BLOCK_FIELDS:
         if field not in output.columns:
             output[field] = ""
@@ -2108,9 +2243,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "forced_exit_count",
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
+        *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
     ]
     for column in numeric_columns:
-        errors = "coerce" if column in DIRECTION_SESSION_DIAGNOSTIC_COLUMNS else "raise"
+        errors = "coerce" if column in COERCED_NUMERIC_DIAGNOSTIC_COLUMNS else "raise"
         output[column] = pd.to_numeric(output[column], errors=errors)
     output["direction_session_adjusted_pnl_min"] = output[
         "direction_session_adjusted_pnl_min"
@@ -2118,6 +2254,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output["worst_direction_session_trade_count"] = output[
         "worst_direction_session_trade_count"
     ].fillna(0)
+    for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
+        output[column] = output[column].fillna(0.0)
     if output["require_profit_barrier"].dtype == object:
         output["require_profit_barrier"] = output["require_profit_barrier"].map(
             lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"}
@@ -2186,6 +2324,7 @@ def summarize_sweep_frames(
         "execution_delay_bars",
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
+        *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
     ]
     for column in optional_metric_columns:
         if column in metrics.columns:
@@ -2231,6 +2370,13 @@ def row_min_or_default(frame: pd.DataFrame, columns: list[str], default: float) 
     return frame[existing].min(axis=1)
 
 
+def row_max_or_default(frame: pd.DataFrame, columns: list[str], default: float) -> pd.Series:
+    existing = [column for column in columns if column in frame.columns]
+    if not existing:
+        return pd.Series(default, index=frame.index, dtype="float64")
+    return frame[existing].max(axis=1)
+
+
 def plateau_support_counts(
     frame: pd.DataFrame,
     plateau_column: str,
@@ -2273,6 +2419,8 @@ def summarize_candidate_selection(
     plateau_radius: float,
     min_plateau_neighbors: int,
     max_direction_session_loss_per_fold: float = 1e100,
+    max_predicted_profit_barrier_miss_rate: float = 1.0,
+    max_actual_profit_barrier_miss_rate: float = 1.0,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -2280,6 +2428,10 @@ def summarize_candidate_selection(
         raise ValueError("max_side_loss_per_fold must be non-negative")
     if max_direction_session_loss_per_fold < 0:
         raise ValueError("max_direction_session_loss_per_fold must be non-negative")
+    if not 0 <= max_predicted_profit_barrier_miss_rate <= 1:
+        raise ValueError("max_predicted_profit_barrier_miss_rate must be between 0 and 1")
+    if not 0 <= max_actual_profit_barrier_miss_rate <= 1:
+        raise ValueError("max_actual_profit_barrier_miss_rate must be between 0 and 1")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -2335,9 +2487,31 @@ def summarize_candidate_selection(
         ],
         float("inf"),
     )
+    merged["predicted_profit_barrier_miss_rate_max_all"] = row_max_or_default(
+        merged,
+        [
+            "predicted_profit_barrier_miss_rate_max_base",
+            "predicted_profit_barrier_miss_rate_max_cost",
+        ],
+        0.0,
+    )
+    merged["actual_profit_barrier_miss_rate_max_all"] = row_max_or_default(
+        merged,
+        [
+            "actual_profit_barrier_miss_rate_max_base",
+            "actual_profit_barrier_miss_rate_max_cost",
+        ],
+        0.0,
+    )
     merged["side_loss_ok"] = merged["side_adjusted_pnl_min_all"] >= -max_side_loss_per_fold
     merged["direction_session_loss_ok"] = (
         merged["direction_session_adjusted_pnl_min_all"] >= -max_direction_session_loss_per_fold
+    )
+    merged["predicted_profit_barrier_miss_ok"] = (
+        merged["predicted_profit_barrier_miss_rate_max_all"] <= max_predicted_profit_barrier_miss_rate
+    )
+    merged["actual_profit_barrier_miss_ok"] = (
+        merged["actual_profit_barrier_miss_rate_max_all"] <= max_actual_profit_barrier_miss_rate
     )
     merged["cost_drop_ok"] = merged["cost_pnl_drop_min"] <= max_cost_pnl_drop
     merged["pre_plateau_eligible"] = (
@@ -2345,6 +2519,8 @@ def summarize_candidate_selection(
         & merged["eligible_cost"].astype(bool)
         & merged["side_loss_ok"]
         & merged["direction_session_loss_ok"]
+        & merged["predicted_profit_barrier_miss_ok"]
+        & merged["actual_profit_barrier_miss_ok"]
         & merged["cost_drop_ok"]
     )
     merged["plateau_support_count"] = plateau_support_counts(
@@ -2364,9 +2540,11 @@ def summarize_candidate_selection(
             "plateau_support_count",
             "side_adjusted_pnl_min_all",
             "direction_session_adjusted_pnl_min_all",
+            "actual_profit_barrier_miss_rate_max_all",
+            "predicted_profit_barrier_miss_rate_max_all",
             "cost_pnl_drop_min",
         ],
-        ascending=[False, False, False, False, False, False, True],
+        ascending=[False, False, False, False, False, False, True, True, True],
     ).reset_index(drop=True)
 
 
@@ -2428,6 +2606,8 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         plateau_radius=args.plateau_radius,
         min_plateau_neighbors=args.min_plateau_neighbors,
         max_direction_session_loss_per_fold=args.max_direction_session_loss_per_fold,
+        max_predicted_profit_barrier_miss_rate=args.max_predicted_profit_barrier_miss_rate,
+        max_actual_profit_barrier_miss_rate=args.max_actual_profit_barrier_miss_rate,
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -2443,6 +2623,8 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "max_cost_pnl_drop": args.max_cost_pnl_drop,
         "max_side_loss_per_fold": args.max_side_loss_per_fold,
         "max_direction_session_loss_per_fold": args.max_direction_session_loss_per_fold,
+        "max_predicted_profit_barrier_miss_rate": args.max_predicted_profit_barrier_miss_rate,
+        "max_actual_profit_barrier_miss_rate": args.max_actual_profit_barrier_miss_rate,
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -2728,6 +2910,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1e100,
         help="maximum allowed loss for any direction:session_regime group in each fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-predicted-profit-barrier-miss-rate",
+        type=float,
+        default=1.0,
+        help="maximum allowed share of trades below the predicted profit-barrier threshold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-actual-profit-barrier-miss-rate",
+        type=float,
+        default=1.0,
+        help="maximum allowed share of trades whose actual side profit barrier was missed",
     )
     model_candidate_selection.add_argument(
         "--plateau-column",

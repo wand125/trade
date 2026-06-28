@@ -1381,3 +1381,42 @@ Artifacts:
 
 - レポート作成時刻と更新時刻は、以後 `YYYY-MM-DD HH:MM JST` で明示する。
 - 既存レポートの補正値は、ファイル更新時刻または既存の `Updated` 記録を基準にした。
+
+### 2026-06-28 10:06 JST Profit Barrier Miss Candidate Gate
+
+作業:
+
+- `model-policy` / `model-sweep` metricsへ predicted/actual profit barrier miss率を追加した。
+- `model-candidate-selection` に `--max-predicted-profit-barrier-miss-rate` と `--max-actual-profit-barrier-miss-rate` を追加した。
+- `require_profit_barrier=false` でも、prediction parquetにbarrier列が存在すれば predicted miss を測れるよう、barrier列を任意読み込みにした。
+- report: `docs/reports/2026-06-28_profit_barrier_miss_candidate_gate.md`
+
+Artifacts:
+
+- model-policy block: `data/reports/backtests/20260628_010449_model_fixed_horizon_ev_2025-05/`
+- model-policy no block: `data/reports/backtests/20260628_010449_model_fixed_horizon_ev_2025-05_1/`
+- no-cost no block sweep: `data/reports/backtests/20260628_010537_model_sweep_2025-05_1/`
+- no-cost asia short block sweep: `data/reports/backtests/20260628_010537_model_sweep_2025-05_3/`
+- cost no block sweep: `data/reports/backtests/20260628_010537_model_sweep_2025-05_2/`
+- cost asia short block sweep: `data/reports/backtests/20260628_010537_model_sweep_2025-05/`
+- candidate selection: `data/reports/backtests/20260628_010550_model_candidate_selection/`
+
+結果:
+
+- 2025-05 no blockは `actual_profit_barrier_miss_rate=0.5000`, `actual_profit_barrier_miss_count=17`, `actual_profit_barrier_miss_adjusted_pnl=-221.5828`。
+- 2025-05 asia short blockは `actual_profit_barrier_miss_rate=0.464286`, `actual_profit_barrier_miss_count=13`, `actual_profit_barrier_miss_adjusted_pnl=-126.3004`。
+- `--max-actual-profit-barrier-miss-rate 0.48` により、direction/session gateを緩めても no blockは `actual_profit_barrier_miss_ok=False`, blockありは `eligible=True`。
+- `predicted_profit_barrier_miss_rate` は両候補とも `0.0`。barrier thresholdを通過した候補の過大評価はmiss率だけでは検出できない。
+
+検証:
+
+- `python3 -m py_compile src/trade_data/backtest.py`: OK。
+- `python3 -m unittest tests.test_backtest`: 28 tests OK。
+- `python3 -m unittest discover tests`: 64 tests OK。
+- `model-candidate-selection --help`, `model-sweep --help`: OK。
+
+判断:
+
+- actual barrier miss率は候補選択の追加gateとして機能する。
+- 閾値 `0.48` はsmoke用であり、採用するにはvalidation fold全体で台地を見る。
+- 次は predicted probability bucket別のactual hit rateを標準診断に入れ、calibrationの過大評価を直接見る。
