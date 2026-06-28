@@ -1,6 +1,7 @@
 # Blind Holdout Candidate Selection
 
 日時: 2026-06-28 08:53 JST
+更新日時: 2026-06-28 08:55 JST
 
 ## 目的
 

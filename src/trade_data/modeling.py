@@ -665,8 +665,10 @@ def evaluate_models(
     regression_targets: list[str] | None = None,
     classification_targets: list[str] | None = None,
 ) -> tuple[dict[str, dict[str, float]], dict[str, np.ndarray]]:
-    regression_targets = regression_targets or REGRESSION_TARGETS
-    classification_targets = classification_targets or CLASSIFICATION_TARGETS
+    if regression_targets is None:
+        regression_targets = REGRESSION_TARGETS
+    if classification_targets is None:
+        classification_targets = CLASSIFICATION_TARGETS
     x = as_matrix(df, feature_columns)
     metrics: dict[str, dict[str, float]] = {"regression": {}, "classification": {}}
     predictions: dict[str, np.ndarray] = {}
@@ -675,9 +677,14 @@ def evaluate_models(
         predictions[target] = pred
         metrics["regression"][target] = regression_metrics(df[target].to_numpy(), pred)
     for target in classification_targets:
-        pred = models[target].predict(x)
+        model = models[target]
+        pred = model.predict(x)
         predictions[target] = pred
         metrics["classification"][target] = classification_metrics(df[target].astype(int).to_numpy(), pred)
+        classes = set(getattr(model, "classes_", []))
+        if hasattr(model, "predict_proba") and classes <= {0, 1} and 1 in classes:
+            class_index = list(model.classes_).index(1)
+            predictions[f"{target}_prob"] = model.predict_proba(x)[:, class_index]
     return metrics, predictions
 
 

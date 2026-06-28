@@ -216,6 +216,31 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [0, 1, 0])
 
+    def test_model_signal_uses_profit_barrier_threshold(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [1.0, 1.0, 1.0],
+                "pred_long_profit_barrier_hit_prob": [0.6, 0.8, 0.2],
+                "pred_short_profit_barrier_hit_prob": [1.0, 1.0, 1.0],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            long_profit_barrier_column="pred_long_profit_barrier_hit_prob",
+            short_profit_barrier_column="pred_short_profit_barrier_hit_prob",
+            require_profit_barrier=True,
+            profit_barrier_threshold=0.7,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, 1, 0])
+
     def test_model_signal_can_block_entry_regimes(self):
         df = frame_with_opens([100, 101, 102])
         predictions = pd.DataFrame(
@@ -396,6 +421,7 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["max_wait_regret"].tolist(), [float("inf")])
         self.assertEqual(normalized["min_entry_rank"].tolist(), [0.0])
         self.assertEqual(normalized["require_profit_barrier"].tolist(), [False])
+        self.assertEqual(normalized["profit_barrier_threshold"].tolist(), [0.5])
         self.assertEqual(normalized["block_trend_regimes"].tolist(), [""])
         self.assertEqual(normalized["block_volatility_regimes"].tolist(), [""])
         self.assertEqual(normalized["block_session_regimes"].tolist(), [""])

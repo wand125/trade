@@ -1,11 +1,15 @@
 import unittest
 
+import numpy as np
+import pandas as pd
+
 from trade_data.dataset import iter_months
 from trade_data.modeling import (
     add_calibrated_ev_columns,
     apply_split_purging,
     build_sample_weights,
     chunk_months,
+    evaluate_models,
     filter_available_target_names,
     fit_linear_calibrator,
     parse_csv_months,
@@ -17,8 +21,6 @@ from trade_data.modeling import (
     selection_metrics,
     validate_disjoint_splits,
 )
-
-import pandas as pd
 
 
 class ModelingTests(unittest.TestCase):
@@ -199,6 +201,29 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(output["roll_vol_60"].tolist(), [0.01, 0.02])
         self.assertEqual(output["trend_regime"].tolist(), ["up", "down"])
         self.assertIn("pred_long_best_adjusted_pnl", output.columns)
+
+    def test_evaluate_models_adds_binary_classifier_probability(self):
+        class BinaryClassifier:
+            classes_ = np.array([0, 1])
+
+            def predict(self, x):
+                return np.array([0, 1])
+
+            def predict_proba(self, x):
+                return np.array([[0.8, 0.2], [0.3, 0.7]])
+
+        frame = pd.DataFrame({"feature": [1.0, 2.0], "long_profit_barrier_hit": [0, 1]})
+
+        _, predictions = evaluate_models(
+            {"long_profit_barrier_hit": BinaryClassifier()},
+            frame,
+            ["feature"],
+            regression_targets=[],
+            classification_targets=["long_profit_barrier_hit"],
+        )
+
+        self.assertEqual(predictions["long_profit_barrier_hit"].tolist(), [0, 1])
+        self.assertEqual(predictions["long_profit_barrier_hit_prob"].tolist(), [0.2, 0.7])
 
     def test_prediction_frame_evaluation_metrics_uses_available_targets(self):
         frame = pd.DataFrame(

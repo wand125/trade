@@ -4,6 +4,7 @@
 
 - Experiment ID: `2026-06-28_hgb_multitask_initial`
 - Datetime: 2026-06-28 02:22 JST
+- Updated: 2026-06-28 08:02 JST
 - Status: completed
 - Main result: 初回の軽量 multi-task モデルを固定 split で学習し、entry/side ranking の暫定基準を作った。
 

@@ -1218,3 +1218,40 @@ Artifacts:
 - 2024-12/2025-02で良く見えたshort offset候補は、2025-03でNoTradeに負けたため採用しない。
 - 最大損失は predicted profit barrier hitが0のshortを許したこと、かつ721分まで保有したことが中心。
 - 次は profit barrier probability calibration、`asia / range / low_vol` shortの抑制、hazard-like close probability / stop-loss timing targetを優先する。
+
+### 2026-06-28 09:08 JST Profit Barrier Probability Gate
+
+作業:
+
+- binary classifierのclass `1` probabilityを `pred_<target>_prob` として保存するようにした。
+- `model-policy` に `--profit-barrier-threshold`、`model-sweep` に `--profit-barrier-thresholds` を追加した。
+- `SWEEP_KEY_COLUMNS` とsummary正規化へ `profit_barrier_threshold` を追加し、閾値違いの候補が混ざらないようにした。
+- 既存 `docs/reports/*.md` はファイル更新時刻を基準に `更新日時` / `Updated` を補正した。
+- report: `docs/reports/2026-06-28_profit_barrier_probability_gate.md`
+
+Artifacts:
+
+- model: `experiments/20260628_000509_full_fixed_horizon_blind_2025_03_barrier_prob_p1_l1p2/`
+- no-cost validation sweeps: `data/reports/backtests/20260628_000602_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- cost-aware validation sweeps: `data/reports/backtests/20260628_000643_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- candidate selection: `data/reports/backtests/20260628_000706_model_candidate_selection/`
+- blind test: `data/reports/backtests/20260628_000729_model_fixed_horizon_ev_2025-03/`
+- cost sensitivity: `data/reports/backtests/20260628_000839_model_cost_sensitivity_2025-03/`
+- failure analysis: `data/reports/backtests/20260628_000901_barrier_prob_gate_2025-03/`
+
+結果:
+
+- validation選択候補は `fixed_horizon_ev`, entry `0`, short offset `8`, side margin `1`, profit barrier threshold `0.40`。
+- validation base min pnl `22.4864`, base mean pnl `49.7168`, cost min pnl `17.4064`, cost mean pnl `43.1869`, min trades `24`。
+- 2025-03 blindは adjusted pnl `-29.5462`, raw pnl `-14.4330`, 29 trades, profit factor `0.6742`, max DD `54.1392`。
+- long pnl `+18.0844`、short pnl `-47.6306`。
+- 前回blind `-49.7004` より損失は縮小したが、NoTrade `0.0` には届かない。
+- cost sensitivityは全条件でマイナス。spread `0.2` / slippage `0.10` / delay `1` は adjusted pnl `-55.7310`。
+- 最大損失は引き続き 2025-03-31 01:28 UTC の `asia / range / low_vol` shortで、adjusted pnl `-49.3248`。
+- このtradeの predicted short barrier probabilityは `0.4859`。閾値 `0.50` なら落ちるが、validationでは月10tradesを満たしにくく、blind後の診断でも `6` trades / adjusted pnl `-39.5282` と悪化した。
+
+判断:
+
+- profit barrier probability gateは有効なfilter軸だが、単独では採用不可。
+- 最大損失は barrier確率だけでなく、fixed horizon 720m short EVの過大評価とexit timingの遅さが重なっている。
+- 次は `asia / range / low_vol` のshortだけを抑制する side-specific regime suppression、exit timing target、candidate selectionへのprofit barrier miss率追加を優先する。
