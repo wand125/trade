@@ -34,6 +34,7 @@ class DatasetTests(unittest.TestCase):
 
         self.assertEqual(labels.loc[0, "entry_idx"], 1)
         self.assertEqual(labels.loc[0, "label"], 1)
+        self.assertEqual(labels.loc[0, "best_side"], 1)
         self.assertAlmostEqual(labels.loc[0, "long_best_adjusted_pnl"], 3.6)
         self.assertAlmostEqual(labels.loc[0, "short_best_adjusted_pnl"], 1.8)
         self.assertAlmostEqual(labels.loc[0, "long_forced_raw_pnl"], 2.0)
@@ -53,6 +54,7 @@ class DatasetTests(unittest.TestCase):
 
         self.assertEqual(labels.loc[1, "entry_idx"], 2)
         self.assertEqual(labels.loc[1, "label"], -1)
+        self.assertEqual(labels.loc[1, "best_side"], -1)
         self.assertAlmostEqual(labels.loc[1, "short_best_adjusted_pnl"], 5.4)
         self.assertEqual(labels.loc[1, "best_exit_idx"], 3)
         self.assertEqual(labels.loc[1, "short_profit_barrier_hit"], 1)
@@ -123,6 +125,7 @@ class DatasetTests(unittest.TestCase):
         self.assertGreater(len(dataset), 0)
         self.assertIn("ret_1", dataset.columns)
         self.assertIn("label", dataset.columns)
+        self.assertIn("best_side", dataset.columns)
         self.assertIn("side_score", dataset.columns)
         self.assertIn("best_adjusted_pnl_quantile", dataset.columns)
         self.assertIn("long_profit_barrier_hit", dataset.columns)
@@ -148,6 +151,7 @@ class DatasetTests(unittest.TestCase):
         self.assertIn("best_holding_time_bin", dataset.columns)
         self.assertEqual(summary["rows"], len(dataset))
         self.assertIn("target_columns", summary)
+        self.assertIn("best_side", summary["target_columns"])
         self.assertIn("long_wait_regret", summary["target_columns"])
         self.assertIn("long_profit_barrier_hit", summary["target_columns"])
         self.assertIn("long_exit_event", summary["target_columns"])

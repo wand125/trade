@@ -2162,3 +2162,41 @@ Artifacts:
 - 2024-12の主因はforced exitではなく、direction error、profit barrier miss、EV過大評価。
 - combined regimeはcandidate tie-break / failure analysisには使うが、標準hard gateにはしない。
 - 次はside/entry calibrationを直接扱う。特に `actual_best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。
+
+### 2026-06-28 16:48 JST Best Side Confidence Smoke
+
+作業:
+
+- `label` とは別に、long/shortの相対的に良い方向を保持する `best_side` targetを追加した。
+- `target-set policy` / `full` で `best_side` をclassification targetに含め、`pred_best_side_prob_1` / `pred_best_side_prob_-1` を保存するようにした。
+- `model-policy` / `model-sweep` に `--side-confidence-penalty` と `--min-side-confidence` を追加した。
+- 2024-09..2024-12のsmoke datasetとHGB modelを作成し、2024-12 testでside-confidence sweepを行った。
+- report: `docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- dataset: `data/processed/datasets/xauusd_m1_best_side_smoke/`
+- model: `experiments/20260628_074412_best_side_confidence_smoke/`
+- sweep: `data/reports/backtests/20260628_074450_model_sweep_2024-12/`
+
+結果:
+
+| split | best_side balanced accuracy | macro f1 |
+|---|---:|---:|
+| train | `0.6710` | `0.6624` |
+| validation | `0.5464` | `0.5393` |
+| test | `0.4797` | `0.4766` |
+
+2024-12 executable smoke:
+
+| side penalty | min side confidence | adjusted pnl | trades | profit factor | max drawdown |
+|---:|---:|---:|---:|---:|---:|
+| `10` | `0.55` | `-109.8978` | `331` | `0.7276` | `119.9102` |
+| `0` | `0.00` | `-220.5348` | `506` | `0.6484` | `241.2352` |
+
+判断:
+
+- side-confidence gateは損失と取引数を減らすが、NoTradeには負けるため採用しない。
+- `best_side` は方向選択の診断 target としては有用。ただし2024-12ではbelow-randomなので、hard gateにするにはwalk-forward OOFの確認が必須。
+- 次は広い期間のdatasetに反映し、side confidenceをcalibration/diagnosticとして使う。

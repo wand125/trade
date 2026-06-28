@@ -110,6 +110,7 @@ class ModelingTests(unittest.TestCase):
         self.assertIn("short_entry_local_rank", regression_targets)
         self.assertIn("long_profit_barrier_hit", classification_targets)
         self.assertIn("long_profit_barrier_hit_60m", classification_targets)
+        self.assertIn("best_side", classification_targets)
 
     def test_full_target_set_includes_fixed_exit_horizon_targets(self):
         regression_targets, classification_targets = resolve_target_names("full")
@@ -164,6 +165,7 @@ class ModelingTests(unittest.TestCase):
                 "entry_timestamp": pd.date_range("2024-01-01 00:01", periods=2, tz="UTC"),
                 "dataset_month": ["2024-01", "2024-01"],
                 "label": [1, -1],
+                "best_side": [-1, 1],
                 "long_best_adjusted_pnl": [1.0, 2.0],
                 "short_best_adjusted_pnl": [2.0, 1.0],
                 "side_score": [-1.0, 1.0],
@@ -204,6 +206,7 @@ class ModelingTests(unittest.TestCase):
 
         self.assertEqual(output["roll_vol_60"].tolist(), [0.01, 0.02])
         self.assertEqual(output["trend_regime"].tolist(), ["up", "down"])
+        self.assertEqual(output["best_side"].tolist(), [-1, 1])
         self.assertIn("pred_long_best_adjusted_pnl", output.columns)
 
     def test_evaluate_models_adds_binary_classifier_probability(self):

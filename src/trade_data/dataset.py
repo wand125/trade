@@ -178,6 +178,7 @@ def future_best_labels(
 
     n = len(df)
     label = np.full(n, np.nan)
+    best_side = np.full(n, np.nan)
     long_adj = np.full(n, np.nan)
     short_adj = np.full(n, np.nan)
     long_raw = np.full(n, np.nan)
@@ -315,11 +316,13 @@ def future_best_labels(
 
         if long_value >= short_value:
             chosen_label = 1
+            chosen_side = 1
             chosen_adj = long_value
             chosen_raw = long_raw_value
             chosen_exit_idx = long_exit_idx
         else:
             chosen_label = -1
+            chosen_side = -1
             chosen_adj = short_value
             chosen_raw = short_raw_value
             chosen_exit_idx = short_exit_idx
@@ -328,6 +331,7 @@ def future_best_labels(
             chosen_label = 0
 
         label[decision_idx] = chosen_label
+        best_side[decision_idx] = chosen_side
         long_adj[decision_idx] = long_value
         short_adj[decision_idx] = short_value
         long_raw[decision_idx] = long_raw_value
@@ -361,6 +365,7 @@ def future_best_labels(
         {
             "entry_idx": entry_idx_values,
             "label": label,
+            "best_side": best_side,
             "long_best_adjusted_pnl": long_adj,
             "short_best_adjusted_pnl": short_adj,
             "long_best_raw_pnl": long_raw,
@@ -580,6 +585,7 @@ def build_month_dataset(
     label_ready = output["label"].notna()
     output = output.loc[in_eval & feature_ready & label_ready].copy()
     output["label"] = output["label"].astype("int8")
+    output["best_side"] = output["best_side"].astype("int8")
     output["entry_idx"] = output["entry_idx"].astype("int64")
     output["best_exit_idx"] = output["best_exit_idx"].astype("int64")
     output["long_best_exit_idx"] = output["long_best_exit_idx"].astype("int64")
@@ -611,6 +617,7 @@ def build_month_dataset(
         "entry_timestamp",
         "best_exit_timestamp",
         "label",
+        "best_side",
         *quantized_target_columns,
         "long_profit_barrier_hit",
         "short_profit_barrier_hit",
@@ -662,6 +669,7 @@ def build_month_dataset(
         [
             "long_profit_barrier_hit",
             "short_profit_barrier_hit",
+            "best_side",
             "long_exit_event",
             "short_exit_event",
             "long_exit_event_minutes",
@@ -699,6 +707,7 @@ def dataset_summary(
         "feature_columns": feature_columns,
         "target_columns": [
             "label",
+            "best_side",
             *quantized_target_columns,
             *(extra_target_columns or []),
             "long_best_adjusted_pnl",

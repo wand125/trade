@@ -59,6 +59,8 @@ SWEEP_KEY_COLUMNS = [
     "min_entry_rank",
     "min_trade_quality",
     "profit_barrier_miss_penalty",
+    "side_confidence_penalty",
+    "min_side_confidence",
     "require_profit_barrier",
     "profit_barrier_threshold",
     "extra_side_margin_rules",
@@ -307,12 +309,16 @@ class ModelPolicyConfig:
     short_entry_rank_column: str = "pred_short_entry_local_rank"
     long_profit_barrier_column: str = "pred_long_profit_barrier_hit"
     short_profit_barrier_column: str = "pred_short_profit_barrier_hit"
+    long_side_confidence_column: str = "pred_best_side_prob_1"
+    short_side_confidence_column: str = "pred_best_side_prob_-1"
     long_trade_quality_column: str = "pred_trade_quality_long_adjusted_pnl"
     short_trade_quality_column: str = "pred_trade_quality_short_adjusted_pnl"
     max_wait_regret: float = float("inf")
     min_entry_rank: float = 0.0
     min_trade_quality: float = -float("inf")
     profit_barrier_miss_penalty: float = 0.0
+    side_confidence_penalty: float = 0.0
+    min_side_confidence: float = 0.0
     require_profit_barrier: bool = False
     profit_barrier_threshold: float = 0.5
     extra_side_margin_rules: tuple[str, ...] = ()
@@ -553,6 +559,14 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
         required_columns.extend(profit_barrier_prediction_columns)
     else:
         optional_columns.extend(optional_parquet_columns(path, profit_barrier_prediction_columns))
+    side_confidence_prediction_columns = [
+        config.long_side_confidence_column,
+        config.short_side_confidence_column,
+    ]
+    if config.min_side_confidence > 0 or config.side_confidence_penalty > 0:
+        required_columns.extend(side_confidence_prediction_columns)
+    else:
+        optional_columns.extend(optional_parquet_columns(path, side_confidence_prediction_columns))
     trade_quality_prediction_columns = [
         config.long_trade_quality_column,
         config.short_trade_quality_column,
@@ -657,6 +671,10 @@ def model_signal_from_predictions(
         raise ValueError("risk_penalty must be non-negative")
     if config.profit_barrier_miss_penalty < 0:
         raise ValueError("profit_barrier_miss_penalty must be non-negative")
+    if config.side_confidence_penalty < 0:
+        raise ValueError("side_confidence_penalty must be non-negative")
+    if not 0 <= config.min_side_confidence <= 1:
+        raise ValueError("min_side_confidence must be between 0 and 1")
     if config.min_predicted_hold_minutes < 0:
         raise ValueError("min_predicted_hold_minutes must be non-negative")
     if config.max_predicted_hold_minutes < config.min_predicted_hold_minutes:
@@ -701,6 +719,29 @@ def model_signal_from_predictions(
         short_barrier = barrier_aligned[config.short_profit_barrier_column].reset_index(drop=True).astype(float)
         long_ev = long_ev - config.profit_barrier_miss_penalty * (1.0 - long_barrier).clip(0.0, 1.0)
         short_ev = short_ev - config.profit_barrier_miss_penalty * (1.0 - short_barrier).clip(0.0, 1.0)
+    long_side_confidence = None
+    short_side_confidence = None
+    if config.min_side_confidence > 0 or config.side_confidence_penalty > 0:
+        side_confidence_aligned = prediction_index[
+            [config.long_side_confidence_column, config.short_side_confidence_column]
+        ].reindex(df["timestamp"])
+        long_side_confidence = (
+            side_confidence_aligned[config.long_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        short_side_confidence = (
+            side_confidence_aligned[config.short_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        if config.side_confidence_penalty > 0:
+            long_ev = long_ev - config.side_confidence_penalty * (
+                1.0 - long_side_confidence
+            ).clip(0.0, 1.0)
+            short_ev = short_ev - config.side_confidence_penalty * (
+                1.0 - short_side_confidence
+            ).clip(0.0, 1.0)
     if config.policy == "timed_ev":
         holding_aligned = prediction_index[[config.long_holding_column, config.short_holding_column]].reindex(
             df["timestamp"]
@@ -752,6 +793,26 @@ def model_signal_from_predictions(
             index=df.index,
         )
         quality_ok &= side_trade_quality.notna() & (side_trade_quality >= config.min_trade_quality)
+    if config.min_side_confidence > 0:
+        if long_side_confidence is None or short_side_confidence is None:
+            side_confidence_aligned = prediction_index[
+                [config.long_side_confidence_column, config.short_side_confidence_column]
+            ].reindex(df["timestamp"])
+            long_side_confidence = (
+                side_confidence_aligned[config.long_side_confidence_column]
+                .reset_index(drop=True)
+                .astype(float)
+            )
+            short_side_confidence = (
+                side_confidence_aligned[config.short_side_confidence_column]
+                .reset_index(drop=True)
+                .astype(float)
+            )
+        side_confidence = pd.Series(
+            np.where(best_side == 1, long_side_confidence, short_side_confidence),
+            index=df.index,
+        )
+        quality_ok &= side_confidence.notna() & (side_confidence >= config.min_side_confidence)
     if config.require_profit_barrier:
         barrier_aligned = prediction_index[
             [config.long_profit_barrier_column, config.short_profit_barrier_column]
@@ -2160,12 +2221,16 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         short_entry_rank_column=args.short_entry_rank_column,
         long_profit_barrier_column=args.long_profit_barrier_column,
         short_profit_barrier_column=args.short_profit_barrier_column,
+        long_side_confidence_column=args.long_side_confidence_column,
+        short_side_confidence_column=args.short_side_confidence_column,
         long_trade_quality_column=args.long_trade_quality_column,
         short_trade_quality_column=args.short_trade_quality_column,
         max_wait_regret=args.max_wait_regret,
         min_entry_rank=args.min_entry_rank,
         min_trade_quality=args.min_trade_quality,
         profit_barrier_miss_penalty=args.profit_barrier_miss_penalty,
+        side_confidence_penalty=args.side_confidence_penalty,
+        min_side_confidence=args.min_side_confidence,
         require_profit_barrier=args.require_profit_barrier,
         profit_barrier_threshold=args.profit_barrier_threshold,
         extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
@@ -2396,6 +2461,8 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
     parser.add_argument("--long-profit-barrier-column", default="pred_long_profit_barrier_hit")
     parser.add_argument("--short-profit-barrier-column", default="pred_short_profit_barrier_hit")
+    parser.add_argument("--long-side-confidence-column", default="pred_best_side_prob_1")
+    parser.add_argument("--short-side-confidence-column", default="pred_best_side_prob_-1")
     parser.add_argument("--long-trade-quality-column", default="pred_trade_quality_long_adjusted_pnl")
     parser.add_argument("--short-trade-quality-column", default="pred_trade_quality_short_adjusted_pnl")
     parser.add_argument("--max-wait-regret", type=float, default=float("inf"))
@@ -2406,6 +2473,18 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=0.0,
         help="EV penalty multiplied by 1 - side profit-barrier prediction",
+    )
+    parser.add_argument(
+        "--side-confidence-penalty",
+        type=float,
+        default=0.0,
+        help="EV penalty multiplied by 1 - predicted best-side probability",
+    )
+    parser.add_argument(
+        "--min-side-confidence",
+        type=float,
+        default=0.0,
+        help="minimum predicted best-side probability for the selected side",
     )
     parser.add_argument("--require-profit-barrier", action="store_true")
     parser.add_argument("--profit-barrier-threshold", type=float, default=0.5)
@@ -2446,6 +2525,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     side_margins = parse_csv_floats(args.side_margins)
     risk_penalties = parse_csv_floats(args.risk_penalties)
     profit_barrier_miss_penalties = parse_csv_floats(args.profit_barrier_miss_penalties)
+    side_confidence_penalties = parse_csv_floats(args.side_confidence_penalties)
     fixed_horizon_score_modes = parse_csv_strings(args.fixed_horizon_score_modes)
     unknown_fixed_horizon_score_modes = sorted(
         set(fixed_horizon_score_modes) - set(FIXED_HORIZON_SCORE_MODES)
@@ -2460,6 +2540,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     max_predicted_hold_minutes_values = parse_csv_floats(args.max_predicted_hold_minutes)
     min_entry_ranks = parse_csv_floats(args.min_entry_ranks)
     min_trade_qualities = parse_csv_floats(args.min_trade_qualities)
+    min_side_confidences = parse_csv_floats(args.min_side_confidences)
     require_profit_barriers = parse_csv_bools(args.require_profit_barriers)
     profit_barrier_thresholds = parse_csv_floats(args.profit_barrier_thresholds)
     regime_blocks = regime_blocks_from_args(args)
@@ -2480,6 +2561,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         min_entry_ranks,
         min_trade_qualities,
         profit_barrier_miss_penalties,
+        side_confidence_penalties,
+        min_side_confidences,
         require_profit_barriers,
     )
     for (
@@ -2496,6 +2579,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         min_entry_rank,
         min_trade_quality,
         profit_barrier_miss_penalty,
+        side_confidence_penalty,
+        min_side_confidence,
         require_profit_barrier,
     ) in base_grid:
         if max_predicted_hold_minutes < min_predicted_hold_minutes:
@@ -2540,12 +2625,16 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     short_entry_rank_column=args.short_entry_rank_column,
                     long_profit_barrier_column=args.long_profit_barrier_column,
                     short_profit_barrier_column=args.short_profit_barrier_column,
+                    long_side_confidence_column=args.long_side_confidence_column,
+                    short_side_confidence_column=args.short_side_confidence_column,
                     long_trade_quality_column=args.long_trade_quality_column,
                     short_trade_quality_column=args.short_trade_quality_column,
                     max_wait_regret=max_wait_regret,
                     min_entry_rank=min_entry_rank,
                     min_trade_quality=min_trade_quality,
                     profit_barrier_miss_penalty=profit_barrier_miss_penalty,
+                    side_confidence_penalty=side_confidence_penalty,
+                    min_side_confidence=min_side_confidence,
                     require_profit_barrier=require_profit_barrier,
                     profit_barrier_threshold=profit_barrier_threshold,
                     extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
@@ -2579,6 +2668,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "min_entry_rank": min_entry_rank,
                     "min_trade_quality": min_trade_quality,
                     "profit_barrier_miss_penalty": profit_barrier_miss_penalty,
+                    "side_confidence_penalty": side_confidence_penalty,
+                    "min_side_confidence": min_side_confidence,
                     "require_profit_barrier": require_profit_barrier,
                     "profit_barrier_threshold": profit_barrier_threshold,
                     "extra_side_margin_rules": regime_values_to_string(
@@ -2613,12 +2704,14 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "side_margins": side_margins,
         "risk_penalties": risk_penalties,
         "profit_barrier_miss_penalties": profit_barrier_miss_penalties,
+        "side_confidence_penalties": side_confidence_penalties,
         "fixed_horizon_score_modes": fixed_horizon_score_modes,
         "min_predicted_hold_minutes": min_predicted_hold_minutes_values,
         "max_predicted_hold_minutes": max_predicted_hold_minutes_values,
         "max_wait_regrets": max_wait_regrets,
         "min_entry_ranks": min_entry_ranks,
         "min_trade_qualities": min_trade_qualities,
+        "min_side_confidences": min_side_confidences,
         "require_profit_barriers": require_profit_barriers,
         "profit_barrier_thresholds": profit_barrier_thresholds,
         "extra_side_margin_rules": parse_optional_csv_strings(args.extra_side_margin_rules),
@@ -2643,6 +2736,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "short_entry_rank_column": args.short_entry_rank_column,
         "long_profit_barrier_column": args.long_profit_barrier_column,
         "short_profit_barrier_column": args.short_profit_barrier_column,
+        "long_side_confidence_column": args.long_side_confidence_column,
+        "short_side_confidence_column": args.short_side_confidence_column,
         "long_trade_quality_column": args.long_trade_quality_column,
         "short_trade_quality_column": args.short_trade_quality_column,
     }
@@ -2659,6 +2754,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["risk_penalty"] = 0.0
     if "profit_barrier_miss_penalty" not in output.columns:
         output["profit_barrier_miss_penalty"] = 0.0
+    if "side_confidence_penalty" not in output.columns:
+        output["side_confidence_penalty"] = 0.0
+    if "min_side_confidence" not in output.columns:
+        output["min_side_confidence"] = 0.0
     if "fixed_horizon_score_mode" not in output.columns:
         output["fixed_horizon_score_mode"] = "max"
     if "min_predicted_hold_minutes" not in output.columns:
@@ -2769,6 +2868,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "min_entry_rank",
         "min_trade_quality",
         "profit_barrier_threshold",
+        "side_confidence_penalty",
+        "min_side_confidence",
         "total_adjusted_pnl",
         "total_raw_pnl",
         "trade_count",
@@ -3606,9 +3707,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="0",
         help="comma-separated EV penalties multiplied by 1 - side profit-barrier prediction",
     )
+    model_sweep.add_argument(
+        "--side-confidence-penalties",
+        default="0",
+        help="comma-separated EV penalties multiplied by 1 - predicted best-side probability",
+    )
     model_sweep.add_argument("--max-wait-regrets", default="inf")
     model_sweep.add_argument("--min-entry-ranks", default="0")
     model_sweep.add_argument("--min-trade-qualities", default="-inf")
+    model_sweep.add_argument("--min-side-confidences", default="0")
     model_sweep.add_argument("--require-profit-barriers", default="false")
     model_sweep.add_argument("--profit-barrier-thresholds", default="0.5")
     model_sweep.add_argument(
@@ -3666,6 +3773,8 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
     model_sweep.add_argument("--long-profit-barrier-column", default="pred_long_profit_barrier_hit")
     model_sweep.add_argument("--short-profit-barrier-column", default="pred_short_profit_barrier_hit")
+    model_sweep.add_argument("--long-side-confidence-column", default="pred_best_side_prob_1")
+    model_sweep.add_argument("--short-side-confidence-column", default="pred_best_side_prob_-1")
     model_sweep.add_argument("--long-trade-quality-column", default="pred_trade_quality_long_adjusted_pnl")
     model_sweep.add_argument("--short-trade-quality-column", default="pred_trade_quality_short_adjusted_pnl")
     add_regime_gate_args(model_sweep)

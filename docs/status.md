@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 16:31 JST
+最終更新: 2026-06-28 16:48 JST
 
 ## 現在の状態
 
@@ -66,7 +66,9 @@ predicted holding capを`model-sweep`の探索軸とcandidate keyへ追加済み
 
 delay `1` full-gridを新しいcombined regime診断付きで再生成し、`combined_regime` / `direction:combined_regime` の最悪損益gateを追加済み。baseline support-aware selectionは13候補、topは `entry=5`, `short offset=12`, `max hold=720`, cost min pnl `58.2310`。combined gate `60/60` はeligible 0件、`60/65` は3件残り、topは `entry=5`, `short offset=20`, `max hold=480`, cost min pnl `45.4484`。ただしこのtopを2024-12 holdoutへ固定適用すると adjusted pnl `-149.7354`, profit factor `0.3820` と悪化したため、採用しない。詳細は `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`。
 
-`docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
+`best_side` auxiliary targetとside-confidence policy gateを追加済み。`best_side` は no-trade edge を満たすかとは独立に、long/short のどちらが相対的に有利だったかを保持する。2024-09..2024-12 smokeでは `best_side` balanced accuracy が validation `0.5464`、test `0.4797`。side-confidence gateは2024-12 testの損失を `-220.5348` から `-109.8978` へ縮めたが、NoTradeには負けるため採用せず、診断・calibration信号として扱う。詳細は `docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`。
+
+`docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認や再採番でも、ファイルシステムのmtimeではなく本文内の `日時` を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
 
@@ -92,7 +94,7 @@ delay `1` full-gridを新しいcombined regime診断付きで再生成し、`com
 3. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
 4. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。
 5. exit-event datasetを2025-02以降にも拡張し、候補固定後に複数blind月へ適用する。
-6. side/entry calibrationを直接扱う。`actual_best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。
+6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。
 7. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
 8. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
 9. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
@@ -220,6 +222,8 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00039_2026-06-28_exit_event_timing_targets.md`
 - `docs/reports/00040_2026-06-28_exit_event_holding_validation.md`
 - `docs/reports/00041_2026-06-28_holding_cap_sweep.md`
+- `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`
+- `docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
 - `experiments/20260628_062101_exit_event_target_smoke/`

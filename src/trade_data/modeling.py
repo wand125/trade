@@ -80,6 +80,7 @@ CLASSIFICATION_TARGETS = [
     "short_exit_event",
     "long_exit_event_time_bin",
     "short_exit_event_time_bin",
+    "best_side",
     "label",
 ]
 
@@ -107,6 +108,7 @@ POLICY_CLASSIFICATION_TARGETS = [
     "short_exit_event",
     "long_exit_event_time_bin",
     "short_exit_event_time_bin",
+    "best_side",
     "label",
 ]
 
@@ -585,6 +587,7 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "entry_timestamp",
         "dataset_month",
         "label",
+        "best_side",
         "long_best_adjusted_pnl",
         "short_best_adjusted_pnl",
         *EXIT_FIXED_HORIZON_TARGETS,
