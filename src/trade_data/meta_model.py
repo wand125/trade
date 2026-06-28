@@ -282,6 +282,44 @@ class CandidateFailureModelBundle:
 
 
 @dataclass(frozen=True)
+class CandidateQualityModelConfig:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    max_depth: int | None
+    min_samples_leaf: int
+    l2_regularization: float
+    max_features: float
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
+    random_seed: int
+    target_clip_quantile: float
+    sample_weighting: str
+    prediction_shrinkage: float
+    lower_quantile: float
+    entry_threshold: float
+    long_entry_threshold_offset: float
+    short_entry_threshold_offset: float
+    side_margin: float
+    min_entry_rank: float
+    long_entry_rank_column: str = "pred_long_entry_local_rank"
+    short_entry_rank_column: str = "pred_short_entry_local_rank"
+
+
+@dataclass
+class CandidateQualityModelBundle:
+    config: CandidateQualityModelConfig
+    mean_model: HistGradientBoostingRegressor
+    lower_model: HistGradientBoostingRegressor
+    feature_columns: list[str]
+    category_mappings: dict[str, dict[str, int]]
+    target_mean: float
+    lower_target_mean: float
+
+
+@dataclass(frozen=True)
 class TradeFailureProbabilityCalibrator:
     config: GroupEVCalibrationConfig
     target_name: str
@@ -308,6 +346,20 @@ TRADE_QUALITY_LONG_OVERESTIMATE_COLUMN = "pred_trade_quality_long_overestimate"
 TRADE_QUALITY_SHORT_OVERESTIMATE_COLUMN = "pred_trade_quality_short_overestimate"
 TRADE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN = "pred_trade_quality_long_overestimate_risk"
 TRADE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN = "pred_trade_quality_short_overestimate_risk"
+CANDIDATE_QUALITY_LONG_COLUMN = "pred_candidate_quality_long_adjusted_pnl"
+CANDIDATE_QUALITY_SHORT_COLUMN = "pred_candidate_quality_short_adjusted_pnl"
+CANDIDATE_QUALITY_LONG_LOWER_COLUMN = "pred_candidate_quality_long_lower_adjusted_pnl"
+CANDIDATE_QUALITY_SHORT_LOWER_COLUMN = "pred_candidate_quality_short_lower_adjusted_pnl"
+CANDIDATE_QUALITY_TAKEN_COLUMN = "pred_candidate_quality_taken_adjusted_pnl"
+CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN = "pred_candidate_quality_taken_lower_adjusted_pnl"
+CANDIDATE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN = "pred_candidate_quality_long_overestimate_risk"
+CANDIDATE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN = "pred_candidate_quality_short_overestimate_risk"
+CANDIDATE_QUALITY_LONG_LOWER_OVERESTIMATE_RISK_COLUMN = (
+    "pred_candidate_quality_long_lower_overestimate_risk"
+)
+CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN = (
+    "pred_candidate_quality_short_lower_overestimate_risk"
+)
 TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS = [
     "side",
     "pred_taken_ev",
@@ -2087,6 +2139,278 @@ def candidate_failure_scored_metrics(
     return metrics
 
 
+def candidate_quality_mask_config(config: CandidateQualityModelConfig) -> ResidualPenaltyConfig:
+    return ResidualPenaltyConfig(
+        group_columns=(),
+        min_group_size=1,
+        prior_strength=0.0,
+        penalty_weight=0.0,
+        candidate_entry_only=True,
+        entry_threshold=config.entry_threshold,
+        long_entry_threshold_offset=config.long_entry_threshold_offset,
+        short_entry_threshold_offset=config.short_entry_threshold_offset,
+        side_margin=config.side_margin,
+        min_entry_rank=config.min_entry_rank,
+        long_entry_rank_column=config.long_entry_rank_column,
+        short_entry_rank_column=config.short_entry_rank_column,
+    )
+
+
+def build_candidate_quality_training_frame(
+    predictions: pd.DataFrame,
+    config: CandidateQualityModelConfig,
+    *,
+    long_column: str,
+    short_column: str,
+) -> pd.DataFrame:
+    required_columns = {
+        long_column,
+        short_column,
+        SIDE_COLUMNS["long"]["target"],
+        SIDE_COLUMNS["short"]["target"],
+    }
+    if config.min_entry_rank > 0:
+        required_columns.update(
+            {
+                config.long_entry_rank_column,
+                config.short_entry_rank_column,
+            }
+        )
+    missing_columns = sorted(required_columns - set(predictions.columns))
+    if missing_columns:
+        raise ValueError(f"predictions missing candidate quality columns: {', '.join(missing_columns)}")
+
+    masks = candidate_entry_side_masks(
+        predictions,
+        candidate_quality_mask_config(config),
+        long_column=long_column,
+        short_column=short_column,
+    )
+    frames: list[pd.DataFrame] = []
+    for side_name in ("long", "short"):
+        side_predictions = predictions.loc[masks[side_name]].copy()
+        if side_predictions.empty:
+            continue
+        features = trade_quality_features_from_predictions(side_predictions, side_name)
+        features["candidate_side"] = side_name
+        features["candidate_source_index"] = side_predictions.index.astype(str)
+        if "decision_timestamp" in side_predictions.columns:
+            features["decision_timestamp"] = side_predictions["decision_timestamp"]
+        target_column = SIDE_COLUMNS[side_name]["target"]
+        features["candidate_actual_adjusted_pnl"] = finite_float_series(
+            side_predictions,
+            target_column,
+        )
+        features["target"] = features["candidate_actual_adjusted_pnl"]
+        frames.append(features)
+
+    if not frames:
+        return pd.DataFrame()
+    frame = pd.concat(frames, ignore_index=True)
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(subset=["target"])
+
+
+def fit_candidate_quality_model_from_frame(
+    frame: pd.DataFrame,
+    config: CandidateQualityModelConfig,
+) -> CandidateQualityModelBundle:
+    if frame.empty:
+        raise ValueError("candidate quality model training frame is empty")
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if not 0.0 < config.lower_quantile < 0.5:
+        raise ValueError("lower_quantile must be in (0, 0.5)")
+
+    mappings = category_mappings(frame, TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS)
+    encoded = encode_trade_quality_features(frame, mappings)
+    feature_columns = trade_quality_feature_columns(encoded)
+    x = encoded[feature_columns].astype("float32").to_numpy()
+    y = clipped_target(frame["target"], config.target_clip_quantile)
+    sample_weight = trade_quality_sample_weights(frame, config.sample_weighting)
+
+    mean_model = HistGradientBoostingRegressor(
+        max_iter=config.max_iter,
+        learning_rate=config.learning_rate,
+        max_leaf_nodes=config.max_leaf_nodes,
+        max_depth=config.max_depth,
+        min_samples_leaf=config.min_samples_leaf,
+        l2_regularization=config.l2_regularization,
+        max_features=config.max_features,
+        early_stopping=config.early_stopping,
+        validation_fraction=config.validation_fraction,
+        n_iter_no_change=config.n_iter_no_change,
+        tol=config.tol,
+        random_state=config.random_seed,
+    )
+    mean_model.fit(x, y, sample_weight=sample_weight)
+
+    lower_model = HistGradientBoostingRegressor(
+        loss="quantile",
+        quantile=config.lower_quantile,
+        max_iter=config.max_iter,
+        learning_rate=config.learning_rate,
+        max_leaf_nodes=config.max_leaf_nodes,
+        max_depth=config.max_depth,
+        min_samples_leaf=config.min_samples_leaf,
+        l2_regularization=config.l2_regularization,
+        max_features=config.max_features,
+        early_stopping=config.early_stopping,
+        validation_fraction=config.validation_fraction,
+        n_iter_no_change=config.n_iter_no_change,
+        tol=config.tol,
+        random_state=config.random_seed + 101,
+    )
+    lower_model.fit(x, y, sample_weight=sample_weight)
+
+    return CandidateQualityModelBundle(
+        config=config,
+        mean_model=mean_model,
+        lower_model=lower_model,
+        feature_columns=feature_columns,
+        category_mappings=mappings,
+        target_mean=float(frame["target"].mean()),
+        lower_target_mean=float(frame["target"].quantile(config.lower_quantile)),
+    )
+
+
+def fit_candidate_quality_model(
+    predictions: pd.DataFrame,
+    config: CandidateQualityModelConfig,
+    *,
+    long_column: str,
+    short_column: str,
+) -> CandidateQualityModelBundle:
+    frame = build_candidate_quality_training_frame(
+        predictions,
+        config,
+        long_column=long_column,
+        short_column=short_column,
+    )
+    return fit_candidate_quality_model_from_frame(frame, config)
+
+
+def predict_candidate_quality_features(
+    raw_features: pd.DataFrame,
+    bundle: CandidateQualityModelBundle,
+    *,
+    lower: bool = False,
+) -> np.ndarray:
+    encoded = encode_trade_quality_features(raw_features, bundle.category_mappings)
+    model = bundle.lower_model if lower else bundle.mean_model
+    predictions = model.predict(encoded[bundle.feature_columns].astype("float32").to_numpy())
+    if bundle.config.prediction_shrinkage < 1.0:
+        center = bundle.lower_target_mean if lower else bundle.target_mean
+        predictions = bundle.config.prediction_shrinkage * predictions + (
+            1.0 - bundle.config.prediction_shrinkage
+        ) * center
+    return predictions
+
+
+def candidate_quality_columns_for_side(side_name: str) -> tuple[str, str, str, str]:
+    if side_name == "long":
+        return (
+            CANDIDATE_QUALITY_LONG_COLUMN,
+            CANDIDATE_QUALITY_LONG_LOWER_COLUMN,
+            CANDIDATE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN,
+            CANDIDATE_QUALITY_LONG_LOWER_OVERESTIMATE_RISK_COLUMN,
+        )
+    return (
+        CANDIDATE_QUALITY_SHORT_COLUMN,
+        CANDIDATE_QUALITY_SHORT_LOWER_COLUMN,
+        CANDIDATE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN,
+        CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN,
+    )
+
+
+def add_candidate_quality_model_columns(
+    predictions: pd.DataFrame,
+    bundle: CandidateQualityModelBundle,
+) -> pd.DataFrame:
+    missing = sorted(
+        {TRADE_SOURCE_LONG_EV_COLUMN, TRADE_SOURCE_SHORT_EV_COLUMN} - set(predictions.columns)
+    )
+    if missing:
+        raise ValueError(f"predictions missing trade source columns: {', '.join(missing)}")
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        quality_column, lower_column, risk_column, lower_risk_column = candidate_quality_columns_for_side(
+            side_name
+        )
+        source_column = TRADE_SOURCE_LONG_EV_COLUMN if side_name == "long" else TRADE_SOURCE_SHORT_EV_COLUMN
+        features = trade_quality_features_from_predictions(output, side_name)
+        output[quality_column] = predict_candidate_quality_features(features, bundle, lower=False)
+        output[lower_column] = predict_candidate_quality_features(features, bundle, lower=True)
+        overestimate = (
+            output[source_column].astype(float) - output[quality_column].astype(float)
+        ).clip(lower=0.0)
+        lower_overestimate = (
+            output[source_column].astype(float) - output[lower_column].astype(float)
+        ).clip(lower=0.0)
+        output[risk_column] = -overestimate
+        output[lower_risk_column] = -lower_overestimate
+    return output
+
+
+def add_candidate_quality_model_values_to_examples(
+    examples: pd.DataFrame,
+    bundle: CandidateQualityModelBundle,
+) -> pd.DataFrame:
+    output = examples.copy()
+    output[CANDIDATE_QUALITY_TAKEN_COLUMN] = predict_candidate_quality_features(
+        output,
+        bundle,
+        lower=False,
+    )
+    output[CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN] = predict_candidate_quality_features(
+        output,
+        bundle,
+        lower=True,
+    )
+    return output
+
+
+def candidate_quality_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
+    if scored.empty:
+        return {
+            "candidate_count": 0,
+            "raw_bias": 0.0,
+            "mean_bias": 0.0,
+            "lower_bias": 0.0,
+            "raw_overestimate_mean": 0.0,
+            "mean_overestimate_mean": 0.0,
+            "lower_overestimate_mean": 0.0,
+            "mean_mae": 0.0,
+            "mean_rmse": 0.0,
+            "mean_r2": 0.0,
+            "lower_coverage": 0.0,
+        }
+    target = finite_float_series(scored, "target")
+    raw_pred = finite_float_series(scored, "pred_taken_ev")
+    mean_pred = finite_float_series(scored, CANDIDATE_QUALITY_TAKEN_COLUMN)
+    lower_pred = finite_float_series(scored, CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN)
+    raw_error = raw_pred - target
+    mean_error = mean_pred - target
+    lower_error = lower_pred - target
+    mean_r2 = float(r2_score(target, mean_pred)) if len(scored) >= 2 else 0.0
+    return {
+        "candidate_count": int(len(scored)),
+        "target_mean": float(target.mean()),
+        "raw_predicted_mean": float(raw_pred.mean()),
+        "mean_predicted_mean": float(mean_pred.mean()),
+        "lower_predicted_mean": float(lower_pred.mean()),
+        "raw_bias": float(raw_error.mean()),
+        "mean_bias": float(mean_error.mean()),
+        "lower_bias": float(lower_error.mean()),
+        "raw_overestimate_mean": float(raw_error.clip(lower=0).mean()),
+        "mean_overestimate_mean": float(mean_error.clip(lower=0).mean()),
+        "lower_overestimate_mean": float(lower_error.clip(lower=0).mean()),
+        "mean_mae": float(mean_absolute_error(target, mean_pred)),
+        "mean_rmse": float(mean_squared_error(target, mean_pred) ** 0.5),
+        "mean_r2": mean_r2,
+        "lower_coverage": float((lower_pred <= target).mean()),
+    }
+
+
 def trade_failure_calibrated_prob_column(target_name: str, side_name: str) -> str:
     return f"pred_trade_failure_{target_name}_{side_name}_calibrated_prob"
 
@@ -3536,6 +3860,34 @@ def candidate_failure_model_config_from_args(args: argparse.Namespace) -> Candid
     )
 
 
+def candidate_quality_model_config_from_args(args: argparse.Namespace) -> CandidateQualityModelConfig:
+    return CandidateQualityModelConfig(
+        max_iter=args.max_iter,
+        learning_rate=args.learning_rate,
+        max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
+        min_samples_leaf=args.min_samples_leaf,
+        l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
+        random_seed=args.random_seed,
+        target_clip_quantile=args.target_clip_quantile,
+        sample_weighting=args.sample_weighting,
+        prediction_shrinkage=args.prediction_shrinkage,
+        lower_quantile=args.lower_quantile,
+        entry_threshold=args.entry_threshold,
+        long_entry_threshold_offset=args.long_entry_threshold_offset,
+        short_entry_threshold_offset=args.short_entry_threshold_offset,
+        side_margin=args.side_margin,
+        min_entry_rank=args.min_entry_rank,
+        long_entry_rank_column=args.long_entry_rank_column,
+        short_entry_rank_column=args.short_entry_rank_column,
+    )
+
+
 def oof_candidate_failure_model(args: argparse.Namespace) -> int:
     validation_months = parse_csv_months(args.validation_months)
     apply_months = parse_csv_months(args.apply_months)
@@ -3702,6 +4054,175 @@ def oof_candidate_failure_model(args: argparse.Namespace) -> int:
             validation_oof_candidates,
             config.target_names,
         ),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def oof_candidate_quality_model(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF candidate quality model")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    config = candidate_quality_model_config_from_args(args)
+    validation_candidates = build_candidate_quality_training_frame(
+        validation_predictions,
+        config,
+        long_column=TRADE_SOURCE_LONG_EV_COLUMN,
+        short_column=TRADE_SOURCE_SHORT_EV_COLUMN,
+    )
+    if validation_candidates.empty:
+        raise ValueError("validation candidate quality frame is empty")
+
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_candidate_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for fold_index, holdout_month in enumerate(validation_months):
+        fit_predictions = validation_predictions[
+            validation_predictions["dataset_month"] != holdout_month
+        ].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_predictions.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build candidate quality OOF fold for {holdout_month}")
+        fold_config = CandidateQualityModelConfig(
+            **{
+                **asdict(config),
+                "random_seed": config.random_seed + 19 * fold_index,
+            }
+        )
+        fit_candidates = build_candidate_quality_training_frame(
+            fit_predictions,
+            fold_config,
+            long_column=TRADE_SOURCE_LONG_EV_COLUMN,
+            short_column=TRADE_SOURCE_SHORT_EV_COLUMN,
+        )
+        holdout_candidates = build_candidate_quality_training_frame(
+            holdout_predictions,
+            fold_config,
+            long_column=TRADE_SOURCE_LONG_EV_COLUMN,
+            short_column=TRADE_SOURCE_SHORT_EV_COLUMN,
+        )
+        if fit_candidates.empty:
+            raise ValueError(f"candidate quality fit frame is empty for {holdout_month}")
+        fold_bundle = fit_candidate_quality_model_from_frame(fit_candidates, fold_config)
+        holdout_prediction_output = add_candidate_quality_model_columns(
+            holdout_predictions,
+            fold_bundle,
+        )
+        holdout_candidate_output = add_candidate_quality_model_values_to_examples(
+            holdout_candidates,
+            fold_bundle,
+        )
+        fold_prediction_outputs.append(holdout_prediction_output)
+        fold_candidate_outputs.append(holdout_candidate_output)
+        fold_metrics[holdout_month] = {
+            "fit_candidates": int(len(fit_candidates)),
+            "holdout_candidates": int(len(holdout_candidates)),
+            "holdout_predictions": int(len(holdout_predictions)),
+            "holdout": candidate_quality_scored_metrics(holdout_candidate_output),
+            "target_mean": fold_bundle.target_mean,
+            "lower_target_mean": fold_bundle.lower_target_mean,
+            "feature_columns": fold_bundle.feature_columns,
+            "category_mappings": fold_bundle.category_mappings,
+        }
+
+    validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+    validation_oof_candidates = pd.concat(fold_candidate_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof_candidates.columns:
+        validation_oof_candidates = validation_oof_candidates.sort_values("decision_timestamp")
+
+    final_bundle = fit_candidate_quality_model_from_frame(validation_candidates, config)
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_candidate_quality_model_columns(apply_predictions, final_bundle)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_candidate_quality_model.parquet",
+        index=False,
+    )
+    validation_oof_candidates.to_csv(
+        run_dir / "validation_oof_candidate_quality_examples.csv",
+        index=False,
+    )
+    validation_candidates.to_csv(run_dir / "validation_fit_candidate_quality_examples.csv", index=False)
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_candidate_quality_model.parquet",
+            index=False,
+        )
+    joblib.dump(final_bundle, run_dir / "candidate_quality_model.joblib")
+    metrics = {
+        "mode": "validation_oof_candidate_quality_model",
+        "config": asdict(config),
+        "validation_predictions": str(args.validation_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "validation_predictions": int(len(validation_predictions)),
+            "validation_candidates": int(len(validation_candidates)),
+            "validation_oof": int(len(validation_oof)),
+            "validation_oof_candidates": int(len(validation_oof_candidates)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_predictions": month_counts(validation_predictions),
+            "validation_candidates": month_counts(validation_candidates),
+            "validation_oof": month_counts(validation_oof),
+            "validation_oof_candidates": month_counts(validation_oof_candidates),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "candidate_side_counts": (
+            {}
+            if validation_candidates.empty
+            else {
+                str(side): int(count)
+                for side, count in validation_candidates["candidate_side"].value_counts().items()
+            }
+        ),
+        "final_model": {
+            "target_mean": final_bundle.target_mean,
+            "lower_target_mean": final_bundle.lower_target_mean,
+            "feature_columns": final_bundle.feature_columns,
+            "category_mappings": final_bundle.category_mappings,
+        },
+        "folds": fold_metrics,
+        "validation_oof": candidate_quality_scored_metrics(validation_oof_candidates),
     }
     with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
@@ -4434,6 +4955,35 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_quality_model_args(candidate_failure_model_parser, include_target_clip_quantile=False)
     add_candidate_entry_filter_args(candidate_failure_model_parser)
     candidate_failure_model_parser.set_defaults(func=oof_candidate_failure_model)
+
+    candidate_quality_model_parser = subparsers.add_parser(
+        "oof-candidate-quality-model",
+        help="build validation OOF candidate-entry realized-PnL mean and lower-quantile columns",
+    )
+    candidate_quality_model_parser.add_argument("--validation-predictions", type=Path, required=True)
+    candidate_quality_model_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation-candidate quality model",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    candidate_quality_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    candidate_quality_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    candidate_quality_model_parser.add_argument("--label", default="candidate_quality_model")
+    candidate_quality_model_parser.add_argument(
+        "--lower-quantile",
+        type=float,
+        default=0.25,
+        help="lower-tail quantile target for conservative candidate quality estimates",
+    )
+    add_trade_source_args(candidate_quality_model_parser)
+    add_trade_quality_model_args(candidate_quality_model_parser)
+    add_candidate_entry_filter_args(candidate_quality_model_parser)
+    candidate_quality_model_parser.set_defaults(func=oof_candidate_quality_model)
 
     trade_failure_calibration_parser = subparsers.add_parser(
         "oof-trade-failure-calibration",

@@ -5,6 +5,17 @@ import pandas as pd
 
 from trade_data.meta_model import (
     CandidateFailureModelConfig,
+    CandidateQualityModelConfig,
+    CANDIDATE_QUALITY_LONG_COLUMN,
+    CANDIDATE_QUALITY_LONG_LOWER_COLUMN,
+    CANDIDATE_QUALITY_LONG_LOWER_OVERESTIMATE_RISK_COLUMN,
+    CANDIDATE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN,
+    CANDIDATE_QUALITY_SHORT_COLUMN,
+    CANDIDATE_QUALITY_SHORT_LOWER_COLUMN,
+    CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN,
+    CANDIDATE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN,
+    CANDIDATE_QUALITY_TAKEN_COLUMN,
+    CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN,
     GroupEVCalibrationConfig,
     MetaModelConfig,
     ResidualPenaltyConfig,
@@ -28,6 +39,7 @@ from trade_data.meta_model import (
     build_training_frame,
     build_sample_weights,
     build_candidate_failure_training_frame,
+    build_candidate_quality_training_frame,
     candidate_entry_side_masks,
     candidate_failure_prob_column,
     candidate_failure_risk_column,
@@ -35,6 +47,7 @@ from trade_data.meta_model import (
     candidate_failure_target_column,
     combine_fit_predictions,
     fit_candidate_failure_model_from_frame,
+    fit_candidate_quality_model_from_frame,
     fit_group_target_calibrator,
     fit_group_ev_calibrator,
     fit_residual_penalty_calibrator,
@@ -51,6 +64,8 @@ from trade_data.meta_model import (
     residual_penalty_scored_metrics,
     trade_quality_calibration_metrics,
     side_target_means,
+    add_candidate_quality_model_columns,
+    add_candidate_quality_model_values_to_examples,
     trade_failure_calibrated_prob_column,
     trade_failure_calibrated_risk_column,
     trade_failure_prob_column,
@@ -661,6 +676,78 @@ class MetaModelTests(unittest.TestCase):
         self.assertEqual(output[short_risk].tolist(), (-output[short_prob]).tolist())
         self.assertIn(taken_prob, scored.columns)
         self.assertFalse(scored[taken_prob].isna().any())
+
+    def test_candidate_quality_model_adds_mean_lower_and_risk_columns(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions["dataset_month"] = ["2024-07", "2024-07", "2024-09"]
+        predictions["decision_timestamp"] = pd.date_range(
+            "2025-01-01",
+            periods=3,
+            freq="h",
+            tz="UTC",
+        )
+        config = CandidateQualityModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            lower_quantile=0.25,
+            entry_threshold=7.0,
+            long_entry_threshold_offset=0.0,
+            short_entry_threshold_offset=0.0,
+            side_margin=1.0,
+            min_entry_rank=0.0,
+        )
+
+        examples = build_candidate_quality_training_frame(
+            predictions,
+            config,
+            long_column="pred_trade_source_long_ev",
+            short_column="pred_trade_source_short_ev",
+        )
+        bundle = fit_candidate_quality_model_from_frame(examples, config)
+        output = add_candidate_quality_model_columns(predictions, bundle)
+        scored = add_candidate_quality_model_values_to_examples(examples, bundle)
+
+        self.assertEqual(len(examples), 3)
+        self.assertEqual(examples["target"].tolist(), [10.0, 20.0, 15.0])
+        for column in [
+            CANDIDATE_QUALITY_LONG_COLUMN,
+            CANDIDATE_QUALITY_SHORT_COLUMN,
+            CANDIDATE_QUALITY_LONG_LOWER_COLUMN,
+            CANDIDATE_QUALITY_SHORT_LOWER_COLUMN,
+            CANDIDATE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN,
+            CANDIDATE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN,
+            CANDIDATE_QUALITY_LONG_LOWER_OVERESTIMATE_RISK_COLUMN,
+            CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN,
+        ]:
+            self.assertIn(column, output.columns)
+            self.assertFalse(output[column].isna().any())
+        self.assertTrue((output[CANDIDATE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN] <= 0).all())
+        self.assertTrue((output[CANDIDATE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN] <= 0).all())
+        self.assertIn(CANDIDATE_QUALITY_TAKEN_COLUMN, scored.columns)
+        self.assertIn(CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN, scored.columns)
+        self.assertFalse(scored[CANDIDATE_QUALITY_TAKEN_COLUMN].isna().any())
+        self.assertFalse(scored[CANDIDATE_QUALITY_TAKEN_LOWER_COLUMN].isna().any())
 
     def test_trade_failure_probability_calibration_adds_side_prob_and_risk_columns(self):
         predictions = prediction_frame().copy()

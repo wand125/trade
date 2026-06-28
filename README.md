@@ -221,6 +221,25 @@ python -m trade_data.meta_model oof-candidate-failure-model \
   --min-entry-rank 0.5
 ```
 
+Train candidate-entry realized-PnL mean and lower-quantile models from every row
+that passes the entry candidate filter:
+
+```bash
+python -m trade_data.meta_model oof-candidate-quality-model \
+  --validation-predictions data/reports/modeling/<run>/predictions_oof.parquet \
+  --apply-predictions data/reports/modeling/<run>/predictions_2024_12.parquet \
+  --validation-months 2024-07,2024-09,2024-11,2025-01 \
+  --apply-months 2024-12 \
+  --source-mode columns \
+  --long-column pred_long_best_adjusted_pnl \
+  --short-column pred_short_best_adjusted_pnl \
+  --lower-quantile 0.25 \
+  --entry-threshold 12 \
+  --short-entry-threshold-offset 6 \
+  --side-margin 5 \
+  --min-entry-rank 0.5
+```
+
 Train a shared multi-output MLP regressor for policy regression targets:
 
 ```bash

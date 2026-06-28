@@ -3474,3 +3474,52 @@ Artifacts:
 - `large_adverse` は保有中の逆行を捉えるが、24h以内のexit込み最終損益最大化とはズレる。
 - fixed holdout改善は片月依存で、validationでもriskなしに勝てない。標準採用しない。
 - 次はcandidate rowを使う場合でも、二値adverse分類ではなく、連続EV、下方分位、exit timing込みの実現可能PnL targetを優先する。
+
+### 2026-06-29 01:21 JST Candidate-entry quality quantile
+
+作業:
+
+- `trade_data.meta_model` に `oof-candidate-quality-model` を追加した。
+- entry条件を通ったcandidate rowをside別に展開し、side別 `*_best_adjusted_pnl` を連続targetとして学習する。
+- 平均回帰と下方分位回帰を同時にfitし、`pred_candidate_quality_*_adjusted_pnl` / `*_lower_adjusted_pnl` / `*_overestimate_risk` を出力する。
+- candidate条件は直近raw top骨格に合わせて entry `12`, short offset `6`, side margin `5`, min rank `0.5`。
+- mean/lowerの直接EV置換と、lower overestimate riskのsoft penaltyをvalidation 4foldで比較した。
+- fixed holdout `2024-12` / `2025-02` でもlower overestimate riskをsmokeした。
+- report: `docs/reports/00082_2026-06-29_candidate_entry_quality_quantile.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- candidate quality 2024-12 apply: `data/reports/modeling/20260628_161319_candidate_quality_q25_2024_12/`
+- candidate quality 2025-02 apply: `data/reports/modeling/20260628_161344_candidate_quality_q25_2025_02/`
+- mean direct summary: `data/reports/backtests/candidate_quality_mean_direct_summary/20260628_161542_model_sweep_summary/`
+- lower direct summary: `data/reports/backtests/candidate_quality_lower_direct_summary/20260628_161659_model_sweep_summary/`
+- lower overestimate risk summary: `data/reports/backtests/candidate_quality_lower_overestimate_risk_summary/20260628_161822_model_sweep_summary/`
+- fixed holdout: `data/reports/backtests/candidate_quality_lower_overestimate_risk_fixed/`
+
+結果:
+
+| item | value |
+|---|---:|
+| candidate count | `9091` |
+| target mean | `23.1947` |
+| raw overestimate mean | `7.7361` |
+| mean overestimate mean | `6.6840` |
+| lower overestimate mean | `1.5366` |
+| mean MAE | `16.2496` |
+| mean R2 | `-0.0509` |
+| lower coverage | `0.6845` |
+| mean direct validation min pnl | `-190.2562` |
+| lower direct validation min pnl | `-152.8084` |
+| lower risk0 validation min pnl | `82.7176` |
+| lower risk0.1 validation min pnl | `5.6070` |
+| lower risk0.5 validation min pnl | `1.1300` |
+| fixed 2024-12 risk0.5 | `-4.8092` |
+| fixed 2025-02 risk0.5 | `-45.8502` |
+
+判断:
+
+- 連続PnL targetは二値failureより情報量は多いが、今回の平均回帰はcandidate順位付けとして弱い。
+- 下方分位はEV過大評価を抑えるが、entry decisionに使うと保守化しすぎる。
+- risk penaltyは2024-12だけを救い、2025-02とvalidation robustnessを壊す。
+- 標準採用しない。candidate quality列は診断・calibration補助として残し、次はexit timing、barrier到達順、forced exit、EV calibration誤差を含むtarget設計へ進む。

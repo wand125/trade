@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 01:02 JST
+最終更新: 2026-06-29 01:21 JST
 
 ## 現在の状態
 
@@ -140,6 +140,8 @@ trade failure probabilityのside/regime別OOF校正CLIを追加済み。`oof-tra
 
 candidate-entry failure modelを追加済み。`oof-candidate-failure-model` はentry候補行をside別に展開し、`large_adverse = max_adverse_pnl <= -10` をOOF分類して `pred_candidate_failure_<target>_<side>_prob/risk` を出力する。学習例はselected trades 106件からcandidate `9091` 件へ増えたが、OOF AUCは `0.3738` と逆相関気味。通常riskはvalidation min pnlをriskなし `82.7176` からrisk10 `5.9462` へ壊し、反転riskでもrisk5 `39.9032` でriskなしを超えない。fixed holdoutではrisk10が2024-12 `+19.2252` へ改善する一方、2025-02 `-18.6000` へ悪化。標準採用せず、次はcandidate rowの連続期待値・下方分位・exit timing込みtargetを検討する。詳細は `docs/reports/00081_2026-06-29_candidate_entry_failure_model.md`。
 
+candidate-entry quality quantile modelを追加済み。`oof-candidate-quality-model` はentry候補行のside別実現可能PnLを平均回帰と下方分位回帰で学習し、`pred_candidate_quality_*_adjusted_pnl` / `*_lower_adjusted_pnl` / `*_overestimate_risk` を出力する。candidate `9091` 件のOOFでは平均モデル `R2=-0.0509`、lower coverage `0.6845`。mean/lowerをEVへ直接使うとvalidation min pnlは `-190.2562` / `-152.8084` へ崩れ、lower overestimate riskも最良はrisk `0` のまま。fixed holdoutではrisk `0.5` が2024-12を `-4.8092` へ縮める一方、2025-02を `-45.8502` へ壊す。標準採用せず、quality列は診断・calibration補助に残す。詳細は `docs/reports/00082_2026-06-29_candidate_entry_quality_quantile.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -190,6 +192,7 @@ candidate-entry failure modelを追加済み。`oof-candidate-failure-model` は
 27. trade failure classifierでは `large_loss` だけが薄く有効。validation min pnlと2024-12固定testは改善したが、NoTradeを超えず、2025-02を少し削る。標準採用は保留し、次は `large_loss` threshold、side/regime別校正、candidate-entry集合への拡張を試す。
 28. `large_loss` threshold比較では `10` がOOF/validation/2ヶ月合計で最も筋がよいが、2024-12はまだNoTrade未満。thresholdだけの最適化は止め、`threshold=10` のprobabilityをside/regime別に校正するか、candidate-entry集合へ学習対象を広げる。
 29. side/regime別failure probability校正は、OOF AUCを少し改善しても実行policyを改善しなかった。実行trade 106件のgroup校正は不安定なので、次はcandidate-entry集合へfailure targetを広げて学習量を増やす。
+30. candidate-entry qualityの平均/下方分位は、直接EV置換でもsoft riskでもvalidationを改善しなかった。次はcandidate targetにexit timing、barrier到達順、forced exit、EV calibration誤差を入れ、単純なbest adjusted PnL回帰から離れる。
 
 ## 未決定事項
 
@@ -200,6 +203,8 @@ candidate-entry failure modelを追加済み。`oof-candidate-failure-model` は
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 01:21 JST 更新: `oof-candidate-quality-model` を追加し、candidate rowの連続PnL平均と下方分位を学習した。OOFはcandidate `9091` 件、平均モデル `R2=-0.0509`、lower coverage `0.6845`。mean/lower直接EVはvalidation min pnl `-190.2562` / `-152.8084` で採用不可。lower overestimate riskもvalidation topはrisk `0`、fixed 2024-12だけ改善して2025-02を壊す。標準採用せず、次はexit timing込みtargetとEV calibration誤差の扱いを改善する。
 
 2026-06-29 00:45 JST 更新: trade failure probabilityのside/regime別OOF校正CLIを追加した。`volatility_regime+session_regime` はOOF AUCを `0.5736` から `0.5837` に上げたが、実行policyでは改善せず、`combined_regime` full grid topはrisk `0`、`vol+session calibrated risk=30` はvalidation min pnl `62.7122` でraw t10 top `92.8530` 未満。fixed 2024-12も `-159.2242` と大きく崩れたため標準採用しない。次はcandidate-entry集合へfailure targetを広げる。
 
