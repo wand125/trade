@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 07:29 JST
+最終更新: 2026-06-29 07:37 JST
 
 ## 現在の状態
 
@@ -27,6 +27,8 @@ entry timingのsupport-aware calibrationを追加済み。`entry-timing-calibrat
 jackknife選定候補を既存holdout stressへ固定監査済み。`model-holdout-audit` はvalidation summary側の重複candidate keyをmerge前に落とすよう修正した。jackknife候補はvalidation内では通過するが、既存holdout stressでは `down5,up10` が9case中6通過で2024-12全コスト負け、`down5,range5` は6case中2通過で合計PnLも負。したがって標準policyへは昇格しない。詳細は `docs/reports/00109_2026-06-29_jackknife_holdout_gap.md`。
 
 選択済みtrade露出の横断診断 `model-trade-exposure` を追加済み。`down5,up10` の2024-12失敗は月全体のregime mixより、選択trade上の `long:down_low_vol`, `long:up_low_vol`, `long:london`, `short:asia` とEV過大評価に出る。ただし、これらの露出はvalidationでは概ね利益寄与しており、`long:london` / `short:asia` のblockは2024-12を `-39.0314` へ悪化、penalty5は2024-12を `+13.2610` に戻すがvalidation minを `40.1824` まで壊した。採用せず、診断・教師/特徴へのフィードバックに留める。詳細は `docs/reports/00110_2026-06-29_trade_exposure_failure_profile.md`。
+
+side confidence / calibrated EV のsoft補正を再検証済み。`side_confidence_penalty=2` はvalidation合計 `691.1634`, min `151.6892` でbaseを上回るが、holdoutではsum `192.9620`, min `-34.8578` とbaseより悪い。`min_side_confidence` はvalidationで取引数とPnLを落とし、`pred_calibrated_*_best_adjusted_pnl` への単純差し替えもvalidation min `-90.7698` で壊れる。標準policyへは採用せず、次は教師側でside不確実性と実現EV分布を直接扱う。詳細は `docs/reports/00111_2026-06-29_side_confidence_ev_calibration_recheck.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

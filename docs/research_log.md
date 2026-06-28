@@ -4104,3 +4104,30 @@ Artifacts:
 - 2024-12失敗は月全体のregime mixではなく、選択tradeのside / session / low-vol露出とEV過大評価に出る。
 - 単純なsession/regime blockは、ポジション空きで別entryが入り実backtestを悪化させうる。採用しない。
 - 次はhard ruleではなく、side confidence / EV calibration / exit timing targetの教師・特徴側へ戻す。
+
+### 2026-06-29 07:37 JST Side confidence / calibrated EV recheck
+
+作業:
+
+- `down5,up10` 固定候補で `side_confidence_penalty=0,2,5,8,12,16` をvalidation 4か月と既存holdout 3か月で評価した。
+- `min_side_confidence=0,0.55,0.6,0.65,0.7,0.75` をvalidationで評価した。
+- `pred_calibrated_long_best_adjusted_pnl` / `pred_calibrated_short_best_adjusted_pnl` へ差し替えた固定候補をvalidationで評価した。
+- report: `docs/reports/00111_2026-06-29_side_confidence_ev_calibration_recheck.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| variant | validation sum | validation min | holdout sum | holdout min | 判断 |
+|---|---:|---:|---:|---:|---|
+| base | `622.6486` | `138.0338` | `242.5008` | `-20.8252` | 現行基準 |
+| side confidence penalty `2` | `691.1634` | `151.6892` | `192.9620` | `-34.8578` | validationは良いがholdout悪化 |
+| side confidence penalty `16` | `184.0738` | `-9.4830` | `68.8822` | `-17.8110` | 低頻度化。validation不適格 |
+| min side confidence `0.55` | `314.7878` | `42.4602` | - | - | validationで棄却 |
+| calibrated EV columns | `211.9996` | `-90.7698` | - | - | validationで棄却 |
+
+判断:
+
+- `side_confidence_penalty=2` はvalidationだけなら選ばれるが、holdoutでbaseより悪い。採用しない。
+- global `min_side_confidence` は取引数とPnLを落としすぎる。採用しない。
+- calibrated EV列の単純差し替えは2024-11を大きく壊す。採用しない。
+- 次は後段のglobal補正ではなく、教師・特徴側でside不確実性と実現EV分布を直接扱う。
