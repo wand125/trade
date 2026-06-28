@@ -4,6 +4,16 @@
 
 ## 2026-06-28 JST
 
+### 23:19 Selected-trade quality hybrid gate
+
+- 直近hybrid top policy (`timed_ev`, entry `15`, short offset `4`, side margin `5`, rank `0.5`, MLP holding, max hold `480`) のvalidation 4ヶ月実行trade 106件を生成し、既存 `oof-trade-quality-calibration` でselected-trade qualityをOOF校正した。
+- OOFでは raw bias `15.8005` が calibrated bias `-0.4206`、raw overestimate mean `17.3736` が `5.8545` へ改善。ただし calibrated R2 は `-0.0684`。
+- `min_trade_quality` gateはvalidationで改善せず、topはgateなし `-inf` のまま。`min_trade_quality=4` は4fold eligibleだが min pnl `21.0614`, sum `214.5450` まで落ちる。
+- fixed holdoutでは `min_trade_quality=4` が2024-12を `-54.6032 -> -4.6296` へ縮める一方、2025-02を `+81.8334 -> +8.5648` へ壊す。
+- 判断: selected-trade qualityは過大評価診断として有効だが、下限gateとしては標準採用しない。次は校正EVへの置換またはsoft overestimate penalty、もしくは実行trade failure classifierへ進む。
+- report: `docs/reports/00075_2026-06-28_selected_trade_quality_hybrid_gate.md`
+- 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 23:11 Candidate-entry residual penalty
 
 - `ResidualPenaltyConfig` に `candidate_entry_only`, side別entry offset, `side_margin`, `min_entry_rank` を追加し、`candidate_entry_side_masks` でentry候補行だけをfit対象にできるようにした。
