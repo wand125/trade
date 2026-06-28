@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 22:03 JST
+最終更新: 2026-06-28 22:12 JST
 
 ## 現在の状態
 
@@ -116,6 +116,8 @@ candidate selectionへ near-top risk rankingを追加済み。`--candidate-rank-
 
 side/regime EV penaltyを追加済み。`--side-ev-penalty-rules` は `side:column=value+...:penalty` 形式で、side選択前にmatching sideのEVを直接減点する。HGB entry/side + MLP exit hybridのlocal gridでは `long:session_regime=ny_late:15` がvalidation min pnlをruleなし `81.5352` から `93.8904` へ上げた。near-top riskでは同じ減点15 + `min_entry_rank=0.5` がtopになり、2024-12反証月はruleなし `-54.6032` に対して `-5.4938` まで改善した。2024-12 cost stressでも高コスト条件のbaseline `-76.3910` に対してrisk top `-26.0816` まで損失を縮めた。2025-02追加固定testではbaseline `+81.8334`, risk top `+79.4018` と両方プラスで、高コスト + delay 1でもbaseline `+21.3628`, risk top `+19.5898`。ただし2025-02ではbaselineがrisk topをわずかに上回るため、side EV penaltyは標準policyへ昇格しない。詳細は `docs/reports/00067_2026-06-28_side_regime_ev_penalty.md`, `docs/reports/00068_2026-06-28_side_ev_penalty_cost_stress.md`, `docs/reports/00069_2026-06-28_side_ev_penalty_2025_02_holdout.md`。
 
+`short:combined_regime=up_low_vol` のside EV penaltyを検証済み。short shareは下がるが、validation最悪月PnLが `long:ny_late:15` 単独の `93.8904` からcombo `69.8078` / `63.6080` へ落ち、short-onlyは `50.2796` まで悪化した。固定testでもcomboは2024-12 `-77.3720` / `-79.1486`、2025-02 `+28.5478` / `+64.0924` で、既存baselineや `long:ny_late` risk topを上回らない。したがって直接減点は採用しない。詳細は `docs/reports/00070_2026-06-28_short_up_low_vol_ev_penalty.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -154,7 +156,8 @@ side/regime EV penaltyを追加済み。`--side-ev-penalty-rules` は `side:colu
 15. group-loss hard gate / soft penaltyは、2024-12の `long:ny_late` failureを事前に止められなかったため標準採用しない。
 16. `long:range_low_vol` hard block / extra marginは2024-12で大きく悪化したため棄却する。
 17. near-top risk rankingは実装済み。複合riskでは `long:ny_late` を採用せず、drawdown-only採用は脆いため標準基準にしない。
-18. `long:ny_late:15` side EV penalty risk topは2024-12を防御し、2025-02でも非破綻だったが、2025-02ではbaselineを上回らない。標準採用は保留し、次は `short:up_low_vol` / short偏重のriskを複数holdoutで扱う。
+18. `long:ny_late:15` side EV penalty risk topは2024-12を防御し、2025-02でも非破綻だったが、2025-02ではbaselineを上回らない。標準採用は保留する。
+19. `short:up_low_vol` の直接side EV penaltyはvalidation最悪月と2024-12固定testを壊すため採用しない。short偏重riskはpost-hocなgroup減点ではなく、support-aware target、side/regime別calibrated EV、複数holdout同時rankingで扱う。
 
 ## 未決定事項
 
@@ -165,6 +168,8 @@ side/regime EV penaltyを追加済み。`--side-ev-penalty-rules` は `side:colu
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-28 22:12 JST 更新: `short:combined_regime=up_low_vol` のside EV penaltyをvalidation/base、cost-mid、2024-12/2025-02固定test、代表cost stressで確認した。short比率は下がるが、validation最悪月PnLと2024-12 holdoutが悪化するため直接減点は採用しない。次はshort偏重riskを、group post-hoc penaltyではなくsupport-aware targetやside/regime別calibrated EV、複数holdout同時rankingで扱う。
 
 2026-06-28 22:03 JST 更新: `policy_combined` datasetに2025-02を追加し、同じtrain/valid splitでHGB entry/side + MLP exit hybrid predictionを生成した。2025-02固定testではbaseline `+81.8334`, risk top `+79.4018`, PnL top `+59.1854`。高コスト + delay 1でもbaseline `+21.3628`, risk top `+19.5898` はプラス。risk topは2024-12防御として有効だが、2025-02ではbaselineにわずかに負けるため標準採用しない。次は `short:up_low_vol` とshort偏重riskを複数holdoutで扱う。
 

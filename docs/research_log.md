@@ -4,6 +4,14 @@
 
 ## 2026-06-28 JST
 
+### 22:12 Short up_low_vol EV penalty
+
+- `short:combined_regime=up_low_vol` を直接side EV penaltyで減点する実験を実施。
+- validationではshort shareは下がったが、最悪月PnLが `long:ny_late:15` 単独 `93.8904` からcombo `69.8078` / `63.6080`、short-only `50.2796` へ悪化。
+- 2024-12/2025-02固定testでも、comboは2024-12で `-77.3720` / `-79.1486`、2025-02で `+28.5478` / `+64.0924`。既存baselineや `long:ny_late` risk topを上回らない。
+- 判断: `short:up_low_vol` 直接減点は採用しない。short偏重riskはsupport-aware target、side/regime別calibrated EV、複数holdout同時rankingで扱う。
+- 運用メモ: report ordering/latest/renumberingはファイルシステム更新時刻や本文の `更新日時` ではなく、各レポート本文の作成時刻 `日時` を参照する。
+
 ### 作業
 
 - XAUUSD の HistData 取得パイプラインを作成。
