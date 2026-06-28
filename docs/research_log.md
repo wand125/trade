@@ -3150,3 +3150,41 @@ Artifacts:
 - risk topはbaselineより大きく壊れにくいが、NoTrade `0` を安定して超えないため標準policyへ昇格しない。
 - delay1のプラスは約定遅延に依存した偶然改善として扱い、edgeとはみなさない。
 - 現在のhybrid prediction artifactは2024-12までなので、次は別holdout月のdataset追加、HGB/MLP再学習、hybrid prediction生成を行う。
+
+### 2026-06-28 22:03 JST Side EV Penalty 2025-02 Holdout
+
+作業:
+
+- `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined` に2025-02を追加生成した。
+- 既存hybridと同じtrain/valid splitで、testだけ2025-02にしたHGB entry/sideモデルとshared MLP exitモデルを再学習した。
+- HGB予測にMLPの `pred_*_exit_event_minutes` を `pred_mlp_*_exit_event_minutes` として結合し、hybrid predictionを作成した。
+- baseline、`long:session_regime=ny_late:15` PnL top、同risk topを2025-02へ固定適用し、同じcost stress gridを実行した。
+- report: `docs/reports/00069_2026-06-28_side_ev_penalty_2025_02_holdout.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- dataset: `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined/xauusd_m1_2025-02_h24_edge15.parquet`
+- HGB: `experiments/20260628_130038_policy_combined_side_exit_test_2025_02/`
+- shared MLP: `experiments/20260628_130102_shared_mlp_hgb_split_test_2025_02/`
+- hybrid predictions: `data/reports/modeling/20260628_hgb_mlp_exit_hybrid/predictions_hgb_entry_mlp_exit_2025_02.parquet`
+- fixed tests: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_2025_02/`
+- cost stress: `data/reports/backtests/hgb_entry_mlp_exit_side_ev_penalty_cost_stress_2025_02/`
+
+結果:
+
+| item | baseline | PnL top | risk top |
+|---|---:|---:|---:|
+| standard adjusted pnl | `+81.8334` | `+59.1854` | `+79.4018` |
+| high cost delay1 adjusted pnl | `+21.3628` | `-18.7136` | `+19.5898` |
+| standard trades | `118` | `111` | `113` |
+| standard profit factor | `1.3420` | `1.2338` | `1.3558` |
+| standard max DD | `99.3504` | `123.5044` | `113.6334` |
+| worst direction/combined | `short:up_low_vol` | `short:up_low_vol` | `short:up_low_vol` |
+
+判断:
+
+- 2025-02ではbaselineとrisk topの両方がNoTradeと高コストstressを上回った。
+- risk topは2024-12防御として有効だが、2025-02ではbaselineをわずかに下回るため、標準policyへ昇格しない。
+- PnL topは高コスト + delay 1でマイナス化するため、risk topより弱い。
+- 次は `short:up_low_vol` / short偏重riskを、複数holdoutを同時に見るselectionで扱う。
