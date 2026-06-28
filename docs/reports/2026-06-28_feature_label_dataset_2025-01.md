@@ -1,10 +1,11 @@
 # Feature/Label Dataset: 2025-01
 
+日時: 2026-06-28 02:11 JST
+更新日時: 2026-06-28 08:02 JST
+
 ## Summary
 
 - Experiment ID: `2026-06-28_feature_label_dataset_2025-01`
-- Datetime: 2026-06-28 02:11 JST
-- Updated: 2026-06-28 08:02 JST
 - Status: completed
 - Main result: leak-free M1 features and future-24h oracle-style labels were generated for 2025-01.
 

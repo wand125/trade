@@ -1,7 +1,7 @@
 # Side-Specific Regime Suppression
 
 日時: 2026-06-28 09:26 JST
-更新日時: 2026-06-28 09:39 JST
+更新日時: 2026-06-28 09:51 JST
 
 ## 目的
 
@@ -349,3 +349,18 @@ Regime diagnosis:
 2. exit timing targetを追加し、block後にも残る exit regretを減らす。
 3. コスト条件を標準選択に入れる。少なくとも spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
 4. 2025-06以降も追加blindとして継続確認する。
+
+## 更新: 2026-06-28 09:51 JST
+
+Next Actions 1 に対応し、`model-candidate-selection` へ `direction x session_regime` の損失集中gateを追加した。
+
+Report:
+
+- `docs/reports/2026-06-28_direction_session_candidate_gate.md`
+
+主な結果:
+
+- `model-sweep` metricsへ `direction_session_adjusted_pnl_min`, `worst_direction_session`, `worst_direction_session_trade_count` を追加した。
+- `model-candidate-selection` に `--max-direction-session-loss-per-fold` を追加した。
+- 2025-05 smokeでは、blockなし候補の `worst_direction_session=short:asia`, `direction_session_adjusted_pnl_min=-100.5254` を検出し、`direction_session_loss_ok=False` でeligibleから落とせた。
+- `short:session_regime=asia` blockあり候補は `direction_session_adjusted_pnl_min=+19.8400` でeligibleに残った。

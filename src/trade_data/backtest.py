@@ -125,6 +125,12 @@ ANALYSIS_GROUP_COLUMNS = [
     "pred_taken_entry_rank_bucket",
 ]
 
+DIRECTION_SESSION_DIAGNOSTIC_COLUMNS = [
+    "direction_session_adjusted_pnl_min",
+    "worst_direction_session",
+    "worst_direction_session_trade_count",
+]
+
 
 @dataclass(frozen=True)
 class BacktestConfig:
@@ -419,6 +425,7 @@ def read_prediction_frame(path: Path, config: ModelPolicyConfig) -> pd.DataFrame
     columns.extend(extra_side_margin_rule_columns(config))
     columns.extend(side_rule_columns(config))
     columns.extend([column for column, _ in blocked_regime_columns(config)])
+    columns.extend(optional_parquet_columns(path, REGIME_COLUMNS))
     columns = list(dict.fromkeys(columns))
     predictions = pd.read_parquet(path, columns=columns)
     missing = sorted(set(columns) - set(predictions.columns))
@@ -888,6 +895,80 @@ def summarize_trades(
     }
 
 
+def attach_trade_prediction_columns(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+    columns: Iterable[str],
+) -> pd.DataFrame:
+    output = trades.copy()
+    selected_columns = [
+        "decision_timestamp",
+        *[column for column in columns if column in predictions.columns],
+    ]
+    selected_columns = list(dict.fromkeys(selected_columns))
+    if trades.empty or len(selected_columns) == 1:
+        for column in selected_columns:
+            if column != "decision_timestamp" and column not in output.columns:
+                output[column] = pd.Series(dtype="object")
+        return output
+    output["entry_decision_timestamp"] = pd.to_datetime(output["entry_decision_timestamp"], utc=True)
+    context = predictions[selected_columns].copy()
+    context["decision_timestamp"] = pd.to_datetime(context["decision_timestamp"], utc=True)
+    return output.merge(
+        context,
+        left_on="entry_decision_timestamp",
+        right_on="decision_timestamp",
+        how="left",
+        validate="many_to_one",
+    )
+
+
+def direction_session_diagnostics(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+) -> dict[str, object]:
+    if trades.empty:
+        return {
+            "direction_session_adjusted_pnl_min": 0.0,
+            "worst_direction_session": "",
+            "worst_direction_session_trade_count": 0,
+        }
+    if "session_regime" not in predictions.columns:
+        return {
+            "direction_session_adjusted_pnl_min": None,
+            "worst_direction_session": "",
+            "worst_direction_session_trade_count": 0,
+        }
+    enriched = attach_trade_prediction_columns(trades, predictions, ["session_regime"])
+    if "session_regime" not in enriched.columns:
+        return {
+            "direction_session_adjusted_pnl_min": None,
+            "worst_direction_session": "",
+            "worst_direction_session_trade_count": 0,
+        }
+    grouped = (
+        enriched.dropna(subset=["direction", "session_regime"])
+        .groupby(["direction", "session_regime"], dropna=False, observed=True)
+        .agg(
+            total_adjusted_pnl=("adjusted_pnl", "sum"),
+            trade_count=("adjusted_pnl", "size"),
+        )
+        .reset_index()
+    )
+    if grouped.empty:
+        return {
+            "direction_session_adjusted_pnl_min": 0.0,
+            "worst_direction_session": "",
+            "worst_direction_session_trade_count": 0,
+        }
+    worst = grouped.sort_values(["total_adjusted_pnl", "trade_count"], ascending=[True, False]).iloc[0]
+    return {
+        "direction_session_adjusted_pnl_min": float(worst["total_adjusted_pnl"]),
+        "worst_direction_session": f"{worst['direction']}:{worst['session_regime']}",
+        "worst_direction_session_trade_count": int(worst["trade_count"]),
+    }
+
+
 def json_default(value: object) -> str:
     if isinstance(value, pd.Timestamp):
         return value.isoformat()
@@ -1174,6 +1255,16 @@ def prepare_analysis_predictions(
     predictions["pred_long_best_adjusted_pnl"] = predictions[long_column]
     predictions["pred_short_best_adjusted_pnl"] = predictions[short_column]
     return predictions
+
+
+def optional_parquet_columns(path: Path, columns: Iterable[str]) -> list[str]:
+    try:
+        import pyarrow.parquet as pq
+
+        available = set(pq.ParquetFile(path).schema.names)
+    except Exception:
+        return []
+    return [column for column in columns if column in available]
 
 
 def read_analysis_predictions(path: Path, long_column: str, short_column: str) -> pd.DataFrame:
@@ -1592,6 +1683,7 @@ def run_model_policy(
     metrics["signal_long_count"] = int((signal == 1).sum())
     metrics["signal_short_count"] = int((signal == -1).sum())
     metrics["signal_flat_count"] = int((signal == 0).sum())
+    metrics.update(direction_session_diagnostics(trades, predictions))
     curve = equity_curve(trades, backtest_config.evaluation_start)
     return metrics, trades, curve, signal
 
@@ -1970,6 +2062,12 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["side_extra_margin_rules"] = ""
     if "side_block_rules" not in output.columns:
         output["side_block_rules"] = ""
+    if "direction_session_adjusted_pnl_min" not in output.columns:
+        output["direction_session_adjusted_pnl_min"] = np.inf
+    if "worst_direction_session" not in output.columns:
+        output["worst_direction_session"] = ""
+    if "worst_direction_session_trade_count" not in output.columns:
+        output["worst_direction_session_trade_count"] = 0
     for field, _ in REGIME_BLOCK_FIELDS:
         if field not in output.columns:
             output[field] = ""
@@ -2008,9 +2106,18 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "max_drawdown",
         "forced_exit_rate",
         "forced_exit_count",
+        "direction_session_adjusted_pnl_min",
+        "worst_direction_session_trade_count",
     ]
     for column in numeric_columns:
-        output[column] = pd.to_numeric(output[column])
+        errors = "coerce" if column in DIRECTION_SESSION_DIAGNOSTIC_COLUMNS else "raise"
+        output[column] = pd.to_numeric(output[column], errors=errors)
+    output["direction_session_adjusted_pnl_min"] = output[
+        "direction_session_adjusted_pnl_min"
+    ].fillna(np.inf)
+    output["worst_direction_session_trade_count"] = output[
+        "worst_direction_session_trade_count"
+    ].fillna(0)
     if output["require_profit_barrier"].dtype == object:
         output["require_profit_barrier"] = output["require_profit_barrier"].map(
             lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"}
@@ -2020,6 +2127,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output["extra_side_margin_rules"] = output["extra_side_margin_rules"].fillna("").astype(str)
     output["side_extra_margin_rules"] = output["side_extra_margin_rules"].fillna("").astype(str)
     output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
+    output["worst_direction_session"] = output["worst_direction_session"].fillna("").astype(str)
     for field, _ in REGIME_BLOCK_FIELDS:
         output[field] = output[field].fillna("").astype(str)
     return output
@@ -2076,6 +2184,8 @@ def summarize_sweep_frames(
         "spread_points",
         "slippage_points",
         "execution_delay_bars",
+        "direction_session_adjusted_pnl_min",
+        "worst_direction_session_trade_count",
     ]
     for column in optional_metric_columns:
         if column in metrics.columns:
@@ -2162,11 +2272,14 @@ def summarize_candidate_selection(
     plateau_column: str,
     plateau_radius: float,
     min_plateau_neighbors: int,
+    max_direction_session_loss_per_fold: float = 1e100,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
     if max_side_loss_per_fold < 0:
         raise ValueError("max_side_loss_per_fold must be non-negative")
+    if max_direction_session_loss_per_fold < 0:
+        raise ValueError("max_direction_session_loss_per_fold must be non-negative")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -2214,12 +2327,24 @@ def summarize_candidate_selection(
     merged["side_adjusted_pnl_min_all"] = merged[
         ["long_adjusted_pnl_min_all", "short_adjusted_pnl_min_all"]
     ].min(axis=1)
+    merged["direction_session_adjusted_pnl_min_all"] = row_min_or_default(
+        merged,
+        [
+            "direction_session_adjusted_pnl_min_min_base",
+            "direction_session_adjusted_pnl_min_min_cost",
+        ],
+        float("inf"),
+    )
     merged["side_loss_ok"] = merged["side_adjusted_pnl_min_all"] >= -max_side_loss_per_fold
+    merged["direction_session_loss_ok"] = (
+        merged["direction_session_adjusted_pnl_min_all"] >= -max_direction_session_loss_per_fold
+    )
     merged["cost_drop_ok"] = merged["cost_pnl_drop_min"] <= max_cost_pnl_drop
     merged["pre_plateau_eligible"] = (
         merged["eligible_base"].astype(bool)
         & merged["eligible_cost"].astype(bool)
         & merged["side_loss_ok"]
+        & merged["direction_session_loss_ok"]
         & merged["cost_drop_ok"]
     )
     merged["plateau_support_count"] = plateau_support_counts(
@@ -2238,9 +2363,10 @@ def summarize_candidate_selection(
             "total_adjusted_pnl_min_base",
             "plateau_support_count",
             "side_adjusted_pnl_min_all",
+            "direction_session_adjusted_pnl_min_all",
             "cost_pnl_drop_min",
         ],
-        ascending=[False, False, False, False, False, True],
+        ascending=[False, False, False, False, False, False, True],
     ).reset_index(drop=True)
 
 
@@ -2301,6 +2427,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         plateau_column=args.plateau_column,
         plateau_radius=args.plateau_radius,
         min_plateau_neighbors=args.min_plateau_neighbors,
+        max_direction_session_loss_per_fold=args.max_direction_session_loss_per_fold,
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -2315,6 +2442,7 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "min_cost_adjusted_pnl_per_fold": args.min_cost_adjusted_pnl_per_fold,
         "max_cost_pnl_drop": args.max_cost_pnl_drop,
         "max_side_loss_per_fold": args.max_side_loss_per_fold,
+        "max_direction_session_loss_per_fold": args.max_direction_session_loss_per_fold,
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -2595,6 +2723,12 @@ def build_parser() -> argparse.ArgumentParser:
     model_candidate_selection.add_argument("--min-cost-adjusted-pnl-per-fold", type=float, default=0.0)
     model_candidate_selection.add_argument("--max-cost-pnl-drop", type=float, default=1e100)
     model_candidate_selection.add_argument("--max-side-loss-per-fold", type=float, default=1e100)
+    model_candidate_selection.add_argument(
+        "--max-direction-session-loss-per-fold",
+        type=float,
+        default=1e100,
+        help="maximum allowed loss for any direction:session_regime group in each fold",
+    )
     model_candidate_selection.add_argument(
         "--plateau-column",
         default="short_entry_threshold_offset",

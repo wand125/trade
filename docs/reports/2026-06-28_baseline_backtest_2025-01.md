@@ -1,10 +1,11 @@
 # Baseline Backtest: 2025-01
 
+日時: 2026-06-28 01:58 JST
+更新日時: 2026-06-28 08:02 JST
+
 ## Summary
 
 - Experiment ID: `2026-06-28_baseline_backtest_2025-01`
-- Datetime: 2026-06-28 01:58 JST
-- Updated: 2026-06-28 08:02 JST
 - Status: completed
 - Main result: 2025-01 の初期ベースラインは、no trade を除き全て adjusted pnl がマイナス。
 
@@ -64,4 +65,3 @@
 - future 24h path から、long/short/stay の教師ラベルを作る。
 - adjusted pnl だけでなく、最大逆行幅を考慮したラベルを比較する。
 - 複数月で同じベースライン表を出し、月依存性を確認する。
-

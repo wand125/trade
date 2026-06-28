@@ -100,7 +100,7 @@ experiments/
 
 実験ごとに `docs/reports/` または `experiments/.../report.md` にレポートを書く。
 
-各レポートには、日付だけでなく時刻まで含めた `日時: YYYY-MM-DD HH:MM JST` または `- Datetime: YYYY-MM-DD HH:MM JST` を記録する。既存レポートを時刻付きへ補正する場合は、ファイル更新時刻を基準にする。
+各レポートの冒頭には、日付だけでなく時刻まで含めた `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を記録する。既存レポートを時刻付きへ補正する場合は、ファイル更新時刻または既存の `Updated` 記録を基準にする。
 
 テンプレート:
 

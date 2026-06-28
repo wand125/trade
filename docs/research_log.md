@@ -1332,3 +1332,52 @@ Artifacts:
 - 暫定採用候補へ昇格する。
 - ただし2025-04 failure analysisでは direction error rate `0.5161`、predicted side error rate `0.5484`、exit regret sum `1183.4512`。方向予測そのものは依然弱い。
 - 次はcandidate selectionへside/session別損失集中を追加し、このruleを手作業ではなくvalidation内で検出できるようにする。
+
+### 2026-06-28 09:51 JST Direction Session Candidate Gate
+
+作業:
+
+- `model-sweep` metricsへ `direction_session_adjusted_pnl_min`, `worst_direction_session`, `worst_direction_session_trade_count` を追加した。
+- `model-candidate-selection` に `--max-direction-session-loss-per-fold` を追加した。
+- 古いsweep CSVは新列なしでも読めるよう、normalize時は `direction_session_adjusted_pnl_min=inf` として扱う。
+- report: `docs/reports/2026-06-28_direction_session_candidate_gate.md`
+
+Artifacts:
+
+- no-cost no block: `data/reports/backtests/20260628_005016_model_sweep_2025-05/`
+- no-cost asia short block: `data/reports/backtests/20260628_005016_model_sweep_2025-05_1/`
+- cost no block: `data/reports/backtests/20260628_005015_model_sweep_2025-05_1/`
+- cost asia short block: `data/reports/backtests/20260628_005015_model_sweep_2025-05/`
+- candidate selection: `data/reports/backtests/20260628_005032_model_candidate_selection/`
+
+結果:
+
+- 2025-05 no blockは `direction_session_adjusted_pnl_min=-100.5254`, `worst_direction_session=short:asia`, costでは `-103.8054`。
+- 2025-05 asia short blockは `direction_session_adjusted_pnl_min=+19.8400`, costでは `+17.4840`。
+- `--max-direction-session-loss-per-fold 45` により、no blockは `direction_session_loss_ok=False`, `eligible=False`、blockありは `eligible=True`。
+
+検証:
+
+- `python3 -m py_compile src/trade_data/backtest.py`: OK。
+- `python3 -m unittest tests.test_backtest`: 26 tests OK。
+- `python3 -m unittest discover tests`: 62 tests OK。
+- `model-candidate-selection --help`, `model-sweep --help`: OK。
+- `git diff --check`: OK。
+
+判断:
+
+- side/session別損失集中を候補選択へ組み込めるようになった。
+- 次は predicted/actual profit barrier miss率もcandidate selectionへ追加する。
+
+### 2026-06-28 09:54 JST Report Timestamp Normalization
+
+作業:
+
+- 既存 `docs/reports/*.md` の旧形式レポートに、冒頭の `日時` / `更新日時` を追加した。
+- 旧Summary内の `- Datetime` / `- Updated` は、重複しないよう冒頭メタデータへ移した。
+- `docs/README.md`, `docs/experiment_protocol.md`, `docs/templates/experiment_report.md` を、冒頭に `日時` と `更新日時` を置く運用へ更新した。
+
+判断:
+
+- レポート作成時刻と更新時刻は、以後 `YYYY-MM-DD HH:MM JST` で明示する。
+- 既存レポートの補正値は、ファイル更新時刻または既存の `Updated` 記録を基準にした。

@@ -1,9 +1,11 @@
 # Experiment Report Template
 
+日時: YYYY-MM-DD HH:MM JST
+更新日時: YYYY-MM-DD HH:MM JST
+
 ## Summary
 
 - Experiment ID:
-- Datetime: YYYY-MM-DD HH:MM JST
 - Owner:
 - Status:
 - Main result:

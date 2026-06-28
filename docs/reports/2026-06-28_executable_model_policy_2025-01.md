@@ -1,10 +1,11 @@
 # Executable Model Policy Backtest: 2025-01
 
+日時: 2026-06-28 02:30 JST
+更新日時: 2026-06-28 08:02 JST
+
 ## Summary
 
 - Experiment ID: `2026-06-28_executable_model_policy_2025-01`
-- Datetime: 2026-06-28 02:30 JST
-- Updated: 2026-06-28 08:02 JST
 - Status: completed
 - Main result: HGB multi-task model predictions were connected to an executable backtest policy, but the selected policy still lost money after adjusted pnl.
 

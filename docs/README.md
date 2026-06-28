@@ -42,7 +42,7 @@
 ## 記録場所
 
 - `reports/`
-  実験ごとのレポートを置く。各レポートには `日時: YYYY-MM-DD HH:MM JST` または `- Datetime: YYYY-MM-DD HH:MM JST` を入れ、既存レポートの時刻はファイル更新時刻を基準に補正する。
+  実験ごとのレポートを置く。各レポートの冒頭には `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を入れる。既存レポートを補正する場合は、ファイル更新時刻または既存の `Updated` 記録を基準にする。
 
 - `templates/`
   実験レポートやログ追記用のテンプレート。

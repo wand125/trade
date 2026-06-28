@@ -71,5 +71,6 @@ adjusted_pnl = 0              if raw_pnl = 0
 - 最新の研究状態は `docs/status.md` を読めば分かる。
 - 次にやる作業は `docs/status.md` と `docs/research_plan.md` に書かれている。
 - 実験の設定と結果は `docs/reports/` に残る。
+- `docs/reports/` の各レポート冒頭には `日時: YYYY-MM-DD HH:MM JST` と `更新日時: YYYY-MM-DD HH:MM JST` を置く。既存レポートを補正する場合は、ファイル更新時刻または既存の `Updated` 記録を基準にする。
 - 仕様変更や重要判断は `docs/decisions/` に残る。
 - 未検証アイデアは `docs/ideas.md` に集約する。
