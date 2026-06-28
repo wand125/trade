@@ -3039,3 +3039,44 @@ Artifacts:
 - 2024-12では大きく改善するがNoTradeには届かないため、標準policyへ昇格しない。
 - `long:range_low_vol` hard block / extra marginは2024-12で悪化したため棄却する。
 - 次は単体rule採用ではなく、top min pnlからの許容劣化幅とrisk reductionをselection基準に入れるか検討する。
+
+### 2026-06-28 21:28 JST Near Top Risk Selection
+
+作業:
+
+- `model-candidate-selection` に `--candidate-rank-mode near_top_risk` を追加した。
+- best eligible cost min PnLからの許容劣化幅 `--near-top-cost-pnl-tolerance` と、group loss / drawdown / EV overestimate / exit regret / actual miss / side shareのrisk scoreを追加した。
+- 直近のhard block / extra margin long rule gridへ、composite riskとdrawdown-only感度を適用した。
+- drawdown-onlyで上位になるextra-margin `long:ny_late:+5/+10` を2024-12へ固定適用した。
+- report: `docs/reports/00066_2026-06-28_near_top_risk_selection.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- composite hard selection: `data/reports/backtests/hgb_entry_mlp_exit_long_block_rule_near_top_risk_selection/20260628_122635_model_candidate_selection/`
+- composite extra-margin selection: `data/reports/backtests/hgb_entry_mlp_exit_long_margin_rule_near_top_risk_selection/20260628_122635_model_candidate_selection/`
+- drawdown-only hard selection: `data/reports/backtests/hgb_entry_mlp_exit_long_block_rule_near_top_drawdown_only_selection/20260628_122750_model_candidate_selection/`
+- drawdown-only extra-margin selection: `data/reports/backtests/hgb_entry_mlp_exit_long_margin_rule_near_top_drawdown_only_selection/20260628_122750_model_candidate_selection/`
+- extra-margin fixed 2024-12: `data/reports/backtests/hgb_entry_mlp_exit_long_near_top_extra_margin_2024_12/`
+
+結果:
+
+| item | value |
+|---|---:|
+| composite hard top | none |
+| composite hard top risk score | `448.1983` |
+| composite hard `long:ny_late` rank0.5 risk score | `484.1204` |
+| composite hard `long:ny_late` rank0 risk score | `485.7224` |
+| composite extra-margin top | none |
+| drawdown-only hard top | `long:ny_late`, rank0 |
+| drawdown-only extra-margin top | `long:ny_late:+5/+10`, rank0 |
+| drawdown-only max DD improvement vs none | `1.1256` |
+| 2024-12 extra-margin `long:ny_late:+5` | `-15.0538` |
+| 2024-12 extra-margin `long:ny_late:+10` | `-15.0538` |
+
+判断:
+
+- near-top risk rankingは選定インフラとして採用するが、今回の複合riskではruleなしが引き続きtop。
+- `long:ny_late` はnear-topには残るが、group loss、EV overestimate、exit regret、side concentrationが悪化するため保守候補として選ばれない。
+- drawdown-onlyなら `long:ny_late` を選べるが、max DD改善が小さく、他のrisk proxyを悪化させるため標準基準にしない。
+- 次は `long:ny_late` をhard ruleで塞ぐのではなく、side/regime別EV calibrationまたはregime-conditioned risk targetとして扱う。

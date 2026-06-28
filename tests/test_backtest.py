@@ -1812,6 +1812,94 @@ class BacktestTests(unittest.TestCase):
         self.assertAlmostEqual(offset8["robust_total_adjusted_pnl_min_cost"], 34.0)
         self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
 
+    def test_candidate_selection_can_rank_near_top_by_risk_proxy(self):
+        def fold(values):
+            rows = []
+            for offset, pnl, drawdown, direction_session_pnl, ev_overestimate, exit_regret in values:
+                rows.append(
+                    {
+                        "policy": "timed_ev",
+                        "entry_threshold": 15,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 5,
+                        "risk_penalty": 0,
+                        "max_wait_regret": float("inf"),
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "False",
+                        "extra_side_margin_rules": "",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": drawdown,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "direction_session_adjusted_pnl_min": direction_session_pnl,
+                        "ev_overestimate_vs_realized_mean": ev_overestimate,
+                        "exit_regret_mean": exit_regret,
+                        "actual_profit_barrier_miss_rate_smoothed": 0.4,
+                        "max_side_trade_share": 0.7,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        high_pnl_high_risk = (6, 90, 80, -60, 20, 18)
+        near_top_lower_risk = (8, 84, 20, -8, 8, 6)
+        base_a = fold([high_pnl_high_risk, near_top_lower_risk])
+        base_b = fold([(6, 88, 76, -55, 18, 16), (8, 83, 22, -9, 7, 5)])
+        cost_a = fold([(6, 80, 82, -62, 21, 19), (8, 75, 21, -10, 8, 6)])
+        cost_b = fold([(6, 79, 78, -58, 19, 17), (8, 74, 23, -11, 7, 5)])
+
+        default_summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=100.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+        risk_summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=100.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+            candidate_rank_mode="near_top_risk",
+            near_top_cost_pnl_tolerance=10.0,
+        )
+
+        self.assertEqual(default_summary.iloc[0]["short_entry_threshold_offset"], 6)
+        self.assertEqual(risk_summary.iloc[0]["short_entry_threshold_offset"], 8)
+        self.assertTrue(bool(risk_summary.iloc[0]["near_top_cost_pnl_ok"]))
+        self.assertLess(
+            risk_summary.iloc[0]["near_top_risk_score"],
+            risk_summary.iloc[1]["near_top_risk_score"],
+        )
+
     def test_direction_session_diagnostics_reports_worst_group(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=3, freq="min")
         trades = pd.DataFrame(

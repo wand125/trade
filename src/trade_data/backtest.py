@@ -29,6 +29,7 @@ DEFAULT_SHORT_FIXED_HORIZON_COLUMNS = tuple(
     f"pred_short_fixed_{int(minutes)}m_adjusted_pnl" for minutes in DEFAULT_FIXED_HORIZON_MINUTES
 )
 FIXED_HORIZON_SCORE_MODES = ("max", "mean", "median", "min")
+CANDIDATE_RANK_MODES = ("pnl", "near_top_risk")
 
 TRADE_COLUMNS = [
     "direction",
@@ -3611,6 +3612,13 @@ def row_max_or_default(frame: pd.DataFrame, columns: list[str], default: float) 
     return frame[existing].max(axis=1)
 
 
+def row_gap_from_best(frame: pd.DataFrame, value_column: str, eligible_column: str) -> pd.Series:
+    eligible_values = frame.loc[frame[eligible_column].astype(bool), value_column]
+    if eligible_values.empty:
+        return pd.Series(np.inf, index=frame.index, dtype="float64")
+    return float(eligible_values.max()) - frame[value_column]
+
+
 def loss_depth(series: pd.Series) -> pd.Series:
     values = pd.to_numeric(series, errors="coerce").replace(np.inf, np.nan)
     return (-values.fillna(0.0)).clip(lower=0.0)
@@ -3680,6 +3688,14 @@ def summarize_candidate_selection(
     diagnostic_direction_error_rate_scale: float = 100.0,
     diagnostic_actual_profit_barrier_miss_rate_scale: float = 100.0,
     diagnostic_ev_overestimate_vs_realized_mean_scale: float = 1.0,
+    candidate_rank_mode: str = "pnl",
+    near_top_cost_pnl_tolerance: float = 0.0,
+    near_top_group_loss_weight: float = 1.0,
+    near_top_drawdown_weight: float = 1.0,
+    near_top_ev_overestimate_weight: float = 1.0,
+    near_top_exit_regret_weight: float = 1.0,
+    near_top_actual_miss_weight: float = 100.0,
+    near_top_side_share_weight: float = 100.0,
 ) -> pd.DataFrame:
     if max_cost_pnl_drop < 0:
         raise ValueError("max_cost_pnl_drop must be non-negative")
@@ -3739,6 +3755,22 @@ def summarize_candidate_selection(
         raise ValueError(
             "diagnostic_ev_overestimate_vs_realized_mean_scale must be non-negative"
         )
+    if candidate_rank_mode not in CANDIDATE_RANK_MODES:
+        raise ValueError(f"unknown candidate_rank_mode: {candidate_rank_mode}")
+    if near_top_cost_pnl_tolerance < 0:
+        raise ValueError("near_top_cost_pnl_tolerance must be non-negative")
+    if near_top_group_loss_weight < 0:
+        raise ValueError("near_top_group_loss_weight must be non-negative")
+    if near_top_drawdown_weight < 0:
+        raise ValueError("near_top_drawdown_weight must be non-negative")
+    if near_top_ev_overestimate_weight < 0:
+        raise ValueError("near_top_ev_overestimate_weight must be non-negative")
+    if near_top_exit_regret_weight < 0:
+        raise ValueError("near_top_exit_regret_weight must be non-negative")
+    if near_top_actual_miss_weight < 0:
+        raise ValueError("near_top_actual_miss_weight must be non-negative")
+    if near_top_side_share_weight < 0:
+        raise ValueError("near_top_side_share_weight must be non-negative")
     if min_plateau_neighbors < 0:
         raise ValueError("min_plateau_neighbors must be non-negative")
 
@@ -3825,6 +3857,11 @@ def summarize_candidate_selection(
         + merged["direction_session_loss_depth_all"]
         + merged["combined_regime_loss_depth_all"]
         + merged["direction_combined_regime_loss_depth_all"]
+    )
+    merged["max_drawdown_max_all"] = row_max_or_default(
+        merged,
+        ["max_drawdown_max_base", "max_drawdown_max_cost"],
+        0.0,
     )
     merged["short_trade_share_max_all"] = row_max_or_default(
         merged,
@@ -4005,9 +4042,82 @@ def summarize_candidate_selection(
     )
     merged["plateau_ok"] = merged["plateau_support_count"] >= min_plateau_neighbors
     merged["eligible"] = merged["pre_plateau_eligible"] & merged["plateau_ok"]
+    merged["near_top_cost_pnl_gap"] = row_gap_from_best(
+        merged,
+        "total_adjusted_pnl_min_cost",
+        "eligible",
+    )
+    merged["near_top_cost_pnl_ok"] = (
+        merged["eligible"] & (merged["near_top_cost_pnl_gap"] <= near_top_cost_pnl_tolerance)
+    )
+    merged["near_top_risk_score"] = (
+        near_top_group_loss_weight * merged["group_loss_penalty"]
+        + near_top_drawdown_weight * merged["max_drawdown_max_all"]
+        + near_top_ev_overestimate_weight * merged["ev_overestimate_vs_realized_mean_max_all"]
+        + near_top_exit_regret_weight * merged["exit_regret_mean_max_all"]
+        + near_top_actual_miss_weight * merged["actual_profit_barrier_miss_rate_smoothed_max_all"]
+        + near_top_side_share_weight * merged["max_side_trade_share_max_all"]
+    )
 
-    return merged.sort_values(
-        [
+    if candidate_rank_mode == "near_top_risk":
+        sort_columns = [
+            "eligible",
+            "near_top_cost_pnl_ok",
+            "near_top_risk_score",
+            "max_drawdown_max_all",
+            "group_loss_penalty",
+            "ev_overestimate_vs_realized_mean_max_all",
+            "exit_regret_mean_max_all",
+            "total_adjusted_pnl_min_cost",
+            "total_adjusted_pnl_min_base",
+            "near_top_cost_pnl_gap",
+            "plateau_support_count",
+            "side_adjusted_pnl_min_all",
+            "direction_session_adjusted_pnl_min_all",
+            "combined_regime_adjusted_pnl_min_all",
+            "direction_combined_regime_adjusted_pnl_min_all",
+            "direction_error_rate_max_all",
+            "predicted_side_error_rate_max_all",
+            "no_edge_rate_max_all",
+            "short_trade_share_max_all",
+            "max_side_trade_share_max_all",
+            "actual_profit_barrier_miss_rate_smoothed_max_all",
+            "actual_profit_barrier_miss_rate_max_all",
+            "profit_barrier_calibration_overestimate_smoothed_max_all",
+            "predicted_profit_barrier_miss_rate_max_all",
+            "profit_barrier_calibration_overestimate_max_all",
+            "cost_pnl_drop_min",
+        ]
+        ascending = [
+            False,
+            False,
+            True,
+            True,
+            True,
+            True,
+            True,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+        ]
+    else:
+        sort_columns = [
             "eligible",
             "robust_total_adjusted_pnl_min_cost",
             "robust_total_adjusted_pnl_min_base",
@@ -4031,8 +4141,8 @@ def summarize_candidate_selection(
             "predicted_profit_barrier_miss_rate_max_all",
             "profit_barrier_calibration_overestimate_max_all",
             "cost_pnl_drop_min",
-        ],
-        ascending=[
+        ]
+        ascending = [
             False,
             False,
             False,
@@ -4056,8 +4166,9 @@ def summarize_candidate_selection(
             True,
             True,
             True,
-        ],
-    ).reset_index(drop=True)
+        ]
+
+    return merged.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
 
 
 def read_sweep_frames(paths: list[Path]) -> list[pd.DataFrame]:
@@ -4156,6 +4267,14 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         diagnostic_ev_overestimate_vs_realized_mean_scale=(
             args.diagnostic_ev_overestimate_vs_realized_mean_scale
         ),
+        candidate_rank_mode=args.candidate_rank_mode,
+        near_top_cost_pnl_tolerance=args.near_top_cost_pnl_tolerance,
+        near_top_group_loss_weight=args.near_top_group_loss_weight,
+        near_top_drawdown_weight=args.near_top_drawdown_weight,
+        near_top_ev_overestimate_weight=args.near_top_ev_overestimate_weight,
+        near_top_exit_regret_weight=args.near_top_exit_regret_weight,
+        near_top_actual_miss_weight=args.near_top_actual_miss_weight,
+        near_top_side_share_weight=args.near_top_side_share_weight,
     )
     run_dir = make_run_dir(args.output_dir, "model_candidate_selection")
     summary.to_csv(run_dir / "metrics.csv", index=False)
@@ -4209,6 +4328,14 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "diagnostic_ev_overestimate_vs_realized_mean_scale": (
             args.diagnostic_ev_overestimate_vs_realized_mean_scale
         ),
+        "candidate_rank_mode": args.candidate_rank_mode,
+        "near_top_cost_pnl_tolerance": args.near_top_cost_pnl_tolerance,
+        "near_top_group_loss_weight": args.near_top_group_loss_weight,
+        "near_top_drawdown_weight": args.near_top_drawdown_weight,
+        "near_top_ev_overestimate_weight": args.near_top_ev_overestimate_weight,
+        "near_top_exit_regret_weight": args.near_top_exit_regret_weight,
+        "near_top_actual_miss_weight": args.near_top_actual_miss_weight,
+        "near_top_side_share_weight": args.near_top_side_share_weight,
         "plateau_column": args.plateau_column,
         "plateau_radius": args.plateau_radius,
         "min_plateau_neighbors": args.min_plateau_neighbors,
@@ -4719,6 +4846,57 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="scale applied to excess mean EV overestimate",
+    )
+    model_candidate_selection.add_argument(
+        "--candidate-rank-mode",
+        default="pnl",
+        choices=CANDIDATE_RANK_MODES,
+        help=(
+            "pnl keeps historical ranking; near_top_risk ranks candidates within the "
+            "near-top cost min-PnL tolerance by risk proxy"
+        ),
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-cost-pnl-tolerance",
+        type=float,
+        default=0.0,
+        help="allowed degradation from the best eligible cost min PnL for near_top_risk ranking",
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-group-loss-weight",
+        type=float,
+        default=1.0,
+        help="weight for summed side/regime loss depth in near_top_risk score",
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-drawdown-weight",
+        type=float,
+        default=1.0,
+        help="weight for max drawdown in near_top_risk score",
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-ev-overestimate-weight",
+        type=float,
+        default=1.0,
+        help="weight for EV overestimate in near_top_risk score",
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-exit-regret-weight",
+        type=float,
+        default=1.0,
+        help="weight for exit regret in near_top_risk score",
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-actual-miss-weight",
+        type=float,
+        default=100.0,
+        help="weight for smoothed actual profit-barrier miss rate in near_top_risk score",
+    )
+    model_candidate_selection.add_argument(
+        "--near-top-side-share-weight",
+        type=float,
+        default=100.0,
+        help="weight for dominant side trade share in near_top_risk score",
     )
     model_candidate_selection.add_argument(
         "--plateau-column",

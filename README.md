@@ -275,6 +275,27 @@ python -m trade_data.backtest model-sweep-summary \
 Use the summary command to choose entry/exit thresholds from validation folds
 only. The final test month should receive the selected policy unchanged.
 
+For candidate selection, keep the historical PnL ranking by default. When a
+candidate is close to the best validation min PnL, `near_top_risk` can rank only
+that near-top set by risk proxies instead of blindly taking the highest PnL:
+
+```bash
+python -m trade_data.backtest model-candidate-selection \
+  --base-sweeps data/reports/backtests/fold_a/metrics.csv,data/reports/backtests/fold_b/metrics.csv \
+  --cost-sweeps data/reports/backtests/fold_a_cost/metrics.csv,data/reports/backtests/fold_b_cost/metrics.csv \
+  --min-folds 2 \
+  --min-trades-per-fold 30 \
+  --max-forced-exit-rate 0.05 \
+  --max-drawdown 200 \
+  --min-cost-adjusted-pnl-per-fold 0 \
+  --candidate-rank-mode near_top_risk \
+  --near-top-cost-pnl-tolerance 5
+```
+
+This mode is a tie-breaker for validation-close candidates; it is not evidence
+by itself. If only one risk metric changes the selected candidate, treat that as
+a sensitivity diagnostic rather than a promotion rule.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:
