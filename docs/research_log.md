@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 06:44 Entry timing wait regret gate
+
+- `00104` の次作業として、risk penaltyではなく既存entry timing教師の `pred_*_wait_regret` / `pred_*_entry_local_rank` gateを代表4ヶ月validationで再評価した。
+- 固定条件は `timed_ev`, entry `12`, short offset `6`, side margin `5`, rank `0.5`, max hold `480`, short low-vol penalty `down5/up10/range5`, profit/loss `1.0/1.20`。
+- `min_entry_rank=0.7` は全月0 trade。予測分布上の最大はlong `0.6818`, short `0.6905` で、現行スケールでは探索値として無効。
+- validation baseでは `max_wait_regret=4` がmax DDを `92.0350 -> 74.9336` に下げたが、sum pnlは `673.9120 -> 654.3170`, min monthは `145.5682 -> 142.5510` に悪化。`2` は2024-11で `-9.1754`。
+- high costでも同様で、`4` はmax DD `97.1906 -> 79.4966` だがsum/min monthは悪化。`2` は2024-11 `-17.4532`。
+- holdoutでは `max_wait_regret=2` がsum `180.4620` と良く見えるが、validationで棄却済みかつ2025-04を5 tradesまで落とす後付け効果に近い。採用しない。
+- 判断: 標準policyにwait_regret hard gateは追加しない。`wait_regret` はhard閾値ではなく、side/regime別の「待つべき確率」または「今入る価値のlower bound」として再校正する次候補にする。
+- report: `docs/reports/00105_2026-06-29_entry_timing_wait_regret_gate.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 06:36 Candidate quality downside calibration
 
 - `00103` のdownside driftを受け、`trade_data.meta_model candidate-quality-downside-calibration` を追加した。candidate side + `combined_regime` + quality bucketごとに target mean/lower, downside probability, large downside probability, overestimate risk, support/sourceを出力する。

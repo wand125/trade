@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 06:36 JST
+最終更新: 2026-06-29 06:44 JST
 
 ## 現在の状態
 
@@ -15,6 +15,8 @@
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
 candidate quality downside calibrationを追加済み。OOF candidate examplesからside/regime/quality bucket別にtarget mean/lower、downside probability、overestimate risk、support/sourceを出力できる。fixed componentではvalidation合計PnLを改善するrisk penalty候補が出たが、high costとholdoutの最低月が悪化したため、標準policy riskとしては採用せず、診断・ranking特徴量として残す。詳細は `docs/reports/00104_2026-06-29_candidate_quality_downside_calibration.md`。
+
+entry timingの `wait_regret` hard gateを再検証済み。`max_wait_regret=4` はvalidationとhigh costでdrawdownを下げるがsum/min monthを落とし、`2` はvalidation 2024-11でマイナス化する。holdoutでは `2` が良く見えるが、後付けの低頻度化として扱い標準採用しない。`min_entry_rank=0.7` は現行予測スケールでは0 trade。詳細は `docs/reports/00105_2026-06-29_entry_timing_wait_regret_gate.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
