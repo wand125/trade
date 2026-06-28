@@ -1594,3 +1594,45 @@ Artifacts:
 
 - `更新日時` は追記・修正履歴の管理に使う。
 - 通し番号の並び替えや新規番号判断には `日時` のみを使う。
+
+### 2026-06-28 11:14 JST High Turnover Gate Validation
+
+作業:
+
+- validation 4foldで short share / smoothed miss / smoothed calibration gateを比較した。
+- 前回候補周辺gridを追加列込みで再生成した。
+- 月10trades条件を満たせなかったため、high-turnover gridを追加した。
+- high-turnover gridでは `min_entry_rank=0/0.5`, `max_wait_regret=4/inf`, `profit_barrier_threshold=0.0/0.2` を含めた。
+- 2025-06は既知の失敗月として、暫定候補A/Bの回帰チェックだけを実施した。
+- report: `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`
+
+Artifacts:
+
+- fixed-neighborhood comparison: `data/reports/backtests/20260628_020416_model_sweep_candidate_gate_comparison.csv`
+- high-turnover comparison: `data/reports/backtests/20260628_021001_high_turnover_candidate_gate_comparison.csv`
+- forced/direction gate comparison: `data/reports/backtests/20260628_021102_high_turnover_forced_direction_gate_comparison.csv`
+- selected validation comparison: `data/reports/backtests/20260628_021208_model_candidate_selection/`
+- 2025-06 known-month regression: `data/reports/backtests/20260628_021217_known_2025_06_regression_candidates.csv`
+- decision: `docs/decisions/0007_high_turnover_gate_selection.md`
+
+結果:
+
+- 前回候補周辺gridは `min-trades-per-fold=10` を満たせず、最大でも `trade_count_min_base=5`。
+- high-turnover gridでは、PnL条件を緩めると48候補が残った。
+- `max-forced-exit-rate=0` では全滅。`0.05` なら候補が残る。
+- `max-direction-session-loss-per-fold=45` では全滅。`60` なら5候補が残る。
+- `max-short-trade-share=0.65` でも上位候補は残る。
+- smoothed actual missは `0.55` なら5候補、`0.50` なら1候補。
+- smoothed calibrationを `0.60` まで締めると、asia block候補だけが残る。
+
+2025-06既知月回帰:
+
+- A no block candidate: cost adjusted pnl `+37.0572`, 52 trades, short pnl `-14.2222`, max drawdown `77.7572`。
+- B asia block calibration candidate: cost adjusted pnl `-29.4530`, 50 trades, short pnl `-84.9312`, max drawdown `123.6128`。
+
+判断:
+
+- 暫定hard gateは `max-short-trade-share=0.65` と `max-smoothed-actual-profit-barrier-miss-rate=0.55`。
+- smoothed calibrationはhard gateにしない。診断またはtie-breakに留める。
+- 暫定候補Aを、次の未見月 2025-07 で見る前に `docs/decisions/` へ固定する。
+- 固定記録は `docs/decisions/0007_high_turnover_gate_selection.md` に作成済み。

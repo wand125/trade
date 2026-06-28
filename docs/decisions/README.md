@@ -27,3 +27,4 @@
 - `0004_relaxed_adjusted_pnl.md`: 評価倍率 1.0 / 1.25
 - `0005_dense_entry_quality_targets.md`: entry timingを密な品質ターゲットに分解
 - `0006_loss_multiplier_120_standard.md`: 評価倍率 1.0 / 1.20 へ統一
+- `0007_high_turnover_gate_selection.md`: 2025-07 blind前のhigh-turnover gate選定基準

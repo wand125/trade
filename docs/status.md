@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 10:52 JST
+最終更新: 2026-06-28 11:14 JST
 
 ## 現在の状態
 
@@ -38,6 +38,8 @@ profit barrier probability bucket別のactual hit rate診断を追加済み。`m
 
 short exposure concentrationとsupport-aware barrier gateを追加済み。`model-sweep` metricsに `long_trade_share` / `short_trade_share` / `max_side_trade_share` と Laplace-smoothed miss/calibration列を保存し、`model-candidate-selection --max-short-trade-share` / `--max-side-trade-share` / `--max-smoothed-actual-profit-barrier-miss-rate` / `--max-smoothed-profit-barrier-calibration-overestimate` で候補選定に使える。2025-06 smokeでは失敗候補が `short_trade_share=0.933333` で `short_trade_share_ok=false` になり、eligibleから落ちた。
 
+validation 4foldで high-turnover gate比較を実施済み。前回候補周辺gridは月10trades条件を満たせなかったが、`min_entry_rank=0/0.5`, `max_wait_regret=4/inf`, `profit_barrier_threshold=0.0/0.2` を含めた high-turnover gridでは候補が残った。暫定基準は `min-trades-per-fold=10`, `max-forced-exit-rate=0.05`, `max-direction-session-loss-per-fold=60`, `max-short-trade-share=0.65`, `max-smoothed-actual-profit-barrier-miss-rate=0.55`。smoothed calibrationはhard gateにせず、diagnostic/tie-breakに留める。詳細は `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -59,14 +61,13 @@ short exposure concentrationとsupport-aware barrier gateを追加済み。`mode
 
 ## 次の作業
 
-1. validation 4fold以上で、PnL、direction/session損失、short exposure、smoothed actual miss、smoothed calibrationのhard gate候補を横断比較する。
-2. `--max-short-trade-share` を hard gateにする閾値台地を見る。候補値は `0.65`, `0.75`, `0.85`。
-3. smoothed actual miss / smoothed calibrationを raw gateの代替にするか、補助診断に留めるか決める。
-4. コスト条件を標準選択に入れる。少なくとも spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
+1. 固定済みの暫定選定基準で、2025-07 blind dataset/modelを作り、候補Aを未見月で評価する。
+2. profit barrier threshold `0.0` が選ばれた理由を分析する。barrier probability targetの選別力が弱い可能性がある。
+3. smoothed calibrationはhard gateにせず、診断/tie-breakとして残す。hard gate化するなら、2025-06既知月のB候補失敗を回避する追加条件が必要。
+4. コスト条件は標準選択に入れる。spread `0.1` / slippage `0.05` / delay `0` を通常評価へ昇格する。
 5. exit timing targetを fixed horizon、barrier time、hazard-like close probability へ拡張する。
-6. 2025-07以降のblindは、新しいvalidation選択基準を固定してから見る。
-7. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
-8. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+6. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
+7. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項
 
@@ -148,6 +149,10 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 
 2026-06-28 10:52 JST 更新: `docs/reports` の通し番号は、ファイルシステムの更新時刻や本文の `更新日時` ではなく、本文冒頭の `日時` だけを基準にすることを `GOAL.md`, `docs/README.md`, `docs/experiment_protocol.md`, 本ファイルに明記した。
 
+2026-06-28 11:14 JST 更新: validation 4foldで short share / smoothed gate / high-turnover条件を比較した。前回候補周辺gridは月10trades条件を満たせなかったが、high-turnover gridでは `max-forced-exit-rate=0.05`, `max-direction-session-loss-per-fold=60`, `max-short-trade-share=0.65`, `max-smoothed-actual-profit-barrier-miss-rate=0.55` で5候補が残った。暫定候補Aは2025-06既知月でも cost adjusted pnl `+37.0572`、52 trades。calibration hard gateで選ばれるB候補は2025-06既知月で `-29.4530` とLondon short崩れを再発したため、smoothed calibrationはhard gateにしない。詳細は `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`。
+
+2026-06-28 11:14 JST 更新: 2025-07 blind前の暫定選定基準を `docs/decisions/0007_high_turnover_gate_selection.md` に固定記録した。
+
 ## 直近の実験
 
 - `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
@@ -160,6 +165,10 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
 - `docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
 - `docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
+- `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`
+- `docs/decisions/0007_high_turnover_gate_selection.md`
+- `data/reports/backtests/20260628_021208_model_candidate_selection/`
+- `data/reports/backtests/20260628_021217_known_2025_06_regression_candidates.csv`
 - `data/reports/backtests/20260628_014713_model_sweep_2025-06_1/`
 - `data/reports/backtests/20260628_014727_model_candidate_selection/`
 - `experiments/20260628_013141_full_fixed_horizon_blind_2025_06_barrier_prob_p1_l1p2/`
