@@ -77,6 +77,7 @@ from trade_data.meta_model import (
     residual_penalty_scored_metrics,
     side_outcome_columns_for_side,
     trade_quality_calibration_metrics,
+    trade_quality_features_from_predictions,
     side_target_means,
     add_candidate_quality_model_columns,
     add_candidate_quality_model_values_to_examples,
@@ -1205,6 +1206,50 @@ class MetaModelTests(unittest.TestCase):
         self.assertAlmostEqual(output[long_columns["realized_ev_score"]].iloc[0], -22.0)
         self.assertEqual(output[short_columns["source"]].tolist(), ["group", "group"])
         self.assertLessEqual(output[short_columns["wrong_side_risk"]].iloc[0], 0.0)
+
+    def test_trade_quality_features_include_optional_side_diagnostics(self):
+        predictions = pd.DataFrame(
+            {
+                "pred_trade_source_long_ev": [12.0],
+                "pred_trade_source_short_ev": [7.0],
+                "pred_side_outcome_evdist_long_wrong_side_prob": [0.25],
+                "pred_side_outcome_evdist_short_wrong_side_prob": [0.60],
+                "pred_candidate_quality_component_fixed_weighted_long_adjusted_pnl": [4.0],
+                "pred_candidate_quality_component_fixed_weighted_short_adjusted_pnl": [-2.0],
+            }
+        )
+
+        long_features = trade_quality_features_from_predictions(predictions, "long")
+        short_features = trade_quality_features_from_predictions(predictions, "short")
+
+        self.assertAlmostEqual(
+            long_features["pred_taken_side_outcome_wrong_side_prob"].iloc[0],
+            0.25,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_opposite_side_outcome_wrong_side_prob"].iloc[0],
+            0.60,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_side_outcome_wrong_side_prob_gap"].iloc[0],
+            -0.35,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_taken_side_outcome_wrong_side_prob"].iloc[0],
+            0.60,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_opposite_side_outcome_wrong_side_prob"].iloc[0],
+            0.25,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_taken_component_fixed_weighted_quality"].iloc[0],
+            -2.0,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_component_fixed_weighted_quality_gap"].iloc[0],
+            -6.0,
+        )
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):
         predictions = add_trade_source_ev_columns(

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 07:58 JST
+最終更新: 2026-06-29 08:09 JST
 
 ## 現在の状態
 
@@ -31,6 +31,8 @@ jackknife選定候補を既存holdout stressへ固定監査済み。`model-holdo
 side confidence / calibrated EV のsoft補正を再検証済み。`side_confidence_penalty=2` はvalidation合計 `691.1634`, min `151.6892` でbaseを上回るが、holdoutではsum `192.9620`, min `-34.8578` とbaseより悪い。`min_side_confidence` はvalidationで取引数とPnLを落とし、`pred_calibrated_*_best_adjusted_pnl` への単純差し替えもvalidation min `-90.7698` で壊れる。標準policyへは採用せず、次は教師側でside不確実性と実現EV分布を直接扱う。詳細は `docs/reports/00111_2026-06-29_side_confidence_ev_calibration_recheck.md`。
 
 side-outcome EV分布校正を追加済み。`side-outcome-calibration` はside別EV bucket、side confidence bucket、`combined_regime`, `session_regime` から、target mean/lower、no-edge確率、large-loss確率、wrong-side確率、EV過大評価riskを出力する。validation OOFでは `wrong_side_risk >= -0.45` がsum `663.4534`, min `148.1228` でraw base `622.6486` / `138.0338` を上回ったが、holdoutではraw sum `242.5008`, min `-20.8252` に対し `145.5712`, `-57.7274` と悪化した。`conservative_ev_score >= 10` もholdoutでraw未満。標準policy gateには採用せず、診断・stacking特徴量として残す。詳細は `docs/reports/00112_2026-06-29_side_outcome_evdist_calibration.md`。
+
+side-outcome/component列をcandidate-quality二段目modelの特徴量へ追加済み。`side_outcome_stack_fixed` はOOF fixed component targetで mean R2 `0.0168`, mean bias `0.0298` と薄く前進した。validationでは `mean>=0` gateがsum `673.0854`, min `148.8660` でrawを上回るが、holdoutではmin `-20.8252 -> -18.7302`, maxDD `122.9852 -> 109.2604` と少し改善する一方、sumは `242.5008 -> 155.4990` に落ち、2025-03を `84.0776 -> -5.2898` へ壊す。標準policy gateには採用せず、ranking/tie-breakまたはrisk budget別評価の特徴として残す。詳細は `docs/reports/00113_2026-06-29_side_outcome_stacking_features.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

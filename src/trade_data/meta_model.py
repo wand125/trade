@@ -448,6 +448,65 @@ CANDIDATE_QUALITY_LONG_LOWER_OVERESTIMATE_RISK_COLUMN = (
 CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN = (
     "pred_candidate_quality_short_lower_overestimate_risk"
 )
+TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_SPECS = [
+    (
+        "side_outcome_target_mean",
+        "pred_side_outcome_evdist_{side}_calibrated_target_mean",
+    ),
+    (
+        "side_outcome_target_lower",
+        "pred_side_outcome_evdist_{side}_calibrated_target_lower",
+    ),
+    (
+        "side_outcome_conservative_ev_score",
+        "pred_side_outcome_evdist_{side}_conservative_ev_score",
+    ),
+    (
+        "side_outcome_no_edge_prob",
+        "pred_side_outcome_evdist_{side}_no_edge_prob",
+    ),
+    (
+        "side_outcome_large_loss_prob",
+        "pred_side_outcome_evdist_{side}_large_loss_prob",
+    ),
+    (
+        "side_outcome_wrong_side_prob",
+        "pred_side_outcome_evdist_{side}_wrong_side_prob",
+    ),
+    (
+        "side_outcome_ev_overestimate",
+        "pred_side_outcome_evdist_{side}_ev_overestimate",
+    ),
+    (
+        "side_outcome_wrong_side_gap_mean",
+        "pred_side_outcome_evdist_{side}_wrong_side_gap_mean",
+    ),
+    (
+        "component_fixed_weighted_quality",
+        "pred_candidate_quality_component_fixed_weighted_{side}_adjusted_pnl",
+    ),
+    (
+        "component_fixed_weighted_lower_quality",
+        "pred_candidate_quality_component_fixed_weighted_{side}_lower_adjusted_pnl",
+    ),
+    (
+        "component_fixed_weighted_overestimate_risk",
+        "pred_candidate_quality_component_fixed_weighted_{side}_overestimate_risk",
+    ),
+    (
+        "component_fixed_weighted_lower_overestimate_risk",
+        "pred_candidate_quality_component_fixed_weighted_{side}_lower_overestimate_risk",
+    ),
+]
+TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_COLUMNS = [
+    column
+    for feature_name, _ in TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_SPECS
+    for column in (
+        f"pred_taken_{feature_name}",
+        f"pred_opposite_{feature_name}",
+        f"pred_{feature_name}_gap",
+    )
+]
 TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS = [
     "side",
     "pred_taken_ev",
@@ -464,6 +523,7 @@ TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS = [
     "volatility_score_60",
     "decision_hour_sin",
     "decision_hour_cos",
+    *TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_COLUMNS,
 ]
 TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS = [
     "trend_regime",
@@ -1584,6 +1644,27 @@ def side_profit_barrier_series(predictions: pd.DataFrame, side_name: str) -> pd.
     return pd.Series(0.0, index=predictions.index)
 
 
+def opposite_side_name(side_name: str) -> str:
+    return "short" if side_name == "long" else "long"
+
+
+def add_optional_side_feature_columns(
+    output: pd.DataFrame,
+    predictions: pd.DataFrame,
+    side_name: str,
+) -> None:
+    opposite_name = opposite_side_name(side_name)
+    for feature_name, template in TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_SPECS:
+        taken_feature = f"pred_taken_{feature_name}"
+        opposite_feature = f"pred_opposite_{feature_name}"
+        gap_feature = f"pred_{feature_name}_gap"
+        taken = finite_float_series(predictions, template.format(side=side_name))
+        opposite = finite_float_series(predictions, template.format(side=opposite_name))
+        output[taken_feature] = taken
+        output[opposite_feature] = opposite
+        output[gap_feature] = taken - opposite
+
+
 def trade_quality_features_from_predictions(
     predictions: pd.DataFrame,
     side_name: str,
@@ -1634,6 +1715,7 @@ def trade_quality_features_from_predictions(
             output[column] = "__missing__"
     if "dataset_month" in predictions.columns:
         output["dataset_month"] = predictions["dataset_month"].astype(str)
+    add_optional_side_feature_columns(output, predictions, side_name)
     return output
 
 

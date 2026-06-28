@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 08:09 Side outcome stacking features
+
+- `trade_quality_features_from_predictions` にside別補助特徴を追加した。side-outcome EV分布列と `component_fixed_weighted` quality列を、taken/opposite/gap の3系統でcandidate-quality modelへ渡せるようにした。列が存在しないartifactでは0になり、既存互換を維持する。
+- `oof-candidate-quality-model` のdefaultは `source_mode=fixed_horizon` なので、固定候補と同じEV sourceにするため `--source-mode columns --long-column pred_long_best_adjusted_pnl --short-column pred_short_best_adjusted_pnl` を明示した。
+- `side_outcome_stack_fixed` modelは validation OOF candidate `9091` 件で fixed component targetを学習。mean R2 `0.0168`, mean bias `0.0298`, mean overestimate `3.7140`。raw EVのbias `20.7301` より大きく改善した。
+- validationでは `pred_candidate_quality_side_outcome_stack_fixed_*_adjusted_pnl >= 0` gateがsum `673.0854`, min `148.8660`, trades `254`, maxDD `81.8534` でraw `622.6486` / `138.0338` / `275` / `85.0166` を上回った。lower gateはvalidation時点でraw未満。
+- holdoutでは `mean>=0` が2024-12を `-20.8252 -> -18.7302`、maxDDを `122.9852 -> 109.2604` に少し改善したが、2025-03を `84.0776 -> -5.2898` に壊し、sumは `242.5008 -> 155.4990` に落ちた。
+- 判断: side-outcome/component特徴を二段目modelへ入れる実装は採用。ただし `side_outcome_stack_fixed` gateは標準policyには採用しない。risk budgetを明示したranking/tie-breakや診断特徴として残す。
+- report: `docs/reports/00113_2026-06-29_side_outcome_stacking_features.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 07:58 Side outcome EV distribution calibration
 
 - `trade_data.meta_model side-outcome-calibration` を追加した。side別EV bucket、side confidence bucket、`combined_regime`, `session_regime` で、target mean/lower、no-edge確率、large-loss確率、wrong-side確率、EV過大評価riskをsupport-awareに出力する。
