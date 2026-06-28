@@ -2022,3 +2022,46 @@ Artifacts:
 - exit event timing targetは本流の次実験軸へ昇格する。
 - 次はvalidation 4fold用に新target入りdatasetを再生成し、従来 `pred_*_best_holding_minutes` と `pred_*_exit_event_minutes` をholding columnとして比較する。
 - 多クラス `exit_event` のprobability出力を追加し、profit/loss/time確率をgateやpenaltyに使えるようにする。
+
+### 2026-06-28 15:50 JST Exit Event Holding Validation
+
+作業:
+
+- 新target入りdataset `data/processed/datasets/xauusd_m1_p1_l1p2_exit_event/` を 2023-01 から 2025-01 まで生成した。
+- `policy` target setでHGB 80iterを再学習し、validation 4foldで従来holding columnとexit-event holding columnを比較した。
+- 多クラスclassifierについて `pred_<target>_prob_<class>` を出力するようにし、`pred_long_exit_event_prob_1` / `pred_short_exit_event_prob_1` をprofit-first gateとして使えるようにした。
+- `short_entry_threshold_offset=8,12,16,20` の拡張gridも試した。
+- report: `docs/reports/00040_2026-06-28_exit_event_holding_validation.md`
+- 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- model with exit-event class probabilities: `experiments/20260628_064332_policy_exit_event_prob_p1_l1p2/`
+- best-holding comparison: `data/reports/backtests/20260628_063841_model_candidate_selection/`
+- exit-event holding comparison: `data/reports/backtests/20260628_063856_model_candidate_selection/`
+- exit-event profit probability gate: `data/reports/backtests/20260628_064600_model_candidate_selection/`
+- short offset expansion strict: `data/reports/backtests/20260628_064844_model_candidate_selection/`
+- short offset expansion forced-exit 10% diagnostic: `data/reports/backtests/20260628_065005_model_candidate_selection/`
+
+結果:
+
+| variant | strict eligible | best cost min pnl | main failure |
+|---|---:|---:|---|
+| best holding + old barrier prob | 0 | `30.2476` | smoothed barrier miss `0.551020` |
+| exit-event holding + old barrier prob | 0 | `59.5464` | forced exit `0.097561` |
+| exit-event holding + exit-event profit prob | 0 | `75.8344` | forced exit `0.125000` |
+| exit-event holding + profit prob + short offset expansion | 0 | `75.8344` | forced exit `0.125000` |
+
+10% forced-exit diagnostic:
+
+| entry | short offset | min entry rank | profit-first threshold | cost min pnl | min trades | forced exit max | short share max | smoothed miss max |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `5` | `12` | `0.5` | `0.4` | `56.6182` | `29` | `0.081081` | `0.540541` | `0.538462` |
+| `0` | `16` | `0.5` | `0.4` | `53.2866` | `32` | `0.055556` | `0.550000` | `0.534884` |
+
+判断:
+
+- exit-event minutesはbest holding minutesより学習しやすく、validation PnL台地も押し上げる。
+- ただし、strict `max_forced_exit_rate=0.05` では採用不可。5% gateを緩めて採用するのは、まだtime-expiry riskの取り扱いが粗い。
+- `pred_*_exit_event_prob_1` はbarrier missを抑える方向に効いたため、研究信号として残す。
+- 次はholding minuteをそのまま使うのではなく、time-exit probability penalty、holding cap、hazard/survival型exit policyで強制決済率を直接下げる。

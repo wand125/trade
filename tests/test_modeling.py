@@ -228,6 +228,34 @@ class ModelingTests(unittest.TestCase):
 
         self.assertEqual(predictions["long_profit_barrier_hit"].tolist(), [0, 1])
         self.assertEqual(predictions["long_profit_barrier_hit_prob"].tolist(), [0.2, 0.7])
+        self.assertEqual(predictions["long_profit_barrier_hit_prob_0"].tolist(), [0.8, 0.3])
+        self.assertEqual(predictions["long_profit_barrier_hit_prob_1"].tolist(), [0.2, 0.7])
+
+    def test_evaluate_models_adds_multiclass_classifier_probabilities(self):
+        class MulticlassClassifier:
+            classes_ = np.array([0, 1, 2])
+
+            def predict(self, x):
+                return np.array([0, 1])
+
+            def predict_proba(self, x):
+                return np.array([[0.6, 0.3, 0.1], [0.2, 0.7, 0.1]])
+
+        frame = pd.DataFrame({"feature": [1.0, 2.0], "long_exit_event": [0, 1]})
+
+        _, predictions = evaluate_models(
+            {"long_exit_event": MulticlassClassifier()},
+            frame,
+            ["feature"],
+            regression_targets=[],
+            classification_targets=["long_exit_event"],
+        )
+
+        self.assertEqual(predictions["long_exit_event"].tolist(), [0, 1])
+        self.assertEqual(predictions["long_exit_event_prob_0"].tolist(), [0.6, 0.2])
+        self.assertEqual(predictions["long_exit_event_prob_1"].tolist(), [0.3, 0.7])
+        self.assertEqual(predictions["long_exit_event_prob_2"].tolist(), [0.1, 0.1])
+        self.assertNotIn("long_exit_event_prob", predictions)
 
     def test_prediction_frame_evaluation_metrics_uses_available_targets(self):
         frame = pd.DataFrame(

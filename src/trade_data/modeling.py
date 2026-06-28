@@ -560,6 +560,25 @@ def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, 
     }
 
 
+def classifier_probability_predictions(
+    target: str,
+    model: object,
+    x: np.ndarray,
+) -> dict[str, np.ndarray]:
+    if not hasattr(model, "predict_proba"):
+        return {}
+    classes = list(getattr(model, "classes_", []))
+    if not classes:
+        return {}
+    probabilities = model.predict_proba(x)
+    predictions: dict[str, np.ndarray] = {}
+    for class_index, class_value in enumerate(classes):
+        predictions[f"{target}_prob_{class_value}"] = probabilities[:, class_index]
+    if set(classes) <= {0, 1} and 1 in classes:
+        predictions[f"{target}_prob"] = probabilities[:, classes.index(1)]
+    return predictions
+
+
 def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd.DataFrame:
     columns = [
         "decision_timestamp",
@@ -712,10 +731,7 @@ def evaluate_models(
         pred = model.predict(x)
         predictions[target] = pred
         metrics["classification"][target] = classification_metrics(df[target].astype(int).to_numpy(), pred)
-        classes = set(getattr(model, "classes_", []))
-        if hasattr(model, "predict_proba") and classes <= {0, 1} and 1 in classes:
-            class_index = list(model.classes_).index(1)
-            predictions[f"{target}_prob"] = model.predict_proba(x)[:, class_index]
+        predictions.update(classifier_probability_predictions(target, model, x))
     return metrics, predictions
 
 
