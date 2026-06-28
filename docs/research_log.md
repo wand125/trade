@@ -2385,3 +2385,38 @@ Artifact:
 - 全体平均ではprofit-barrier確率は過小評価に見えるが、threshold `0.4` 以上のtest bucketは強く過大評価している。
 - 2024-12 holdoutでactual profit barrier missが高かった理由と整合する。
 - 次はOOF予測へこの診断を適用し、bucket崩れが単月固有か構造的かを確認する。
+
+### 2026-06-28 17:44 JST Profit Barrier OOF Representative
+
+作業:
+
+- `profit_barrier` target setを追加し、`long_profit_barrier_hit` / `short_profit_barrier_hit` だけを学習するblocked OOFを可能にした。
+- EV予測列がないtarget setでもOOF評価とreport出力が落ちないよう、selection metricsは必要列がある場合だけ計算するようにした。
+- 2024-07 / 2024-09 / 2024-11 / 2025-01 の代表4ヶ月で1ヶ月blocked OOFを実行した。
+- `profit-barrier-report` をOOF predictionへ適用した。
+- report: `docs/reports/00049_2026-06-28_profit_barrier_oof_representative.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- OOF predictions: `experiments/20260628_084318_profit_barrier_oof_representative_smoke/predictions_oof.parquet`
+- OOF metrics: `experiments/20260628_084318_profit_barrier_oof_representative_smoke/metrics.json`
+- calibration report: `data/reports/modeling/20260628_084402_profit_barrier_oof_representative_smoke/`
+
+結果:
+
+| scope | rows | actual hit | predicted mean | error |
+|---|---:|---:|---:|---:|
+| overall stacked | `238482` | `0.3734` | `0.3295` | `-0.0439` |
+| `0.4-0.6` bucket | `49088` | `0.4759` | `0.4341` | `-0.0417` |
+| `>=0.4` long | `37938` | `0.5164` | `0.4282` | `-0.0882` |
+| `>=0.4` short | `11165` | `0.3376` | `0.4545` | `0.1169` |
+| `>=0.5` long | `2149` | `0.3685` | `0.5556` | `0.1870` |
+| `>=0.5` short | `1638` | `0.3107` | `0.5196` | `0.2089` |
+
+判断:
+
+- 前回testで見た `0.4-0.6` bucketの大きな過大評価は、代表OOF全体では再現しなかった。
+- ただし short側と `>=0.5` 高信頼bucketは過大評価しており、profit-barrier確率を単純なhard gateとして採用するのは危険。
+- global calibration補正も危険。全体平均は過小評価だが、side/bucketごとに符号が違う。
+- 次は side別・bucket別・support-aware なOOF calibrationを作り、raw probabilityではなくsmoothed actual hit rate / uncertainty / supportを候補選定へ入れる。

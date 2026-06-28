@@ -251,6 +251,12 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(regression_targets, ["long_best_adjusted_pnl", "short_best_adjusted_pnl"])
         self.assertEqual(classification_targets, ["best_side"])
 
+    def test_profit_barrier_target_set_keeps_only_barrier_classifiers(self):
+        regression_targets, classification_targets = resolve_target_names("profit_barrier")
+
+        self.assertEqual(regression_targets, [])
+        self.assertEqual(classification_targets, ["long_profit_barrier_hit", "short_profit_barrier_hit"])
+
     def test_filter_available_target_names_drops_missing_research_targets(self):
         frame = pd.DataFrame(
             {
@@ -415,6 +421,24 @@ class ModelingTests(unittest.TestCase):
         self.assertIn("label", metrics["classification"])
         self.assertNotIn("best_holding_time_bin", metrics["classification"])
         self.assertEqual(metrics["selection"]["selected_trade_count"], 2)
+
+    def test_prediction_frame_evaluation_metrics_allows_no_ev_selection_columns(self):
+        frame = pd.DataFrame(
+            {
+                "long_profit_barrier_hit": [1, 0],
+                "pred_long_profit_barrier_hit": [1, 1],
+            }
+        )
+
+        metrics = prediction_frame_evaluation_metrics(
+            frame,
+            regression_targets=[],
+            classification_targets=["long_profit_barrier_hit"],
+            entry_threshold=10.0,
+        )
+
+        self.assertIn("long_profit_barrier_hit", metrics["classification"])
+        self.assertNotIn("selection", metrics)
 
     def test_apply_split_purging_removes_label_overlap(self):
         train = pd.DataFrame(

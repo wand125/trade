@@ -116,6 +116,14 @@ TARGET_SETS = {
     "full": (REGRESSION_TARGETS, CLASSIFICATION_TARGETS),
     "policy": (POLICY_REGRESSION_TARGETS, POLICY_CLASSIFICATION_TARGETS),
     "side_confidence": (EV_TARGETS, ["best_side"]),
+    "profit_barrier": ([], ["long_profit_barrier_hit", "short_profit_barrier_hit"]),
+}
+
+SELECTION_COLUMNS = {
+    "pred_long_best_adjusted_pnl",
+    "pred_short_best_adjusted_pnl",
+    "long_best_adjusted_pnl",
+    "short_best_adjusted_pnl",
 }
 
 GENERALIZATION_FEATURE_COLUMNS = [
@@ -1265,7 +1273,8 @@ def prediction_frame_evaluation_metrics(
                 pred_frame[target].astype(int).to_numpy(),
                 pred_frame[pred_column].astype(int).to_numpy(),
             )
-    metrics["selection"] = selection_metrics(pred_frame, entry_threshold)
+    if SELECTION_COLUMNS.issubset(pred_frame.columns):
+        metrics["selection"] = selection_metrics(pred_frame, entry_threshold)
     return metrics
 
 
@@ -1485,7 +1494,8 @@ def oof(args: argparse.Namespace) -> int:
         pred_frame["oof_fold"] = fold_index
         pred_frame["oof_holdout_months"] = ",".join(holdout_months)
         fold_outputs.append(pred_frame)
-        split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
+        if SELECTION_COLUMNS.issubset(pred_frame.columns):
+            split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
         fold_metrics[str(fold_index)] = {
             "holdout_months": holdout_months,
             "fit_rows_before_purge": fit_rows_before_purge,
@@ -1591,7 +1601,6 @@ def write_report(run_dir: Path, metrics: dict[str, object]) -> None:
 
 
 def write_oof_report(run_dir: Path, metrics: dict[str, object]) -> None:
-    selection = metrics["oof"]["selection"]
     lines = [
         "# HistGradientBoosting Blocked OOF Report",
         "",
@@ -1602,22 +1611,32 @@ def write_oof_report(run_dir: Path, metrics: dict[str, object]) -> None:
         f"- oof rows: {metrics['rows']['oof_predictions']}",
         f"- purge label overlap: {metrics['purge_label_overlap']}",
         f"- embargo hours: {metrics['embargo_hours']}",
-        "",
-        "## OOF Selection",
-        "",
-        "| threshold | trades | oracle-exit pnl | avg pnl | side acc | oracle upper bound |",
-        "|---:|---:|---:|---:|---:|---:|",
-        (
-            f"| {selection['entry_threshold']:.4f} | "
-            f"{selection['selected_trade_count']} | "
-            f"{selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
-            f"{selection['selected_avg_adjusted_pnl']:.4f} | "
-            f"{selection['selected_side_accuracy']:.4f} | "
-            f"{selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
-        ),
-        "",
-        "This report evaluates blocked out-of-fold predictions. It is intended for calibration and meta-model training data, not as a final executable policy score.",
     ]
+    selection = metrics["oof"].get("selection")
+    if selection:
+        lines.extend(
+            [
+                "",
+                "## OOF Selection",
+                "",
+                "| threshold | trades | oracle-exit pnl | avg pnl | side acc | oracle upper bound |",
+                "|---:|---:|---:|---:|---:|---:|",
+                (
+                    f"| {selection['entry_threshold']:.4f} | "
+                    f"{selection['selected_trade_count']} | "
+                    f"{selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{selection['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{selection['selected_side_accuracy']:.4f} | "
+                    f"{selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "This report evaluates blocked out-of-fold predictions. It is intended for calibration and meta-model training data, not as a final executable policy score.",
+        ]
+    )
     (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
