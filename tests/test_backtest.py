@@ -7,6 +7,7 @@ from trade_data.backtest import (
     BacktestConfig,
     ModelPolicyConfig,
     apply_execution_cost,
+    combined_regime_diagnostics,
     direction_session_diagnostics,
     enrich_trades_with_predictions,
     fixed_horizon_scores,
@@ -610,6 +611,14 @@ class BacktestTests(unittest.TestCase):
         self.assertTrue(pd.isna(normalized["direction_session_adjusted_pnl_min"]).sum() == 0)
         self.assertEqual(normalized["worst_direction_session"].tolist(), [""])
         self.assertEqual(normalized["worst_direction_session_trade_count"].tolist(), [0])
+        self.assertTrue(pd.isna(normalized["combined_regime_adjusted_pnl_min"]).sum() == 0)
+        self.assertEqual(normalized["worst_combined_regime"].tolist(), [""])
+        self.assertEqual(normalized["worst_combined_regime_trade_count"].tolist(), [0])
+        self.assertTrue(
+            pd.isna(normalized["direction_combined_regime_adjusted_pnl_min"]).sum() == 0
+        )
+        self.assertEqual(normalized["worst_direction_combined_regime"].tolist(), [""])
+        self.assertEqual(normalized["worst_direction_combined_regime_trade_count"].tolist(), [0])
         self.assertEqual(normalized["direction_error_rate"].tolist(), [0.0])
         self.assertEqual(normalized["predicted_side_error_rate"].tolist(), [0.0])
         self.assertEqual(normalized["no_edge_rate"].tolist(), [0.0])
@@ -848,6 +857,81 @@ class BacktestTests(unittest.TestCase):
         offset8 = summary[summary["short_entry_threshold_offset"] == 8].iloc[0]
         self.assertFalse(bool(offset6["eligible"]))
         self.assertFalse(bool(offset6["direction_session_loss_ok"]))
+        self.assertTrue(bool(offset8["eligible"]))
+        self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
+
+    def test_candidate_selection_can_gate_combined_regime_loss(self):
+        def fold(values):
+            rows = []
+            for offset, pnl, combined_pnl, direction_combined_pnl in values:
+                rows.append(
+                    {
+                        "policy": "fixed_horizon_ev",
+                        "entry_threshold": 0,
+                        "long_entry_threshold_offset": 0,
+                        "short_entry_threshold_offset": offset,
+                        "exit_threshold": 0,
+                        "side_margin": 1,
+                        "risk_penalty": 0,
+                        "max_wait_regret": 4,
+                        "min_entry_rank": 0.5,
+                        "require_profit_barrier": "True",
+                        "profit_barrier_threshold": 0.4,
+                        "extra_side_margin_rules": "session_regime=asia:5",
+                        "side_extra_margin_rules": "",
+                        "side_block_rules": "",
+                        "block_trend_regimes": "",
+                        "block_volatility_regimes": "",
+                        "block_session_regimes": "",
+                        "block_gap_regimes": "",
+                        "block_combined_regimes": "",
+                        "total_adjusted_pnl": pnl,
+                        "total_raw_pnl": pnl + 5,
+                        "trade_count": 30,
+                        "win_rate": 0.6,
+                        "max_drawdown": 40,
+                        "forced_exit_rate": 0.0,
+                        "forced_exit_count": 0,
+                        "long_adjusted_pnl": 20,
+                        "short_adjusted_pnl": 10,
+                        "combined_regime_adjusted_pnl_min": combined_pnl,
+                        "worst_combined_regime": "range_low_vol",
+                        "worst_combined_regime_trade_count": 8,
+                        "direction_combined_regime_adjusted_pnl_min": direction_combined_pnl,
+                        "worst_direction_combined_regime": "long:range_low_vol",
+                        "worst_direction_combined_regime_trade_count": 6,
+                    }
+                )
+            return pd.DataFrame(rows)
+
+        base_a = fold([(6, 46, -70, -65), (8, 32, -10, -9)])
+        base_b = fold([(6, 44, -68, -64), (8, 30, -11, -10)])
+        cost_a = fold([(6, 36, -72, -66), (8, 24, -12, -11)])
+        cost_b = fold([(6, 35, -71, -65), (8, 23, -13, -12)])
+
+        summary = summarize_candidate_selection(
+            base_frames=[base_a, base_b],
+            cost_frames=[cost_a, cost_b],
+            min_folds=2,
+            min_trades_per_fold=20,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_base_adjusted_pnl_per_fold=0.0,
+            min_cost_adjusted_pnl_per_fold=0.0,
+            max_cost_pnl_drop=20.0,
+            max_side_loss_per_fold=20.0,
+            max_combined_regime_loss_per_fold=30.0,
+            max_direction_combined_regime_loss_per_fold=30.0,
+            plateau_column="short_entry_threshold_offset",
+            plateau_radius=2.0,
+            min_plateau_neighbors=0,
+        )
+
+        offset6 = summary[summary["short_entry_threshold_offset"] == 6].iloc[0]
+        offset8 = summary[summary["short_entry_threshold_offset"] == 8].iloc[0]
+        self.assertFalse(bool(offset6["eligible"]))
+        self.assertFalse(bool(offset6["combined_regime_loss_ok"]))
+        self.assertFalse(bool(offset6["direction_combined_regime_loss_ok"]))
         self.assertTrue(bool(offset8["eligible"]))
         self.assertEqual(summary.iloc[0]["short_entry_threshold_offset"], 8)
 
@@ -1333,6 +1417,31 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(diagnostics["worst_direction_session"], "short:asia")
         self.assertEqual(diagnostics["worst_direction_session_trade_count"], 2)
         self.assertAlmostEqual(diagnostics["direction_session_adjusted_pnl_min"], -40.0)
+
+    def test_combined_regime_diagnostics_reports_worst_groups(self):
+        timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=3, freq="min")
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "long", "short"],
+                "entry_decision_timestamp": [timestamps[0], timestamps[1], timestamps[2]],
+                "adjusted_pnl": [-20.0, -5.0, -12.0],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "combined_regime": ["range_low_vol", "range_low_vol", "up_normal_vol"],
+            }
+        )
+
+        diagnostics = combined_regime_diagnostics(trades, predictions)
+
+        self.assertEqual(diagnostics["worst_combined_regime"], "range_low_vol")
+        self.assertEqual(diagnostics["worst_combined_regime_trade_count"], 2)
+        self.assertAlmostEqual(diagnostics["combined_regime_adjusted_pnl_min"], -25.0)
+        self.assertEqual(diagnostics["worst_direction_combined_regime"], "long:range_low_vol")
+        self.assertEqual(diagnostics["worst_direction_combined_regime_trade_count"], 2)
+        self.assertAlmostEqual(diagnostics["direction_combined_regime_adjusted_pnl_min"], -25.0)
 
     def test_profit_barrier_diagnostics_reports_predicted_and_actual_misses(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=3, freq="min")

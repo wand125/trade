@@ -2107,3 +2107,58 @@ Best strict candidate:
 - cap `720` は `480` よりPnLが高く、`960` 以上よりforced exitが少ないため、現時点の中心候補。
 - delay `1` 固定診断では4fold全てプラスだが、smoothed miss max `0.552632` が現行gate `0.55` を少し超えた。delay `1` はfull-grid選定前に標準採用しない。
 - 次は閾値を固定して未使用blind月へ適用する。test結果を見てcapやthresholdを再選択しない。
+
+### 2026-06-28 16:31 JST Delay 1 Combined Regime Holdout
+
+作業:
+
+- `model-sweep` metricsへ `combined_regime` / `direction:combined_regime` の最悪損益診断を追加した。
+- `model-candidate-selection` に `--max-combined-regime-loss-per-fold` と `--max-direction-combined-regime-loss-per-fold` を追加した。
+- delay `1` のvalidation 4fold full-gridを、新しい診断列入りで再生成した。
+- combined regime gateの閾値感度を確認し、`60/65` gateのtop候補を2024-12 holdoutへ固定適用した。
+- report: `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`
+- 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- no-cost sweeps: `data/reports/backtests/20260628_072504_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- cost-aware sweeps: `data/reports/backtests/20260628_072645_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- baseline support-aware selection: `data/reports/backtests/20260628_072821_model_candidate_selection/`
+- combined gate `60/60`: `data/reports/backtests/20260628_072839_model_candidate_selection/`
+- combined gate `60/65`: `data/reports/backtests/20260628_073009_model_candidate_selection/`
+- 2024-12 holdout: `data/reports/backtests/20260628_073040_model_timed_ev_2024-12/`
+- 2024-12 analysis: `data/reports/backtests/20260628_073055_holdout_2024_12_combined_gate_top/`
+
+結果:
+
+| selection | eligible | pre-plateau | top | cost min pnl |
+|---|---:|---:|---|---:|
+| baseline support-aware | `13` | `21` | `entry=5, short offset=12, cap=720` | `58.2310` |
+| combined `60/60` | `0` | `13` | n/a | n/a |
+| combined `60/65` | `3` | `16` | `entry=5, short offset=20, cap=480` | `45.4484` |
+
+2024-12 holdout:
+
+- adjusted pnl `-149.7354`
+- raw pnl `-109.3520`
+- trades `33`
+- win rate `0.4545`
+- profit factor `0.3820`
+- max drawdown `176.6504`
+- forced exits `2`
+
+失敗診断:
+
+- long adjusted pnl `-116.2186`
+- short adjusted pnl `-33.5168`
+- direction error rate `0.575758`
+- exit regret mean `16.019952`
+- EV overestimate vs realized mean `21.857830`
+- profit barrier miss trades `25`, adjusted pnl `-184.2444`
+
+判断:
+
+- combined regime gateはvalidation候補を絞るが、hard gateとして採用候補を改善しなかった。
+- 2024-12の主因はforced exitではなく、direction error、profit barrier miss、EV過大評価。
+- combined regimeはcandidate tie-break / failure analysisには使うが、標準hard gateにはしない。
+- 次はside/entry calibrationを直接扱う。特に `actual_best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。

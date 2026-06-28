@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 16:05 JST
+最終更新: 2026-06-28 16:31 JST
 
 ## 現在の状態
 
@@ -64,6 +64,8 @@ exit event holdingをvalidation 4foldで検証済み。`pred_*_exit_event_minute
 
 predicted holding capを`model-sweep`の探索軸とcandidate keyへ追加済み。`max_predicted_hold_minutes=240,480,720,960,1200,1440` の4fold sweepでは、strict `max_forced_exit_rate=0.05` でも20候補がeligibleに復活した。topは `entry=10`, `short offset=8`, `profit-first threshold=0.4`, `max hold=720` で、cost-aware min pnl `84.7072`, min trades `32`, forced exit max `0.028571`。delay `1` 固定診断でも4fold全てプラスだが、smoothed missが最大 `0.552632` と現行gate `0.55` をわずかに超えるため、まだblind-tested candidateではない。詳細は `docs/reports/00041_2026-06-28_holding_cap_sweep.md`。
 
+delay `1` full-gridを新しいcombined regime診断付きで再生成し、`combined_regime` / `direction:combined_regime` の最悪損益gateを追加済み。baseline support-aware selectionは13候補、topは `entry=5`, `short offset=12`, `max hold=720`, cost min pnl `58.2310`。combined gate `60/60` はeligible 0件、`60/65` は3件残り、topは `entry=5`, `short offset=20`, `max hold=480`, cost min pnl `45.4484`。ただしこのtopを2024-12 holdoutへ固定適用すると adjusted pnl `-149.7354`, profit factor `0.3820` と悪化したため、採用しない。詳細は `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -87,13 +89,14 @@ predicted holding capを`model-sweep`の探索軸とcandidate keyへ追加済み
 
 1. raw fixed horizon + `score_mode=max` + `profit_barrier_miss_penalty=0.0` + `min_trade_quality=-inf` を現行基準にする。
 2. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
-3. holding cap付きexit-event candidateを、閾値を固定したまま未使用blind月で検証する。
-4. delay `1` のfull-grid cost-aware candidate selectionを実行し、standard評価へ昇格できるか確認する。
-5. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
-6. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
-7. PnL, trade count, side/session loss, short share, smoothed barrier miss, forced exit, cost-aware成績を同時に満たす候補を固定する。
-8. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
-9. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
+3. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
+4. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。
+5. exit-event datasetを2025-02以降にも拡張し、候補固定後に複数blind月へ適用する。
+6. side/entry calibrationを直接扱う。`actual_best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。
+7. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
+8. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
+9. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
+10. shared representationを持つ小型MLP/TCNでmulti-task学習を試す。
 
 ## 未決定事項
 

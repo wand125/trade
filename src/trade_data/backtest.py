@@ -138,6 +138,15 @@ DIRECTION_SESSION_DIAGNOSTIC_COLUMNS = [
     "worst_direction_session_trade_count",
 ]
 
+COMBINED_REGIME_DIAGNOSTIC_COLUMNS = [
+    "combined_regime_adjusted_pnl_min",
+    "worst_combined_regime",
+    "worst_combined_regime_trade_count",
+    "direction_combined_regime_adjusted_pnl_min",
+    "worst_direction_combined_regime",
+    "worst_direction_combined_regime_trade_count",
+]
+
 SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS = [
     "long_trade_share",
     "short_trade_share",
@@ -231,6 +240,10 @@ PROFIT_BARRIER_CALIBRATION_COLUMNS = [
 COERCED_NUMERIC_DIAGNOSTIC_COLUMNS = {
     "direction_session_adjusted_pnl_min",
     "worst_direction_session_trade_count",
+    "combined_regime_adjusted_pnl_min",
+    "worst_combined_regime_trade_count",
+    "direction_combined_regime_adjusted_pnl_min",
+    "worst_direction_combined_regime_trade_count",
     *SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS,
     *TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS,
     *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
@@ -1108,32 +1121,41 @@ def attach_trade_prediction_columns(
     )
 
 
-def direction_session_diagnostics(
+def worst_group_pnl_diagnostics(
     trades: pd.DataFrame,
     predictions: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    context_columns: list[str],
+    value_column: str,
+    label_column: str,
+    count_column: str,
+    label_separator: str = ":",
 ) -> dict[str, object]:
+    default = {
+        value_column: 0.0,
+        label_column: "",
+        count_column: 0,
+    }
     if trades.empty:
+        return default
+    missing_prediction_columns = [column for column in context_columns if column not in predictions.columns]
+    if missing_prediction_columns:
         return {
-            "direction_session_adjusted_pnl_min": 0.0,
-            "worst_direction_session": "",
-            "worst_direction_session_trade_count": 0,
+            value_column: None,
+            label_column: "",
+            count_column: 0,
         }
-    if "session_regime" not in predictions.columns:
+    enriched = attach_trade_prediction_columns(trades, predictions, context_columns)
+    if any(column not in enriched.columns for column in group_columns):
         return {
-            "direction_session_adjusted_pnl_min": None,
-            "worst_direction_session": "",
-            "worst_direction_session_trade_count": 0,
-        }
-    enriched = attach_trade_prediction_columns(trades, predictions, ["session_regime"])
-    if "session_regime" not in enriched.columns:
-        return {
-            "direction_session_adjusted_pnl_min": None,
-            "worst_direction_session": "",
-            "worst_direction_session_trade_count": 0,
+            value_column: None,
+            label_column: "",
+            count_column: 0,
         }
     grouped = (
-        enriched.dropna(subset=["direction", "session_regime"])
-        .groupby(["direction", "session_regime"], dropna=False, observed=True)
+        enriched.dropna(subset=group_columns)
+        .groupby(group_columns, dropna=False, observed=True)
         .agg(
             total_adjusted_pnl=("adjusted_pnl", "sum"),
             trade_count=("adjusted_pnl", "size"),
@@ -1141,17 +1163,54 @@ def direction_session_diagnostics(
         .reset_index()
     )
     if grouped.empty:
-        return {
-            "direction_session_adjusted_pnl_min": 0.0,
-            "worst_direction_session": "",
-            "worst_direction_session_trade_count": 0,
-        }
+        return default
     worst = grouped.sort_values(["total_adjusted_pnl", "trade_count"], ascending=[True, False]).iloc[0]
+    worst_label = label_separator.join(str(worst[column]) for column in group_columns)
     return {
-        "direction_session_adjusted_pnl_min": float(worst["total_adjusted_pnl"]),
-        "worst_direction_session": f"{worst['direction']}:{worst['session_regime']}",
-        "worst_direction_session_trade_count": int(worst["trade_count"]),
+        value_column: float(worst["total_adjusted_pnl"]),
+        label_column: worst_label,
+        count_column: int(worst["trade_count"]),
     }
+
+
+def direction_session_diagnostics(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+) -> dict[str, object]:
+    return worst_group_pnl_diagnostics(
+        trades,
+        predictions,
+        group_columns=["direction", "session_regime"],
+        context_columns=["session_regime"],
+        value_column="direction_session_adjusted_pnl_min",
+        label_column="worst_direction_session",
+        count_column="worst_direction_session_trade_count",
+    )
+
+
+def combined_regime_diagnostics(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+) -> dict[str, object]:
+    combined = worst_group_pnl_diagnostics(
+        trades,
+        predictions,
+        group_columns=["combined_regime"],
+        context_columns=["combined_regime"],
+        value_column="combined_regime_adjusted_pnl_min",
+        label_column="worst_combined_regime",
+        count_column="worst_combined_regime_trade_count",
+    )
+    direction_combined = worst_group_pnl_diagnostics(
+        trades,
+        predictions,
+        group_columns=["direction", "combined_regime"],
+        context_columns=["combined_regime"],
+        value_column="direction_combined_regime_adjusted_pnl_min",
+        label_column="worst_direction_combined_regime",
+        count_column="worst_direction_combined_regime_trade_count",
+    )
+    return {**combined, **direction_combined}
 
 
 def barrier_miss_summary(
@@ -2168,6 +2227,7 @@ def run_model_policy(
     metrics["signal_short_count"] = int((signal == -1).sum())
     metrics["signal_flat_count"] = int((signal == 0).sum())
     metrics.update(direction_session_diagnostics(trades, predictions))
+    metrics.update(combined_regime_diagnostics(trades, predictions))
     metrics.update(
         trade_prediction_diagnostics(
             trades,
@@ -2631,6 +2691,18 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["worst_direction_session"] = ""
     if "worst_direction_session_trade_count" not in output.columns:
         output["worst_direction_session_trade_count"] = 0
+    if "combined_regime_adjusted_pnl_min" not in output.columns:
+        output["combined_regime_adjusted_pnl_min"] = np.inf
+    if "worst_combined_regime" not in output.columns:
+        output["worst_combined_regime"] = ""
+    if "worst_combined_regime_trade_count" not in output.columns:
+        output["worst_combined_regime_trade_count"] = 0
+    if "direction_combined_regime_adjusted_pnl_min" not in output.columns:
+        output["direction_combined_regime_adjusted_pnl_min"] = np.inf
+    if "worst_direction_combined_regime" not in output.columns:
+        output["worst_direction_combined_regime"] = ""
+    if "worst_direction_combined_regime_trade_count" not in output.columns:
+        output["worst_direction_combined_regime_trade_count"] = 0
     for column in SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS:
         if column not in output.columns:
             output[column] = 0.0
@@ -2706,6 +2778,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "forced_exit_count",
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
+        "combined_regime_adjusted_pnl_min",
+        "worst_combined_regime_trade_count",
+        "direction_combined_regime_adjusted_pnl_min",
+        "worst_direction_combined_regime_trade_count",
         *SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS,
@@ -2718,6 +2794,18 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     ].fillna(np.inf)
     output["worst_direction_session_trade_count"] = output[
         "worst_direction_session_trade_count"
+    ].fillna(0)
+    output["combined_regime_adjusted_pnl_min"] = output[
+        "combined_regime_adjusted_pnl_min"
+    ].fillna(np.inf)
+    output["worst_combined_regime_trade_count"] = output[
+        "worst_combined_regime_trade_count"
+    ].fillna(0)
+    output["direction_combined_regime_adjusted_pnl_min"] = output[
+        "direction_combined_regime_adjusted_pnl_min"
+    ].fillna(np.inf)
+    output["worst_direction_combined_regime_trade_count"] = output[
+        "worst_direction_combined_regime_trade_count"
     ].fillna(0)
     for column in SIDE_EXPOSURE_DIAGNOSTIC_COLUMNS:
         output[column] = output[column].fillna(0.0)
@@ -2738,6 +2826,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
     output["fixed_horizon_score_mode"] = output["fixed_horizon_score_mode"].fillna("max").astype(str)
     output["worst_direction_session"] = output["worst_direction_session"].fillna("").astype(str)
+    output["worst_combined_regime"] = output["worst_combined_regime"].fillna("").astype(str)
+    output["worst_direction_combined_regime"] = (
+        output["worst_direction_combined_regime"].fillna("").astype(str)
+    )
     for column in PROFIT_BARRIER_CALIBRATION_STRING_COLUMNS:
         output[column] = output[column].fillna("").astype(str)
     for field, _ in REGIME_BLOCK_FIELDS:
@@ -2799,6 +2891,10 @@ def summarize_sweep_frames(
         "execution_delay_bars",
         "direction_session_adjusted_pnl_min",
         "worst_direction_session_trade_count",
+        "combined_regime_adjusted_pnl_min",
+        "worst_combined_regime_trade_count",
+        "direction_combined_regime_adjusted_pnl_min",
+        "worst_direction_combined_regime_trade_count",
         *TRADE_ANALYSIS_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_DIAGNOSTIC_COLUMNS,
         *PROFIT_BARRIER_CALIBRATION_SUMMARY_COLUMNS,
@@ -2896,6 +2992,8 @@ def summarize_candidate_selection(
     plateau_radius: float,
     min_plateau_neighbors: int,
     max_direction_session_loss_per_fold: float = 1e100,
+    max_combined_regime_loss_per_fold: float = 1e100,
+    max_direction_combined_regime_loss_per_fold: float = 1e100,
     max_predicted_profit_barrier_miss_rate: float = 1.0,
     max_actual_profit_barrier_miss_rate: float = 1.0,
     max_profit_barrier_calibration_overestimate: float = 1.0,
@@ -2915,6 +3013,10 @@ def summarize_candidate_selection(
         raise ValueError("max_side_loss_per_fold must be non-negative")
     if max_direction_session_loss_per_fold < 0:
         raise ValueError("max_direction_session_loss_per_fold must be non-negative")
+    if max_combined_regime_loss_per_fold < 0:
+        raise ValueError("max_combined_regime_loss_per_fold must be non-negative")
+    if max_direction_combined_regime_loss_per_fold < 0:
+        raise ValueError("max_direction_combined_regime_loss_per_fold must be non-negative")
     if not 0 <= max_predicted_profit_barrier_miss_rate <= 1:
         raise ValueError("max_predicted_profit_barrier_miss_rate must be between 0 and 1")
     if not 0 <= max_actual_profit_barrier_miss_rate <= 1:
@@ -2993,6 +3095,22 @@ def summarize_candidate_selection(
         [
             "direction_session_adjusted_pnl_min_min_base",
             "direction_session_adjusted_pnl_min_min_cost",
+        ],
+        float("inf"),
+    )
+    merged["combined_regime_adjusted_pnl_min_all"] = row_min_or_default(
+        merged,
+        [
+            "combined_regime_adjusted_pnl_min_min_base",
+            "combined_regime_adjusted_pnl_min_min_cost",
+        ],
+        float("inf"),
+    )
+    merged["direction_combined_regime_adjusted_pnl_min_all"] = row_min_or_default(
+        merged,
+        [
+            "direction_combined_regime_adjusted_pnl_min_min_base",
+            "direction_combined_regime_adjusted_pnl_min_min_cost",
         ],
         float("inf"),
     )
@@ -3078,6 +3196,13 @@ def summarize_candidate_selection(
     merged["direction_session_loss_ok"] = (
         merged["direction_session_adjusted_pnl_min_all"] >= -max_direction_session_loss_per_fold
     )
+    merged["combined_regime_loss_ok"] = (
+        merged["combined_regime_adjusted_pnl_min_all"] >= -max_combined_regime_loss_per_fold
+    )
+    merged["direction_combined_regime_loss_ok"] = (
+        merged["direction_combined_regime_adjusted_pnl_min_all"]
+        >= -max_direction_combined_regime_loss_per_fold
+    )
     merged["short_trade_share_ok"] = merged["short_trade_share_max_all"] <= max_short_trade_share
     merged["side_trade_share_ok"] = merged["max_side_trade_share_max_all"] <= max_side_trade_share
     merged["predicted_profit_barrier_miss_ok"] = (
@@ -3116,6 +3241,8 @@ def summarize_candidate_selection(
         & merged["eligible_cost"].astype(bool)
         & merged["side_loss_ok"]
         & merged["direction_session_loss_ok"]
+        & merged["combined_regime_loss_ok"]
+        & merged["direction_combined_regime_loss_ok"]
         & merged["short_trade_share_ok"]
         & merged["side_trade_share_ok"]
         & merged["predicted_profit_barrier_miss_ok"]
@@ -3147,6 +3274,8 @@ def summarize_candidate_selection(
             "plateau_support_count",
             "side_adjusted_pnl_min_all",
             "direction_session_adjusted_pnl_min_all",
+            "combined_regime_adjusted_pnl_min_all",
+            "direction_combined_regime_adjusted_pnl_min_all",
             "ev_overestimate_vs_realized_mean_max_all",
             "exit_regret_mean_max_all",
             "direction_error_rate_max_all",
@@ -3162,6 +3291,8 @@ def summarize_candidate_selection(
             "cost_pnl_drop_min",
         ],
         ascending=[
+            False,
+            False,
             False,
             False,
             False,
@@ -3243,6 +3374,10 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         plateau_radius=args.plateau_radius,
         min_plateau_neighbors=args.min_plateau_neighbors,
         max_direction_session_loss_per_fold=args.max_direction_session_loss_per_fold,
+        max_combined_regime_loss_per_fold=args.max_combined_regime_loss_per_fold,
+        max_direction_combined_regime_loss_per_fold=(
+            args.max_direction_combined_regime_loss_per_fold
+        ),
         max_predicted_profit_barrier_miss_rate=args.max_predicted_profit_barrier_miss_rate,
         max_actual_profit_barrier_miss_rate=args.max_actual_profit_barrier_miss_rate,
         max_profit_barrier_calibration_overestimate=args.max_profit_barrier_calibration_overestimate,
@@ -3274,6 +3409,10 @@ def handle_model_candidate_selection(args: argparse.Namespace) -> int:
         "max_cost_pnl_drop": args.max_cost_pnl_drop,
         "max_side_loss_per_fold": args.max_side_loss_per_fold,
         "max_direction_session_loss_per_fold": args.max_direction_session_loss_per_fold,
+        "max_combined_regime_loss_per_fold": args.max_combined_regime_loss_per_fold,
+        "max_direction_combined_regime_loss_per_fold": (
+            args.max_direction_combined_regime_loss_per_fold
+        ),
         "max_predicted_profit_barrier_miss_rate": args.max_predicted_profit_barrier_miss_rate,
         "max_actual_profit_barrier_miss_rate": args.max_actual_profit_barrier_miss_rate,
         "max_profit_barrier_calibration_overestimate": args.max_profit_barrier_calibration_overestimate,
@@ -3588,6 +3727,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1e100,
         help="maximum allowed loss for any direction:session_regime group in each fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-combined-regime-loss-per-fold",
+        type=float,
+        default=1e100,
+        help="maximum allowed loss for any combined_regime group in each fold",
+    )
+    model_candidate_selection.add_argument(
+        "--max-direction-combined-regime-loss-per-fold",
+        type=float,
+        default=1e100,
+        help="maximum allowed loss for any direction:combined_regime group in each fold",
     )
     model_candidate_selection.add_argument(
         "--max-predicted-profit-barrier-miss-rate",
