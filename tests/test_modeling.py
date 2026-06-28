@@ -15,6 +15,9 @@ from trade_data.modeling import (
     parse_csv_months,
     prediction_frame,
     prediction_frame_evaluation_metrics,
+    profit_barrier_bucket_metrics,
+    profit_barrier_frame,
+    profit_barrier_group_metrics,
     regression_training_values,
     resolve_target_names,
     resolve_split_months,
@@ -92,6 +95,76 @@ class ModelingTests(unittest.TestCase):
         )
 
         buckets = side_confidence_bucket_metrics(predictions, bucket_count=5, min_confidence=0.5)
+
+        self.assertEqual(set(buckets["prediction_split"]), {"valid", "test"})
+        self.assertTrue((buckets["rows"] > 0).all())
+
+    def test_profit_barrier_frame_stacks_long_and_short_probabilities(self):
+        predictions = pd.DataFrame(
+            {
+                "long_profit_barrier_hit": [1, 0],
+                "short_profit_barrier_hit": [0, 1],
+                "pred_long_profit_barrier_hit_prob_1": [0.8, 0.6],
+                "pred_short_profit_barrier_hit_prob_1": [0.2, 0.7],
+                "dataset_month": ["2024-01", "2024-01"],
+            }
+        )
+
+        output = profit_barrier_frame(predictions)
+
+        self.assertEqual(len(output), 4)
+        self.assertEqual(output["barrier_side"].tolist(), ["long", "long", "short", "short"])
+        self.assertEqual(output["profit_barrier_actual"].tolist(), [1.0, 0.0, 0.0, 1.0])
+        self.assertEqual(output["profit_barrier_probability"].tolist(), [0.8, 0.6, 0.2, 0.7])
+
+    def test_profit_barrier_group_metrics_exposes_overestimate(self):
+        predictions = pd.DataFrame(
+            {
+                "long_profit_barrier_hit": [1, 0, 0],
+                "short_profit_barrier_hit": [0, 0, 1],
+                "pred_long_profit_barrier_hit_prob_1": [0.9, 0.8, 0.7],
+                "pred_short_profit_barrier_hit_prob_1": [0.4, 0.6, 0.6],
+                "dataset_month": ["2024-01", "2024-01", "2024-02"],
+            }
+        )
+
+        metrics = profit_barrier_group_metrics(
+            predictions,
+            ["dataset_month", "barrier_side"],
+            min_rows=1,
+            threshold=0.5,
+        )
+        month_1 = metrics.loc[
+            (metrics["group_key"] == "dataset_month") & (metrics["group_value"] == "2024-01")
+        ].iloc[0]
+        long_side = metrics.loc[
+            (metrics["group_key"] == "barrier_side") & (metrics["group_value"] == "long")
+        ].iloc[0]
+
+        self.assertEqual(int(month_1["rows"]), 4)
+        self.assertAlmostEqual(month_1["actual_hit_rate"], 0.25)
+        self.assertAlmostEqual(month_1["predicted_probability_mean"], 0.675)
+        self.assertAlmostEqual(month_1["overestimate"], 0.425)
+        self.assertEqual(int(long_side["rows"]), 3)
+        self.assertAlmostEqual(long_side["predicted_hit_rate"], 1.0)
+
+    def test_profit_barrier_bucket_metrics_groups_by_split_when_available(self):
+        predictions = pd.DataFrame(
+            {
+                "long_profit_barrier_hit": [1, 0, 0],
+                "short_profit_barrier_hit": [0, 1, 0],
+                "pred_long_profit_barrier_hit_prob_1": [0.9, 0.3, 0.55],
+                "pred_short_profit_barrier_hit_prob_1": [0.1, 0.8, 0.45],
+                "prediction_split": ["valid", "valid", "test"],
+            }
+        )
+
+        buckets = profit_barrier_bucket_metrics(
+            predictions,
+            bucket_count=5,
+            min_probability=0.0,
+            threshold=0.5,
+        )
 
         self.assertEqual(set(buckets["prediction_split"]), {"valid", "test"})
         self.assertTrue((buckets["rows"] > 0).all())

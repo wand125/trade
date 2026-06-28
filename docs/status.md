@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 17:30 JST
+最終更新: 2026-06-28 17:36 JST
 
 ## 現在の状態
 
@@ -76,6 +76,8 @@ regime-aware side-confidence penalty ruleを追加済み。`--side-confidence-pe
 
 candidate selectionへ group-loss soft ranking penaltyを追加済み。`--group-loss-penalty-weight` は side / direction-session / combined-regime / direction-combined-regime の最悪損失深さを合算し、eligible候補の `robust_total_adjusted_pnl_min_cost` を下げて順位付けする。delay `1` 4fold smokeではtopが `entry=5, short offset=12, max hold=720` から `entry=5, short offset=20, max hold=720` へ変わり、2024-12 holdoutは `-149.7354` から `-126.0770` へ改善したがNoTradeには大きく負けた。採用ではなく診断/tie-break軸に留める。詳細は `docs/reports/00047_2026-06-28_group_loss_penalty_ranking.md`。
 
+`profit-barrier-report` を追加済み。prediction parquet全体をlong/short縦持ちにし、profit-barrier確率のactual hit rate、overestimate、Brier scoreをsplit/月/regime/bucket別に見られる。exit-event probabilityモデルのvalid+test smokeでは全体は actual hit `0.3661` / predicted mean `0.3299` でやや過小評価だが、testの `0.4-0.6` bucketは actual hit `0.1807` / predicted mean `0.4447` で強く過大評価。threshold `0.4` gateの危険性が確認された。詳細は `docs/reports/00048_2026-06-28_profit_barrier_prediction_calibration.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなく本文内の `日時` と通し番号を参照する。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -102,7 +104,7 @@ candidate selectionへ group-loss soft ranking penaltyを追加済み。`--group
 3. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
 4. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。
 5. exit-event datasetを2025-02以降にも拡張し、候補固定後に複数blind月へ適用する。
-6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。
+6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。profit barrierは全体平均ではなくbucket別actual hit rateを必ず確認する。
 7. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
 8. `side-confidence-report` をより広いwalk-forward OOF予測へ適用し、representative smokeの過大確信が安定して出るか確認する。
 9. side-confidence penalty tuningは、まずviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。

@@ -818,7 +818,195 @@ def side_confidence_bucket_metrics(
     return pd.DataFrame(rows)
 
 
-def load_side_confidence_predictions(paths: list[Path]) -> pd.DataFrame:
+def profit_barrier_frame(
+    predictions: pd.DataFrame,
+    long_actual_column: str = "long_profit_barrier_hit",
+    short_actual_column: str = "short_profit_barrier_hit",
+    long_probability_column: str = "pred_long_profit_barrier_hit_prob_1",
+    short_probability_column: str = "pred_short_profit_barrier_hit_prob_1",
+) -> pd.DataFrame:
+    required_columns = [
+        long_actual_column,
+        short_actual_column,
+        long_probability_column,
+        short_probability_column,
+    ]
+    missing_columns = [column for column in required_columns if column not in predictions.columns]
+    if missing_columns:
+        raise ValueError(f"missing profit barrier columns: {', '.join(missing_columns)}")
+
+    metadata_columns = [
+        column
+        for column in [
+            "prediction_file",
+            "prediction_split",
+            "decision_timestamp",
+            "entry_timestamp",
+            "dataset_month",
+            *REGIME_COLUMNS,
+        ]
+        if column in predictions.columns
+    ]
+    frames: list[pd.DataFrame] = []
+    for side, actual_column, probability_column in [
+        ("long", long_actual_column, long_probability_column),
+        ("short", short_actual_column, short_probability_column),
+    ]:
+        side_frame = predictions[metadata_columns].copy()
+        side_frame["barrier_side"] = side
+        side_frame["profit_barrier_actual"] = predictions[actual_column].astype(float)
+        side_frame["profit_barrier_probability"] = predictions[probability_column].astype(float)
+        frames.append(side_frame)
+    output = pd.concat(frames, ignore_index=True)
+    return output.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=["profit_barrier_actual", "profit_barrier_probability"]
+    )
+
+
+def profit_barrier_summary_row(
+    frame: pd.DataFrame,
+    group_key: str,
+    group_value: str,
+    threshold: float,
+) -> dict[str, object]:
+    if frame.empty:
+        return {
+            "group_key": group_key,
+            "group_value": group_value,
+            "rows": 0,
+            "actual_hit_rate": 0.0,
+            "predicted_probability_mean": 0.0,
+            "predicted_probability_median": 0.0,
+            "calibration_error": 0.0,
+            "overestimate": 0.0,
+            "underestimate": 0.0,
+            "brier_score": 0.0,
+            "predicted_hit_rate": 0.0,
+            "threshold_accuracy": 0.0,
+            "long_side_share": 0.0,
+        }
+    actual = frame["profit_barrier_actual"].astype(float)
+    probability = frame["profit_barrier_probability"].astype(float).clip(0.0, 1.0)
+    actual_hit_rate = float(actual.mean())
+    probability_mean = float(probability.mean())
+    calibration_error = probability_mean - actual_hit_rate
+    predicted_hit = probability >= threshold
+    actual_hit = actual >= 0.5
+    return {
+        "group_key": group_key,
+        "group_value": group_value,
+        "rows": int(len(frame)),
+        "actual_hit_rate": actual_hit_rate,
+        "predicted_probability_mean": probability_mean,
+        "predicted_probability_median": float(probability.median()),
+        "calibration_error": float(calibration_error),
+        "overestimate": float(max(calibration_error, 0.0)),
+        "underestimate": float(max(-calibration_error, 0.0)),
+        "brier_score": float(((probability - actual) ** 2).mean()),
+        "predicted_hit_rate": float(predicted_hit.mean()),
+        "threshold_accuracy": float((predicted_hit == actual_hit).mean()),
+        "long_side_share": float((frame["barrier_side"] == "long").mean()),
+    }
+
+
+def profit_barrier_group_metrics(
+    predictions: pd.DataFrame,
+    group_columns: list[str],
+    min_rows: int = 1,
+    threshold: float = 0.5,
+    long_actual_column: str = "long_profit_barrier_hit",
+    short_actual_column: str = "short_profit_barrier_hit",
+    long_probability_column: str = "pred_long_profit_barrier_hit_prob_1",
+    short_probability_column: str = "pred_short_profit_barrier_hit_prob_1",
+) -> pd.DataFrame:
+    frame = profit_barrier_frame(
+        predictions,
+        long_actual_column=long_actual_column,
+        short_actual_column=short_actual_column,
+        long_probability_column=long_probability_column,
+        short_probability_column=short_probability_column,
+    )
+    rows = [profit_barrier_summary_row(frame, "overall", "all", threshold)]
+    available_columns = [column for column in group_columns if column in frame.columns]
+    for column in available_columns:
+        grouped = frame.groupby(column, dropna=False, sort=True)
+        for value, group in grouped:
+            if len(group) >= min_rows:
+                rows.append(profit_barrier_summary_row(group, column, str(value), threshold))
+    if "prediction_split" in frame.columns:
+        for column in available_columns:
+            if column == "prediction_split":
+                continue
+            grouped = frame.groupby(["prediction_split", column], dropna=False, sort=True)
+            for (split, value), group in grouped:
+                if len(group) >= min_rows:
+                    rows.append(
+                        profit_barrier_summary_row(
+                            group,
+                            f"prediction_split:{column}",
+                            f"{split}|{value}",
+                            threshold,
+                        )
+                    )
+    return pd.DataFrame(rows)
+
+
+def profit_barrier_bucket_metrics(
+    predictions: pd.DataFrame,
+    bucket_count: int = 5,
+    min_probability: float = 0.0,
+    threshold: float = 0.5,
+    long_actual_column: str = "long_profit_barrier_hit",
+    short_actual_column: str = "short_profit_barrier_hit",
+    long_probability_column: str = "pred_long_profit_barrier_hit_prob_1",
+    short_probability_column: str = "pred_short_profit_barrier_hit_prob_1",
+) -> pd.DataFrame:
+    if bucket_count <= 0:
+        raise ValueError("bucket_count must be positive")
+    if not 0 <= min_probability < 1:
+        raise ValueError("min_probability must be in [0, 1)")
+    frame = profit_barrier_frame(
+        predictions,
+        long_actual_column=long_actual_column,
+        short_actual_column=short_actual_column,
+        long_probability_column=long_probability_column,
+        short_probability_column=short_probability_column,
+    )
+    edges = np.linspace(min_probability, 1.0, bucket_count + 1)
+    bucket_indexes = np.searchsorted(edges, frame["profit_barrier_probability"], side="right") - 1
+    frame = frame.copy()
+    frame["probability_bucket_index"] = np.clip(bucket_indexes, 0, bucket_count - 1)
+    rows: list[dict[str, object]] = []
+    grouping_columns = ["probability_bucket_index"]
+    if "prediction_split" in frame.columns:
+        grouping_columns = ["prediction_split", "probability_bucket_index"]
+    for keys, group in frame.groupby(grouping_columns, dropna=False, sort=True):
+        if isinstance(keys, tuple):
+            split, bucket_index = keys
+        else:
+            split, bucket_index = "all", keys
+        bucket_index = int(bucket_index)
+        lower = float(edges[bucket_index])
+        upper = float(edges[bucket_index + 1])
+        row = profit_barrier_summary_row(
+            group,
+            "probability_bucket",
+            f"{lower:.2f}-{upper:.2f}",
+            threshold,
+        )
+        row.update(
+            {
+                "prediction_split": str(split),
+                "bucket_index": bucket_index,
+                "bucket_lower": lower,
+                "bucket_upper": upper,
+            }
+        )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def load_report_predictions(paths: list[Path]) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
     for path in paths:
         frame = pd.read_parquet(path)
@@ -835,7 +1023,7 @@ def parse_csv_strings(value: str) -> list[str]:
 
 
 def handle_side_confidence_report(args: argparse.Namespace) -> int:
-    predictions = load_side_confidence_predictions(args.predictions)
+    predictions = load_report_predictions(args.predictions)
     group_columns = parse_csv_strings(args.group_columns)
     group_metrics = side_confidence_group_metrics(
         predictions,
@@ -863,6 +1051,61 @@ def handle_side_confidence_report(args: argparse.Namespace) -> int:
         "min_group_rows": args.min_group_rows,
         "bucket_count": args.bucket_count,
         "min_confidence": args.min_confidence,
+        "overall": group_metrics.iloc[0].to_dict(),
+        "worst_groups": worst_groups.to_dict(orient="records"),
+    }
+    with (output_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2)
+    print(json.dumps(summary["overall"], ensure_ascii=False, indent=2))
+    print(f"artifacts: {output_dir}")
+    return 0
+
+
+def handle_profit_barrier_report(args: argparse.Namespace) -> int:
+    predictions = load_report_predictions(args.predictions)
+    group_columns = parse_csv_strings(args.group_columns)
+    group_metrics = profit_barrier_group_metrics(
+        predictions,
+        group_columns,
+        min_rows=args.min_group_rows,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column=args.long_probability_column,
+        short_probability_column=args.short_probability_column,
+    )
+    bucket_metrics = profit_barrier_bucket_metrics(
+        predictions,
+        bucket_count=args.bucket_count,
+        min_probability=args.min_probability,
+        threshold=args.threshold,
+        long_actual_column=args.long_actual_column,
+        short_actual_column=args.short_actual_column,
+        long_probability_column=args.long_probability_column,
+        short_probability_column=args.short_probability_column,
+    )
+    eligible_groups = group_metrics.loc[group_metrics["rows"] >= args.min_group_rows].copy()
+    worst_groups = eligible_groups.sort_values(
+        ["overestimate", "rows"],
+        ascending=[False, False],
+    ).head(args.top_n)
+    output_dir = make_run_dir(args.output_dir, args.label or "profit_barrier_report")
+    group_metrics.to_csv(output_dir / "group_metrics.csv", index=False)
+    bucket_metrics.to_csv(output_dir / "bucket_metrics.csv", index=False)
+    worst_groups.to_csv(output_dir / "worst_groups.csv", index=False)
+    summary = {
+        "prediction_files": [str(path) for path in args.predictions],
+        "rows": int(len(predictions)),
+        "stacked_rows": int(group_metrics.iloc[0]["rows"]),
+        "group_columns": group_columns,
+        "min_group_rows": args.min_group_rows,
+        "bucket_count": args.bucket_count,
+        "min_probability": args.min_probability,
+        "threshold": args.threshold,
+        "long_actual_column": args.long_actual_column,
+        "short_actual_column": args.short_actual_column,
+        "long_probability_column": args.long_probability_column,
+        "short_probability_column": args.short_probability_column,
         "overall": group_metrics.iloc[0].to_dict(),
         "worst_groups": worst_groups.to_dict(orient="records"),
     }
@@ -1520,6 +1763,41 @@ def build_parser() -> argparse.ArgumentParser:
     side_confidence_report.add_argument("--min-confidence", type=float, default=0.5)
     side_confidence_report.add_argument("--top-n", type=int, default=20)
     side_confidence_report.set_defaults(func=handle_side_confidence_report)
+
+    profit_barrier_report = subparsers.add_parser(
+        "profit-barrier-report",
+        help="summarize profit-barrier hit probability calibration from saved predictions",
+    )
+    profit_barrier_report.add_argument(
+        "--predictions",
+        type=Path,
+        action="append",
+        required=True,
+        help="prediction parquet; pass multiple times to combine valid/test/OOF files",
+    )
+    profit_barrier_report.add_argument("--output-dir", type=Path, default=Path("data/reports/modeling"))
+    profit_barrier_report.add_argument("--label", default="profit_barrier_report")
+    profit_barrier_report.add_argument(
+        "--group-columns",
+        default="prediction_split,dataset_month,barrier_side,session_regime,volatility_regime,trend_regime,combined_regime",
+        help="comma-separated columns to summarize independently",
+    )
+    profit_barrier_report.add_argument("--min-group-rows", type=int, default=100)
+    profit_barrier_report.add_argument("--bucket-count", type=int, default=5)
+    profit_barrier_report.add_argument("--min-probability", type=float, default=0.0)
+    profit_barrier_report.add_argument("--threshold", type=float, default=0.5)
+    profit_barrier_report.add_argument("--long-actual-column", default="long_profit_barrier_hit")
+    profit_barrier_report.add_argument("--short-actual-column", default="short_profit_barrier_hit")
+    profit_barrier_report.add_argument(
+        "--long-probability-column",
+        default="pred_long_profit_barrier_hit_prob_1",
+    )
+    profit_barrier_report.add_argument(
+        "--short-probability-column",
+        default="pred_short_profit_barrier_hit_prob_1",
+    )
+    profit_barrier_report.add_argument("--top-n", type=int, default=20)
+    profit_barrier_report.set_defaults(func=handle_profit_barrier_report)
     return parser
 
 

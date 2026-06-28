@@ -2356,3 +2356,32 @@ Artifacts:
 - group-loss soft rankingは、validation内で深いgroup損失を持つ候補の順位を下げられる。
 - 2024-12 holdout損失は縮んだが、NoTradeには大きく負けるため採用しない。
 - 引き続き、中心課題はentry/side calibrationとprofit-barrier hit calibration。group-loss penaltyは候補比較の補助軸に留める。
+
+### 2026-06-28 17:36 JST Profit Barrier Prediction Calibration
+
+作業:
+
+- `trade_data.modeling profit-barrier-report` を追加した。
+- prediction parquet全体をlong/short縦持ちにして、actual hit rate / predicted mean / overestimate / Brier scoreをsplit・月・regime・bucket別に集計できるようにした。
+- `experiments/20260628_064332_policy_exit_event_prob_p1_l1p2/` のvalid/test predictionsでsmoke診断した。
+- report: `docs/reports/00048_2026-06-28_profit_barrier_prediction_calibration.md`
+- 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifact:
+
+- `data/reports/modeling/20260628_083635_profit_barrier_valid_test_exit_event_prob/`
+
+結果:
+
+| scope | rows | actual hit | predicted mean | overestimate |
+|---|---:|---:|---:|---:|
+| overall | `288030` | `0.3661` | `0.3299` | `0.0000` |
+| test `0.4-0.6` bucket | `9481` | `0.1807` | `0.4447` | `0.2640` |
+| test `0.6-0.8` bucket | `63` | `0.1905` | `0.6216` | `0.4311` |
+| valid `0.60-0.80` bucket | `419` | `0.2267` | `0.6231` | `0.3964` |
+
+判断:
+
+- 全体平均ではprofit-barrier確率は過小評価に見えるが、threshold `0.4` 以上のtest bucketは強く過大評価している。
+- 2024-12 holdoutでactual profit barrier missが高かった理由と整合する。
+- 次はOOF予測へこの診断を適用し、bucket崩れが単月固有か構造的かを確認する。
