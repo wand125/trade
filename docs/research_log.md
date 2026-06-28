@@ -2065,3 +2065,45 @@ Artifacts:
 - ただし、strict `max_forced_exit_rate=0.05` では採用不可。5% gateを緩めて採用するのは、まだtime-expiry riskの取り扱いが粗い。
 - `pred_*_exit_event_prob_1` はbarrier missを抑える方向に効いたため、研究信号として残す。
 - 次はholding minuteをそのまま使うのではなく、time-exit probability penalty、holding cap、hazard/survival型exit policyで強制決済率を直接下げる。
+
+### 2026-06-28 16:05 JST Holding Cap Sweep
+
+作業:
+
+- `model-sweep` の `--min-predicted-hold-minutes` / `--max-predicted-hold-minutes` をCSV grid対応にした。
+- `min_predicted_hold_minutes` / `max_predicted_hold_minutes` をcandidate keyへ追加し、cap違いの候補がfold集計で混ざらないようにした。
+- exit-event holding + profit-first probability gateのvalidation 4foldで、`max_predicted_hold_minutes=240,480,720,960,1200,1440` を比較した。
+- report: `docs/reports/00041_2026-06-28_holding_cap_sweep.md`
+- 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
+
+Artifacts:
+
+- no-cost sweeps: `data/reports/backtests/20260628_065828_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- cost-aware sweeps: `data/reports/backtests/20260628_065950_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- strict candidate selection: `data/reports/backtests/20260628_070227_model_candidate_selection/`
+- 10% forced-exit diagnostic: `data/reports/backtests/20260628_070240_model_candidate_selection/`
+- delay `1` fixed top diagnostic: `data/reports/backtests/20260628_070518_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+
+結果:
+
+| forced-exit gate | eligible | best cost min pnl | best base min pnl | min trades | forced exit max | best cap |
+|---:|---:|---:|---:|---:|---:|---:|
+| `0.05` | `20` | `84.7072` | `92.2774` | `32` | `0.028571` | `720` |
+| `0.10` | `29` | `84.7072` | `92.2774` | `32` | `0.028571` | `720` |
+
+Best strict candidate:
+
+- `policy=timed_ev`
+- `entry_threshold=10`
+- `short_entry_threshold_offset=8`
+- `profit_barrier_threshold=0.4`
+- `max_predicted_hold_minutes=720`
+- cost-aware fold pnl: `151.2868`, `98.1128`, `87.6574`, `84.7072`
+- cost-aware min trades `32`, max drawdown `80.4432`, max forced exit rate `0.028571`
+
+判断:
+
+- holding capはforced-exit問題に直接効き、strict gateを緩めずに候補を復活させた。
+- cap `720` は `480` よりPnLが高く、`960` 以上よりforced exitが少ないため、現時点の中心候補。
+- delay `1` 固定診断では4fold全てプラスだが、smoothed miss max `0.552632` が現行gate `0.55` を少し超えた。delay `1` はfull-grid選定前に標準採用しない。
+- 次は閾値を固定して未使用blind月へ適用する。test結果を見てcapやthresholdを再選択しない。

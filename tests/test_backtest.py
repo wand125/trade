@@ -600,6 +600,8 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["long_entry_threshold_offset"].tolist(), [0.0])
         self.assertEqual(normalized["short_entry_threshold_offset"].tolist(), [0.0])
         self.assertEqual(normalized["max_wait_regret"].tolist(), [float("inf")])
+        self.assertEqual(normalized["min_predicted_hold_minutes"].tolist(), [1.0])
+        self.assertEqual(normalized["max_predicted_hold_minutes"].tolist(), [1440.0])
         self.assertEqual(normalized["min_entry_rank"].tolist(), [0.0])
         self.assertEqual(normalized["require_profit_barrier"].tolist(), [False])
         self.assertEqual(normalized["profit_barrier_threshold"].tolist(), [0.5])
@@ -626,6 +628,41 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["block_combined_regimes"].tolist(), [""])
         self.assertEqual(normalized["sweep_source"].tolist(), ["fold_a"])
         self.assertAlmostEqual(normalized["forced_exit_rate"].iloc[0], 0.25)
+
+    def test_sweep_summary_keeps_predicted_hold_cap_as_key(self):
+        def fold(long_cap_pnl, short_cap_pnl):
+            return pd.DataFrame(
+                {
+                    "policy": ["timed_ev", "timed_ev"],
+                    "entry_threshold": [10, 10],
+                    "exit_threshold": [0, 0],
+                    "side_margin": [1, 1],
+                    "max_predicted_hold_minutes": [720, 1440],
+                    "total_adjusted_pnl": [long_cap_pnl, short_cap_pnl],
+                    "total_raw_pnl": [long_cap_pnl + 5, short_cap_pnl + 5],
+                    "trade_count": [20, 20],
+                    "win_rate": [0.6, 0.6],
+                    "max_drawdown": [20, 20],
+                    "forced_exit_rate": [0.0, 0.0],
+                    "forced_exit_count": [0, 0],
+                }
+            )
+
+        summary = summarize_sweep_frames(
+            [fold(30, 10), fold(25, 15)],
+            min_folds=2,
+            min_trades_per_fold=10,
+            max_forced_exit_rate=0.0,
+            max_drawdown=100.0,
+            min_adjusted_pnl_per_fold=0.0,
+            sort_by="min_pnl",
+        )
+
+        self.assertEqual(len(summary), 2)
+        self.assertEqual(summary.iloc[0]["max_predicted_hold_minutes"], 720)
+        self.assertAlmostEqual(summary.iloc[0]["total_adjusted_pnl_min"], 25.0)
+        self.assertEqual(summary.iloc[1]["max_predicted_hold_minutes"], 1440)
+        self.assertAlmostEqual(summary.iloc[1]["total_adjusted_pnl_min"], 10.0)
 
     def test_sweep_summary_selects_mean_pnl_under_fold_constraints(self):
         fold_a = pd.DataFrame(

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 15:50 JST
+最終更新: 2026-06-28 16:05 JST
 
 ## 現在の状態
 
@@ -62,6 +62,8 @@ exit event timing targetを追加済み。side別に `time_exit/profit_first/los
 
 exit event holdingをvalidation 4foldで検証済み。`pred_*_exit_event_minutes` は従来 `pred_*_best_holding_minutes` よりcost min pnlの上限を `30.2476` から `75.8344` へ押し上げたが、strict `max_forced_exit_rate=0.05` ではeligible 0件。多クラスclassifierの `pred_*_exit_event_prob_<class>` 出力を追加し、profit-first class `1` をgateに使うとsmoothed missは改善した。診断として `max_forced_exit_rate=0.10` なら2候補が残るが、採用基準はまだ緩めない。詳細は `docs/reports/00040_2026-06-28_exit_event_holding_validation.md`。
 
+predicted holding capを`model-sweep`の探索軸とcandidate keyへ追加済み。`max_predicted_hold_minutes=240,480,720,960,1200,1440` の4fold sweepでは、strict `max_forced_exit_rate=0.05` でも20候補がeligibleに復活した。topは `entry=10`, `short offset=8`, `profit-first threshold=0.4`, `max hold=720` で、cost-aware min pnl `84.7072`, min trades `32`, forced exit max `0.028571`。delay `1` 固定診断でも4fold全てプラスだが、smoothed missが最大 `0.552632` と現行gate `0.55` をわずかに超えるため、まだblind-tested candidateではない。詳細は `docs/reports/00041_2026-06-28_holding_cap_sweep.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -85,9 +87,9 @@ exit event holdingをvalidation 4foldで検証済み。`pred_*_exit_event_minute
 
 1. raw fixed horizon + `score_mode=max` + `profit_barrier_miss_penalty=0.0` + `min_trade_quality=-inf` を現行基準にする。
 2. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
-3. exit-event holdingはstrict採用しない。`pred_*_exit_event_minutes` / `pred_*_exit_event_prob_1` は研究信号として残し、time-expiry riskを下げる設計に進む。
-4. forced exitを減らすため、predicted holdingの上限cap、time-exit probability penalty、hazard/survival型exit policyを比較する。
-5. cost-aware評価を主目的にした候補選定基準を再固定する。spread `0.1` / slippage `0.05` / delay `1` を通常評価へ昇格するか検討する。
+3. holding cap付きexit-event candidateを、閾値を固定したまま未使用blind月で検証する。
+4. delay `1` のfull-grid cost-aware candidate selectionを実行し、standard評価へ昇格できるか確認する。
+5. time-exit probability penalty、hazard/survival型exit policyをholding capと比較する。
 6. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
 7. PnL, trade count, side/session loss, short share, smoothed barrier miss, forced exit, cost-aware成績を同時に満たす候補を固定する。
 8. train OOFを月単位またはwalk-forward OOFに細分化し、4ヶ月blocked OOF依存を確認する。
@@ -213,6 +215,8 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00037_2026-06-28_selected_trade_quality_calibration.md`
 - `docs/reports/00038_2026-06-28_selected_trade_quality_model.md`
 - `docs/reports/00039_2026-06-28_exit_event_timing_targets.md`
+- `docs/reports/00040_2026-06-28_exit_event_holding_validation.md`
+- `docs/reports/00041_2026-06-28_holding_cap_sweep.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
 - `experiments/20260628_062101_exit_event_target_smoke/`
