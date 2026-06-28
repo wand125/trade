@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 05:48 JST
+最終更新: 2026-06-29 06:04 JST
 
 ## 現在の状態
 
@@ -180,6 +180,8 @@ exit time-bin classifier由来のholding派生列を追加済み。`pred_*_exit_
 
 normal-vol / time-session risk ruleを代表4ヶ月validationで検証済み。`model-candidate-selection` のカテゴリplateau列バグを修正し、`side_ev_penalty_rules` をplateau columnにしても落ちないようにした。normal-vol short直接減点 (`short_norm5/10`) はhigh cost最低月がマイナスへ落ち、台地なし。`time5` はhigh cost min pnlを `120.5842 -> 125.4900` に小改善したが、base/cost sumを削るため標準昇格しない。`long_range5` も診断候補止まり。詳細は `docs/reports/00101_2026-06-29_normal_time_risk_validation.md`。
 
+candidate-entry failure targetをsession/regime別に拡張済み。`large_loss`, `wrong_side`, `range_normal_vol_selected_failure`, `normal_vol_selected_failure`, `time_session_selected_failure`, `any_failure` を `oof-candidate-failure-model` へ追加した。CLI defaultは互換性維持のため従来通り `large_adverse` のまま。validation OOFでは `normal_vol_selected_failure` がAUC `0.6418` と薄く使えそうに見え、policy接続でもbase/high cost validationを小改善したが、2024-12 / 2025-02 / 2025-03 / 2025-04 holdout baseではrisk `20` が全月で悪化し、sum pnl `-105.0100 -> -183.7474`, max DD `474.6194 -> 516.4888`。標準採用しない。詳細は `docs/reports/00102_2026-06-29_candidate_failure_regime_session_targets.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -208,7 +210,7 @@ normal-vol / time-session risk ruleを代表4ヶ月validationで検証済み。`
 5. exit-event datasetとlog exit minutes targetを複数foldへ拡張し、候補固定後に複数blind月へ適用する。
 6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。profit barrierは全体平均ではなくside別・bucket別actual hit rateとsupportを必ず確認する。
 7. exit-event probability penalty、holding shrink単独、両者の小grid、dynamic / hazard-like exit threshold、side-confidence hard/min gateはいずれも標準採用しない。探索軸として残す。
-8. exit timingの複数fold比較では `bin_expected cap=480` がvalidation暫定最上位だったが、固定holdout stressで2025-04が大きく崩れたため標準昇格しない。normal-vol / rollover / ny_late risk ruleのvalidationでは、normal-vol short直接減点は台地なし、`time5` と `long_range5` は診断候補止まり。次はrule追加ではなくsession/regime別の選択失敗を教師化する。log-derived比較用にはdataset/train artifactを再生成する。
+8. exit timingの複数fold比較では `bin_expected cap=480` がvalidation暫定最上位だったが、固定holdout stressで2025-04が大きく崩れたため標準昇格しない。normal-vol / rollover / ny_late risk ruleのvalidationでは、normal-vol short直接減点は台地なし、`time5` と `long_range5` は診断候補止まり。session/regime別の選択失敗targetもvalidation小改善後にholdoutで悪化したため、分類probability直結は採用しない。次はcandidate rowの連続的なrealizable PnL / lower quantile / calibrated downsideを月別prevalence shift込みで扱う。log-derived比較用にはdataset/train artifactを再生成する。
 9. `target-set side_confidence` との同一月比較は完了。専用化だけでは改善せず、`month_target` もvalidationを壊したため、side-confidence hard/min gate探索は止めてOOF calibration/diagnosticへ戻す。
 10. side-confidence penalty tuningは、calibration改善後にviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。shared representationを持つMLP/TCNを試す場合は、HGBのtarget独立fitでは得られない表現共有が本当に効くかを検証点にする。
 11. diagnostic gate、group-loss penalty、diagnostic soft penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。diagnostic soft penaltyの今回topは2024-12で悪化したため、標準policyへ昇格しない。
@@ -248,6 +250,7 @@ normal-vol / time-session risk ruleを代表4ヶ月validationで検証済み。`
 45. 2025-04未使用holdoutでは、MLP exit minutesが負方向へ外挿破綻して高回転化した。HGB holding fallbackでもNoTradeに負けるため、exit timing targetとentry/side EVの両方に月外汎化問題がある。
 46. `timed_ev` holding guard、log exit minutes target、time-bin由来holding列は実装済み。既存4foldでは `bin_expected cap=480` がbase/high costで最上位だったが、固定holdoutでは `raw_event cap=480` より悪く、2025-04でNoTradeに大きく負けた。log-derivedは未比較なので、log対応artifact再生成は別途行う。
 47. `model-candidate-selection` のplateau supportは、数値列だけでなくカテゴリrule set列にも対応済み。文字列plateauは同一カテゴリのeligible supportを数える。現時点では `side_ev_penalty_rules` のカテゴリplateauを採用条件には使わず、候補比較の互換修正として扱う。
+48. candidate-entry failure targetは `large_adverse` 以外にも拡張済み。ただし `normal_vol_selected_failure` riskはholdoutで悪化し、`wrong_side` / `time_session_selected_failure` はOOFで逆相関寄り。分類targetをentry scoreへ直接penalty接続する方向は標準採用せず、診断特徴として残す。
 
 ## 未決定事項
 
@@ -258,6 +261,8 @@ normal-vol / time-session risk ruleを代表4ヶ月validationで検証済み。`
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 06:04 JST 更新: candidate-entry failure targetをsession/regime別に拡張した。`normal_vol_selected_failure` はvalidation OOF AUC `0.6418`、validation policyでもhigh cost min pnl `120.5842 -> 124.4280` へ小改善したが、2024-12/2025-02/2025-03/2025-04 holdout baseではrisk `20` が全月で悪化し、sum pnl `-105.0100 -> -183.7474`、max DD `474.6194 -> 516.4888`。標準採用しない。次は分類probability直結ではなく、candidate rowの連続的なrealizable PnL / lower quantile / calibrated downsideへ進む。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の `日時` を基準にする。
 
 2026-06-29 05:48 JST 更新: normal-vol / time-session risk ruleをvalidation 4foldで確認した。normal-vol short直接減点はhigh cost最低月がマイナスへ落ちるため採用しない。`time5` はhigh cost min pnlを `120.5842 -> 125.4900` に小改善したが、base/cost sumを削るため標準昇格しない。`long_range5` も診断候補止まり。次はruleを増やすより、session/regime別の選択失敗を教師化する。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の `日時` を基準にする。
 

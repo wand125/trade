@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 06:04 Candidate failure regime/session targets
+
+- `00101` の次作業として、normal-vol / time-sessionをruleで直接減点せず、candidate-entry failure targetとして教師化した。
+- `oof-candidate-failure-model` に `large_loss`, `wrong_side`, `range_normal_vol_selected_failure`, `normal_vol_selected_failure`, `time_session_selected_failure`, `any_failure` を追加した。CLI defaultは互換性維持のため従来通り `large_adverse` のまま。
+- validation OOFでは `normal_vol_selected_failure` がprevalence `0.0067`, AUC `0.6418`、`range_normal_vol_selected_failure` がprevalence `0.0033`, AUC `0.7523`。一方 `wrong_side`, `time_session_selected_failure`, `any_failure` は逆相関寄り。
+- `large_loss_threshold=10` はcandidate条件通過行で陽性ゼロだったため、`large_loss_threshold=0` を診断したがAUC `0.4730` で弱い。
+- `normal_vol_selected_failure` riskをpolicyへ接続すると、base validationはrisk `10` で min pnl `145.5682 -> 147.5388`、high cost validationはrisk `20` で min pnl `120.5842 -> 124.4280` へ小改善した。
+- しかしrisk `20` を2024-12 / 2025-02 / 2025-03 / 2025-04 holdout baseへ固定適用すると、sum pnlは `-105.0100 -> -183.7474`、max DDは `474.6194 -> 516.4888` に悪化した。
+- 判断: `normal_vol_selected_failure` riskは標準採用しない。target拡張は診断基盤として残し、次は分類probability直結ではなく、candidate rowの連続的なrealizable PnL / lower quantile / calibrated downsideへ進む。
+- report: `docs/reports/00102_2026-06-29_candidate_failure_regime_session_targets.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 05:48 Normal vol / time risk validation
 
 - `00100` の2025-04 failureで見えた `short:range_normal_vol`, `short:up_normal_vol`, `long:range_normal_vol`, `rollover`, `ny_late` を、2025-04へ直接合わせず代表4ヶ月validationだけで確認した。

@@ -262,6 +262,7 @@ class CandidateFailureModelConfig:
     sample_weighting: str
     prediction_shrinkage: float
     large_adverse_threshold: float
+    large_loss_threshold: float
     target_names: tuple[str, ...]
     entry_threshold: float
     long_entry_threshold_offset: float
@@ -346,7 +347,15 @@ TRADE_FAILURE_TARGET_NAMES = (
     "exit_regret_high",
     "any_failure",
 )
-CANDIDATE_FAILURE_TARGET_NAMES = ("large_adverse",)
+CANDIDATE_FAILURE_TARGET_NAMES = (
+    "large_adverse",
+    "large_loss",
+    "wrong_side",
+    "range_normal_vol_selected_failure",
+    "normal_vol_selected_failure",
+    "time_session_selected_failure",
+    "any_failure",
+)
 CANDIDATE_QUALITY_TARGET_MODES = (
     "best_adjusted_pnl",
     "barrier_event_adjusted_pnl",
@@ -1959,10 +1968,70 @@ def candidate_failure_targets_from_predictions(
     if actual_adverse_column not in predictions.columns:
         raise ValueError(f"predictions missing candidate target column: {actual_adverse_column}")
     actual_adverse = finite_float_series(predictions, actual_adverse_column)
+    large_adverse = actual_adverse <= -config.large_adverse_threshold
     targets = pd.DataFrame(index=predictions.index)
     if "large_adverse" in config.target_names:
-        targets[candidate_failure_target_column("large_adverse")] = (
-            actual_adverse <= -config.large_adverse_threshold
+        targets[candidate_failure_target_column("large_adverse")] = large_adverse
+    needs_adjusted = bool(
+        {
+            "large_loss",
+            "wrong_side",
+            "range_normal_vol_selected_failure",
+            "normal_vol_selected_failure",
+            "time_session_selected_failure",
+            "any_failure",
+        }.intersection(config.target_names)
+    )
+    if not needs_adjusted:
+        return targets.astype(int)
+
+    actual_adjusted = finite_float_series(predictions, SIDE_COLUMNS[side_name]["target"])
+    selected_loss = actual_adjusted <= 0.0
+    large_loss = actual_adjusted <= -config.large_loss_threshold
+    if "large_loss" in config.target_names:
+        targets[candidate_failure_target_column("large_loss")] = large_loss
+    if "wrong_side" in config.target_names or "any_failure" in config.target_names:
+        opposite_adjusted = finite_float_series(predictions, SIDE_COLUMNS[side_name]["opposite_target"])
+        wrong_side = opposite_adjusted > actual_adjusted
+    else:
+        wrong_side = pd.Series(False, index=predictions.index)
+    if "wrong_side" in config.target_names:
+        targets[candidate_failure_target_column("wrong_side")] = wrong_side
+
+    if (
+        "range_normal_vol_selected_failure" in config.target_names
+        or "normal_vol_selected_failure" in config.target_names
+        or "any_failure" in config.target_names
+    ):
+        combined_regime = predictions["combined_regime"].astype("string").fillna("__missing__")
+        range_normal_failure = (combined_regime == "range_normal_vol") & selected_loss
+        normal_vol_failure = combined_regime.str.endswith("_normal_vol").fillna(False) & selected_loss
+    else:
+        range_normal_failure = pd.Series(False, index=predictions.index)
+        normal_vol_failure = pd.Series(False, index=predictions.index)
+    if "range_normal_vol_selected_failure" in config.target_names:
+        targets[candidate_failure_target_column("range_normal_vol_selected_failure")] = (
+            range_normal_failure
+        )
+    if "normal_vol_selected_failure" in config.target_names:
+        targets[candidate_failure_target_column("normal_vol_selected_failure")] = normal_vol_failure
+    if "time_session_selected_failure" in config.target_names or "any_failure" in config.target_names:
+        session_regime = predictions["session_regime"].astype("string").fillna("__missing__")
+        time_session_failure = session_regime.isin(["rollover", "ny_late"]) & selected_loss
+    else:
+        time_session_failure = pd.Series(False, index=predictions.index)
+    if "time_session_selected_failure" in config.target_names:
+        targets[candidate_failure_target_column("time_session_selected_failure")] = (
+            time_session_failure
+        )
+    if "any_failure" in config.target_names:
+        targets[candidate_failure_target_column("any_failure")] = (
+            large_adverse
+            | large_loss
+            | wrong_side
+            | range_normal_failure
+            | normal_vol_failure
+            | time_session_failure
         )
     return targets.astype(int)
 
@@ -1981,6 +2050,30 @@ def build_candidate_failure_training_frame(
         "long_max_adverse_pnl",
         "short_max_adverse_pnl",
     }
+    targets_requiring_adjusted = {
+        "large_loss",
+        "wrong_side",
+        "range_normal_vol_selected_failure",
+        "normal_vol_selected_failure",
+        "time_session_selected_failure",
+        "any_failure",
+    }
+    if targets_requiring_adjusted.intersection(config.target_names):
+        required_columns.update(
+            {
+                SIDE_COLUMNS["long"]["target"],
+                SIDE_COLUMNS["short"]["target"],
+            }
+        )
+    targets_requiring_combined_regime = {
+        "range_normal_vol_selected_failure",
+        "normal_vol_selected_failure",
+        "any_failure",
+    }
+    if targets_requiring_combined_regime.intersection(config.target_names):
+        required_columns.add("combined_regime")
+    if {"time_session_selected_failure", "any_failure"}.intersection(config.target_names):
+        required_columns.add("session_regime")
     if config.min_entry_rank > 0:
         required_columns.update(
             {
@@ -2028,6 +2121,8 @@ def fit_candidate_failure_model_from_frame(
         raise ValueError("prediction_shrinkage must be in [0, 1]")
     if config.large_adverse_threshold < 0:
         raise ValueError("large_adverse_threshold must be non-negative")
+    if config.large_loss_threshold < 0:
+        raise ValueError("large_loss_threshold must be non-negative")
     validate_candidate_failure_targets(config.target_names)
     if frame.empty:
         raise ValueError("candidate failure model training frame is empty")
@@ -4247,6 +4342,7 @@ def candidate_failure_model_config_from_args(args: argparse.Namespace) -> Candid
         sample_weighting=args.sample_weighting,
         prediction_shrinkage=args.prediction_shrinkage,
         large_adverse_threshold=args.large_adverse_threshold,
+        large_loss_threshold=args.large_loss_threshold,
         target_names=target_names,
         entry_threshold=args.entry_threshold,
         long_entry_threshold_offset=args.long_entry_threshold_offset,
@@ -5403,10 +5499,16 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_failure_model_parser.add_argument("--label", default="candidate_failure_model")
     candidate_failure_model_parser.add_argument(
         "--failure-targets",
-        default=",".join(CANDIDATE_FAILURE_TARGET_NAMES),
-        help="comma-separated candidate failure targets: large_adverse",
+        default="large_adverse",
+        help=(
+            "comma-separated candidate failure targets: large_adverse,large_loss,"
+            "wrong_side,range_normal_vol_selected_failure,normal_vol_selected_failure,"
+            "time_session_selected_failure,any_failure; default keeps the legacy "
+            "large_adverse-only model"
+        ),
     )
     candidate_failure_model_parser.add_argument("--large-adverse-threshold", type=float, default=10.0)
+    candidate_failure_model_parser.add_argument("--large-loss-threshold", type=float, default=10.0)
     add_trade_source_args(candidate_failure_model_parser)
     add_trade_quality_model_args(candidate_failure_model_parser, include_target_clip_quantile=False)
     add_candidate_entry_filter_args(candidate_failure_model_parser)
