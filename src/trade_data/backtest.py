@@ -56,6 +56,9 @@ SWEEP_KEY_COLUMNS = [
     "fixed_horizon_score_mode",
     "min_predicted_hold_minutes",
     "max_predicted_hold_minutes",
+    "min_valid_predicted_hold_minutes",
+    "long_holding_fallback_column",
+    "short_holding_fallback_column",
     "max_wait_regret",
     "min_entry_rank",
     "min_trade_quality",
@@ -309,6 +312,9 @@ class ModelPolicyConfig:
     short_holding_column: str = "pred_short_best_holding_minutes"
     min_predicted_hold_minutes: float = 1.0
     max_predicted_hold_minutes: float = 1440.0
+    min_valid_predicted_hold_minutes: float = -float("inf")
+    long_holding_fallback_column: str = ""
+    short_holding_fallback_column: str = ""
     fixed_horizon_minutes: tuple[float, ...] = DEFAULT_FIXED_HORIZON_MINUTES
     long_fixed_horizon_columns: tuple[str, ...] = DEFAULT_LONG_FIXED_HORIZON_COLUMNS
     short_fixed_horizon_columns: tuple[str, ...] = DEFAULT_SHORT_FIXED_HORIZON_COLUMNS
@@ -567,6 +573,10 @@ def prediction_required_columns(config: ModelPolicyConfig) -> list[str]:
         required_columns.extend([config.long_risk_column, config.short_risk_column])
     if config.policy == "timed_ev":
         required_columns.extend([config.long_holding_column, config.short_holding_column])
+        if config.long_holding_fallback_column:
+            required_columns.append(config.long_holding_fallback_column)
+        if config.short_holding_fallback_column:
+            required_columns.append(config.short_holding_fallback_column)
     if config.policy == "fixed_horizon_ev":
         required_columns.extend([*config.long_fixed_horizon_columns, *config.short_fixed_horizon_columns])
     if np.isfinite(config.max_wait_regret):
@@ -816,6 +826,11 @@ def model_signal_from_predictions(
             "max_predicted_hold_minutes must be greater than or equal to "
             "min_predicted_hold_minutes"
         )
+    if (
+        np.isfinite(config.min_valid_predicted_hold_minutes)
+        and config.min_valid_predicted_hold_minutes < 0
+    ):
+        raise ValueError("min_valid_predicted_hold_minutes must be non-negative or -inf")
 
     prediction_index = predictions.set_index("decision_timestamp")
     aligned = prediction_index[[config.long_column, config.short_column]].reindex(df["timestamp"])
@@ -823,6 +838,8 @@ def model_signal_from_predictions(
     short_ev = aligned[config.short_column].reset_index(drop=True).astype(float)
     long_holding = None
     short_holding = None
+    long_holding_entry_ok = None
+    short_holding_entry_ok = None
     long_time_exit = None
     short_time_exit = None
     long_loss_first = None
@@ -948,11 +965,64 @@ def model_signal_from_predictions(
             long_ev = long_ev - side_confidence_overfit_penalty * long_side_confidence.clip(0.0, 1.0)
             short_ev = short_ev - side_confidence_overfit_penalty * short_side_confidence.clip(0.0, 1.0)
     if config.policy == "timed_ev":
-        holding_aligned = prediction_index[[config.long_holding_column, config.short_holding_column]].reindex(
-            df["timestamp"]
-        )
+        holding_columns = [config.long_holding_column, config.short_holding_column]
+        if config.long_holding_fallback_column:
+            holding_columns.append(config.long_holding_fallback_column)
+        if config.short_holding_fallback_column:
+            holding_columns.append(config.short_holding_fallback_column)
+        holding_columns = list(dict.fromkeys(holding_columns))
+        holding_aligned = prediction_index[holding_columns].reindex(df["timestamp"])
         long_holding = holding_aligned[config.long_holding_column].reset_index(drop=True).astype(float)
         short_holding = holding_aligned[config.short_holding_column].reset_index(drop=True).astype(float)
+        holding_guard_enabled = (
+            np.isfinite(config.min_valid_predicted_hold_minutes)
+            or bool(config.long_holding_fallback_column)
+            or bool(config.short_holding_fallback_column)
+        )
+        if holding_guard_enabled:
+            min_valid_hold = (
+                config.min_valid_predicted_hold_minutes
+                if np.isfinite(config.min_valid_predicted_hold_minutes)
+                else -float("inf")
+            )
+            long_primary_ok = (
+                long_holding.notna()
+                & np.isfinite(long_holding)
+                & (long_holding >= min_valid_hold)
+            )
+            short_primary_ok = (
+                short_holding.notna()
+                & np.isfinite(short_holding)
+                & (short_holding >= min_valid_hold)
+            )
+            long_holding_entry_ok = long_primary_ok.copy()
+            short_holding_entry_ok = short_primary_ok.copy()
+            if config.long_holding_fallback_column:
+                long_fallback = (
+                    holding_aligned[config.long_holding_fallback_column]
+                    .reset_index(drop=True)
+                    .astype(float)
+                )
+                long_fallback_ok = (
+                    long_fallback.notna()
+                    & np.isfinite(long_fallback)
+                    & (long_fallback >= min_valid_hold)
+                )
+                long_holding = long_holding.where(long_primary_ok, long_fallback)
+                long_holding_entry_ok = long_primary_ok | (~long_primary_ok & long_fallback_ok)
+            if config.short_holding_fallback_column:
+                short_fallback = (
+                    holding_aligned[config.short_holding_fallback_column]
+                    .reset_index(drop=True)
+                    .astype(float)
+                )
+                short_fallback_ok = (
+                    short_fallback.notna()
+                    & np.isfinite(short_fallback)
+                    & (short_fallback >= min_valid_hold)
+                )
+                short_holding = short_holding.where(short_primary_ok, short_fallback)
+                short_holding_entry_ok = short_primary_ok | (~short_primary_ok & short_fallback_ok)
     if (
         config.policy in {"timed_ev", "fixed_horizon_ev"}
         and long_holding is not None
@@ -1050,6 +1120,12 @@ def model_signal_from_predictions(
         short_barrier = barrier_aligned[config.short_profit_barrier_column].reset_index(drop=True).astype(float)
         side_barrier = pd.Series(np.where(best_side == 1, long_barrier, short_barrier), index=df.index)
         quality_ok &= side_barrier.notna() & (side_barrier >= config.profit_barrier_threshold)
+    if long_holding_entry_ok is not None and short_holding_entry_ok is not None:
+        side_holding_entry_ok = pd.Series(
+            np.where(best_side == 1, long_holding_entry_ok, short_holding_entry_ok),
+            index=df.index,
+        )
+        quality_ok &= side_holding_entry_ok.astype(bool)
     for column, blocked_values in blocked_regime_columns(config):
         regime_aligned = prediction_index[[column]].reindex(df["timestamp"])
         regime_values = pd.Series(
@@ -2120,6 +2196,7 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "risk_penalty",
         "min_predicted_hold_minutes",
         "max_predicted_hold_minutes",
+        "min_valid_predicted_hold_minutes",
         "max_wait_regret",
         "min_entry_rank",
         "min_trade_quality",
@@ -2623,6 +2700,9 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         short_holding_column=args.short_holding_column,
         min_predicted_hold_minutes=args.min_predicted_hold_minutes,
         max_predicted_hold_minutes=args.max_predicted_hold_minutes,
+        min_valid_predicted_hold_minutes=args.min_valid_predicted_hold_minutes,
+        long_holding_fallback_column=args.long_holding_fallback_column,
+        short_holding_fallback_column=args.short_holding_fallback_column,
         fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
         long_fixed_horizon_columns=parse_csv_string_tuple(args.long_fixed_horizon_columns),
         short_fixed_horizon_columns=parse_csv_string_tuple(args.short_fixed_horizon_columns),
@@ -2873,6 +2953,25 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--min-predicted-hold-minutes", type=float, default=1.0)
     parser.add_argument("--max-predicted-hold-minutes", type=float, default=1440.0)
     parser.add_argument(
+        "--min-valid-predicted-hold-minutes",
+        type=float,
+        default=-float("inf"),
+        help=(
+            "minimum raw timed_ev holding prediction required before an entry; "
+            "use -inf to keep the historical clip-only behavior"
+        ),
+    )
+    parser.add_argument(
+        "--long-holding-fallback-column",
+        default="",
+        help="optional long holding column used when the primary timed_ev holding is invalid",
+    )
+    parser.add_argument(
+        "--short-holding-fallback-column",
+        default="",
+        help="optional short holding column used when the primary timed_ev holding is invalid",
+    )
+    parser.add_argument(
         "--fixed-horizon-minutes",
         default=",".join(str(int(minutes)) for minutes in DEFAULT_FIXED_HORIZON_MINUTES),
     )
@@ -3043,6 +3142,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     max_wait_regrets = parse_csv_floats(args.max_wait_regrets)
     min_predicted_hold_minutes_values = parse_csv_floats(args.min_predicted_hold_minutes)
     max_predicted_hold_minutes_values = parse_csv_floats(args.max_predicted_hold_minutes)
+    min_valid_predicted_hold_minutes_values = parse_csv_floats(
+        args.min_valid_predicted_hold_minutes
+    )
     min_entry_ranks = parse_csv_floats(args.min_entry_ranks)
     min_trade_qualities = parse_csv_floats(args.min_trade_qualities)
     min_side_confidences = parse_csv_floats(args.min_side_confidences)
@@ -3083,6 +3185,18 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
             risk_penalty=max(risk_penalties),
             long_holding_column=args.long_holding_column,
             short_holding_column=args.short_holding_column,
+            min_valid_predicted_hold_minutes=(
+                max(
+                    [
+                        value
+                        for value in min_valid_predicted_hold_minutes_values
+                        if np.isfinite(value)
+                    ],
+                    default=-float("inf"),
+                )
+            ),
+            long_holding_fallback_column=args.long_holding_fallback_column,
+            short_holding_fallback_column=args.short_holding_fallback_column,
             fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
             long_fixed_horizon_columns=parse_csv_string_tuple(args.long_fixed_horizon_columns),
             short_fixed_horizon_columns=parse_csv_string_tuple(args.short_fixed_horizon_columns),
@@ -3150,6 +3264,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         fixed_horizon_score_modes,
         min_predicted_hold_minutes_values,
         max_predicted_hold_minutes_values,
+        min_valid_predicted_hold_minutes_values,
         max_wait_regrets,
         min_entry_ranks,
         min_trade_qualities,
@@ -3177,6 +3292,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         fixed_horizon_score_mode,
         min_predicted_hold_minutes,
         max_predicted_hold_minutes,
+        min_valid_predicted_hold_minutes,
         max_wait_regret,
         min_entry_rank,
         min_trade_quality,
@@ -3222,6 +3338,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     short_holding_column=args.short_holding_column,
                     min_predicted_hold_minutes=min_predicted_hold_minutes,
                     max_predicted_hold_minutes=max_predicted_hold_minutes,
+                    min_valid_predicted_hold_minutes=min_valid_predicted_hold_minutes,
+                    long_holding_fallback_column=args.long_holding_fallback_column,
+                    short_holding_fallback_column=args.short_holding_fallback_column,
                     fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
                     long_fixed_horizon_columns=parse_csv_string_tuple(
                         args.long_fixed_horizon_columns
@@ -3297,6 +3416,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "fixed_horizon_score_mode": fixed_horizon_score_mode,
                     "min_predicted_hold_minutes": min_predicted_hold_minutes,
                     "max_predicted_hold_minutes": max_predicted_hold_minutes,
+                    "min_valid_predicted_hold_minutes": min_valid_predicted_hold_minutes,
+                    "long_holding_fallback_column": args.long_holding_fallback_column,
+                    "short_holding_fallback_column": args.short_holding_fallback_column,
                     "max_wait_regret": max_wait_regret,
                     "min_entry_rank": min_entry_rank,
                     "min_trade_quality": min_trade_quality,
@@ -3368,6 +3490,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "fixed_horizon_score_modes": fixed_horizon_score_modes,
         "min_predicted_hold_minutes": min_predicted_hold_minutes_values,
         "max_predicted_hold_minutes": max_predicted_hold_minutes_values,
+        "min_valid_predicted_hold_minutes": min_valid_predicted_hold_minutes_values,
         "max_wait_regrets": max_wait_regrets,
         "min_entry_ranks": min_entry_ranks,
         "min_trade_qualities": min_trade_qualities,
@@ -3397,6 +3520,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "short_risk_column": args.short_risk_column,
         "long_holding_column": args.long_holding_column,
         "short_holding_column": args.short_holding_column,
+        "long_holding_fallback_column": args.long_holding_fallback_column,
+        "short_holding_fallback_column": args.short_holding_fallback_column,
         "fixed_horizon_minutes": parse_csv_floats(args.fixed_horizon_minutes),
         "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
         "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
@@ -3454,6 +3579,12 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["min_predicted_hold_minutes"] = 1.0
     if "max_predicted_hold_minutes" not in output.columns:
         output["max_predicted_hold_minutes"] = 1440.0
+    if "min_valid_predicted_hold_minutes" not in output.columns:
+        output["min_valid_predicted_hold_minutes"] = -float("inf")
+    if "long_holding_fallback_column" not in output.columns:
+        output["long_holding_fallback_column"] = ""
+    if "short_holding_fallback_column" not in output.columns:
+        output["short_holding_fallback_column"] = ""
     if "long_entry_threshold_offset" not in output.columns:
         output["long_entry_threshold_offset"] = 0.0
     if "short_entry_threshold_offset" not in output.columns:
@@ -5100,6 +5231,24 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--short-holding-column", default="pred_short_best_holding_minutes")
     model_sweep.add_argument("--min-predicted-hold-minutes", default="1")
     model_sweep.add_argument("--max-predicted-hold-minutes", default="1440")
+    model_sweep.add_argument(
+        "--min-valid-predicted-hold-minutes",
+        default="-inf",
+        help=(
+            "comma-separated raw timed_ev holding validity thresholds; entries below the "
+            "threshold are skipped unless a valid fallback holding column is supplied"
+        ),
+    )
+    model_sweep.add_argument(
+        "--long-holding-fallback-column",
+        default="",
+        help="optional long holding fallback column for timed_ev hold guards",
+    )
+    model_sweep.add_argument(
+        "--short-holding-fallback-column",
+        default="",
+        help="optional short holding fallback column for timed_ev hold guards",
+    )
     model_sweep.add_argument(
         "--fixed-horizon-minutes",
         default=",".join(str(int(minutes)) for minutes in DEFAULT_FIXED_HORIZON_MINUTES),

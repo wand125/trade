@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 04:57 Timed EV holding guard
+
+- `timed_ev` に raw holding predictionのfail-close/fallback guardを追加した。
+- `model-sweep` grid keyに `min_valid_predicted_hold_minutes`, `long_holding_fallback_column`, `short_holding_fallback_column` を追加した。
+- defaultは `min_valid_predicted_hold_minutes=-inf` で既存のclip-only挙動を維持する。
+- primary holdingが非finiteまたは `min_valid_predicted_hold_minutes` 未満の場合、fallback columnがあればfallbackへ差し替え、fallbackも無効ならそのsideのentryを不可にする。
+- 2025-04 strict top診断では、HGB fallbackが base `-170.7302`, high `-182.3386`、fail-close skipが base `-111.2648`, high `-129.9124` まで損失を縮めた。
+- 判断: holding guardは採用するが、標準candidateではなく安全装置として扱う。NoTradeには届かないため、次は exit minutes targetを `log1p(minutes)`, bin分類, hazard/event probability型へ作り直し、walk-forward validationで評価する。
+- report: `docs/reports/00096_2026-06-29_timed_ev_holding_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 04:44 2025-04 stress score holdout
 
 - `00094` の方針通り、未使用月 `2025-04` へ同一形式の `xauusd_m1_p1_l1p2_policy_combined` dataset、HGB entry/side、MLP exit、forced target、`component_fixed_weighted` applyを生成した。

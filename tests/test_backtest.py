@@ -482,6 +482,56 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [1, 1, 1, 0, 1, 1])
 
+    def test_timed_model_signal_skips_entries_with_invalid_raw_holding_time(self):
+        df = frame_with_opens([100, 101, 102, 103, 104, 105], start="2025-01-01 00:00:00+00:00")
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20, 20, 20, 20, 20, 20],
+                "pred_short_best_adjusted_pnl": [1, 1, 1, 1, 1, 1],
+                "pred_long_best_holding_minutes": [-5, -5, -5, -5, -5, -5],
+                "pred_short_best_holding_minutes": [2, 2, 2, 2, 2, 2],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="timed_ev",
+            entry_threshold=10,
+            exit_threshold=0,
+            min_valid_predicted_hold_minutes=2,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, 0, 0, 0, 0, 0])
+
+    def test_timed_model_signal_uses_holding_fallback_for_invalid_primary_time(self):
+        df = frame_with_opens([100, 101, 102, 103, 104, 105], start="2025-01-01 00:00:00+00:00")
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20, 20, 20, 20, 20, 20],
+                "pred_short_best_adjusted_pnl": [1, 1, 1, 1, 1, 1],
+                "pred_long_best_holding_minutes": [-5, -5, -5, -5, -5, -5],
+                "pred_short_best_holding_minutes": [2, 2, 2, 2, 2, 2],
+                "pred_long_exit_event_minutes": [3, 3, 3, 3, 3, 3],
+                "pred_short_exit_event_minutes": [3, 3, 3, 3, 3, 3],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="timed_ev",
+            entry_threshold=10,
+            exit_threshold=0,
+            min_valid_predicted_hold_minutes=2,
+            long_holding_fallback_column="pred_long_exit_event_minutes",
+            short_holding_fallback_column="pred_short_exit_event_minutes",
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [1, 1, 1, 1, 0, 1])
+
     def test_timed_model_signal_shrinks_holding_time_with_exit_event_probability(self):
         df = frame_with_opens([100, 101, 102, 103, 104, 105], start="2025-01-01 00:00:00+00:00")
         predictions = pd.DataFrame(
@@ -896,6 +946,9 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["max_wait_regret"].tolist(), [float("inf")])
         self.assertEqual(normalized["min_predicted_hold_minutes"].tolist(), [1.0])
         self.assertEqual(normalized["max_predicted_hold_minutes"].tolist(), [1440.0])
+        self.assertEqual(normalized["min_valid_predicted_hold_minutes"].tolist(), [-float("inf")])
+        self.assertEqual(normalized["long_holding_fallback_column"].tolist(), [""])
+        self.assertEqual(normalized["short_holding_fallback_column"].tolist(), [""])
         self.assertEqual(normalized["min_entry_rank"].tolist(), [0.0])
         self.assertEqual(normalized["require_profit_barrier"].tolist(), [False])
         self.assertEqual(normalized["profit_barrier_threshold"].tolist(), [0.5])

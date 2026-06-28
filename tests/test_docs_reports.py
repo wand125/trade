@@ -2,6 +2,7 @@ import re
 import unittest
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 
 REPORT_NAME_PATTERN = re.compile(r"^(?P<number>\d{5})_\d{4}-\d{2}-\d{2}_.+\.md$")
@@ -20,6 +21,23 @@ def read_internal_report_time(path: Path) -> datetime:
 
 
 class DocsReportTests(unittest.TestCase):
+    def test_internal_report_time_ignores_updated_time(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "00001_2026-01-02_example.md"
+            path.write_text(
+                "\n".join(
+                    [
+                        "# Example",
+                        "",
+                        "日時: 2026-01-02 03:04 JST",
+                        "更新日時: 2099-12-31 23:59 JST",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(read_internal_report_time(path), datetime(2026, 1, 2, 3, 4))
+
     def test_report_numbers_follow_internal_report_time(self):
         report_paths = sorted(Path("docs/reports").glob("*.md"))
         self.assertGreater(len(report_paths), 0)
