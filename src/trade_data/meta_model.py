@@ -144,6 +144,34 @@ class GroupTargetCalibrator:
 
 
 @dataclass(frozen=True)
+class ResidualPenaltyConfig:
+    group_columns: tuple[str, ...]
+    min_group_size: int
+    prior_strength: float
+    penalty_weight: float
+    min_excess_overestimate: float = 0.0
+
+
+@dataclass(frozen=True)
+class ResidualPenaltyStats:
+    n: int
+    pred_mean: float
+    target_mean: float
+    bias: float
+    overestimate_mean: float
+    overestimate_rate: float
+
+
+@dataclass(frozen=True)
+class ResidualPenaltyCalibrator:
+    config: ResidualPenaltyConfig
+    long_column: str
+    short_column: str
+    side_stats: dict[str, ResidualPenaltyStats]
+    group_stats: dict[str, dict[tuple[str, ...], ResidualPenaltyStats]]
+
+
+@dataclass(frozen=True)
 class TradeQualityCalibrator:
     config: GroupEVCalibrationConfig
     overall_stats: GroupEVStats
@@ -695,6 +723,278 @@ def add_group_calibrated_fixed_horizon_columns(
     calibrator: GroupTargetCalibrator,
 ) -> pd.DataFrame:
     return add_group_calibrated_target_columns(predictions, calibrator)
+
+
+def residual_penalty_output_column(side_name: str) -> str:
+    return f"pred_regime_residual_penalized_{side_name}_best_adjusted_pnl"
+
+
+def residual_penalty_stat(pred: pd.Series, target: pd.Series) -> ResidualPenaltyStats:
+    frame = (
+        pd.DataFrame({"pred": pred.astype(float), "target": target.astype(float)})
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna(subset=["pred", "target"])
+    )
+    if frame.empty:
+        raise ValueError("no valid rows for residual penalty stats")
+    error = frame["pred"] - frame["target"]
+    return ResidualPenaltyStats(
+        n=int(len(frame)),
+        pred_mean=float(frame["pred"].mean()),
+        target_mean=float(frame["target"].mean()),
+        bias=float(error.mean()),
+        overestimate_mean=float(error.clip(lower=0.0).mean()),
+        overestimate_rate=float((error > 0.0).mean()),
+    )
+
+
+def shrink_residual_penalty_stats(
+    raw: ResidualPenaltyStats,
+    prior: ResidualPenaltyStats,
+    weight: float,
+) -> ResidualPenaltyStats:
+    return ResidualPenaltyStats(
+        n=raw.n,
+        pred_mean=float(weight * raw.pred_mean + (1.0 - weight) * prior.pred_mean),
+        target_mean=float(weight * raw.target_mean + (1.0 - weight) * prior.target_mean),
+        bias=float(weight * raw.bias + (1.0 - weight) * prior.bias),
+        overestimate_mean=float(
+            weight * raw.overestimate_mean + (1.0 - weight) * prior.overestimate_mean
+        ),
+        overestimate_rate=float(
+            weight * raw.overestimate_rate + (1.0 - weight) * prior.overestimate_rate
+        ),
+    )
+
+
+def residual_side_columns(calibrator: ResidualPenaltyCalibrator, side_name: str) -> tuple[str, str]:
+    if side_name == "long":
+        return calibrator.long_column, SIDE_COLUMNS[side_name]["target"]
+    if side_name == "short":
+        return calibrator.short_column, SIDE_COLUMNS[side_name]["target"]
+    raise ValueError(f"unknown side: {side_name}")
+
+
+def validate_residual_penalty_inputs(
+    predictions: pd.DataFrame,
+    config: ResidualPenaltyConfig,
+    long_column: str,
+    short_column: str,
+) -> None:
+    if config.min_group_size <= 0:
+        raise ValueError("min_group_size must be positive")
+    if config.prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    if config.penalty_weight < 0:
+        raise ValueError("penalty_weight must be non-negative")
+    if config.min_excess_overestimate < 0:
+        raise ValueError("min_excess_overestimate must be non-negative")
+    required_columns = {
+        long_column,
+        short_column,
+        SIDE_COLUMNS["long"]["target"],
+        SIDE_COLUMNS["short"]["target"],
+        *config.group_columns,
+    }
+    missing_columns = sorted(required_columns - set(predictions.columns))
+    if missing_columns:
+        raise ValueError(f"predictions missing residual penalty columns: {', '.join(missing_columns)}")
+
+
+def fit_residual_penalty_calibrator(
+    predictions: pd.DataFrame,
+    config: ResidualPenaltyConfig,
+    *,
+    long_column: str,
+    short_column: str,
+) -> ResidualPenaltyCalibrator:
+    validate_residual_penalty_inputs(predictions, config, long_column, short_column)
+
+    side_stats: dict[str, ResidualPenaltyStats] = {}
+    group_stats: dict[str, dict[tuple[str, ...], ResidualPenaltyStats]] = {}
+    keys = group_key_series(predictions, config.group_columns)
+    for side_name, score_column in [("long", long_column), ("short", short_column)]:
+        target_column = SIDE_COLUMNS[side_name]["target"]
+        side_frame = (
+            pd.DataFrame(
+                {
+                    "pred": predictions[score_column].astype(float),
+                    "target": predictions[target_column].astype(float),
+                    "key": keys,
+                }
+            )
+            .replace([np.inf, -np.inf], np.nan)
+            .dropna(subset=["pred", "target"])
+        )
+        if side_frame.empty:
+            raise ValueError(f"no valid rows for {side_name} residual penalty")
+        side_stat = residual_penalty_stat(side_frame["pred"], side_frame["target"])
+        side_stats[side_name] = side_stat
+        group_stats[side_name] = {}
+        for key, group in side_frame.groupby("key", sort=False):
+            group_count = int(len(group))
+            if group_count < config.min_group_size:
+                continue
+            if config.prior_strength == 0:
+                weight = 1.0
+            else:
+                weight = group_count / (group_count + config.prior_strength)
+            raw_stat = residual_penalty_stat(group["pred"], group["target"])
+            group_stats[side_name][key] = shrink_residual_penalty_stats(raw_stat, side_stat, weight)
+    return ResidualPenaltyCalibrator(
+        config=config,
+        long_column=long_column,
+        short_column=short_column,
+        side_stats=side_stats,
+        group_stats=group_stats,
+    )
+
+
+def residual_penalty_stats_frame(
+    predictions: pd.DataFrame,
+    side_name: str,
+    calibrator: ResidualPenaltyCalibrator,
+) -> pd.DataFrame:
+    side_stat = calibrator.side_stats[side_name]
+    stats = pd.DataFrame(
+        {
+            "pred_mean": side_stat.pred_mean,
+            "target_mean": side_stat.target_mean,
+            "bias": side_stat.bias,
+            "overestimate_mean": side_stat.overestimate_mean,
+            "overestimate_rate": side_stat.overestimate_rate,
+            "support": side_stat.n,
+            "source": "side",
+        },
+        index=predictions.index,
+    ).reset_index(drop=True)
+    if calibrator.config.group_columns:
+        keys = group_key_series(predictions, calibrator.config.group_columns).reset_index(drop=True)
+        for key, group_stat in calibrator.group_stats[side_name].items():
+            mask = keys == key
+            if mask.any():
+                stats.loc[mask, "pred_mean"] = group_stat.pred_mean
+                stats.loc[mask, "target_mean"] = group_stat.target_mean
+                stats.loc[mask, "bias"] = group_stat.bias
+                stats.loc[mask, "overestimate_mean"] = group_stat.overestimate_mean
+                stats.loc[mask, "overestimate_rate"] = group_stat.overestimate_rate
+                stats.loc[mask, "support"] = group_stat.n
+                stats.loc[mask, "source"] = "group"
+    return stats
+
+
+def residual_penalty_values(
+    predictions: pd.DataFrame,
+    side_name: str,
+    calibrator: ResidualPenaltyCalibrator,
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.DataFrame]:
+    score_column, _ = residual_side_columns(calibrator, side_name)
+    raw = predictions[score_column].astype(float).reset_index(drop=True)
+    stats = residual_penalty_stats_frame(predictions, side_name, calibrator)
+    side_overestimate = calibrator.side_stats[side_name].overestimate_mean
+    excess = (
+        stats["overestimate_mean"].astype(float)
+        - side_overestimate
+        - calibrator.config.min_excess_overestimate
+    ).clip(lower=0.0)
+    penalty = calibrator.config.penalty_weight * excess
+    penalized = raw - penalty
+    return (
+        pd.Series(penalized.to_numpy(), index=predictions.index),
+        pd.Series(penalty.to_numpy(), index=predictions.index),
+        pd.Series(excess.to_numpy(), index=predictions.index),
+        stats,
+    )
+
+
+def add_residual_penalty_columns(
+    predictions: pd.DataFrame,
+    calibrator: ResidualPenaltyCalibrator,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        output_column = residual_penalty_output_column(side_name)
+        penalized, penalty, excess, stats = residual_penalty_values(output, side_name, calibrator)
+        output[output_column] = penalized
+        output[f"{output_column}_penalty"] = penalty
+        output[f"{output_column}_excess_overestimate"] = excess
+        output[f"{output_column}_overestimate_mean"] = pd.Series(
+            stats["overestimate_mean"].to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{output_column}_side_overestimate_mean"] = calibrator.side_stats[
+            side_name
+        ].overestimate_mean
+        output[f"{output_column}_bias"] = pd.Series(stats["bias"].to_numpy(), index=predictions.index)
+        output[f"{output_column}_support"] = pd.Series(
+            stats["support"].to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{output_column}_source"] = pd.Series(
+            stats["source"].to_numpy(),
+            index=predictions.index,
+        )
+    return output
+
+
+def residual_penalty_scored_metrics(
+    predictions: pd.DataFrame,
+    *,
+    long_column: str,
+    short_column: str,
+    entry_threshold: float,
+) -> dict[str, object]:
+    long_output = residual_penalty_output_column("long")
+    short_output = residual_penalty_output_column("short")
+    metrics: dict[str, object] = {
+        "raw_selection": selection_metrics(
+            predictions,
+            threshold=entry_threshold,
+            long_column=long_column,
+            short_column=short_column,
+        ),
+        "penalized_selection": selection_metrics(
+            predictions,
+            threshold=entry_threshold,
+            long_column=long_output,
+            short_column=short_output,
+        ),
+        "long_penalized": regression_metrics(
+            predictions[SIDE_COLUMNS["long"]["target"]],
+            predictions[long_output].to_numpy(),
+        ),
+        "short_penalized": regression_metrics(
+            predictions[SIDE_COLUMNS["short"]["target"]],
+            predictions[short_output].to_numpy(),
+        ),
+        "penalty_mean": {
+            "long": float(predictions[f"{long_output}_penalty"].mean()),
+            "short": float(predictions[f"{short_output}_penalty"].mean()),
+        },
+        "penalty_positive_rate": {
+            "long": float((predictions[f"{long_output}_penalty"] > 0).mean()),
+            "short": float((predictions[f"{short_output}_penalty"] > 0).mean()),
+        },
+    }
+    return metrics
+
+
+def serializable_residual_penalty_calibrator(
+    calibrator: ResidualPenaltyCalibrator,
+) -> dict[str, object]:
+    return {
+        "config": asdict(calibrator.config),
+        "long_column": calibrator.long_column,
+        "short_column": calibrator.short_column,
+        "side_stats": {side: asdict(stats) for side, stats in calibrator.side_stats.items()},
+        "group_stats": {
+            side: {
+                "|".join(key): asdict(stats)
+                for key, stats in side_groups.items()
+            }
+            for side, side_groups in calibrator.group_stats.items()
+        },
+    }
 
 
 def fit_trade_quality_calibrator(
@@ -1647,6 +1947,173 @@ def oof_group_calibration(args: argparse.Namespace) -> int:
     return 0
 
 
+def oof_residual_penalty(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    base_fit_months = parse_csv_months(args.base_fit_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF residual penalty")
+    if args.base_fit_predictions is None and base_fit_months is not None:
+        raise ValueError("--base-fit-months requires --base-fit-predictions")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    base_fit_predictions = None
+    if args.base_fit_predictions is not None:
+        base_fit_predictions = filter_months(
+            pd.read_parquet(args.base_fit_predictions),
+            base_fit_months,
+            "base_fit",
+        )
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+
+    config = ResidualPenaltyConfig(
+        group_columns=tuple(parse_csv_strings(args.group_columns)),
+        min_group_size=args.min_group_size,
+        prior_strength=args.prior_strength,
+        penalty_weight=args.penalty_weight,
+        min_excess_overestimate=args.min_excess_overestimate,
+    )
+    validate_residual_penalty_inputs(
+        validation_predictions,
+        config,
+        args.long_column,
+        args.short_column,
+    )
+    if base_fit_predictions is not None:
+        validate_residual_penalty_inputs(
+            base_fit_predictions,
+            config,
+            args.long_column,
+            args.short_column,
+        )
+    if apply_predictions is not None:
+        validate_residual_penalty_inputs(
+            apply_predictions,
+            config,
+            args.long_column,
+            args.short_column,
+        )
+
+    fold_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for holdout_month in validation_months:
+        validation_fit_predictions = validation_predictions[
+            validation_predictions["dataset_month"] != holdout_month
+        ].copy()
+        fit_predictions = combine_fit_predictions(validation_fit_predictions, base_fit_predictions)
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_predictions.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build residual penalty OOF fold for {holdout_month}")
+        fold_calibrator = fit_residual_penalty_calibrator(
+            fit_predictions,
+            config,
+            long_column=args.long_column,
+            short_column=args.short_column,
+        )
+        holdout_output = add_residual_penalty_columns(holdout_predictions, fold_calibrator)
+        fold_outputs.append(holdout_output)
+        fold_metrics[holdout_month] = {
+            "fit_rows": int(len(fit_predictions)),
+            "base_fit_rows": 0 if base_fit_predictions is None else int(len(base_fit_predictions)),
+            "validation_fit_rows": int(len(validation_fit_predictions)),
+            "holdout_rows": int(len(holdout_predictions)),
+            "holdout": residual_penalty_scored_metrics(
+                holdout_output,
+                long_column=args.long_column,
+                short_column=args.short_column,
+                entry_threshold=args.entry_threshold,
+            ),
+            "calibrator": serializable_residual_penalty_calibrator(fold_calibrator),
+        }
+
+    validation_oof = pd.concat(fold_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+
+    final_fit_predictions = combine_fit_predictions(validation_predictions, base_fit_predictions)
+    final_calibrator = fit_residual_penalty_calibrator(
+        final_fit_predictions,
+        config,
+        long_column=args.long_column,
+        short_column=args.short_column,
+    )
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_residual_penalty_columns(apply_predictions, final_calibrator)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_residual_penalized.parquet",
+        index=False,
+    )
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_residual_penalized.parquet",
+            index=False,
+        )
+    metrics = {
+        "mode": "validation_oof_residual_penalty",
+        "validation_predictions": str(args.validation_predictions),
+        "base_fit_predictions": None if args.base_fit_predictions is None else str(args.base_fit_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "base_fit_months": base_fit_months,
+        "apply_months": apply_months,
+        "long_column": args.long_column,
+        "short_column": args.short_column,
+        "rows": {
+            "base_fit": 0 if base_fit_predictions is None else int(len(base_fit_predictions)),
+            "validation": int(len(validation_predictions)),
+            "validation_oof": int(len(validation_oof)),
+            "final_fit": int(len(final_fit_predictions)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "base_fit": {} if base_fit_predictions is None else month_counts(base_fit_predictions),
+            "validation": month_counts(validation_predictions),
+            "validation_oof": month_counts(validation_oof),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "final_calibrator": serializable_residual_penalty_calibrator(final_calibrator),
+        "folds": fold_metrics,
+        "validation_oof": residual_penalty_scored_metrics(
+            validation_oof,
+            long_column=args.long_column,
+            short_column=args.short_column,
+            entry_threshold=args.entry_threshold,
+        ),
+        "apply": None
+        if apply_output is None
+        else residual_penalty_scored_metrics(
+            apply_output,
+            long_column=args.long_column,
+            short_column=args.short_column,
+            entry_threshold=args.entry_threshold,
+        ),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    if metrics["apply"] is not None:
+        print(json.dumps(metrics["apply"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def oof_fixed_horizon_calibration(args: argparse.Namespace) -> int:
     validation_months = parse_csv_months(args.validation_months)
     base_fit_months = parse_csv_months(args.base_fit_months)
@@ -2200,6 +2667,35 @@ def build_parser() -> argparse.ArgumentParser:
         group_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
         group_parser.add_argument("--label", default=default_label)
 
+    def add_residual_penalty_args(
+        penalty_parser: argparse.ArgumentParser,
+        default_label: str = "regime_residual_penalty",
+    ) -> None:
+        penalty_parser.add_argument(
+            "--group-columns",
+            default="volatility_regime,session_regime",
+            help="comma-separated categorical columns for side/regime residual penalty",
+        )
+        penalty_parser.add_argument("--min-group-size", type=int, default=500)
+        penalty_parser.add_argument("--prior-strength", type=float, default=2000.0)
+        penalty_parser.add_argument(
+            "--penalty-weight",
+            type=float,
+            default=1.0,
+            help="non-negative multiplier applied to group excess overestimate",
+        )
+        penalty_parser.add_argument(
+            "--min-excess-overestimate",
+            type=float,
+            default=0.0,
+            help="ignored excess overestimate before the residual penalty starts",
+        )
+        penalty_parser.add_argument("--long-column", default="pred_long_best_adjusted_pnl")
+        penalty_parser.add_argument("--short-column", default="pred_short_best_adjusted_pnl")
+        penalty_parser.add_argument("--entry-threshold", type=float, default=15.0)
+        penalty_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+        penalty_parser.add_argument("--label", default=default_label)
+
     def add_trade_source_args(source_parser: argparse.ArgumentParser) -> None:
         source_parser.add_argument(
             "--source-mode",
@@ -2304,6 +2800,31 @@ def build_parser() -> argparse.ArgumentParser:
     group_oof_parser.add_argument("--base-fit-months", help="comma-separated base fit months")
     add_group_calibration_args(group_oof_parser)
     group_oof_parser.set_defaults(func=oof_group_calibration)
+
+    residual_penalty_oof_parser = subparsers.add_parser(
+        "oof-residual-penalty",
+        help="build validation OOF side/regime residual-overestimate penalty columns",
+    )
+    residual_penalty_oof_parser.add_argument("--validation-predictions", type=Path, required=True)
+    residual_penalty_oof_parser.add_argument(
+        "--base-fit-predictions",
+        type=Path,
+        help="optional OOF prediction frame to include in every validation penalty fit",
+    )
+    residual_penalty_oof_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation-fitted penalty",
+    )
+    residual_penalty_oof_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    residual_penalty_oof_parser.add_argument("--base-fit-months", help="comma-separated base fit months")
+    residual_penalty_oof_parser.add_argument("--apply-months", help="comma-separated apply months")
+    add_residual_penalty_args(residual_penalty_oof_parser)
+    residual_penalty_oof_parser.set_defaults(func=oof_residual_penalty)
 
     fixed_horizon_oof_parser = subparsers.add_parser(
         "oof-fixed-horizon-calibration",

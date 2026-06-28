@@ -6,10 +6,12 @@ import pandas as pd
 from trade_data.meta_model import (
     GroupEVCalibrationConfig,
     MetaModelConfig,
+    ResidualPenaltyConfig,
     TradeQualityModelConfig,
     add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
+    add_residual_penalty_columns,
     add_trade_quality_model_columns,
     add_trade_quality_model_values_to_enriched,
     add_trade_quality_columns,
@@ -20,6 +22,7 @@ from trade_data.meta_model import (
     combine_fit_predictions,
     fit_group_target_calibrator,
     fit_group_ev_calibrator,
+    fit_residual_penalty_calibrator,
     fit_trade_quality_model,
     fit_trade_quality_calibrator,
     filter_months,
@@ -27,6 +30,8 @@ from trade_data.meta_model import (
     parse_csv_ints,
     parse_csv_months,
     parse_csv_strings,
+    residual_penalty_output_column,
+    residual_penalty_scored_metrics,
     trade_quality_calibration_metrics,
     side_target_means,
     train_model,
@@ -305,6 +310,46 @@ class MetaModelTests(unittest.TestCase):
             output["pred_regime_calibrated_short_fixed_60m_adjusted_pnl_lower"].iloc[0],
             6.0 - (2.0 / (2**0.5)),
         )
+
+    def test_residual_penalty_only_penalizes_excess_group_overestimate(self):
+        df = pd.DataFrame(
+            {
+                "long_best_adjusted_pnl": [0.0, 0.0, 10.0, 10.0],
+                "short_best_adjusted_pnl": [5.0, 5.0, 5.0, 5.0],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 10.0, 10.0],
+                "pred_short_best_adjusted_pnl": [5.0, 5.0, 5.0, 5.0],
+                "session_regime": ["asia", "asia", "ny_late", "ny_late"],
+            }
+        )
+        config = ResidualPenaltyConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            penalty_weight=1.0,
+        )
+
+        calibrator = fit_residual_penalty_calibrator(
+            df,
+            config,
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+        )
+        output = add_residual_penalty_columns(df, calibrator)
+        long_output = residual_penalty_output_column("long")
+        short_output = residual_penalty_output_column("short")
+        metrics = residual_penalty_scored_metrics(
+            output,
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            entry_threshold=5.0,
+        )
+
+        self.assertEqual(output[f"{long_output}_penalty"].tolist(), [10.0, 10.0, 0.0, 0.0])
+        self.assertEqual(output[long_output].tolist(), [10.0, 10.0, 10.0, 10.0])
+        self.assertEqual(output[f"{short_output}_penalty"].tolist(), [0.0, 0.0, 0.0, 0.0])
+        self.assertEqual(output[f"{long_output}_source"].tolist(), ["group", "group", "group", "group"])
+        self.assertAlmostEqual(metrics["penalty_mean"]["long"], 5.0)
+        self.assertAlmostEqual(metrics["penalty_positive_rate"]["long"], 0.5)
 
     def test_trade_quality_calibration_adds_side_quality_columns(self):
         predictions = add_trade_source_ev_columns(

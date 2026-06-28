@@ -4,6 +4,14 @@
 
 ## 2026-06-28 JST
 
+### 23:01 Regime residual penalty
+
+- `ResidualPenaltyCalibrator` と `oof-residual-penalty` CLIを追加。side平均より過大評価が大きいregimeだけ `penalty_weight * excess_overestimate` をEVから差し引く列を生成する。
+- `volatility_regime,session_regime`, weight `1` はrow-level OOFで selected avg adjusted pnl `19.0855 -> 19.2500`、side accuracy `0.5449 -> 0.5492` と小幅改善。ただしpenalty平均は `0.1-0.2` 程度。
+- `session_regime`, weight `10` はvalidation 4foldでeligible、min adjusted pnl `85.7296` / `81.0356`。しかしfixed holdoutでは2024-12が `-156.1742` / `-159.1944` と大幅悪化し、2025-02は `+102.3132` / `+137.5952`。
+- `volatility_regime,session_regime`, weight `10` も2024-12 `-166.4110` / `-159.6254`、2025-02 `+16.6456` / `+61.8658` で弱い。
+- 判断: row-level residual penaltyは診断インフラとして残すが標準採用しない。次は全rowではなく、entry条件通過候補または実行tradeに限定した selected-trade / candidate-entry residual targetへ進む。
+
 ### 22:47 Support-aware lower EV calibration
 
 - `GroupEVCalibrationConfig.lower_z` と support-aware lower EV columnsを追加。`prior_strength > 0` では `target_std * sqrt(prior/(support+prior))` をmarginに使い、`pred_regime_calibrated_*_best_adjusted_pnl_lower` を出力する。

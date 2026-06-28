@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 22:47 JST
+最終更新: 2026-06-28 23:01 JST
 
 ## 現在の状態
 
@@ -122,6 +122,8 @@ side/regime EV penaltyを追加済み。`--side-ev-penalty-rules` は `side:colu
 
 support-aware lower EV calibration列を追加済み。`pred_regime_calibrated_*_best_adjusted_pnl_lower` はgroup supportに応じたconservative marginをcalibrated EVから差し引く。validation OOFのselected-side品質は改善したが、executable validationでは `lower_z=0.5` が2024-11を壊し、4fold min adjusted pnl `-127.7796` / `-134.5254` でeligible 0件。fixed holdoutでも2025-02は `+135.2708` / `+106.2222` と強い一方、2024-12は `-101.7542` / `-133.4082` で悪化。標準採用しない。詳細は `docs/reports/00072_2026-06-28_support_aware_lower_ev_calibration.md`。
 
+regime residual penalty列を追加済み。`pred_regime_residual_penalized_*_best_adjusted_pnl` はside平均より過大評価が大きいregimeだけEVを減点する。`session_regime`, weight `10` はvalidation 4foldでeligible、min adjusted pnl `85.7296` / `81.0356` だったが、fixed holdoutでは2024-12が `-156.1742` / `-159.1944` と大幅悪化。`volatility_regime,session_regime`, weight `10` も2024-12 `-166.4110` / `-159.6254` で弱い。row-level residualは実行売買の壊れる方向を十分に表さないため標準採用しない。詳細は `docs/reports/00073_2026-06-28_regime_residual_penalty.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -164,6 +166,7 @@ support-aware lower EV calibration列を追加済み。`pred_regime_calibrated_*
 19. `short:up_low_vol` の直接side EV penaltyはvalidation最悪月と2024-12固定testを壊すため採用しない。short偏重riskはpost-hocなgroup減点ではなく、support-aware target、side/regime別calibrated EV、複数holdout同時rankingで扱う。
 20. `model-holdout-audit` による2ヶ月同時監査では現候補が全滅した。次はside EV penalty探索を広げず、entry/side EV calibrationとsupport-aware realized-PnL targetへ戻る。
 21. support-aware lower EVは、OOF selected-side品質を改善しても executable validationを壊した。次はEV全体を一律に下げず、side/regime別calibration residual targetやregime-conditioned side confidenceで「壊れる方向」を学習する。
+22. row-level residual penaltyはvalidation OOFのselected avgを上げても、fixed holdoutで2024-12を大きく悪化させた。次は全rowの教師ではなく、entry条件通過候補または実行tradeに限定した residual/failure target を作る。
 
 ## 未決定事項
 
@@ -174,6 +177,8 @@ support-aware lower EV calibration列を追加済み。`pred_regime_calibrated_*
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-28 23:01 JST 更新: `oof-residual-penalty` と residual penalized EV列を追加し、session / vol-session粒度で検証した。session weight `10` はvalidation上eligibleだが、2024-12 fixed holdout `-156.1742` / `-159.1944` で既存baselineより大きく悪化。row-level residualは実行売買の壊れ方を表さないため標準採用せず、次は selected-trade / candidate-entry residual targetへ進む。
 
 2026-06-28 22:47 JST 更新: support-aware lower EV columnsを追加し、`lower_z=0.5` をvalidation/holdoutで検証した。OOF selected-side品質は改善したが、executable validationは2024-11で崩れ、4fold min adjusted pnl `-127.7796` / `-134.5254`。2024-12 fixed holdoutも `-101.7542` / `-133.4082` で既存baselineより悪化。標準採用せず、次はside/regime別calibration residual targetまたはregime-conditioned side confidenceへ進む。
 
