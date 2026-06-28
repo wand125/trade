@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-28 14:39 JST
+最終更新: 2026-06-28 15:00 JST
 
 ## 現在の状態
 
@@ -54,6 +54,8 @@ fixed horizon EV予測に対するOOF calibration基盤を追加済み。`volati
 
 profit barrier hit probabilityを使った線形miss penaltyを追加済み。`profit_barrier_miss_penalty=2/4/6/8` をvalidation 4foldで試したが、delay 0 / delay 1 のcost-aware候補選定ともeligibleはpenalty `0.0` のみだった。非zero penaltyはtrade集合の実現品質を改善せず、smoothed missやEV overestimateも悪化したため採用しない。実装は探索軸として残し、標準設定は `profit_barrier_miss_penalty=0.0` を維持する。詳細は `docs/reports/00036_2026-06-28_profit_barrier_miss_penalty_sweep.md`。
 
+selected-trade realized PnL calibration基盤を追加済み。現行基準候補のcost-aware trades 246件から、side/regime別に `pred_taken_ev -> adjusted_pnl` をOOF補正した。raw biasは `0.628560` から calibrated bias `-0.078209` へ下がったが、R2は `-0.017978`。`min_trade_quality` gateをvalidation 4foldで試すと、eligible topはgateなし `-inf` のままで、`0` 以上はcost min pnlを大きく落とした。現時点では採用しない。詳細は `docs/reports/00037_2026-06-28_selected_trade_quality_calibration.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイル更新時刻や `更新日時` ではなく、レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -75,8 +77,8 @@ profit barrier hit probabilityを使った線形miss penaltyを追加済み。`p
 
 ## 次の作業
 
-1. raw fixed horizon + `score_mode=max` + `profit_barrier_miss_penalty=0.0` を現行基準にする。
-2. 線形profit-barrier miss penaltyは採用せず、selected tradesの実現PnLに対する二段階targetを作る。特にEV overestimate、exit regret、actual profit-barrier missを同時に下げる方向へ進める。
+1. raw fixed horizon + `score_mode=max` + `profit_barrier_miss_penalty=0.0` + `min_trade_quality=-inf` を現行基準にする。
+2. selected-trade qualityの単純group平均gateは採用せず、selected tradesの実現PnLを小型モデルで学習する。特にEV overestimate、exit regret、actual profit-barrier missを同時に下げる方向へ進める。
 3. profit-barrier missを直接下げるexit timing target、またはhazard/survival型の「いつ利確/損切り/時間切れになるか」targetを試す。
 4. cost-aware評価を主目的にした候補選定基準を再固定する。spread `0.1` / slippage `0.05` / delay `1` を通常評価へ昇格するか検討する。
 5. diagnostic gateは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値は使わない。
@@ -201,8 +203,11 @@ calibrated EV列を指定したtrade failure分析に修正し、shrink065 top-m
 - `docs/reports/00034_2026-06-28_fixed_horizon_score_mode_validation.md`
 - `docs/reports/00035_2026-06-28_fixed_horizon_oof_calibration.md`
 - `docs/reports/00036_2026-06-28_profit_barrier_miss_penalty_sweep.md`
+- `docs/reports/00037_2026-06-28_selected_trade_quality_calibration.md`
 - `docs/decisions/0007_high_turnover_gate_selection.md`
 - `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
+- `experiments/20260628_055648_trade_quality_oof_fixed_horizon/`
+- `data/reports/backtests/20260628_055927_model_candidate_selection/`
 - `data/reports/backtests/20260628_053757_model_candidate_selection/`
 - `data/reports/backtests/20260628_053630_model_candidate_selection/`
 - `data/reports/backtests/20260628_050919_horizon_score_mode_candidate_selection/`

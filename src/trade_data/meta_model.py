@@ -15,6 +15,12 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+from trade_data.backtest import (
+    FIXED_HORIZON_SCORE_MODES,
+    enrich_trades_with_predictions,
+    prepare_analysis_predictions,
+    read_trades_csv,
+)
 from trade_data.modeling import GENERALIZATION_FEATURE_COLUMNS, parse_bool, selection_metrics
 
 
@@ -134,7 +140,19 @@ class GroupTargetCalibrator:
     group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]]
 
 
+@dataclass(frozen=True)
+class TradeQualityCalibrator:
+    config: GroupEVCalibrationConfig
+    overall_stats: GroupEVStats
+    side_stats: dict[str, GroupEVStats]
+    group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]]
+
+
 FIXED_HORIZON_MINUTES = (60, 240, 720)
+TRADE_SOURCE_LONG_EV_COLUMN = "pred_trade_source_long_ev"
+TRADE_SOURCE_SHORT_EV_COLUMN = "pred_trade_source_short_ev"
+TRADE_QUALITY_LONG_COLUMN = "pred_trade_quality_long_adjusted_pnl"
+TRADE_QUALITY_SHORT_COLUMN = "pred_trade_quality_short_adjusted_pnl"
 
 
 def fixed_horizon_target_specs(
@@ -212,6 +230,75 @@ def parse_csv_ints(value: str | None) -> list[int]:
         except ValueError as exc:
             raise argparse.ArgumentTypeError("CSV values must be integers") from exc
     return output
+
+
+def parse_csv_paths(value: str | None) -> list[Path]:
+    if value is None:
+        return []
+    paths = [Path(part.strip()) for part in value.split(",") if part.strip()]
+    if not paths:
+        raise argparse.ArgumentTypeError("at least one path is required")
+    return paths
+
+
+def fixed_horizon_score_series(frame: pd.DataFrame, columns: tuple[str, ...], score_mode: str) -> pd.Series:
+    if score_mode not in FIXED_HORIZON_SCORE_MODES:
+        raise ValueError(f"unknown fixed horizon score mode: {score_mode}")
+    missing = sorted(set(columns) - set(frame.columns))
+    if missing:
+        raise ValueError(f"predictions missing fixed horizon columns: {', '.join(missing)}")
+    values = frame.loc[:, list(columns)].astype(float)
+    if score_mode == "max":
+        score = values.max(axis=1)
+    elif score_mode == "mean":
+        score = values.mean(axis=1)
+    elif score_mode == "median":
+        score = values.median(axis=1)
+    elif score_mode == "min":
+        score = values.min(axis=1)
+    else:
+        raise ValueError(f"unknown fixed horizon score mode: {score_mode}")
+    return pd.Series(score.to_numpy(), index=frame.index)
+
+
+def add_trade_source_ev_columns(
+    predictions: pd.DataFrame,
+    *,
+    source_mode: str,
+    long_column: str,
+    short_column: str,
+    long_fixed_horizon_columns: tuple[str, ...],
+    short_fixed_horizon_columns: tuple[str, ...],
+    fixed_horizon_score_mode: str,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    if source_mode == "columns":
+        missing = sorted({long_column, short_column} - set(output.columns))
+        if missing:
+            raise ValueError(f"predictions missing trade source columns: {', '.join(missing)}")
+        output[TRADE_SOURCE_LONG_EV_COLUMN] = output[long_column].astype(float)
+        output[TRADE_SOURCE_SHORT_EV_COLUMN] = output[short_column].astype(float)
+    elif source_mode == "fixed_horizon":
+        output[TRADE_SOURCE_LONG_EV_COLUMN] = fixed_horizon_score_series(
+            output,
+            long_fixed_horizon_columns,
+            fixed_horizon_score_mode,
+        )
+        output[TRADE_SOURCE_SHORT_EV_COLUMN] = fixed_horizon_score_series(
+            output,
+            short_fixed_horizon_columns,
+            fixed_horizon_score_mode,
+        )
+    else:
+        raise ValueError("trade source mode must be columns or fixed_horizon")
+    return output
+
+
+def read_trade_frames(paths: list[Path]) -> pd.DataFrame:
+    if not paths:
+        raise ValueError("at least one trade CSV is required")
+    frames = [read_trades_csv(path) for path in paths]
+    return pd.concat(frames, ignore_index=True)
 
 
 def filter_months(df: pd.DataFrame, months: list[str] | None, label: str) -> pd.DataFrame:
@@ -440,6 +527,193 @@ def add_group_calibrated_fixed_horizon_columns(
     calibrator: GroupTargetCalibrator,
 ) -> pd.DataFrame:
     return add_group_calibrated_target_columns(predictions, calibrator)
+
+
+def fit_trade_quality_calibrator(
+    enriched_trades: pd.DataFrame,
+    config: GroupEVCalibrationConfig,
+) -> TradeQualityCalibrator:
+    if config.min_group_size <= 0:
+        raise ValueError("min_group_size must be positive")
+    if config.prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+
+    required_columns = {
+        "direction",
+        "adjusted_pnl",
+        "pred_taken_ev",
+        *config.group_columns,
+    }
+    missing_columns = sorted(required_columns - set(enriched_trades.columns))
+    if missing_columns:
+        raise ValueError(f"enriched trades missing calibration columns: {', '.join(missing_columns)}")
+
+    working = enriched_trades.copy()
+    working["side_name"] = working["direction"].astype(str).str.lower()
+    working["target"] = working["adjusted_pnl"].astype(float)
+    working["pred"] = working["pred_taken_ev"].astype(float)
+    working = working.replace([np.inf, -np.inf], np.nan).dropna(subset=["target", "pred"])
+    if working.empty:
+        raise ValueError("no valid selected trades for trade quality calibration")
+
+    overall_stats = GroupEVStats(
+        n=int(len(working)),
+        pred_mean=float(working["pred"].mean()),
+        target_mean=float(working["target"].mean()),
+    )
+    keys = group_key_series(working, config.group_columns)
+    side_stats: dict[str, GroupEVStats] = {}
+    group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]] = {}
+    for side_name in ("long", "short"):
+        side_frame = working[working["side_name"] == side_name]
+        group_stats[side_name] = {}
+        if side_frame.empty:
+            continue
+        side_stats[side_name] = GroupEVStats(
+            n=int(len(side_frame)),
+            pred_mean=float(side_frame["pred"].mean()),
+            target_mean=float(side_frame["target"].mean()),
+        )
+        side_keys = keys.loc[side_frame.index]
+        side_working = side_frame.assign(_key=side_keys)
+        for key, group in side_working.groupby("_key", sort=False):
+            group_count = int(len(group))
+            if group_count < config.min_group_size:
+                continue
+            if config.prior_strength == 0:
+                weight = 1.0
+            else:
+                weight = group_count / (group_count + config.prior_strength)
+            side_stat = side_stats[side_name]
+            group_stats[side_name][key] = GroupEVStats(
+                n=group_count,
+                pred_mean=float(weight * group["pred"].mean() + (1.0 - weight) * side_stat.pred_mean),
+                target_mean=float(
+                    weight * group["target"].mean() + (1.0 - weight) * side_stat.target_mean
+                ),
+            )
+    return TradeQualityCalibrator(
+        config=config,
+        overall_stats=overall_stats,
+        side_stats=side_stats,
+        group_stats=group_stats,
+    )
+
+
+def trade_quality_side_values(
+    predictions: pd.DataFrame,
+    side_name: str,
+    raw_column: str,
+    calibrator: TradeQualityCalibrator,
+) -> pd.Series:
+    raw = predictions[raw_column].astype(float).reset_index(drop=True)
+    fallback_stat = calibrator.side_stats.get(side_name, calibrator.overall_stats)
+    stats = pd.DataFrame(
+        {
+            "pred_mean": fallback_stat.pred_mean,
+            "target_mean": fallback_stat.target_mean,
+        },
+        index=predictions.index,
+    ).reset_index(drop=True)
+    if calibrator.config.group_columns:
+        keys = group_key_series(predictions, calibrator.config.group_columns).reset_index(drop=True)
+        for key, group_stat in calibrator.group_stats.get(side_name, {}).items():
+            mask = keys == key
+            if mask.any():
+                stats.loc[mask, "pred_mean"] = group_stat.pred_mean
+                stats.loc[mask, "target_mean"] = group_stat.target_mean
+    values = stats["target_mean"] + calibrator.config.prediction_shrinkage * (raw - stats["pred_mean"])
+    return pd.Series(values.to_numpy(), index=predictions.index)
+
+
+def add_trade_quality_columns(
+    predictions: pd.DataFrame,
+    calibrator: TradeQualityCalibrator,
+) -> pd.DataFrame:
+    missing = sorted(
+        {TRADE_SOURCE_LONG_EV_COLUMN, TRADE_SOURCE_SHORT_EV_COLUMN} - set(predictions.columns)
+    )
+    if missing:
+        raise ValueError(f"predictions missing trade source columns: {', '.join(missing)}")
+    output = predictions.copy()
+    output[TRADE_QUALITY_LONG_COLUMN] = trade_quality_side_values(
+        output,
+        "long",
+        TRADE_SOURCE_LONG_EV_COLUMN,
+        calibrator,
+    )
+    output[TRADE_QUALITY_SHORT_COLUMN] = trade_quality_side_values(
+        output,
+        "short",
+        TRADE_SOURCE_SHORT_EV_COLUMN,
+        calibrator,
+    )
+    return output
+
+
+def add_trade_quality_values_to_enriched(
+    enriched_trades: pd.DataFrame,
+    calibrator: TradeQualityCalibrator,
+) -> pd.DataFrame:
+    output = enriched_trades.copy()
+    calibrated = []
+    keys = group_key_series(output, calibrator.config.group_columns)
+    for index, row in output.iterrows():
+        side_name = str(row["direction"]).lower()
+        stat = calibrator.side_stats.get(side_name, calibrator.overall_stats)
+        key = keys.loc[index]
+        stat = calibrator.group_stats.get(side_name, {}).get(key, stat)
+        raw = float(row["pred_taken_ev"])
+        calibrated.append(stat.target_mean + calibrator.config.prediction_shrinkage * (raw - stat.pred_mean))
+    output["pred_trade_quality_taken_adjusted_pnl"] = calibrated
+    return output
+
+
+def trade_quality_calibration_metrics(
+    enriched_trades: pd.DataFrame,
+    calibrator: TradeQualityCalibrator,
+) -> dict[str, float]:
+    if enriched_trades.empty:
+        return trade_quality_scored_metrics(enriched_trades)
+    scored = add_trade_quality_values_to_enriched(enriched_trades, calibrator)
+    return trade_quality_scored_metrics(scored)
+
+
+def trade_quality_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
+    if scored.empty:
+        return {
+            "trade_count": 0,
+            "raw_bias": 0.0,
+            "calibrated_bias": 0.0,
+            "bias_reduction": 0.0,
+            "raw_overestimate_mean": 0.0,
+            "calibrated_overestimate_mean": 0.0,
+            "calibrated_mae": 0.0,
+            "calibrated_rmse": 0.0,
+            "calibrated_r2": 0.0,
+        }
+    target = scored["adjusted_pnl"].astype(float)
+    raw_pred = scored["pred_taken_ev"].astype(float)
+    calibrated_pred = scored["pred_trade_quality_taken_adjusted_pnl"].astype(float)
+    raw_error = raw_pred - target
+    calibrated_error = calibrated_pred - target
+    if len(scored) >= 2:
+        calibrated_r2 = float(r2_score(target, calibrated_pred))
+    else:
+        calibrated_r2 = 0.0
+    return {
+        "trade_count": int(len(scored)),
+        "raw_bias": float(raw_error.mean()),
+        "calibrated_bias": float(calibrated_error.mean()),
+        "bias_reduction": float(abs(raw_error.mean()) - abs(calibrated_error.mean())),
+        "raw_overestimate_mean": float(raw_error.clip(lower=0).mean()),
+        "calibrated_overestimate_mean": float(calibrated_error.clip(lower=0).mean()),
+        "calibrated_mae": float(mean_absolute_error(target, calibrated_pred)),
+        "calibrated_rmse": float(mean_squared_error(target, calibrated_pred) ** 0.5),
+        "calibrated_r2": calibrated_r2,
+    }
 
 
 def side_examples(df: pd.DataFrame, side_name: str) -> pd.DataFrame:
@@ -693,6 +967,21 @@ def serializable_group_target_calibrator(calibrator: GroupTargetCalibrator) -> d
                 for key, stats in target_groups.items()
             }
             for name, target_groups in calibrator.group_stats.items()
+        },
+    }
+
+
+def serializable_trade_quality_calibrator(calibrator: TradeQualityCalibrator) -> dict[str, object]:
+    return {
+        "config": asdict(calibrator.config),
+        "overall_stats": asdict(calibrator.overall_stats),
+        "side_stats": {side: asdict(stats) for side, stats in calibrator.side_stats.items()},
+        "group_stats": {
+            side: {
+                "|".join(key): asdict(stats)
+                for key, stats in side_groups.items()
+            }
+            for side, side_groups in calibrator.group_stats.items()
         },
     }
 
@@ -1007,6 +1296,163 @@ def oof_fixed_horizon_calibration(args: argparse.Namespace) -> int:
     return 0
 
 
+def trade_source_kwargs_from_args(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "source_mode": args.source_mode,
+        "long_column": args.long_column,
+        "short_column": args.short_column,
+        "long_fixed_horizon_columns": tuple(parse_csv_strings(args.long_fixed_horizon_columns)),
+        "short_fixed_horizon_columns": tuple(parse_csv_strings(args.short_fixed_horizon_columns)),
+        "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+    }
+
+
+def prepare_trade_quality_prediction_frame(
+    predictions: pd.DataFrame,
+    args: argparse.Namespace,
+) -> pd.DataFrame:
+    return add_trade_source_ev_columns(predictions, **trade_source_kwargs_from_args(args))
+
+
+def enrich_trades_for_trade_quality(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+) -> pd.DataFrame:
+    analysis_predictions = prepare_analysis_predictions(
+        predictions,
+        TRADE_SOURCE_LONG_EV_COLUMN,
+        TRADE_SOURCE_SHORT_EV_COLUMN,
+    )
+    return enrich_trades_with_predictions(trades, analysis_predictions)
+
+
+def oof_trade_quality_calibration(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF trade quality calibration")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+    validation_trades = read_trade_frames(parse_csv_paths(args.validation_trades))
+    validation_enriched = enrich_trades_for_trade_quality(validation_trades, validation_predictions)
+    validation_enriched = validation_enriched[
+        validation_enriched["dataset_month"].isin(validation_months)
+    ].copy()
+    if validation_enriched.empty:
+        raise ValueError("validation selected-trade frame is empty after month filtering")
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    config = GroupEVCalibrationConfig(
+        group_columns=tuple(parse_csv_strings(args.group_columns)),
+        min_group_size=args.min_group_size,
+        prior_strength=args.prior_strength,
+        prediction_shrinkage=args.prediction_shrinkage,
+    )
+    validate_group_columns(validation_predictions, validation_predictions, config.group_columns)
+    if apply_predictions is not None:
+        validate_group_columns(validation_predictions, apply_predictions, config.group_columns)
+
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_trade_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for holdout_month in validation_months:
+        fit_trades = validation_enriched[validation_enriched["dataset_month"] != holdout_month].copy()
+        holdout_trades = validation_enriched[validation_enriched["dataset_month"] == holdout_month].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_trades.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build trade quality OOF fold for {holdout_month}")
+        fold_calibrator = fit_trade_quality_calibrator(fit_trades, config)
+        holdout_prediction_output = add_trade_quality_columns(holdout_predictions, fold_calibrator)
+        holdout_trade_output = add_trade_quality_values_to_enriched(holdout_trades, fold_calibrator)
+        fold_prediction_outputs.append(holdout_prediction_output)
+        fold_trade_outputs.append(holdout_trade_output)
+        fold_metrics[holdout_month] = {
+            "fit_trades": int(len(fit_trades)),
+            "holdout_trades": int(len(holdout_trades)),
+            "holdout_predictions": int(len(holdout_predictions)),
+            "holdout": trade_quality_calibration_metrics(holdout_trades, fold_calibrator),
+            "calibrator": serializable_trade_quality_calibrator(fold_calibrator),
+        }
+
+    validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+    validation_oof_trades = pd.concat(fold_trade_outputs, ignore_index=True)
+    if "entry_timestamp" in validation_oof_trades.columns:
+        validation_oof_trades = validation_oof_trades.sort_values("entry_timestamp")
+
+    final_calibrator = fit_trade_quality_calibrator(validation_enriched, config)
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_trade_quality_columns(apply_predictions, final_calibrator)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_trade_quality_calibrated.parquet",
+        index=False,
+    )
+    validation_oof_trades.to_csv(run_dir / "validation_oof_enriched_trades.csv", index=False)
+    validation_enriched.to_csv(run_dir / "validation_fit_enriched_trades.csv", index=False)
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_trade_quality_calibrated.parquet",
+            index=False,
+        )
+    metrics = {
+        "mode": "validation_oof_trade_quality",
+        "validation_trades": [str(path) for path in parse_csv_paths(args.validation_trades)],
+        "validation_predictions": str(args.validation_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "validation_predictions": int(len(validation_predictions)),
+            "validation_trades": int(len(validation_enriched)),
+            "validation_oof": int(len(validation_oof)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_predictions": month_counts(validation_predictions),
+            "validation_trades": month_counts(validation_enriched),
+            "validation_oof": month_counts(validation_oof),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "final_calibrator": serializable_trade_quality_calibrator(final_calibrator),
+        "folds": fold_metrics,
+        "validation_oof": trade_quality_scored_metrics(validation_oof_trades),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def fit(args: argparse.Namespace) -> int:
     config = MetaModelConfig(
         max_iter=args.max_iter,
@@ -1113,6 +1559,29 @@ def build_parser() -> argparse.ArgumentParser:
         group_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
         group_parser.add_argument("--label", default=default_label)
 
+    def add_trade_source_args(source_parser: argparse.ArgumentParser) -> None:
+        source_parser.add_argument(
+            "--source-mode",
+            choices=["columns", "fixed_horizon"],
+            default="fixed_horizon",
+            help="which side EV source to calibrate from selected trades",
+        )
+        source_parser.add_argument("--long-column", default="pred_long_best_adjusted_pnl")
+        source_parser.add_argument("--short-column", default="pred_short_best_adjusted_pnl")
+        source_parser.add_argument(
+            "--long-fixed-horizon-columns",
+            default="pred_long_fixed_60m_adjusted_pnl,pred_long_fixed_240m_adjusted_pnl,pred_long_fixed_720m_adjusted_pnl",
+        )
+        source_parser.add_argument(
+            "--short-fixed-horizon-columns",
+            default="pred_short_fixed_60m_adjusted_pnl,pred_short_fixed_240m_adjusted_pnl,pred_short_fixed_720m_adjusted_pnl",
+        )
+        source_parser.add_argument(
+            "--fixed-horizon-score-mode",
+            choices=FIXED_HORIZON_SCORE_MODES,
+            default="max",
+        )
+
     fit_parser = subparsers.add_parser("fit", help="fit a meta EV model and apply it")
     fit_parser.add_argument("--train-predictions", type=Path, required=True)
     fit_parser.add_argument("--apply-predictions", type=Path, required=True)
@@ -1203,6 +1672,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_group_calibration_args(fixed_horizon_oof_parser, "fixed_horizon_regime_calibration")
     fixed_horizon_oof_parser.set_defaults(func=oof_fixed_horizon_calibration)
+
+    trade_quality_oof_parser = subparsers.add_parser(
+        "oof-trade-quality-calibration",
+        help="build validation OOF selected-trade realized-PnL calibration columns",
+    )
+    trade_quality_oof_parser.add_argument(
+        "--validation-trades",
+        required=True,
+        help="comma-separated model-policy trades.csv files for validation months",
+    )
+    trade_quality_oof_parser.add_argument("--validation-predictions", type=Path, required=True)
+    trade_quality_oof_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to calibrate with the final validation-trade calibrator",
+    )
+    trade_quality_oof_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    trade_quality_oof_parser.add_argument("--apply-months", help="comma-separated apply months")
+    add_trade_source_args(trade_quality_oof_parser)
+    add_group_calibration_args(trade_quality_oof_parser, "trade_quality_calibration")
+    trade_quality_oof_parser.set_defaults(func=oof_trade_quality_calibration)
     return parser
 
 

@@ -9,17 +9,21 @@ from trade_data.meta_model import (
     add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
+    add_trade_quality_columns,
+    add_trade_source_ev_columns,
     available_feature_columns,
     build_training_frame,
     build_sample_weights,
     combine_fit_predictions,
     fit_group_target_calibrator,
     fit_group_ev_calibrator,
+    fit_trade_quality_calibrator,
     filter_months,
     fixed_horizon_target_specs,
     parse_csv_ints,
     parse_csv_months,
     parse_csv_strings,
+    trade_quality_calibration_metrics,
     side_target_means,
     train_model,
 )
@@ -236,6 +240,39 @@ class MetaModelTests(unittest.TestCase):
 
         self.assertEqual(output["pred_regime_calibrated_long_fixed_60m_adjusted_pnl"].tolist(), [2.0, 2.0, 9.0])
         self.assertEqual(output["pred_regime_calibrated_short_fixed_60m_adjusted_pnl"].tolist(), [6.0, 6.0, 2.0])
+
+    def test_trade_quality_calibration_adds_side_quality_columns(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "long", "short"],
+                "adjusted_pnl": [1.0, 3.0, 9.0],
+                "pred_taken_ev": [11.0, 13.0, 12.0],
+                "session_regime": ["asia", "asia", "ny_late"],
+            }
+        )
+        config = GroupEVCalibrationConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            prediction_shrinkage=0.0,
+        )
+
+        calibrator = fit_trade_quality_calibrator(trades, config)
+        output = add_trade_quality_columns(predictions, calibrator)
+        metrics = trade_quality_calibration_metrics(trades, calibrator)
+
+        self.assertEqual(output["pred_trade_quality_long_adjusted_pnl"].tolist(), [2.0, 2.0, 2.0])
+        self.assertEqual(output["pred_trade_quality_short_adjusted_pnl"].tolist(), [9.0, 9.0, 9.0])
+        self.assertAlmostEqual(metrics["calibrated_bias"], 0.0)
 
 
 if __name__ == "__main__":

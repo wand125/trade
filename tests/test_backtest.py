@@ -553,6 +553,28 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(unpenalized_signal.tolist(), [1, 1])
         self.assertEqual(penalized_signal.tolist(), [-1, 1])
 
+    def test_model_signal_can_filter_low_predicted_trade_quality(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 5.0],
+                "pred_short_best_adjusted_pnl": [10.0, 10.0, 16.0],
+                "pred_trade_quality_long_adjusted_pnl": [-2.0, 4.0, 3.0],
+                "pred_trade_quality_short_adjusted_pnl": [8.0, 8.0, 7.0],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10.0,
+            min_trade_quality=0.0,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, 1, -1])
+
     def test_sweep_metrics_normalization_adds_missing_risk_penalty(self):
         frame = pd.DataFrame(
             {
@@ -573,6 +595,7 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(normalized["risk_penalty"].tolist(), [0.0])
         self.assertEqual(normalized["profit_barrier_miss_penalty"].tolist(), [0.0])
+        self.assertEqual(normalized["min_trade_quality"].tolist(), [-float("inf")])
         self.assertEqual(normalized["fixed_horizon_score_mode"].tolist(), ["max"])
         self.assertEqual(normalized["long_entry_threshold_offset"].tolist(), [0.0])
         self.assertEqual(normalized["short_entry_threshold_offset"].tolist(), [0.0])

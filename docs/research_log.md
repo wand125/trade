@@ -1915,3 +1915,38 @@ Artifacts:
 - 線形miss penaltyはtrade集合の実現品質を改善せず、smoothed missやEV overestimateを悪化させた。
 - 実装は探索軸として残すが、標準設定は `profit_barrier_miss_penalty=0.0` を維持する。
 - 次はselected tradesの実現PnL、actual barrier miss、exit regretを直接targetにする二段階モデル、またはhazard/survival型exit timing targetへ進む。
+
+### 2026-06-28 15:00 JST Selected Trade Quality Calibration
+
+作業:
+
+- policyが実際に選んだtradeだけを使う `TradeQualityCalibrator` を追加した。
+- `trade_data.meta_model oof-trade-quality-calibration` を追加し、validation月leave-one-month-outで `pred_trade_quality_long/short_adjusted_pnl` を生成できるようにした。
+- `model-policy --min-trade-quality` と `model-sweep --min-trade-qualities` を追加した。
+- 現行基準候補のcost-aware trades 4ヶ月分を生成し、OOF quality列を作った。
+- report: `docs/reports/00037_2026-06-28_selected_trade_quality_calibration.md`
+
+Artifacts:
+
+- selected-trade fit trades: `data/reports/backtests/20260628_055630_model_fixed_horizon_ev_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- OOF quality predictions: `experiments/20260628_055648_trade_quality_oof_fixed_horizon/`
+- no-cost quality sweeps: `data/reports/backtests/20260628_055803_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- cost quality sweeps: `data/reports/backtests/20260628_055853_model_sweep_2024-07/`, `...2024-09/`, `...2024-11/`, `...2025-01/`
+- candidate selection: `data/reports/backtests/20260628_055927_model_candidate_selection/`
+
+結果:
+
+| min trade quality | eligible | best cost min pnl | best base min pnl | min trades | best smoothed miss | best EV overestimate |
+|---:|---:|---:|---:|---:|---:|---:|
+| `-inf` | 7 | `27.2158` | `39.7538` | 47 | `0.454545` | `14.377795` |
+| `-1.0` | 6 | `22.7466` | `34.8046` | 47 | `0.454545` | `14.377795` |
+| `0.0` | 3 | `9.2116` | `20.8296` | 47 | `0.464286` | `14.549737` |
+| `0.5` | 3 | `4.7194` | `15.3554` | 27 | `0.488889` | `14.763182` |
+| `1.0` | 0 | `-9.1060` | `-4.2660` | 17 | `0.625000` | `16.130152` |
+
+判断:
+
+- OOF selected-trade calibrationはraw biasを `0.628560` から `-0.078209` へ下げたが、R2は `-0.017978` で個別trade識別力は弱い。
+- `min_trade_quality` gateはtop候補を改善しない。`0` 以上ではcost min pnlが大きく悪化する。
+- 実装は残すが、標準候補には採用しない。標準は `min_trade_quality=-inf`。
+- 次はgroup平均ではなく小型モデルでselected-trade targetを学習するか、hazard/survival型exit timing targetへ進む。
