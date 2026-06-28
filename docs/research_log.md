@@ -3708,3 +3708,41 @@ Artifacts:
 - fixed horizon componentはOOF R2が相対的にましだが、実行policyではentry `15`, risk `0.05` でもmin pnl `43.6626` に落ちる。
 - clipped bestはOOF MAEが小さいが、実行policyではEV過大評価を下げない。
 - 標準採用しない。次はcomponentをscalar penaltyにせず、別特徴/別target/multi-output診断として扱う。
+
+### 2026-06-29 02:57 JST Candidate quality prefixed component gates
+
+作業:
+
+- `oof-candidate-quality-model` に `--prediction-prefix` を追加した。
+- prefixなしでは既存の `pred_candidate_quality_long_adjusted_pnl` などを維持する。
+- prefixありでは `pred_candidate_quality_<prefix>_<side>_*` 列を出し、複数componentの予測を同じparquetへ共存できる。
+- timed / fixed / clipped best componentを順番にOOF scoringし、final combined parquetを作った。
+- component mean列を `min_trade_quality` gateとしてvalidation 4foldで比較した。
+- report: `docs/reports/00087_2026-06-29_candidate_quality_prefixed_component_gates.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- timed prefixed OOF: `data/reports/modeling/20260628_175235_candidate_quality_prefixed_timed_component_oof/`
+- fixed prefixed OOF: `data/reports/modeling/20260628_175302_candidate_quality_prefixed_fixed_component_oof/`
+- final combined prefixed OOF: `data/reports/modeling/20260628_175327_candidate_quality_prefixed_clipped_best_oof/`
+- timed gate summary: `data/reports/backtests/candidate_quality_timed_component_quality_gate_summary/20260628_175700_model_sweep_summary/`
+- fixed gate summary: `data/reports/backtests/candidate_quality_fixed_component_quality_gate_summary/20260628_175700_model_sweep_summary/`
+- clipped gate summary: `data/reports/backtests/candidate_quality_clipped_best_quality_gate_summary/20260628_175700_model_sweep_summary/`
+
+結果:
+
+| gate family | best positive gate | min pnl | sum pnl | min trades | forced exit max | EV overestimate mean |
+|---|---|---:|---:|---:|---:|---:|
+| baseline | no gate | `82.7176` | `406.6546` | `24` | `0.0370` | `15.5226` |
+| timed component | entry `10`, rank `0.5`, quality `0` | `39.5520` | `287.2454` | `24` | `0.0357` | `16.5066` |
+| fixed component | entry `12`, rank `0.5`, quality `0` | `71.1944` | `367.3486` | `21` | `0.0000` | `15.9284` |
+| clipped best | entry `12`, rank `0.5`, quality `0/2/5` | `82.7176` | `406.6546` | `24` | `0.0370` | `15.5226` |
+| clipped best | entry `12`, rank `0.5`, quality `8` | `82.7176` | `402.3006` | `24` | `0.0370` | `15.5758` |
+
+判断:
+
+- prefix付きcomponent列は採用する。componentを潰さず同じparquetへ持てるため、診断とstacking基盤として必要。
+- component meanの単独quality gateは標準採用しない。
+- fixed component gateはforced exitを減らすが、PnL改善へ変換できていない。
+- 次はcomponent列をhard gateではなく、diagnostic/tie-break/multi-feature stackingの説明変数として使う。

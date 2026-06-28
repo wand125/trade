@@ -249,12 +249,20 @@ python -m trade_data.meta_model oof-candidate-quality-model \
   --joint-best-weight 0.1 \
   --joint-time-decay 0.25 \
   --joint-fixed-horizon-minutes 60,240,720 \
+  --prediction-prefix joint_exit \
   --lower-quantile 0.25 \
   --entry-threshold 12 \
   --short-entry-threshold-offset 6 \
   --side-margin 5 \
   --min-entry-rank 0.5
 ```
+
+When multiple candidate-quality targets should coexist in one prediction
+parquet, set `--prediction-prefix`. For example,
+`--prediction-prefix fixed_component` writes
+`pred_candidate_quality_fixed_component_long_adjusted_pnl` and matching
+short/lower/risk columns instead of overwriting the default
+`pred_candidate_quality_long_adjusted_pnl` columns.
 
 If a saved prediction parquet was produced before actual forced-exit target
 columns were preserved, enrich it from the dataset files before training

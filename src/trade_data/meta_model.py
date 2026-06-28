@@ -313,6 +313,7 @@ class CandidateQualityModelConfig:
     joint_time_decay: float = 0.25
     joint_component_clip_multiple: float = 1.0
     joint_fixed_horizon_minutes: tuple[int, ...] = (60, 240, 720)
+    prediction_prefix: str = ""
     long_entry_rank_column: str = "pred_long_entry_local_rank"
     short_entry_rank_column: str = "pred_short_entry_local_rank"
 
@@ -2554,19 +2555,41 @@ def predict_candidate_quality_features(
     return predictions
 
 
-def candidate_quality_columns_for_side(side_name: str) -> tuple[str, str, str, str]:
-    if side_name == "long":
+def validate_candidate_quality_prediction_prefix(prefix: str) -> str:
+    normalized = prefix.strip()
+    if not normalized:
+        return ""
+    if re.fullmatch(r"[A-Za-z0-9_]+", normalized) is None:
+        raise ValueError("prediction_prefix must contain only letters, digits, and underscores")
+    return normalized
+
+
+def candidate_quality_columns_for_side(
+    side_name: str,
+    prediction_prefix: str = "",
+) -> tuple[str, str, str, str]:
+    prefix = validate_candidate_quality_prediction_prefix(prediction_prefix)
+    if not prefix:
+        if side_name == "long":
+            return (
+                CANDIDATE_QUALITY_LONG_COLUMN,
+                CANDIDATE_QUALITY_LONG_LOWER_COLUMN,
+                CANDIDATE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN,
+                CANDIDATE_QUALITY_LONG_LOWER_OVERESTIMATE_RISK_COLUMN,
+            )
         return (
-            CANDIDATE_QUALITY_LONG_COLUMN,
-            CANDIDATE_QUALITY_LONG_LOWER_COLUMN,
-            CANDIDATE_QUALITY_LONG_OVERESTIMATE_RISK_COLUMN,
-            CANDIDATE_QUALITY_LONG_LOWER_OVERESTIMATE_RISK_COLUMN,
+            CANDIDATE_QUALITY_SHORT_COLUMN,
+            CANDIDATE_QUALITY_SHORT_LOWER_COLUMN,
+            CANDIDATE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN,
+            CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN,
         )
+
+    base = f"pred_candidate_quality_{prefix}_{side_name}"
     return (
-        CANDIDATE_QUALITY_SHORT_COLUMN,
-        CANDIDATE_QUALITY_SHORT_LOWER_COLUMN,
-        CANDIDATE_QUALITY_SHORT_OVERESTIMATE_RISK_COLUMN,
-        CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN,
+        f"{base}_adjusted_pnl",
+        f"{base}_lower_adjusted_pnl",
+        f"{base}_overestimate_risk",
+        f"{base}_lower_overestimate_risk",
     )
 
 
@@ -2581,8 +2604,8 @@ def add_candidate_quality_model_columns(
         raise ValueError(f"predictions missing trade source columns: {', '.join(missing)}")
     output = predictions.copy()
     for side_name in ("long", "short"):
-        quality_column, lower_column, risk_column, lower_risk_column = candidate_quality_columns_for_side(
-            side_name
+        quality_column, lower_column, risk_column, lower_risk_column = (
+            candidate_quality_columns_for_side(side_name, bundle.config.prediction_prefix)
         )
         source_column = TRADE_SOURCE_LONG_EV_COLUMN if side_name == "long" else TRADE_SOURCE_SHORT_EV_COLUMN
         features = trade_quality_features_from_predictions(output, side_name)
@@ -4149,6 +4172,7 @@ def candidate_quality_model_config_from_args(args: argparse.Namespace) -> Candid
         joint_time_decay=args.joint_time_decay,
         joint_component_clip_multiple=args.joint_component_clip_multiple,
         joint_fixed_horizon_minutes=tuple(parse_csv_ints(args.joint_fixed_horizon_minutes)),
+        prediction_prefix=validate_candidate_quality_prediction_prefix(args.prediction_prefix),
         long_entry_rank_column=args.long_entry_rank_column,
         short_entry_rank_column=args.short_entry_rank_column,
     )
@@ -5305,6 +5329,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--joint-fixed-horizon-minutes",
         default="60,240,720",
         help="comma-separated fixed-horizon actual PnL minutes used by joint_exit_adjusted_pnl",
+    )
+    candidate_quality_model_parser.add_argument(
+        "--prediction-prefix",
+        default="",
+        help=(
+            "optional prefix for output prediction columns, producing "
+            "pred_candidate_quality_<prefix>_<side>_* columns"
+        ),
     )
     add_trade_source_args(candidate_quality_model_parser)
     add_trade_quality_model_args(candidate_quality_model_parser)
