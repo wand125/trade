@@ -245,6 +245,21 @@ python -m trade_data.meta_model oof-candidate-quality-model \
   --min-entry-rank 0.5
 ```
 
+If a saved prediction parquet was produced before actual forced-exit target
+columns were preserved, enrich it from the dataset files before training
+barrier-event targets:
+
+```bash
+python -m trade_data.modeling enrich-predictions \
+  --predictions data/reports/modeling/<run>/predictions_oof.parquet \
+  --output-path data/reports/modeling/<run>/predictions_oof_forced.parquet \
+  --dataset-dir data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined \
+  --months 2024-07,2024-09,2024-11,2025-01 \
+  --horizon-hours 24 \
+  --min-adjusted-edge 15 \
+  --target-columns long_forced_raw_pnl,short_forced_raw_pnl,long_forced_adjusted_pnl,short_forced_adjusted_pnl,forced_side_score
+```
+
 Train a shared multi-output MLP regressor for policy regression targets:
 
 ```bash

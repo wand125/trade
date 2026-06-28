@@ -11,6 +11,7 @@ from trade_data.modeling import (
     build_parser,
     build_sample_weights,
     chunk_months,
+    enrich_predictions_with_dataset_targets,
     evaluate_models,
     filter_available_target_names,
     fit_linear_calibrator,
@@ -349,6 +350,29 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(args.batch_size, 64)
         self.assertEqual(args.max_iter, 3)
 
+    def test_enrich_predictions_parser_accepts_target_context_args(self):
+        parser = build_parser()
+
+        args = parser.parse_args(
+            [
+                "enrich-predictions",
+                "--predictions",
+                "predictions.parquet",
+                "--output-path",
+                "predictions_enriched.parquet",
+                "--months",
+                "2024-07,2024-09",
+                "--target-columns",
+                "long_forced_adjusted_pnl,short_forced_adjusted_pnl",
+                "--replace-existing",
+                "true",
+            ]
+        )
+
+        self.assertEqual(args.func.__name__, "handle_enrich_predictions")
+        self.assertEqual(args.months, "2024-07,2024-09")
+        self.assertEqual(args.replace_existing, True)
+
     def test_parse_csv_months(self):
         self.assertEqual(parse_csv_months("2024-01,2024-03"), ["2024-01", "2024-03"])
 
@@ -463,6 +487,11 @@ class ModelingTests(unittest.TestCase):
                 "best_side": [-1, 1],
                 "long_best_adjusted_pnl": [1.0, 2.0],
                 "short_best_adjusted_pnl": [2.0, 1.0],
+                "long_forced_raw_pnl": [1.5, -2.5],
+                "short_forced_raw_pnl": [-1.5, 2.5],
+                "long_forced_adjusted_pnl": [1.5, -3.0],
+                "short_forced_adjusted_pnl": [-1.8, 2.5],
+                "forced_side_score": [3.3, -5.5],
                 "side_score": [-1.0, 1.0],
                 "best_adjusted_pnl": [2.0, 2.0],
                 "best_holding_minutes": [10.0, 20.0],
@@ -502,7 +531,84 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(output["roll_vol_60"].tolist(), [0.01, 0.02])
         self.assertEqual(output["trend_regime"].tolist(), ["up", "down"])
         self.assertEqual(output["best_side"].tolist(), [-1, 1])
+        self.assertEqual(output["long_forced_adjusted_pnl"].tolist(), [1.5, -3.0])
+        self.assertEqual(output["short_forced_adjusted_pnl"].tolist(), [-1.8, 2.5])
         self.assertIn("pred_long_best_adjusted_pnl", output.columns)
+
+    def test_enrich_predictions_with_dataset_targets_adds_missing_context_columns(self):
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01", "2024-01"],
+                "decision_timestamp": pd.date_range("2024-01-01", periods=2, tz="UTC"),
+                "existing": [1, 2],
+            }
+        )
+        dataset_context = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01", "2024-01"],
+                "decision_timestamp": pd.date_range("2024-01-01", periods=2, tz="UTC"),
+                "long_forced_adjusted_pnl": [3.0, 4.0],
+                "short_forced_adjusted_pnl": [-3.6, -4.8],
+            }
+        )
+
+        output, metrics = enrich_predictions_with_dataset_targets(
+            predictions,
+            dataset_context,
+            ["long_forced_adjusted_pnl", "short_forced_adjusted_pnl"],
+        )
+
+        self.assertEqual(output["existing"].tolist(), [1, 2])
+        self.assertEqual(output["long_forced_adjusted_pnl"].tolist(), [3.0, 4.0])
+        self.assertEqual(output["short_forced_adjusted_pnl"].tolist(), [-3.6, -4.8])
+        self.assertEqual(metrics["added_columns"], ["long_forced_adjusted_pnl", "short_forced_adjusted_pnl"])
+        self.assertEqual(metrics["missing_matches"], 0)
+
+    def test_enrich_predictions_with_dataset_targets_requires_all_rows_to_match(self):
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01", "2024-01"],
+                "decision_timestamp": pd.date_range("2024-01-01", periods=2, tz="UTC"),
+            }
+        )
+        dataset_context = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01"],
+                "decision_timestamp": pd.date_range("2024-01-01", periods=1, tz="UTC"),
+                "long_forced_adjusted_pnl": [3.0],
+            }
+        )
+
+        with self.assertRaises(ValueError):
+            enrich_predictions_with_dataset_targets(
+                predictions,
+                dataset_context,
+                ["long_forced_adjusted_pnl"],
+            )
+
+    def test_enrich_predictions_with_dataset_targets_allows_null_target_values(self):
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01"],
+                "decision_timestamp": pd.to_datetime(["2024-01-01"], utc=True),
+            }
+        )
+        dataset_context = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01"],
+                "decision_timestamp": pd.to_datetime(["2024-01-01"], utc=True),
+                "experimental_target": [np.nan],
+            }
+        )
+
+        output, metrics = enrich_predictions_with_dataset_targets(
+            predictions,
+            dataset_context,
+            ["experimental_target"],
+        )
+
+        self.assertTrue(pd.isna(output["experimental_target"].iloc[0]))
+        self.assertEqual(metrics["missing_matches"], 0)
 
     def test_evaluate_models_adds_binary_classifier_probability(self):
         class BinaryClassifier:

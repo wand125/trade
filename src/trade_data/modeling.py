@@ -38,6 +38,13 @@ EV_TARGETS = [
     "long_best_adjusted_pnl",
     "short_best_adjusted_pnl",
 ]
+FORCED_EXIT_TARGET_COLUMNS = [
+    "long_forced_raw_pnl",
+    "short_forced_raw_pnl",
+    "long_forced_adjusted_pnl",
+    "short_forced_adjusted_pnl",
+    "forced_side_score",
+]
 EXIT_FIXED_HORIZON_TARGETS = [
     f"{side}_fixed_{minutes}m_adjusted_pnl"
     for minutes in EXIT_FIXED_HORIZON_MINUTES
@@ -732,6 +739,7 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "best_side",
         "long_best_adjusted_pnl",
         "short_best_adjusted_pnl",
+        *FORCED_EXIT_TARGET_COLUMNS,
         *EXIT_FIXED_HORIZON_TARGETS,
         "side_score",
         "best_adjusted_pnl",
@@ -1399,6 +1407,150 @@ def load_report_predictions(paths: list[Path]) -> pd.DataFrame:
 
 def parse_csv_strings(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def months_from_predictions(predictions: pd.DataFrame, explicit_months: str | None = None) -> list[str]:
+    if explicit_months:
+        return parse_csv_months(explicit_months)
+    if "dataset_month" not in predictions.columns:
+        raise ValueError("--months is required when predictions do not contain dataset_month")
+    months = sorted(predictions["dataset_month"].dropna().astype(str).unique())
+    if not months:
+        raise ValueError("no dataset_month values found in predictions")
+    return months
+
+
+def dataset_target_context_frame(
+    dataset_dir: Path,
+    months: list[str],
+    horizon_hours: float,
+    edge: float,
+    target_columns: list[str],
+) -> pd.DataFrame:
+    if not target_columns:
+        raise ValueError("at least one target column is required")
+    frames: list[pd.DataFrame] = []
+    for month in months:
+        path = dataset_path(dataset_dir, month, horizon_hours, edge)
+        if not path.exists():
+            raise FileNotFoundError(f"dataset not found: {path}")
+        frame = pd.read_parquet(path)
+        required = ["decision_timestamp", *target_columns]
+        missing = [column for column in required if column not in frame.columns]
+        if missing:
+            raise ValueError(f"{path} missing target context columns: {', '.join(missing)}")
+        context = frame[required].copy()
+        context["dataset_month"] = month
+        frames.append(context)
+    output = pd.concat(frames, ignore_index=True)
+    duplicated = output.duplicated(["dataset_month", "decision_timestamp"])
+    if duplicated.any():
+        duplicate_count = int(duplicated.sum())
+        raise ValueError(f"dataset target context has duplicate keys: {duplicate_count}")
+    return output
+
+
+def enrich_predictions_with_dataset_targets(
+    predictions: pd.DataFrame,
+    dataset_context: pd.DataFrame,
+    target_columns: list[str],
+    replace_existing: bool = False,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    required_prediction_columns = ["dataset_month", "decision_timestamp"]
+    missing_prediction_columns = [
+        column for column in required_prediction_columns if column not in predictions.columns
+    ]
+    if missing_prediction_columns:
+        raise ValueError(
+            f"predictions missing merge columns: {', '.join(missing_prediction_columns)}"
+        )
+    missing_context_columns = [
+        column
+        for column in ["dataset_month", "decision_timestamp", *target_columns]
+        if column not in dataset_context.columns
+    ]
+    if missing_context_columns:
+        raise ValueError(f"dataset context missing columns: {', '.join(missing_context_columns)}")
+
+    output = predictions.copy()
+    columns_to_add = [
+        column
+        for column in target_columns
+        if replace_existing or column not in output.columns
+    ]
+    if not columns_to_add:
+        return output, {
+            "rows": int(len(output)),
+            "added_columns": [],
+            "skipped_existing_columns": list(target_columns),
+            "missing_matches": 0,
+        }
+
+    context = dataset_context[["dataset_month", "decision_timestamp", *columns_to_add]].copy()
+    context["__dataset_context_matched"] = True
+    renamed = {column: f"__dataset_{column}" for column in columns_to_add}
+    context = context.rename(columns=renamed)
+    merged = output.merge(
+        context,
+        on=["dataset_month", "decision_timestamp"],
+        how="left",
+        validate="many_to_one",
+    )
+    missing_match_mask = merged["__dataset_context_matched"].isna()
+    missing_matches = int(missing_match_mask.sum())
+    if missing_matches:
+        raise ValueError(f"dataset target context missing matches for {missing_matches} prediction rows")
+
+    for column in columns_to_add:
+        dataset_column = renamed[column]
+        merged[column] = merged[dataset_column]
+        merged = merged.drop(columns=[dataset_column])
+    merged = merged.drop(columns=["__dataset_context_matched"])
+
+    skipped_existing = [column for column in target_columns if column not in columns_to_add]
+    return merged, {
+        "rows": int(len(merged)),
+        "added_columns": columns_to_add,
+        "skipped_existing_columns": skipped_existing,
+        "missing_matches": missing_matches,
+    }
+
+
+def handle_enrich_predictions(args: argparse.Namespace) -> int:
+    predictions = pd.read_parquet(args.predictions)
+    target_columns = parse_csv_strings(args.target_columns)
+    months = months_from_predictions(predictions, args.months)
+    dataset_context = dataset_target_context_frame(
+        args.dataset_dir,
+        months,
+        args.horizon_hours,
+        args.min_adjusted_edge,
+        target_columns,
+    )
+    enriched, metrics = enrich_predictions_with_dataset_targets(
+        predictions,
+        dataset_context,
+        target_columns,
+        replace_existing=args.replace_existing,
+    )
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    enriched.to_parquet(args.output_path, index=False)
+    metrics.update(
+        {
+            "predictions": str(args.predictions),
+            "output_path": str(args.output_path),
+            "dataset_dir": str(args.dataset_dir),
+            "months": months,
+            "target_columns": target_columns,
+            "replace_existing": bool(args.replace_existing),
+        }
+    )
+    metrics_path = args.output_path.with_suffix(".metrics.json")
+    with metrics_path.open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2)
+    print(f"wrote: {args.output_path}")
+    print(f"metrics: {metrics_path}")
+    return 0
 
 
 def handle_side_confidence_report(args: argparse.Namespace) -> int:
@@ -2846,6 +2998,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="regression targets from this set are trained jointly; classification targets are skipped",
     )
     shared_mlp_oof_parser.set_defaults(func=oof_shared_mlp)
+
+    enrich_predictions_parser = subparsers.add_parser(
+        "enrich-predictions",
+        help="join saved prediction parquet with actual target context from dataset files",
+    )
+    enrich_predictions_parser.add_argument("--predictions", type=Path, required=True)
+    enrich_predictions_parser.add_argument("--output-path", type=Path, required=True)
+    enrich_predictions_parser.add_argument(
+        "--dataset-dir",
+        type=Path,
+        default=Path("data/processed/datasets/xauusd_m1"),
+    )
+    enrich_predictions_parser.add_argument(
+        "--months",
+        help="comma-separated dataset months; defaults to prediction dataset_month values",
+    )
+    enrich_predictions_parser.add_argument("--horizon-hours", type=float, default=24.0)
+    enrich_predictions_parser.add_argument("--min-adjusted-edge", type=float, default=15.0)
+    enrich_predictions_parser.add_argument(
+        "--target-columns",
+        default=",".join(FORCED_EXIT_TARGET_COLUMNS),
+        help="comma-separated dataset columns to join into the prediction parquet",
+    )
+    enrich_predictions_parser.add_argument(
+        "--replace-existing",
+        type=parse_bool,
+        default=False,
+        help="overwrite prediction columns when the target column already exists",
+    )
+    enrich_predictions_parser.set_defaults(func=handle_enrich_predictions)
 
     side_confidence_report = subparsers.add_parser(
         "side-confidence-report",

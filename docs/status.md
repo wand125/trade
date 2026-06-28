@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 01:56 JST
+最終更新: 2026-06-29 02:11 JST
 
 ## 現在の状態
 
@@ -144,6 +144,8 @@ candidate-entry quality quantile modelを追加済み。`oof-candidate-quality-m
 
 candidate-entry qualityにbarrier event targetを追加済み。`oof-candidate-quality-model --target-mode barrier_event_adjusted_pnl` はprofit firstを `+15`、loss firstを `-15`、time exitをforced PnLまたは `fixed_720m_adjusted_pnl` fallbackで学習する。candidate `9091` 件のOOFではtarget mean `1.5739`、raw bias `20.4316`、mean bias `0.9855`、mean `R2=-0.1730`、lower coverage `0.9925`。overestimate riskはvalidation最良がrisk `0` のままで、risk `0.10` はmin pnl `82.7176` から `27.1240` へ悪化。fixed 2024-12はrisk `0.10` で `-2.2914` まで改善するが、2025-02を `-17.9024` へ壊す。標準採用せず、exit timing込みtargetの診断軸として残す。詳細は `docs/reports/00083_2026-06-29_candidate_quality_barrier_target.md`。
 
+prediction artifactのforced PnL欠落を修正済み。`prediction_frame` は `long_forced_raw_pnl`, `short_forced_raw_pnl`, `long_forced_adjusted_pnl`, `short_forced_adjusted_pnl`, `forced_side_score` を保存する。既存artifact向けに `trade_data.modeling enrich-predictions` を追加し、datasetの `dataset_month` + `decision_timestamp` でtarget contextをjoinできる。enriched hybrid OOFは `115252` 行でforced列欠損0。forced列でbarrier targetを再実行するとtime exit sourceは `long/short_forced_adjusted_pnl` だけになりfallbackは解消したが、validation topはrisk `0` のまま。標準採用せず、target semantics修正として扱う。詳細は `docs/reports/00084_2026-06-29_forced_prediction_targets.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -195,7 +197,8 @@ candidate-entry qualityにbarrier event targetを追加済み。`oof-candidate-q
 28. `large_loss` threshold比較では `10` がOOF/validation/2ヶ月合計で最も筋がよいが、2024-12はまだNoTrade未満。thresholdだけの最適化は止め、`threshold=10` のprobabilityをside/regime別に校正するか、candidate-entry集合へ学習対象を広げる。
 29. side/regime別failure probability校正は、OOF AUCを少し改善しても実行policyを改善しなかった。実行trade 106件のgroup校正は不安定なので、次はcandidate-entry集合へfailure targetを広げて学習量を増やす。
 30. candidate-entry qualityの平均/下方分位は、直接EV置換でもsoft riskでもvalidationを改善しなかった。
-31. barrier event targetはraw EV過大評価の診断には有効だが、mean/lower/risk policyはいずれも標準採用できない。次はforced PnL列をprediction artifactへ残すか、exit event class、time-to-event、fixed horizon PnL、EV calibration誤差をjointに扱うtargetへ進む。
+31. barrier event targetはraw EV過大評価の診断には有効だが、mean/lower/risk policyはいずれも標準採用できない。
+32. forced PnL列はprediction artifactへ残せるようになった。次はforced target単独のriskではなく、exit event class、time-to-event、fixed horizon PnL、EV calibration誤差をjointに扱うtargetへ進む。
 
 ## 未決定事項
 
@@ -206,6 +209,8 @@ candidate-entry qualityにbarrier event targetを追加済み。`oof-candidate-q
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 02:11 JST 更新: `prediction_frame` がforced exit target列を保存するようにし、既存hybrid prediction向けに `trade_data.modeling enrich-predictions` を追加した。OOF `115252` 行、2024-12 `28763` 行、2025-02 `27441` 行へforced列をjoinし、欠損0を確認。forced barrier targetではtime exit sourceが `long/short_forced_adjusted_pnl` だけになりfallbackは解消したが、validation topはrisk `0` のまま。標準採用せず、次はexit event、time-to-event、fixed horizon PnL、EV calibration誤差のjoint targetへ進む。
 
 2026-06-29 01:56 JST 更新: `oof-candidate-quality-model --target-mode barrier_event_adjusted_pnl` を追加した。profit/loss barrier順とtime exit PnLをtargetに入れると、OOF target meanは `1.5739` まで下がりraw EV bias `20.4316` が露出した。平均モデルはbiasを `0.9855` まで縮めるが `R2=-0.1730`、lowerはcoverage `0.9925` で保守的すぎる。validationではrisk `0` が最良、fixed 2024-12だけrisk `0.10` が改善して2025-02を壊す。標準採用せず、次はforced PnL列とjoint exit/EV calibration targetを整える。
 

@@ -3574,3 +3574,51 @@ Artifacts:
 - mean direct EVは方向ミスとDDが大きく、lower direct EVは保守的すぎる。
 - overestimate riskは2024-12の損失を縮める局面があるが、validation最良はrisk `0`、2025-02も削る。
 - 標準採用しない。次はprediction artifactにforced PnLを残すか、exit event class、time-to-event、fixed horizon PnL、EV calibration誤差をjoint targetとして扱う。
+
+### 2026-06-29 02:11 JST Forced prediction targets
+
+作業:
+
+- `prediction_frame` がforced exit target列を保存するようにした。
+- 保存対象は `long_forced_raw_pnl`, `short_forced_raw_pnl`, `long_forced_adjusted_pnl`, `short_forced_adjusted_pnl`, `forced_side_score`。
+- 既存prediction artifact向けに `trade_data.modeling enrich-predictions` を追加した。
+- join keyは `dataset_month` + `decision_timestamp`。target値ではなく明示markerで結合成否を判定し、targetがNaNでも行一致があれば成功する。
+- 既存hybrid OOF / 2024-12 / 2025-02 predictionをdataset target contextで補完した。
+- enriched predictionで `oof-candidate-quality-model --target-mode barrier_event_adjusted_pnl` を再実行した。
+- forced barrier overestimate riskをvalidation 4foldとfixed 2024-12 / 2025-02でsmokeした。
+- report: `docs/reports/00084_2026-06-29_forced_prediction_targets.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- enriched hybrid predictions: `data/reports/modeling/20260629_hgb_mlp_exit_hybrid_forced_targets/`
+- forced barrier quality 2024-12 apply: `data/reports/modeling/20260628_170650_candidate_quality_barrier_forced_q25_2024_12/`
+- forced barrier quality 2025-02 apply: `data/reports/modeling/20260628_170650_candidate_quality_barrier_forced_q25_2025_02/`
+- forced barrier risk validation summary: `data/reports/backtests/candidate_quality_barrier_forced_overestimate_risk_summary/20260628_170819_model_sweep_summary/`
+- fixed smoke: `data/reports/backtests/candidate_quality_barrier_forced_overestimate_risk_fixed/`
+
+結果:
+
+| item | value |
+|---|---:|
+| OOF enriched rows | `115252` |
+| 2024-12 enriched rows | `28763` |
+| 2025-02 enriched rows | `27441` |
+| forced column missing matches | `0` |
+| forced target candidate count | `9091` |
+| forced target mean | `1.6521` |
+| forced raw bias | `20.3534` |
+| forced mean bias | `0.8738` |
+| forced mean R2 | `-0.1692` |
+| validation risk0 min pnl | `82.7176` |
+| validation risk0.10 min pnl | `27.0340` |
+| validation risk0.25 min pnl | `-19.1186` |
+| fixed 2024-12 risk0.10 | `0.1206` |
+| fixed 2025-02 risk0.10 | `-17.3004` |
+
+判断:
+
+- forced PnL列のartifact gapは解消した。time exit sourceは `long_forced_adjusted_pnl` / `short_forced_adjusted_pnl` だけになり、`fixed_720m` fallbackは使われなくなった。
+- target semanticsは正しくなり、OOF biasとR2はわずかに改善したが、MAEは少し悪化した。
+- 実行policyではvalidation topがrisk `0` のままで、forced targetのrisk列は標準採用できない。
+- 次はforced target単独ではなく、exit event class、time-to-event、fixed horizon PnL、EV calibration誤差をjointに扱うtargetへ進む。
