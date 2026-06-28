@@ -166,6 +166,8 @@ high cost validation (`spread=0.2`, `slippage=0.1`, `delay=1`) を追加し、ba
 
 stress-aware rankingとして `model-candidate-selection --candidate-rank-mode stress_score` を追加済み。既存 `near_top_risk_score` にvalidation cost/base scenario合計PnL rewardを加える。`model-holdout-audit` も `model-sweep` の `metrics.csv` gridを読めるようにした。base 4fold + moderate/high cost 8foldのstress score topは `down5,up10` だが、既存holdout stressでは min pnl `-57.7402`, sum `473.2982`。全候補が9 holdout cases全通過には届かず、標準採用候補はまだない。次は2025-04以降へ同一形式predictionを生成し、未使用holdoutで確認する。詳細は `docs/reports/00094_2026-06-29_stress_score_ranking_audit.md`。
 
+2025-04へ同一形式の dataset/HGB/MLP/forced target/component predictionを生成し、未使用holdoutで stress score topを確認済み。MLP exit minutesは2025-04で外挿破綻し、中央値が long `-163.75`, short `-145.39`、1分未満率が約65%になった。MLP holding本線ではbestでも base `-475.6374`, high `-1442.3792`、stress top `down5,up10` は base `-503.8224`, high `-1503.3702`。HGB holding fallbackでは高回転は止まるがbest/strict `down5,up10,range5` でも base `-157.1394`, high `-167.4006`。標準採用不可。次は exit minutes の unconstrained regression をやめ、log/bin/hazard targetとfail-close guardを入れる。詳細は `docs/reports/00095_2026-06-29_2025_04_stress_score_holdout.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -230,6 +232,7 @@ stress-aware rankingとして `model-candidate-selection --candidate-rank-mode s
 41. cost-aware validation selection topも固定holdout cost stressで未達。次はrule set数を増やすのではなく、stress-aware drawdownと月別下振れを候補rankingへ組み込む。
 42. high-stress validation selectionでも固定holdout stressへ外挿できなかった。holdout結果を直接最適化せず、validation fold内で cost scenario合計、drawdown max、group損失、EV overestimateを含むstress-aware rankingを定義し、未使用holdout月で確認する。
 43. `stress_score` rankingは実装済みだが、既存holdout stressでは全候補に負けcaseが残る。既存holdoutに合わせたweight調整はpost-hocになるため、次は2025-04以降の `xauusd_m1_p1_l1p2_policy_combined` datasetと同一HGB+MLP+component predictionを生成して未使用holdoutで確認する。
+44. 2025-04未使用holdoutでは、MLP exit minutesが負方向へ外挿破綻して高回転化した。HGB holding fallbackでもNoTradeに負けるため、exit timing targetとentry/side EVの両方に月外汎化問題がある。2025-04へ直接weight最適化せず、exit minutes targetをlog/bin/hazard型へ作り直し、holding異常時のfail-close guardを入れる。
 
 ## 未決定事項
 
@@ -240,6 +243,8 @@ stress-aware rankingとして `model-candidate-selection --candidate-rank-mode s
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 04:44 JST 更新: 2025-04へ同一形式predictionを生成し、stress score topを未使用holdoutで確認した。MLP exit minutesは中央値 long `-163.75`, short `-145.39`、1分未満率約65%で外挿破綻。MLP holding本線はbestでも base `-475.6374`, high `-1442.3792`、stress top `down5,up10` は base `-503.8224`, high `-1503.3702`。HGB holding fallbackでもbest/strict `down5,up10,range5` が base `-157.1394`, high `-167.4006` でNoTradeに負ける。2025-04へ直接weight最適化せず、次は exit minutes の unconstrained regression をやめ、log/bin/hazard targetとfail-close guardを入れる。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の `日時` を基準にする。
 
 2026-06-29 04:26 JST 更新: `candidate_rank_mode=stress_score` と model-sweep grid対応の `model-holdout-audit` を追加した。stress score topは `down5,up10` だが、既存holdout stressでは min pnl `-57.7402`, sum `473.2982` で標準採用不可。`down10,up10,range10` はholdout balanceが良いがvalidation topではない。既存holdoutに合わせてweight調整せず、次は2025-04以降の同一形式prediction生成から未使用holdoutを確認する。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の `日時` を基準にする。
 

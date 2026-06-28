@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 04:44 2025-04 stress score holdout
+
+- `00094` の方針通り、未使用月 `2025-04` へ同一形式の `xauusd_m1_p1_l1p2_policy_combined` dataset、HGB entry/side、MLP exit、forced target、`component_fixed_weighted` applyを生成した。
+- HGB testは long EV R2 `-0.5656`, short EV R2 `-0.2691`, side score R2 `-0.0257`。MLP testは long EV R2 `-0.5518`, short EV R2 `-0.1337`, side score R2 `-0.2685`。
+- MLP exit minutesは2025-04で外挿破綻し、中央値が long `-163.75`, short `-145.39`、1分未満率が long `0.6458`, short `0.6549`。これにより `timed_ev` が数分保有の高回転strategyになった。
+- MLP holding本線では、best availableでも base `-475.6374` / mid `-933.4812` / high `-1442.3792`。stress top `down5,up10` は base `-503.8224`, high `-1503.3702` で標準採用不可。
+- HGB holding fallbackでは高回転は止まり、best/strict `down5,up10,range5` が base `-157.1394`, high `-167.4006`、80-81 trades。ただしNoTradeには届かず、entry/side EVも2025-04で崩れている。
+- 判断: 2025-04は未使用holdout failureとして保存する。次は exit minutes の unconstrained regression をやめ、log/bin/hazard targetと fail-close guardを入れる。2025-04へ直接weight最適化はしない。
+- report: `docs/reports/00095_2026-06-29_2025_04_stress_score_holdout.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 04:26 Stress score ranking audit
 
 - `model-candidate-selection --candidate-rank-mode stress_score` を追加した。既存 `near_top_risk_score` に対して、validation cost/base scenario合計PnLをrewardするranking。
