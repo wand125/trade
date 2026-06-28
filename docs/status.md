@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 00:22 JST
+最終更新: 2026-06-29 00:45 JST
 
 ## 現在の状態
 
@@ -136,6 +136,8 @@ selected-trade qualityから `raw EV - calibrated quality` の過大評価幅を
 
 `large_loss` threshold `5/10/15` を比較済み。OOF AUCは `5=0.4042`, `10=0.5736`, `15=0.5665`。validation 4fold topの最悪月PnLは `5=88.8168`, `10=92.8530`, `15=87.4970` で `10` が最良。fixed holdoutでは `5` が2024-12 `+22.3498` だが2025-02 `-19.6600`、`10` は2024-12 `-37.2928` / 2025-02 `+76.9254`、`15` は2024-12 `-55.4970` / 2025-02 `+21.5216`。threshold調整だけでは標準採用に足りないため、`threshold=10` を基準信号として side/regime別校正またはcandidate-entry集合拡張へ進む。詳細は `docs/reports/00079_2026-06-29_large_loss_threshold_comparison.md`。
 
+trade failure probabilityのside/regime別OOF校正CLIを追加済み。`oof-trade-failure-calibration` は `pred_trade_failure_<target>_<side>_calibrated_prob/risk` と support-aware `upper_prob/risk` を出力する。`large_loss threshold=10` で試したところ、OOF AUCは `volatility_regime+session_regime` が raw `0.5736` から `0.5837` へ少し上がったが、実行policyでは改善しなかった。`combined_regime` full grid topはrisk `0` に戻り min pnl `82.7176` でraw t10 top `92.8530` 未満。`vol+session calibrated risk=30` はvalidation sumを上げるがmin pnl `62.7122`、fixed 2024-12 `-159.2242` と大きく崩れた。標準採用せず、次はcandidate-entry集合へfailure targetを広げる。詳細は `docs/reports/00080_2026-06-29_trade_failure_probability_calibration.md`。
+
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 
 利用可能なデータ:
@@ -185,6 +187,7 @@ selected-trade qualityから `raw EV - calibrated quality` の過大評価幅を
 26. selected-trade qualityの過大評価soft penaltyはvalidation上だけ改善し、fixed 2024-12で既存baselineより悪化した。過大評価幅の回帰的penaltyはいったん止め、`large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high` などの実行trade failure分類targetへ進む。
 27. trade failure classifierでは `large_loss` だけが薄く有効。validation min pnlと2024-12固定testは改善したが、NoTradeを超えず、2025-02を少し削る。標準採用は保留し、次は `large_loss` threshold、side/regime別校正、candidate-entry集合への拡張を試す。
 28. `large_loss` threshold比較では `10` がOOF/validation/2ヶ月合計で最も筋がよいが、2024-12はまだNoTrade未満。thresholdだけの最適化は止め、`threshold=10` のprobabilityをside/regime別に校正するか、candidate-entry集合へ学習対象を広げる。
+29. side/regime別failure probability校正は、OOF AUCを少し改善しても実行policyを改善しなかった。実行trade 106件のgroup校正は不安定なので、次はcandidate-entry集合へfailure targetを広げて学習量を増やす。
 
 ## 未決定事項
 
@@ -195,6 +198,8 @@ selected-trade qualityから `raw EV - calibrated quality` の過大評価幅を
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 00:45 JST 更新: trade failure probabilityのside/regime別OOF校正CLIを追加した。`volatility_regime+session_regime` はOOF AUCを `0.5736` から `0.5837` に上げたが、実行policyでは改善せず、`combined_regime` full grid topはrisk `0`、`vol+session calibrated risk=30` はvalidation min pnl `62.7122` でraw t10 top `92.8530` 未満。fixed 2024-12も `-159.2242` と大きく崩れたため標準採用しない。次はcandidate-entry集合へfailure targetを広げる。
 
 2026-06-29 00:22 JST 更新: `large_loss` threshold `5/10/15` を比較した。OOF AUCは `5=0.4042`, `10=0.5736`, `15=0.5665`、validation top min pnlは `5=88.8168`, `10=92.8530`, `15=87.4970`。fixed holdoutでは `5` が2024-12を `+22.3498` にするが2025-02 `-19.6600`、`10` は2ヶ月合計では最良だが2024-12 `-37.2928`、`15` は2024-12 `-55.4970`。threshold調整だけでは標準採用に足りないため、`threshold=10` を基準にside/regime別校正またはcandidate-entry集合拡張へ進む。
 

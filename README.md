@@ -187,6 +187,20 @@ python -m trade_data.meta_model fit \
   --label meta_ev_dense_entry_quality
 ```
 
+Calibrate OOF trade-failure probabilities by side/regime without refitting the
+failure classifier:
+
+```bash
+python -m trade_data.meta_model oof-trade-failure-calibration \
+  --validation-trades data/reports/modeling/<failure_run>/validation_oof_failure_enriched_trades.csv \
+  --validation-predictions data/reports/modeling/<failure_run>/predictions_validation_oof_trade_failure_model.parquet \
+  --apply-predictions data/reports/modeling/<failure_run>/predictions_apply_trade_failure_model.parquet \
+  --validation-months 2024-07,2024-09,2024-11,2025-01 \
+  --apply-months 2024-12 \
+  --target-name large_loss \
+  --group-columns volatility_regime,session_regime
+```
+
 Train a shared multi-output MLP regressor for policy regression targets:
 
 ```bash

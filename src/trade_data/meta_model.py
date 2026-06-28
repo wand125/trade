@@ -245,6 +245,15 @@ class TradeFailureModelBundle:
     target_means: dict[str, float]
 
 
+@dataclass(frozen=True)
+class TradeFailureProbabilityCalibrator:
+    config: GroupEVCalibrationConfig
+    target_name: str
+    overall_stats: GroupEVStats
+    side_stats: dict[str, GroupEVStats]
+    group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]]
+
+
 FIXED_HORIZON_MINUTES = (60, 240, 720)
 TRADE_FAILURE_TARGET_NAMES = (
     "large_loss",
@@ -1765,6 +1774,272 @@ def trade_failure_scored_metrics(scored: pd.DataFrame, target_names: tuple[str, 
     return metrics
 
 
+def trade_failure_calibrated_prob_column(target_name: str, side_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_{side_name}_calibrated_prob"
+
+
+def trade_failure_calibrated_risk_column(target_name: str, side_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_{side_name}_calibrated_risk"
+
+
+def trade_failure_upper_prob_column(target_name: str, side_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_{side_name}_upper_prob"
+
+
+def trade_failure_upper_risk_column(target_name: str, side_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_{side_name}_upper_risk"
+
+
+def trade_failure_taken_calibrated_prob_column(target_name: str) -> str:
+    return f"pred_trade_failure_{target_name}_taken_calibrated_prob"
+
+
+def fit_trade_failure_probability_calibrator(
+    enriched_trades: pd.DataFrame,
+    config: GroupEVCalibrationConfig,
+    target_name: str,
+) -> TradeFailureProbabilityCalibrator:
+    validate_trade_failure_targets((target_name,))
+    if config.min_group_size <= 0:
+        raise ValueError("min_group_size must be positive")
+    if config.prior_strength < 0:
+        raise ValueError("prior_strength must be non-negative")
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if config.lower_z < 0:
+        raise ValueError("lower_z must be non-negative")
+
+    target_column = f"trade_failure_{target_name}"
+    pred_column = trade_failure_taken_prob_column(target_name)
+    required_columns = {
+        "direction",
+        target_column,
+        pred_column,
+        *config.group_columns,
+    }
+    missing_columns = sorted(required_columns - set(enriched_trades.columns))
+    if missing_columns:
+        raise ValueError(
+            f"enriched trades missing failure calibration columns: {', '.join(missing_columns)}"
+        )
+
+    working = enriched_trades.copy()
+    working["side_name"] = working["direction"].astype(str).str.lower()
+    working["target"] = finite_float_series(working, target_column).clip(0.0, 1.0)
+    working["pred"] = finite_float_series(working, pred_column).clip(0.0, 1.0)
+    working = working.replace([np.inf, -np.inf], np.nan).dropna(subset=["target", "pred"])
+    if working.empty:
+        raise ValueError("no valid selected trades for trade failure probability calibration")
+
+    overall_stats = GroupEVStats(
+        n=int(len(working)),
+        pred_mean=float(working["pred"].mean()),
+        target_mean=float(working["target"].mean()),
+        target_std=target_std(working["target"]),
+        target_standard_error=target_standard_error(working["target"]),
+    )
+    keys = group_key_series(working, config.group_columns)
+    side_stats: dict[str, GroupEVStats] = {}
+    group_stats: dict[str, dict[tuple[str, ...], GroupEVStats]] = {}
+    for side_name in ("long", "short"):
+        side_frame = working[working["side_name"] == side_name]
+        group_stats[side_name] = {}
+        if side_frame.empty:
+            continue
+        side_stat = GroupEVStats(
+            n=int(len(side_frame)),
+            pred_mean=float(side_frame["pred"].mean()),
+            target_mean=float(side_frame["target"].mean()),
+            target_std=target_std(side_frame["target"]),
+            target_standard_error=target_standard_error(side_frame["target"]),
+        )
+        side_stats[side_name] = side_stat
+        side_keys = keys.loc[side_frame.index]
+        side_working = side_frame.assign(_key=side_keys)
+        for key, group in side_working.groupby("_key", sort=False):
+            group_count = int(len(group))
+            if group_count < config.min_group_size:
+                continue
+            if config.prior_strength == 0:
+                weight = 1.0
+            else:
+                weight = group_count / (group_count + config.prior_strength)
+            group_stats[side_name][key] = GroupEVStats(
+                n=group_count,
+                pred_mean=float(weight * group["pred"].mean() + (1.0 - weight) * side_stat.pred_mean),
+                target_mean=float(
+                    weight * group["target"].mean() + (1.0 - weight) * side_stat.target_mean
+                ),
+                target_std=target_std(group["target"]),
+                target_standard_error=target_standard_error(group["target"]),
+            )
+    return TradeFailureProbabilityCalibrator(
+        config=config,
+        target_name=target_name,
+        overall_stats=overall_stats,
+        side_stats=side_stats,
+        group_stats=group_stats,
+    )
+
+
+def trade_failure_probability_stats_frame(
+    predictions: pd.DataFrame,
+    side_name: str,
+    calibrator: TradeFailureProbabilityCalibrator,
+) -> pd.DataFrame:
+    fallback_stat = calibrator.side_stats.get(side_name, calibrator.overall_stats)
+    stats = pd.DataFrame(
+        {
+            "pred_mean": fallback_stat.pred_mean,
+            "target_mean": fallback_stat.target_mean,
+            "support": fallback_stat.n,
+            "target_std": fallback_stat.target_std,
+            "target_standard_error": fallback_stat.target_standard_error,
+            "source": "side" if side_name in calibrator.side_stats else "overall",
+        },
+        index=predictions.index,
+    ).reset_index(drop=True)
+    if calibrator.config.group_columns:
+        keys = group_key_series(predictions, calibrator.config.group_columns).reset_index(drop=True)
+        for key, group_stat in calibrator.group_stats.get(side_name, {}).items():
+            mask = keys == key
+            if mask.any():
+                stats.loc[mask, "pred_mean"] = group_stat.pred_mean
+                stats.loc[mask, "target_mean"] = group_stat.target_mean
+                stats.loc[mask, "support"] = group_stat.n
+                stats.loc[mask, "target_std"] = group_stat.target_std
+                stats.loc[mask, "target_standard_error"] = group_stat.target_standard_error
+                stats.loc[mask, "source"] = "group"
+    return stats
+
+
+def trade_failure_calibrated_probability_values(
+    predictions: pd.DataFrame,
+    side_name: str,
+    calibrator: TradeFailureProbabilityCalibrator,
+) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
+    raw_column = trade_failure_prob_column(calibrator.target_name, side_name)
+    if raw_column not in predictions.columns:
+        raise ValueError(f"predictions missing failure probability column: {raw_column}")
+    raw = finite_float_series(predictions, raw_column).clip(0.0, 1.0).reset_index(drop=True)
+    stats = trade_failure_probability_stats_frame(predictions, side_name, calibrator)
+    calibrated = (
+        stats["target_mean"].astype(float)
+        + calibrator.config.prediction_shrinkage * (raw - stats["pred_mean"].astype(float))
+    ).clip(0.0, 1.0)
+    upper_margin = support_aware_lower_margin(stats, calibrator.config)
+    upper = (calibrated + upper_margin).clip(0.0, 1.0)
+    return (
+        pd.Series(calibrated.to_numpy(), index=predictions.index),
+        pd.Series(upper.to_numpy(), index=predictions.index),
+        stats,
+    )
+
+
+def add_trade_failure_probability_calibration_columns(
+    predictions: pd.DataFrame,
+    calibrator: TradeFailureProbabilityCalibrator,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    target_name = calibrator.target_name
+    for side_name in ("long", "short"):
+        calibrated, upper, stats = trade_failure_calibrated_probability_values(
+            output,
+            side_name,
+            calibrator,
+        )
+        calibrated_column = trade_failure_calibrated_prob_column(target_name, side_name)
+        upper_column = trade_failure_upper_prob_column(target_name, side_name)
+        output[calibrated_column] = calibrated
+        output[trade_failure_calibrated_risk_column(target_name, side_name)] = -calibrated
+        output[upper_column] = upper
+        output[trade_failure_upper_risk_column(target_name, side_name)] = -upper
+        output[f"{calibrated_column}_support"] = pd.Series(
+            stats["support"].to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{calibrated_column}_source"] = pd.Series(
+            stats["source"].to_numpy(),
+            index=predictions.index,
+        )
+        output[f"{calibrated_column}_upper_margin"] = pd.Series(
+            support_aware_lower_margin(stats, calibrator.config).to_numpy(),
+            index=predictions.index,
+        )
+    return output
+
+
+def add_trade_failure_probability_values_to_enriched(
+    enriched_trades: pd.DataFrame,
+    calibrator: TradeFailureProbabilityCalibrator,
+) -> pd.DataFrame:
+    output = enriched_trades.copy()
+    target_name = calibrator.target_name
+    calibrated_values = []
+    keys = group_key_series(output, calibrator.config.group_columns)
+    for index, row in output.iterrows():
+        side_name = str(row["direction"]).lower()
+        stat = calibrator.side_stats.get(side_name, calibrator.overall_stats)
+        key = keys.loc[index]
+        stat = calibrator.group_stats.get(side_name, {}).get(key, stat)
+        raw = float(row[trade_failure_taken_prob_column(target_name)])
+        calibrated = stat.target_mean + calibrator.config.prediction_shrinkage * (raw - stat.pred_mean)
+        calibrated_values.append(float(np.clip(calibrated, 0.0, 1.0)))
+    output[trade_failure_taken_calibrated_prob_column(target_name)] = calibrated_values
+    return output
+
+
+def trade_failure_probability_scored_metrics(
+    scored: pd.DataFrame,
+    target_name: str,
+) -> dict[str, float]:
+    if scored.empty:
+        return {
+            "trade_count": 0,
+            "prevalence": 0.0,
+            "raw_predicted_mean": 0.0,
+            "calibrated_predicted_mean": 0.0,
+            "raw_bias": 0.0,
+            "calibrated_bias": 0.0,
+            "raw_brier": 0.0,
+            "calibrated_brier": 0.0,
+            "raw_auc": 0.5,
+            "calibrated_auc": 0.5,
+        }
+    target = finite_float_series(scored, f"trade_failure_{target_name}").astype(int)
+    raw = finite_float_series(scored, trade_failure_taken_prob_column(target_name)).clip(0.0, 1.0)
+    calibrated = finite_float_series(
+        scored,
+        trade_failure_taken_calibrated_prob_column(target_name),
+    ).clip(0.0, 1.0)
+    if target.nunique(dropna=True) >= 2:
+        raw_auc = float(roc_auc_score(target, raw))
+        calibrated_auc = float(roc_auc_score(target, calibrated))
+    else:
+        raw_auc = 0.5
+        calibrated_auc = 0.5
+    return {
+        "trade_count": int(len(scored)),
+        "prevalence": float(target.mean()),
+        "raw_predicted_mean": float(raw.mean()),
+        "calibrated_predicted_mean": float(calibrated.mean()),
+        "raw_bias": float(raw.mean() - target.mean()),
+        "calibrated_bias": float(calibrated.mean() - target.mean()),
+        "raw_brier": float(brier_score_loss(target, raw)),
+        "calibrated_brier": float(brier_score_loss(target, calibrated)),
+        "raw_auc": raw_auc,
+        "calibrated_auc": calibrated_auc,
+    }
+
+
+def trade_failure_probability_calibration_metrics(
+    enriched_trades: pd.DataFrame,
+    calibrator: TradeFailureProbabilityCalibrator,
+) -> dict[str, float]:
+    scored = add_trade_failure_probability_values_to_enriched(enriched_trades, calibrator)
+    return trade_failure_probability_scored_metrics(scored, calibrator.target_name)
+
+
 def side_examples(df: pd.DataFrame, side_name: str) -> pd.DataFrame:
     spec = SIDE_COLUMNS[side_name]
     side_value = 1.0 if side_name == "long" else -1.0
@@ -2068,6 +2343,24 @@ def serializable_group_target_calibrator(calibrator: GroupTargetCalibrator) -> d
 def serializable_trade_quality_calibrator(calibrator: TradeQualityCalibrator) -> dict[str, object]:
     return {
         "config": asdict(calibrator.config),
+        "overall_stats": asdict(calibrator.overall_stats),
+        "side_stats": {side: asdict(stats) for side, stats in calibrator.side_stats.items()},
+        "group_stats": {
+            side: {
+                "|".join(key): asdict(stats)
+                for key, stats in side_groups.items()
+            }
+            for side, side_groups in calibrator.group_stats.items()
+        },
+    }
+
+
+def serializable_trade_failure_probability_calibrator(
+    calibrator: TradeFailureProbabilityCalibrator,
+) -> dict[str, object]:
+    return {
+        "config": asdict(calibrator.config),
+        "target_name": calibrator.target_name,
         "overall_stats": asdict(calibrator.overall_stats),
         "side_stats": {side: asdict(stats) for side, stats in calibrator.side_stats.items()},
         "group_stats": {
@@ -3034,6 +3327,153 @@ def oof_trade_failure_model(args: argparse.Namespace) -> int:
     return 0
 
 
+def oof_trade_failure_calibration(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF trade failure calibration")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+    validate_trade_failure_targets((args.target_name,))
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    validation_trades = read_trade_frames(parse_csv_paths(args.validation_trades))
+    validation_trades = validation_trades[
+        validation_trades["dataset_month"].isin(validation_months)
+    ].copy()
+    if validation_trades.empty:
+        raise ValueError("validation failure-trade frame is empty after month filtering")
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+
+    config = GroupEVCalibrationConfig(
+        group_columns=tuple(parse_csv_strings(args.group_columns)),
+        min_group_size=args.min_group_size,
+        prior_strength=args.prior_strength,
+        prediction_shrinkage=args.prediction_shrinkage,
+        lower_z=args.lower_z,
+    )
+    validate_group_columns(validation_predictions, validation_predictions, config.group_columns)
+    if apply_predictions is not None:
+        validate_group_columns(validation_predictions, apply_predictions, config.group_columns)
+
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_trade_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for holdout_month in validation_months:
+        fit_trades = validation_trades[validation_trades["dataset_month"] != holdout_month].copy()
+        holdout_trades = validation_trades[validation_trades["dataset_month"] == holdout_month].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_trades.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build trade failure calibration OOF fold for {holdout_month}")
+        fold_calibrator = fit_trade_failure_probability_calibrator(
+            fit_trades,
+            config,
+            args.target_name,
+        )
+        holdout_prediction_output = add_trade_failure_probability_calibration_columns(
+            holdout_predictions,
+            fold_calibrator,
+        )
+        holdout_trade_output = add_trade_failure_probability_values_to_enriched(
+            holdout_trades,
+            fold_calibrator,
+        )
+        fold_prediction_outputs.append(holdout_prediction_output)
+        fold_trade_outputs.append(holdout_trade_output)
+        fold_metrics[holdout_month] = {
+            "fit_trades": int(len(fit_trades)),
+            "holdout_trades": int(len(holdout_trades)),
+            "holdout_predictions": int(len(holdout_predictions)),
+            "holdout": trade_failure_probability_calibration_metrics(
+                holdout_trades,
+                fold_calibrator,
+            ),
+            "calibrator": serializable_trade_failure_probability_calibrator(fold_calibrator),
+        }
+
+    validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+    validation_oof_trades = pd.concat(fold_trade_outputs, ignore_index=True)
+    if "entry_timestamp" in validation_oof_trades.columns:
+        validation_oof_trades = validation_oof_trades.sort_values("entry_timestamp")
+
+    final_calibrator = fit_trade_failure_probability_calibrator(
+        validation_trades,
+        config,
+        args.target_name,
+    )
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_trade_failure_probability_calibration_columns(
+            apply_predictions,
+            final_calibrator,
+        )
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_trade_failure_calibrated.parquet",
+        index=False,
+    )
+    validation_oof_trades.to_csv(
+        run_dir / "validation_oof_failure_calibrated_trades.csv",
+        index=False,
+    )
+    validation_trades.to_csv(run_dir / "validation_fit_failure_trades.csv", index=False)
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_trade_failure_calibrated.parquet",
+            index=False,
+        )
+
+    metrics = {
+        "mode": "validation_oof_trade_failure_calibration",
+        "target_name": args.target_name,
+        "config": asdict(config),
+        "validation_trades": [str(path) for path in parse_csv_paths(args.validation_trades)],
+        "validation_predictions": str(args.validation_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "rows": {
+            "validation_predictions": int(len(validation_predictions)),
+            "validation_trades": int(len(validation_trades)),
+            "validation_oof": int(len(validation_oof)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_predictions": month_counts(validation_predictions),
+            "validation_trades": month_counts(validation_trades),
+            "validation_oof": month_counts(validation_oof),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "final_calibrator": serializable_trade_failure_probability_calibrator(final_calibrator),
+        "folds": fold_metrics,
+        "validation_oof": trade_failure_probability_scored_metrics(
+            validation_oof_trades,
+            args.target_name,
+        ),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def fit(args: argparse.Namespace) -> int:
     config = MetaModelConfig(
         max_iter=args.max_iter,
@@ -3440,6 +3880,31 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(trade_failure_model_parser)
     add_trade_quality_model_args(trade_failure_model_parser, include_target_clip_quantile=False)
     trade_failure_model_parser.set_defaults(func=oof_trade_failure_model)
+
+    trade_failure_calibration_parser = subparsers.add_parser(
+        "oof-trade-failure-calibration",
+        help="build validation OOF side/regime calibration for trade failure probabilities",
+    )
+    trade_failure_calibration_parser.add_argument(
+        "--validation-trades",
+        required=True,
+        help="comma-separated enriched failure trade CSVs from oof-trade-failure-model",
+    )
+    trade_failure_calibration_parser.add_argument("--validation-predictions", type=Path, required=True)
+    trade_failure_calibration_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional failure-scored prediction frame to calibrate with the final validation calibrator",
+    )
+    trade_failure_calibration_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    trade_failure_calibration_parser.add_argument("--apply-months", help="comma-separated apply months")
+    trade_failure_calibration_parser.add_argument("--target-name", default="large_loss")
+    add_group_calibration_args(trade_failure_calibration_parser, "trade_failure_probability_calibration")
+    trade_failure_calibration_parser.set_defaults(func=oof_trade_failure_calibration)
     return parser
 
 

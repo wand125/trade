@@ -3387,3 +3387,46 @@ Artifacts:
 - `threshold=15` は分類性能は `10` に近いが、2024-12を悪化させる。優先度を下げる。
 - `threshold=10` はOOF/validation/2ヶ月合計で最も筋がよいが、2024-12がまだNoTrade未満。標準採用は保留する。
 - 次はthreshold探索ではなく、`threshold=10` のside/regime別校正、またはcandidate-entry集合へのfailure target拡張へ進む。
+
+### 2026-06-29 00:45 JST Trade Failure Probability Calibration
+
+作業:
+
+- `trade_data.meta_model` に `oof-trade-failure-calibration` を追加した。
+- 既存 `oof-trade-failure-model` のOOF predictions/tradesを読み、side/regime別にfailure probabilityを校正する。
+- 出力列は `pred_trade_failure_<target>_<side>_calibrated_prob/risk` と support-aware `upper_prob/risk`。
+- `large_loss threshold=10` で `side only`, `session`, `combined`, `volatility_regime+session_regime` を比較した。
+- `combined` はfull grid、`volatility_regime+session_regime` はraw top骨格の軽量smokeを実施した。
+- `combined_upper` 以降のfull gridは実行時間が長く、`combined_calibrated` がrawを下回った時点で中断した。未完了variantは採用判断に使っていない。
+- report: `docs/reports/00080_2026-06-29_trade_failure_probability_calibration.md`
+
+Artifacts:
+
+- calibration models: `data/reports/modeling/20260628_153210_trade_failure_large_loss_calibration_side_only_2024_12/`, `data/reports/modeling/20260628_153221_trade_failure_large_loss_calibration_session_2024_12/`, `data/reports/modeling/20260628_153237_trade_failure_large_loss_calibration_combined_2024_12/`, `data/reports/modeling/20260628_153253_trade_failure_large_loss_calibration_vol_session_2024_12/`
+- combined full validation: `data/reports/backtests/trade_failure_large_loss_calibration_validation/combined_calibrated/`
+- combined summary: `data/reports/backtests/trade_failure_large_loss_calibration_summary/combined_calibrated/20260628_154339_model_sweep_summary/`
+- vol+session smoke: `data/reports/backtests/trade_failure_large_loss_calibration_smoke/`
+- vol+session smoke summary: `data/reports/backtests/trade_failure_large_loss_calibration_smoke_summary/`
+- fixed smoke: `data/reports/backtests/trade_failure_large_loss_calibration_fixed_smoke/vol_session_calibrated_risk30/`
+
+結果:
+
+| item | value |
+|---|---:|
+| raw OOF AUC | `0.5736` |
+| combined calibrated OOF AUC | `0.5799` |
+| vol+session calibrated OOF AUC | `0.5837` |
+| raw t10 validation min pnl | `92.8530` |
+| combined full-grid top min pnl | `82.7176` |
+| combined full-grid top risk | `0` |
+| vol+session calibrated risk30 validation min pnl | `62.7122` |
+| vol+session calibrated risk30 validation sum pnl | `523.2990` |
+| vol+session calibrated risk30 fixed 2024-12 | `-159.2242` |
+| vol+session calibrated risk30 fixed 2025-02 | `-0.4302` |
+
+判断:
+
+- side/regime校正はOOF分類AUCを少し上げたが、実行policyのfold最低PnLを改善しない。
+- `combined` full gridではrisk `0` がtopに戻ったため、校正riskは選ばれていない。
+- `vol+session risk30` はsum pnlと一部diagnosticを改善するが、最悪月とfixed 2024-12を壊す。
+- 今回の校正riskは標準採用しない。基盤は残し、次はcandidate-entry集合へfailure targetを広げる。

@@ -15,6 +15,8 @@ from trade_data.meta_model import (
     add_residual_penalty_columns,
     add_trade_failure_model_columns,
     add_trade_failure_model_values_to_enriched,
+    add_trade_failure_probability_calibration_columns,
+    add_trade_failure_probability_values_to_enriched,
     add_trade_quality_model_columns,
     add_trade_quality_model_values_to_enriched,
     add_trade_quality_columns,
@@ -28,6 +30,7 @@ from trade_data.meta_model import (
     fit_group_ev_calibrator,
     fit_residual_penalty_calibrator,
     fit_trade_failure_model,
+    fit_trade_failure_probability_calibrator,
     fit_trade_quality_model,
     fit_trade_quality_calibrator,
     filter_months,
@@ -39,8 +42,13 @@ from trade_data.meta_model import (
     residual_penalty_scored_metrics,
     trade_quality_calibration_metrics,
     side_target_means,
+    trade_failure_calibrated_prob_column,
+    trade_failure_calibrated_risk_column,
     trade_failure_prob_column,
     trade_failure_risk_column,
+    trade_failure_taken_calibrated_prob_column,
+    trade_failure_upper_prob_column,
+    trade_failure_upper_risk_column,
     train_model,
 )
 
@@ -573,6 +581,47 @@ class MetaModelTests(unittest.TestCase):
             self.assertEqual(output[short_risk].tolist(), (-output[short_prob]).tolist())
             self.assertIn(f"pred_trade_failure_{target_name}_taken_prob", scored.columns)
             self.assertIn(f"trade_failure_{target_name}", scored.columns)
+
+    def test_trade_failure_probability_calibration_adds_side_prob_and_risk_columns(self):
+        predictions = prediction_frame().copy()
+        predictions[trade_failure_prob_column("large_loss", "long")] = [0.2, 0.9, 0.1]
+        predictions[trade_failure_prob_column("large_loss", "short")] = [0.3, 0.4, 0.3]
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "long", "short", "short"],
+                "trade_failure_large_loss": [0, 1, 1, 1],
+                "pred_trade_failure_large_loss_taken_prob": [0.2, 0.2, 0.3, 0.3],
+                "session_regime": ["asia", "asia", "ny_late", "ny_late"],
+            }
+        )
+        config = GroupEVCalibrationConfig(
+            group_columns=("session_regime",),
+            min_group_size=1,
+            prior_strength=0.0,
+            prediction_shrinkage=0.0,
+            lower_z=1.0,
+        )
+
+        calibrator = fit_trade_failure_probability_calibrator(trades, config, "large_loss")
+        output = add_trade_failure_probability_calibration_columns(predictions, calibrator)
+        scored = add_trade_failure_probability_values_to_enriched(trades, calibrator)
+
+        long_calibrated = trade_failure_calibrated_prob_column("large_loss", "long")
+        short_calibrated = trade_failure_calibrated_prob_column("large_loss", "short")
+        long_risk = trade_failure_calibrated_risk_column("large_loss", "long")
+        long_upper = trade_failure_upper_prob_column("large_loss", "long")
+        long_upper_risk = trade_failure_upper_risk_column("large_loss", "long")
+        taken_calibrated = trade_failure_taken_calibrated_prob_column("large_loss")
+
+        self.assertEqual(output[long_calibrated].tolist(), [0.5, 0.5, 0.5])
+        self.assertEqual(output[short_calibrated].tolist(), [1.0, 1.0, 1.0])
+        self.assertEqual(output[long_risk].tolist(), [-0.5, -0.5, -0.5])
+        self.assertAlmostEqual(output[long_upper].iloc[0], 0.8535533905932737)
+        self.assertEqual(output[long_upper].tolist(), output[long_upper].iloc[0:1].tolist() * 3)
+        self.assertEqual(output[long_upper_risk].tolist(), (-output[long_upper]).tolist())
+        self.assertEqual(output[f"{long_calibrated}_support"].tolist(), [2, 2, 2])
+        self.assertEqual(output[f"{short_calibrated}_source"].tolist(), ["side", "side", "group"])
+        self.assertEqual(scored[taken_calibrated].tolist(), [0.5, 0.5, 1.0, 1.0])
 
 
 if __name__ == "__main__":
