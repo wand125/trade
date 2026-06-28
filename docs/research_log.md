@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 08:27 Side outcome stack trade delta
+
+- `model-trade-delta` を追加した。base/candidateの `model-policy` runを `entry_decision_timestamp + direction` で比較し、`common` / `only_base` / `only_candidate` に分解する。candidate側のquality列もprediction parquetから結合する。
+- 2024-12はraw `-20.8252`、stack gate `-18.7302` で差分 `+2.0950`。`only_base` の除外が `+67.2954`、`only_candidate` の追加が `-65.2004` でほぼ相殺。
+- 2025-03はraw `84.0776`、stack gate `-5.2898` で差分 `-89.3674`。`only_base` が `+24.5478` の利益を持ち、`only_candidate` が `-64.8196` の損失を追加した。
+- 2025-03の最大悪化は `only_base long` の利益 `+73.4000` を失ったこと。`only_base` のquality `0-5` bucketにも `+51.0784` があり、`min_trade_quality >= 0` を満たす可能性のある良い後続取引が一玉制約の経路変化で消えている。
+- 判断: `side_outcome_stack_fixed >= 0` hard gateは標準policyへ採用しない。品質予測はhard gateではなく、近接候補の優先順位、risk budget、candidate ranking tie-breakへ回す。次は `blocking_cost` / `replacement_regret` / `stateful_entry_value` 系のstateful教師を検討する。
+- report: `docs/reports/00114_2026-06-29_side_outcome_stack_trade_delta.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 08:09 Side outcome stacking features
 
 - `trade_quality_features_from_predictions` にside別補助特徴を追加した。side-outcome EV分布列と `component_fixed_weighted` quality列を、taken/opposite/gap の3系統でcandidate-quality modelへ渡せるようにした。列が存在しないartifactでは0になり、既存互換を維持する。

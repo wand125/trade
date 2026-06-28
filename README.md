@@ -494,6 +494,20 @@ This writes `enriched_trades.csv` and `group_by_*` summaries. Use it for failure
 localization and robustness diagnostics; do not promote post-hoc session/regime
 blocks without a fresh pre-registered holdout.
 
+To compare two fixed policies and separate common, removed, and newly-added
+trades, use `model-trade-delta`:
+
+```bash
+python -m trade_data.backtest model-trade-delta \
+  --base-runs data/reports/backtests/<raw_policy_runs_parent> \
+  --candidate-runs data/reports/backtests/<candidate_policy_runs_parent> \
+  --label model_trade_delta
+```
+
+This is especially important for one-position-at-a-time policies: a hard gate can
+change the trade path and block later opportunities, so evaluate `only_base` and
+`only_candidate` PnL rather than only counting removed trades.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:

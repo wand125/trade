@@ -22,6 +22,7 @@ from trade_data.backtest import (
     profit_barrier_diagnostics,
     read_holdout_run_frame,
     read_model_trade_exposure_frame,
+    read_model_trade_delta_frames,
     run_backtest,
     run_model_policy,
     summarize_holdout_audit,
@@ -30,6 +31,7 @@ from trade_data.backtest import (
     summarize_trades,
     summarize_sweep_frames,
     trade_analysis_summary,
+    trade_delta_group_summary,
     trade_exposure_group_summary,
     trade_failure_flags,
     trade_group_summary,
@@ -2864,6 +2866,98 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(short_row["combined_regime"], "down_low_vol")
         self.assertAlmostEqual(short_row["total_adjusted_pnl"], -2.4)
         self.assertAlmostEqual(short_row["trade_share"], 0.5)
+
+    def test_model_trade_delta_compares_added_and_removed_trades_with_gate_quality(self):
+        timestamps = pd.date_range("2025-03-01 00:00:00+00:00", periods=8, freq="min")
+        base_trades = pd.DataFrame(
+            {
+                "direction": ["long", "short"],
+                "entry_timestamp": [timestamps[1], timestamps[2]],
+                "exit_timestamp": [timestamps[3], timestamps[4]],
+                "entry_price": [100.0, 110.0],
+                "exit_price": [105.0, 102.0],
+                "raw_pnl": [5.0, 8.0],
+                "adjusted_pnl": [5.0, 8.0],
+                "holding_minutes": [2.0, 2.0],
+                "exit_reason": ["signal_close", "signal_close"],
+                "entry_decision_timestamp": [timestamps[0], timestamps[1]],
+                "exit_decision_timestamp": [timestamps[2], timestamps[3]],
+            }
+        )
+        candidate_trades = pd.DataFrame(
+            {
+                "direction": ["long", "short"],
+                "entry_timestamp": [timestamps[1], timestamps[5]],
+                "exit_timestamp": [timestamps[3], timestamps[7]],
+                "entry_price": [100.0, 120.0],
+                "exit_price": [105.0, 124.0],
+                "raw_pnl": [5.0, -4.0],
+                "adjusted_pnl": [5.0, -4.8],
+                "holding_minutes": [2.0, 2.0],
+                "exit_reason": ["signal_close", "signal_close"],
+                "entry_decision_timestamp": [timestamps[0], timestamps[4]],
+                "exit_decision_timestamp": [timestamps[2], timestamps[6]],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": [timestamps[0], timestamps[1], timestamps[4]],
+                "dataset_month": ["2025-03", "2025-03", "2025-03"],
+                "trend_regime": ["up", "down", "range"],
+                "volatility_regime": ["low_vol", "low_vol", "high_vol"],
+                "session_regime": ["london", "asia", "ny"],
+                "gap_regime": ["normal_gap", "normal_gap", "wide_gap"],
+                "combined_regime": ["up_low_vol", "down_low_vol", "range_high_vol"],
+                "long_best_adjusted_pnl": [6.0, 1.0, -1.0],
+                "short_best_adjusted_pnl": [2.0, 9.0, -2.0],
+                "pred_long_best_adjusted_pnl": [7.0, 2.0, 1.0],
+                "pred_short_best_adjusted_pnl": [1.0, 10.0, 12.0],
+                "pred_stack_long_quality": [6.0, 3.0, -1.0],
+                "pred_stack_short_quality": [0.5, -2.0, 4.0],
+            }
+        )
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            predictions_path = root / "predictions.parquet"
+            predictions.to_parquet(predictions_path)
+            base_run = root / "base_2025-03"
+            candidate_run = root / "candidate_2025-03"
+            base_run.mkdir()
+            candidate_run.mkdir()
+            base_trades.to_csv(base_run / "trades.csv", index=False)
+            candidate_trades.to_csv(candidate_run / "trades.csv", index=False)
+            config = {
+                "backtest_config": {"evaluation_start": "2025-03-01T00:00:00+00:00"},
+                "model_policy_config": {
+                    "predictions": str(predictions_path),
+                    "long_column": "pred_long_best_adjusted_pnl",
+                    "short_column": "pred_short_best_adjusted_pnl",
+                    "long_trade_quality_column": "pred_stack_long_quality",
+                    "short_trade_quality_column": "pred_stack_short_quality",
+                    "min_trade_quality": 0.0,
+                },
+            }
+            (base_run / "config.json").write_text(json.dumps(config), encoding="utf-8")
+            (candidate_run / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+            delta = read_model_trade_delta_frames([base_run], [candidate_run])[0]
+            grouped = trade_delta_group_summary(delta, ["month", "delta_status"])
+
+        self.assertEqual(delta["delta_status"].value_counts().to_dict(), {
+            "common": 1,
+            "only_base": 1,
+            "only_candidate": 1,
+        })
+        self.assertAlmostEqual(delta["pnl_delta"].sum(), -12.8)
+        removed = delta[delta["delta_status"] == "only_base"].iloc[0]
+        self.assertAlmostEqual(removed["base_adjusted_pnl"], 8.0)
+        self.assertAlmostEqual(removed["gate_trade_quality_taken"], -2.0)
+        added = delta[delta["delta_status"] == "only_candidate"].iloc[0]
+        self.assertAlmostEqual(added["candidate_adjusted_pnl"], -4.8)
+        self.assertAlmostEqual(added["gate_trade_quality_taken"], 4.0)
+        only_base_summary = grouped[grouped["delta_status"] == "only_base"].iloc[0]
+        self.assertAlmostEqual(only_base_summary["pnl_delta"], -8.0)
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")

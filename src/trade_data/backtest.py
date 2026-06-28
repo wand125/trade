@@ -4700,6 +4700,351 @@ def read_model_trade_exposure_frames(
     ]
 
 
+def resolve_single_model_policy_run_path(path: Path) -> Path:
+    expanded = expand_model_trade_exposure_run_paths([path])
+    if len(expanded) != 1:
+        raise ValueError(f"expected exactly one model-policy run under {path}, found {len(expanded)}")
+    return expanded[0]
+
+
+def read_model_policy_run_metadata(path: Path) -> tuple[Path, dict[str, object], dict[str, object]]:
+    run_dir = path if path.is_dir() else path.parent
+    config_path = run_dir / "config.json"
+    if not config_path.exists():
+        raise FileNotFoundError(f"model-policy config not found: {config_path}")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    model_policy_config = config.get("model_policy_config")
+    if not isinstance(model_policy_config, dict):
+        raise ValueError(f"run has no model_policy_config: {run_dir}")
+    return run_dir, config, model_policy_config
+
+
+def add_side_prediction_values(
+    trades: pd.DataFrame,
+    predictions_path: Path,
+    long_column: str,
+    short_column: str,
+    prefix: str,
+) -> pd.DataFrame:
+    output = trades.copy()
+    long_output = f"{prefix}_long"
+    short_output = f"{prefix}_short"
+    taken_output = f"{prefix}_taken"
+    opposite_output = f"{prefix}_opposite"
+    for column in [long_output, short_output, taken_output, opposite_output]:
+        output[column] = np.nan
+
+    source_columns = [column for column in [long_column, short_column] if column]
+    if not source_columns:
+        return output
+
+    available = optional_parquet_columns(predictions_path, ["decision_timestamp", *source_columns])
+    if "decision_timestamp" not in available:
+        return output
+    value_columns = [column for column in source_columns if column in available]
+    if not value_columns:
+        return output
+
+    values = pd.read_parquet(predictions_path, columns=["decision_timestamp", *value_columns])
+    values["decision_timestamp"] = pd.to_datetime(values["decision_timestamp"], utc=True)
+    rename_columns = {"decision_timestamp": "entry_decision_timestamp"}
+    if long_column in value_columns:
+        rename_columns[long_column] = long_output
+    if short_column in value_columns:
+        rename_columns[short_column] = short_output
+    values = values.rename(columns=rename_columns)
+    output = output.drop(columns=[long_output, short_output, taken_output, opposite_output])
+    output = output.merge(values, on="entry_decision_timestamp", how="left", validate="many_to_one")
+    for column in [long_output, short_output]:
+        if column not in output.columns:
+            output[column] = np.nan
+
+    direction = output["direction"].astype(str).str.lower()
+    output[taken_output] = side_values(output, direction, long_output, short_output)
+    output[opposite_output] = opposite_side_values(output, direction, long_output, short_output)
+    return output
+
+
+TRADE_DELTA_CONTEXT_COLUMNS = [
+    "month",
+    "dataset_month",
+    *REGIME_COLUMNS,
+    "entry_hour",
+    "holding_bucket",
+    "actual_taken_best_bucket",
+    "pred_taken_ev_bucket",
+    "actual_taken_wait_regret_bucket",
+    "pred_taken_wait_regret_bucket",
+    "actual_taken_entry_rank_bucket",
+    "pred_taken_entry_rank_bucket",
+    "predicted_best_side",
+    "actual_best_side",
+    "actual_taken_best_adjusted_pnl",
+    "actual_opposite_best_adjusted_pnl",
+    "actual_best_adjusted_pnl",
+    "pred_taken_ev",
+    "pred_opposite_ev",
+    "pred_best_ev",
+    "pred_taken_best_holding_minutes",
+    "pred_taken_max_adverse_pnl",
+    "pred_taken_wait_regret",
+    "pred_taken_entry_local_rank",
+    "pred_taken_profit_barrier_hit",
+    "direction_error",
+    "no_edge_entry",
+    "predicted_side_error",
+    "predicted_side_matches_trade",
+    "actual_side_matches_trade",
+    "exit_regret",
+    "best_side_regret",
+    "ev_overestimate_vs_oracle",
+    "ev_overestimate_vs_realized",
+    "holding_error_minutes",
+    "oracle_holding_gap_minutes",
+    "is_win",
+    "is_long",
+    "is_short",
+    "is_forced_exit",
+    "is_loss",
+    "gate_trade_quality_long",
+    "gate_trade_quality_short",
+    "gate_trade_quality_taken",
+    "gate_trade_quality_opposite",
+]
+
+
+def coalesce_merged_column(merged: pd.DataFrame, column: str) -> pd.Series:
+    base_column = f"{column}_base"
+    candidate_column = f"{column}_candidate"
+    if base_column in merged.columns and candidate_column in merged.columns:
+        base_values = merged[base_column].astype("object")
+        candidate_values = merged[candidate_column].astype("object")
+        return base_values.where(base_values.notna(), candidate_values)
+    if base_column in merged.columns:
+        return merged[base_column]
+    if candidate_column in merged.columns:
+        return merged[candidate_column]
+    return pd.Series(np.nan, index=merged.index)
+
+
+def build_trade_delta_frame(base: pd.DataFrame, candidate: pd.DataFrame) -> pd.DataFrame:
+    key_columns = ["entry_decision_timestamp", "direction"]
+    for name, frame in [("base", base), ("candidate", candidate)]:
+        missing = sorted(set(key_columns) - set(frame.columns))
+        if missing:
+            raise ValueError(f"{name} trade frame missing columns: {', '.join(missing)}")
+        duplicated = frame[key_columns].duplicated()
+        if duplicated.any():
+            raise ValueError(f"{name} trade frame has duplicated trade keys: {int(duplicated.sum())}")
+
+    passthrough_columns = [
+        column
+        for column in [
+            *TRADE_COLUMNS,
+            *TRADE_DELTA_CONTEXT_COLUMNS,
+        ]
+        if column not in key_columns
+    ]
+    base_columns = [*key_columns, *[column for column in passthrough_columns if column in base.columns]]
+    candidate_columns = [
+        *key_columns,
+        *[column for column in passthrough_columns if column in candidate.columns],
+    ]
+    merged = base.loc[:, list(dict.fromkeys(base_columns))].merge(
+        candidate.loc[:, list(dict.fromkeys(candidate_columns))],
+        on=key_columns,
+        how="outer",
+        suffixes=("_base", "_candidate"),
+        indicator=True,
+        validate="one_to_one",
+    )
+
+    output = pd.DataFrame(
+        {
+            "entry_decision_timestamp": merged["entry_decision_timestamp"],
+            "direction": merged["direction"],
+            "delta_status": merged["_merge"].map(
+                {
+                    "left_only": "only_base",
+                    "right_only": "only_candidate",
+                    "both": "common",
+                }
+            ),
+        }
+    )
+    output["base_present"] = merged["_merge"].isin(["left_only", "both"])
+    output["candidate_present"] = merged["_merge"].isin(["right_only", "both"])
+
+    for column in TRADE_COLUMNS:
+        if column in key_columns:
+            continue
+        base_column = f"{column}_base"
+        candidate_column = f"{column}_candidate"
+        output[f"base_{column}"] = (
+            merged[base_column] if base_column in merged.columns else pd.Series(np.nan, index=merged.index)
+        )
+        output[f"candidate_{column}"] = (
+            merged[candidate_column]
+            if candidate_column in merged.columns
+            else pd.Series(np.nan, index=merged.index)
+        )
+
+    for column in TRADE_DELTA_CONTEXT_COLUMNS:
+        output[column] = coalesce_merged_column(merged, column)
+
+    output["base_adjusted_pnl"] = pd.to_numeric(output["base_adjusted_pnl"], errors="coerce")
+    output["candidate_adjusted_pnl"] = pd.to_numeric(
+        output["candidate_adjusted_pnl"], errors="coerce"
+    )
+    output["base_raw_pnl"] = pd.to_numeric(output["base_raw_pnl"], errors="coerce")
+    output["candidate_raw_pnl"] = pd.to_numeric(output["candidate_raw_pnl"], errors="coerce")
+    output["pnl_delta"] = output["candidate_adjusted_pnl"].fillna(0.0) - output[
+        "base_adjusted_pnl"
+    ].fillna(0.0)
+    output["raw_pnl_delta"] = output["candidate_raw_pnl"].fillna(0.0) - output[
+        "base_raw_pnl"
+    ].fillna(0.0)
+    output["entry_timestamp"] = coalesce_merged_column(merged, "entry_timestamp")
+    output["exit_timestamp"] = coalesce_merged_column(merged, "exit_timestamp")
+    entry_timestamp = pd.to_datetime(output["entry_timestamp"], utc=True, errors="coerce")
+    output["entry_date"] = entry_timestamp.dt.strftime("%Y-%m-%d")
+    output["entry_hour"] = entry_timestamp.dt.hour
+    if "gate_trade_quality_taken" in output.columns:
+        output["gate_trade_quality_taken_bucket"] = bucket_series(
+            pd.to_numeric(output["gate_trade_quality_taken"], errors="coerce"),
+            [-float("inf"), -10, 0, 5, 10, float("inf")],
+            ["<=-10", "-10-0", "0-5", "5-10", ">10"],
+        )
+    return output.sort_values(["entry_decision_timestamp", "direction"]).reset_index(drop=True)
+
+
+def trade_delta_group_summary(frame: pd.DataFrame, group_columns: list[str]) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame(columns=group_columns)
+    missing = sorted(set(group_columns) - set(frame.columns))
+    if missing:
+        raise ValueError(f"trade delta frame missing columns: {', '.join(missing)}")
+
+    working = frame.copy()
+    base_pnl = working["base_adjusted_pnl"].astype(float)
+    candidate_pnl = working["candidate_adjusted_pnl"].astype(float)
+    working["_base_present"] = numeric_indicator(working["base_present"])
+    working["_candidate_present"] = numeric_indicator(working["candidate_present"])
+    working["_only_base"] = numeric_indicator(working["delta_status"].eq("only_base"))
+    working["_only_candidate"] = numeric_indicator(working["delta_status"].eq("only_candidate"))
+    working["_common"] = numeric_indicator(working["delta_status"].eq("common"))
+    working["_base_win"] = pd.Series(np.where(working["base_present"], base_pnl > 0, np.nan), index=working.index)
+    working["_candidate_win"] = pd.Series(
+        np.where(working["candidate_present"], candidate_pnl > 0, np.nan), index=working.index
+    )
+    working["_removed_positive_pnl"] = np.where(
+        working["delta_status"].eq("only_base") & (base_pnl > 0),
+        base_pnl,
+        0.0,
+    )
+    working["_removed_negative_pnl"] = np.where(
+        working["delta_status"].eq("only_base") & (base_pnl < 0),
+        base_pnl,
+        0.0,
+    )
+    working["_added_positive_pnl"] = np.where(
+        working["delta_status"].eq("only_candidate") & (candidate_pnl > 0),
+        candidate_pnl,
+        0.0,
+    )
+    working["_added_negative_pnl"] = np.where(
+        working["delta_status"].eq("only_candidate") & (candidate_pnl < 0),
+        candidate_pnl,
+        0.0,
+    )
+
+    aggregations: dict[str, tuple[str, str]] = {
+        "row_count": ("pnl_delta", "size"),
+        "base_trade_count": ("_base_present", "sum"),
+        "candidate_trade_count": ("_candidate_present", "sum"),
+        "only_base_count": ("_only_base", "sum"),
+        "only_candidate_count": ("_only_candidate", "sum"),
+        "common_count": ("_common", "sum"),
+        "base_adjusted_pnl": ("base_adjusted_pnl", "sum"),
+        "candidate_adjusted_pnl": ("candidate_adjusted_pnl", "sum"),
+        "pnl_delta": ("pnl_delta", "sum"),
+        "base_avg_adjusted_pnl": ("base_adjusted_pnl", "mean"),
+        "candidate_avg_adjusted_pnl": ("candidate_adjusted_pnl", "mean"),
+        "base_win_rate": ("_base_win", "mean"),
+        "candidate_win_rate": ("_candidate_win", "mean"),
+        "removed_positive_pnl": ("_removed_positive_pnl", "sum"),
+        "removed_negative_pnl": ("_removed_negative_pnl", "sum"),
+        "added_positive_pnl": ("_added_positive_pnl", "sum"),
+        "added_negative_pnl": ("_added_negative_pnl", "sum"),
+    }
+    for column in [
+        "gate_trade_quality_taken",
+        "pred_taken_ev",
+        "actual_taken_best_adjusted_pnl",
+        "exit_regret",
+        "ev_overestimate_vs_realized",
+    ]:
+        if column in working.columns:
+            working[column] = pd.to_numeric(working[column], errors="coerce")
+            aggregations[f"{column}_mean"] = (column, "mean")
+
+    summary = working.groupby(group_columns, dropna=False, observed=True).agg(**aggregations).reset_index()
+    sort_columns = [column for column in ["month"] if column in group_columns]
+    sort_columns.extend(["pnl_delta", "row_count"])
+    ascending = [True] * (len(sort_columns) - 2) + [True, False]
+    return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
+
+
+def read_model_trade_delta_frames(
+    base_paths: list[Path],
+    candidate_paths: list[Path],
+    gate_long_quality_column: str = "",
+    gate_short_quality_column: str = "",
+) -> list[pd.DataFrame]:
+    if len(base_paths) != len(candidate_paths):
+        raise ValueError("base and candidate run counts must match")
+    frames: list[pd.DataFrame] = []
+    for base_path, candidate_path in zip(base_paths, candidate_paths):
+        base_run_dir = resolve_single_model_policy_run_path(base_path)
+        candidate_run_dir = resolve_single_model_policy_run_path(candidate_path)
+        _, _, candidate_policy_config = read_model_policy_run_metadata(candidate_run_dir)
+        candidate_predictions_value = candidate_policy_config.get("predictions")
+        if not candidate_predictions_value:
+            raise ValueError(f"candidate run has no predictions path: {candidate_run_dir}")
+        selected_long_quality = gate_long_quality_column or str(
+            candidate_policy_config.get("long_trade_quality_column", "")
+        )
+        selected_short_quality = gate_short_quality_column or str(
+            candidate_policy_config.get("short_trade_quality_column", "")
+        )
+        predictions_path = Path(str(candidate_predictions_value))
+
+        base = read_model_trade_exposure_frame(base_run_dir)
+        candidate = read_model_trade_exposure_frame(candidate_run_dir)
+        base = add_side_prediction_values(
+            base,
+            predictions_path,
+            selected_long_quality,
+            selected_short_quality,
+            "gate_trade_quality",
+        )
+        candidate = add_side_prediction_values(
+            candidate,
+            predictions_path,
+            selected_long_quality,
+            selected_short_quality,
+            "gate_trade_quality",
+        )
+        delta = build_trade_delta_frame(base, candidate)
+        delta.insert(1, "base_run_dir", str(base_run_dir))
+        delta.insert(2, "candidate_run_dir", str(candidate_run_dir))
+        delta["gate_long_quality_column"] = selected_long_quality
+        delta["gate_short_quality_column"] = selected_short_quality
+        delta["gate_min_trade_quality"] = candidate_policy_config.get("min_trade_quality", np.nan)
+        frames.append(delta)
+    return frames
+
+
 def trade_exposure_group_summary(
     frame: pd.DataFrame,
     group_columns: list[str],
@@ -5503,6 +5848,102 @@ def handle_model_trade_exposure(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_model_trade_delta(args: argparse.Namespace) -> int:
+    base_paths = parse_csv_paths(args.base_runs)
+    candidate_paths = parse_csv_paths(args.candidate_runs)
+    delta_frames = read_model_trade_delta_frames(
+        base_paths,
+        candidate_paths,
+        args.gate_long_quality_column,
+        args.gate_short_quality_column,
+    )
+    delta = pd.concat(delta_frames, ignore_index=True) if delta_frames else pd.DataFrame()
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    delta.to_csv(run_dir / "trade_delta_rows.csv", index=False)
+    group_specs = {
+        "month": ["month"],
+        "month_status": ["month", "delta_status"],
+        "month_status_direction": ["month", "delta_status", "direction"],
+        "month_status_direction_combined_regime": [
+            "month",
+            "delta_status",
+            "direction",
+            "combined_regime",
+        ],
+        "month_status_direction_session_regime": [
+            "month",
+            "delta_status",
+            "direction",
+            "session_regime",
+        ],
+        "month_status_quality_bucket": [
+            "month",
+            "delta_status",
+            "gate_trade_quality_taken_bucket",
+        ],
+    }
+    summaries: dict[str, pd.DataFrame] = {}
+    for name, group_columns in group_specs.items():
+        existing_group_columns = [column for column in group_columns if column in delta.columns]
+        if len(existing_group_columns) != len(group_columns):
+            continue
+        summary = trade_delta_group_summary(delta, group_columns)
+        summaries[name] = summary
+        summary.to_csv(run_dir / f"group_by_{name}.csv", index=False)
+
+    metadata = {
+        "base_runs": [str(path) for path in base_paths],
+        "candidate_runs": [str(path) for path in candidate_paths],
+        "gate_long_quality_column": args.gate_long_quality_column,
+        "gate_short_quality_column": args.gate_short_quality_column,
+        "label": args.label,
+        "top_n": args.top_n,
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2, default=json_default)
+
+    if delta.empty:
+        print("no trade deltas to summarize")
+        print(f"artifacts: {run_dir}")
+        return 0
+
+    month_summary = summaries["month"]
+    display_columns = [
+        "month",
+        "base_trade_count",
+        "candidate_trade_count",
+        "base_adjusted_pnl",
+        "candidate_adjusted_pnl",
+        "pnl_delta",
+        "removed_positive_pnl",
+        "removed_negative_pnl",
+        "added_positive_pnl",
+        "added_negative_pnl",
+    ]
+    print("month delta:")
+    print(month_summary.loc[:, display_columns].to_string(index=False))
+    print("worst status x direction x combined regime:")
+    worst = summaries["month_status_direction_combined_regime"].groupby("month", group_keys=False).head(
+        args.top_n
+    )
+    worst_columns = [
+        "month",
+        "delta_status",
+        "direction",
+        "combined_regime",
+        "row_count",
+        "base_adjusted_pnl",
+        "candidate_adjusted_pnl",
+        "pnl_delta",
+        "gate_trade_quality_taken_mean",
+    ]
+    existing_worst_columns = [column for column in worst_columns if column in worst.columns]
+    print(worst.loc[:, existing_worst_columns].to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def handle_analyze_trades(args: argparse.Namespace) -> int:
     trades = read_trades_csv(args.trades)
     predictions = read_analysis_predictions(args.predictions, args.long_column, args.short_column)
@@ -6212,6 +6653,39 @@ def build_parser() -> argparse.ArgumentParser:
     model_trade_exposure.add_argument("--label", default="model_trade_exposure")
     model_trade_exposure.add_argument("--top-n", type=int, default=3)
     model_trade_exposure.set_defaults(func=handle_model_trade_exposure)
+
+    model_trade_delta = subparsers.add_parser(
+        "model-trade-delta",
+        help="compare base and candidate model-policy trades and summarize added/removed exposure",
+    )
+    model_trade_delta.add_argument(
+        "--base-runs",
+        required=True,
+        help="comma-separated base model-policy run dirs, trades.csv files, or parent dirs",
+    )
+    model_trade_delta.add_argument(
+        "--candidate-runs",
+        required=True,
+        help="comma-separated candidate model-policy run dirs, trades.csv files, or parent dirs",
+    )
+    model_trade_delta.add_argument(
+        "--gate-long-quality-column",
+        default="",
+        help="optional gate quality long column; defaults to each candidate run config",
+    )
+    model_trade_delta.add_argument(
+        "--gate-short-quality-column",
+        default="",
+        help="optional gate quality short column; defaults to each candidate run config",
+    )
+    model_trade_delta.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_trade_delta.add_argument("--label", default="model_trade_delta")
+    model_trade_delta.add_argument("--top-n", type=int, default=5)
+    model_trade_delta.set_defaults(func=handle_model_trade_delta)
 
     analyze_trades = subparsers.add_parser(
         "analyze-trades",

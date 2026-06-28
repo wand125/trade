@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 08:09 JST
+最終更新: 2026-06-29 08:27 JST
 
 ## 現在の状態
 
@@ -33,6 +33,8 @@ side confidence / calibrated EV のsoft補正を再検証済み。`side_confiden
 side-outcome EV分布校正を追加済み。`side-outcome-calibration` はside別EV bucket、side confidence bucket、`combined_regime`, `session_regime` から、target mean/lower、no-edge確率、large-loss確率、wrong-side確率、EV過大評価riskを出力する。validation OOFでは `wrong_side_risk >= -0.45` がsum `663.4534`, min `148.1228` でraw base `622.6486` / `138.0338` を上回ったが、holdoutではraw sum `242.5008`, min `-20.8252` に対し `145.5712`, `-57.7274` と悪化した。`conservative_ev_score >= 10` もholdoutでraw未満。標準policy gateには採用せず、診断・stacking特徴量として残す。詳細は `docs/reports/00112_2026-06-29_side_outcome_evdist_calibration.md`。
 
 side-outcome/component列をcandidate-quality二段目modelの特徴量へ追加済み。`side_outcome_stack_fixed` はOOF fixed component targetで mean R2 `0.0168`, mean bias `0.0298` と薄く前進した。validationでは `mean>=0` gateがsum `673.0854`, min `148.8660` でrawを上回るが、holdoutではmin `-20.8252 -> -18.7302`, maxDD `122.9852 -> 109.2604` と少し改善する一方、sumは `242.5008 -> 155.4990` に落ち、2025-03を `84.0776 -> -5.2898` へ壊す。標準policy gateには採用せず、ranking/tie-breakまたはrisk budget別評価の特徴として残す。詳細は `docs/reports/00113_2026-06-29_side_outcome_stacking_features.md`。
+
+raw vs stack gateの取引差分診断 `model-trade-delta` を追加済み。`entry_decision_timestamp + direction` で `common` / `only_base` / `only_candidate` を分解し、candidate側のquality列も結合する。2025-03悪化の主因は、`only_base long` の利益 `+73.4000` を失い、`only_candidate short` `-45.9878` と `only_candidate long` `-18.8318` を追加したこと。`only_base` のquality `0-5` bucketにも `+51.0784` の利益があり、hard gateは一玉制約の経路依存で後続の良い取引を壊す。次は hard gateではなく、近接候補の優先順位、risk budget、`blocking_cost` / `replacement_regret` / `stateful_entry_value` 系教師へ進む。詳細は `docs/reports/00114_2026-06-29_side_outcome_stack_trade_delta.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
