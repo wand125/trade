@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 07:16 Jackknife holdout gap
+
+- `00108` のjackknife選定候補を、既存の2024-12 / 2025-02 / 2025-03 base/mid/high cost holdout sweepへ固定監査した。
+- `model-holdout-audit` がjackknife summaryの重複candidate keyで出力重複し、空のholding fallback keyがCSV読み込み時にNaN/float化してmergeに失敗したため修正した。`normalize_sweep_key_columns` でholding fallback keyを文字列正規化し、validation summaryはmerge前にcandidate keyで重複排除する。
+- `down5,up10` はholdout 9case中6通過、min pnl `-57.7402`, sum `473.2982`, positive rate `0.6667`。2024-12はbase/mid/high全て負けた。
+- `down5,range5` はholdout coverageが6caseのみで、2case通過、min pnl `-125.8666`, sum `-271.6002`, positive rate `0.3333`。2024-12と2025-02で負けた。
+- 判断: jackknifeはvalidation内の単月依存を殺す診断として有用だが、既存holdout stressの崩れを解消しない。候補は標準policyへ昇格しない。次は候補rankingの微調整ではなく、追加walk-forward foldまたはregime/session failureを明示的に扱う設計へ戻る。
+- report: `docs/reports/00109_2026-06-29_jackknife_holdout_gap.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
 ### 07:10 Candidate selection jackknife
 
 - `model-candidate-selection-jackknife` を追加した。保存済み `model-candidate-selection` の `config.json` を入力にし、同じbase/cost sweepと選定条件で各validation foldを1つずつ抜いて再選定する。

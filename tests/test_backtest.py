@@ -2514,18 +2514,20 @@ class BacktestTests(unittest.TestCase):
 
         validation = pd.DataFrame(
             {
-                "policy": ["timed_ev", "timed_ev"],
-                "entry_threshold": [15, 15],
-                "long_entry_threshold_offset": [0, 0],
-                "short_entry_threshold_offset": [4, 8],
-                "exit_threshold": [0, 0],
-                "side_margin": [5, 5],
-                "risk_penalty": [0, 0],
-                "max_wait_regret": [float("inf"), float("inf")],
-                "min_entry_rank": [0.5, 0.5],
-                "require_profit_barrier": ["False", "False"],
-                "eligible": [True, True],
-                "total_adjusted_pnl_min_cost": [40.0, 35.0],
+                "policy": ["timed_ev", "timed_ev", "timed_ev"],
+                "entry_threshold": [15, 15, 15],
+                "long_entry_threshold_offset": [0, 0, 0],
+                "short_entry_threshold_offset": [4, 8, 8],
+                "exit_threshold": [0, 0, 0],
+                "side_margin": [5, 5, 5],
+                "risk_penalty": [0, 0, 0],
+                "max_wait_regret": [float("inf"), float("inf"), float("inf")],
+                "min_entry_rank": [0.5, 0.5, 0.5],
+                "require_profit_barrier": ["False", "False", "False"],
+                "long_holding_fallback_column": [float("nan"), float("nan"), float("nan")],
+                "short_holding_fallback_column": [float("nan"), float("nan"), float("nan")],
+                "eligible": [True, True, True],
+                "total_adjusted_pnl_min_cost": [40.0, 35.0, 34.0],
             }
         )
 
@@ -2548,6 +2550,7 @@ class BacktestTests(unittest.TestCase):
         offset4 = summary[summary["short_entry_threshold_offset"] == 4].iloc[0]
         self.assertFalse(bool(offset4["holdout_eligible"]))
         self.assertEqual(offset4["holdout_case_ok_count"], 1)
+        self.assertEqual(summary["short_entry_threshold_offset"].tolist().count(8), 1)
 
     def test_direction_session_diagnostics_reports_worst_group(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=3, freq="min")

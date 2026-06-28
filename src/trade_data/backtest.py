@@ -2224,6 +2224,8 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
     string_columns = [
         "policy",
         "fixed_horizon_score_mode",
+        "long_holding_fallback_column",
+        "short_holding_fallback_column",
         "side_confidence_penalty_rules",
         "side_confidence_overfit_penalty_rules",
         "side_ev_penalty_rules",
@@ -4703,7 +4705,10 @@ def summarize_holdout_audit(
     ).fillna(0.0)
 
     if validation_summary is not None:
-        validation = normalize_sweep_key_columns(validation_summary)
+        validation = normalize_sweep_key_columns(validation_summary).drop_duplicates(
+            subset=SWEEP_KEY_COLUMNS,
+            keep="first",
+        )
         summary = validation.merge(
             summary,
             on=SWEEP_KEY_COLUMNS,
