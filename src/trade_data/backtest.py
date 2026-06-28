@@ -4915,7 +4915,9 @@ def build_trade_delta_frame(base: pd.DataFrame, candidate: pd.DataFrame) -> pd.D
             [-float("inf"), -10, 0, 5, 10, float("inf")],
             ["<=-10", "-10-0", "0-5", "5-10", ">10"],
         )
-    return output.sort_values(["entry_decision_timestamp", "direction"]).reset_index(drop=True)
+    output = output.sort_values(["entry_decision_timestamp", "direction"]).reset_index(drop=True)
+    output.insert(0, "trade_delta_row_id", np.arange(len(output), dtype="int64"))
+    return output
 
 
 def trade_delta_group_summary(frame: pd.DataFrame, group_columns: list[str]) -> pd.DataFrame:
@@ -4991,6 +4993,174 @@ def trade_delta_group_summary(frame: pd.DataFrame, group_columns: list[str]) -> 
     summary = working.groupby(group_columns, dropna=False, observed=True).agg(**aggregations).reset_index()
     sort_columns = [column for column in ["month"] if column in group_columns]
     sort_columns.extend(["pnl_delta", "row_count"])
+    ascending = [True] * (len(sort_columns) - 2) + [True, False]
+    return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
+
+
+def trade_delta_case_mask(frame: pd.DataFrame, row: pd.Series) -> pd.Series:
+    mask = pd.Series(True, index=frame.index)
+    for column in ["month", "base_run_dir", "candidate_run_dir"]:
+        if column in frame.columns and column in row.index:
+            mask &= frame[column].eq(row[column])
+    return mask
+
+
+def add_trade_delta_blocking_diagnostics(delta: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    output = delta.copy().reset_index(drop=True)
+    if "trade_delta_row_id" not in output.columns:
+        output.insert(0, "trade_delta_row_id", np.arange(len(output), dtype="int64"))
+    for column in [
+        "entry_decision_timestamp",
+        "candidate_exit_decision_timestamp",
+        "base_exit_decision_timestamp",
+    ]:
+        if column in output.columns:
+            output[column] = pd.to_datetime(output[column], utc=True, errors="coerce")
+
+    output["candidate_blocked_base_count"] = 0
+    output["candidate_blocked_base_adjusted_pnl"] = 0.0
+    output["candidate_blocked_base_positive_pnl"] = 0.0
+    output["candidate_blocked_base_negative_pnl"] = 0.0
+    output["candidate_stateful_net_adjusted_pnl"] = pd.to_numeric(
+        output.get("candidate_adjusted_pnl", pd.Series(np.nan, index=output.index)),
+        errors="coerce",
+    )
+    output["candidate_stateful_positive_cost_adjusted_pnl"] = output[
+        "candidate_stateful_net_adjusted_pnl"
+    ]
+    output["blocked_by_candidate_row_id"] = np.nan
+    output["blocked_by_candidate_direction"] = ""
+    output["blocked_by_candidate_adjusted_pnl"] = np.nan
+
+    if output.empty:
+        return output, pd.DataFrame()
+
+    candidate_present = output["candidate_present"].fillna(False).astype(bool)
+    only_base = output["delta_status"].eq("only_base")
+    pairs: list[dict[str, object]] = []
+    for candidate_index, candidate_row in output.loc[candidate_present].iterrows():
+        start = candidate_row.get("entry_decision_timestamp")
+        end = candidate_row.get("candidate_exit_decision_timestamp")
+        if pd.isna(start) or pd.isna(end):
+            continue
+        case_mask = trade_delta_case_mask(output, candidate_row)
+        blocked_mask = (
+            case_mask
+            & only_base
+            & (output["entry_decision_timestamp"] > start)
+            & (output["entry_decision_timestamp"] <= end)
+        )
+        blocked = output.loc[blocked_mask].copy()
+        if blocked.empty:
+            continue
+
+        blocked_pnl = pd.to_numeric(blocked["base_adjusted_pnl"], errors="coerce").fillna(0.0)
+        blocked_sum = float(blocked_pnl.sum())
+        blocked_positive = float(blocked_pnl[blocked_pnl > 0].sum())
+        blocked_negative = float(blocked_pnl[blocked_pnl < 0].sum())
+        candidate_pnl = float(
+            pd.to_numeric(
+                pd.Series([candidate_row.get("candidate_adjusted_pnl", np.nan)]),
+                errors="coerce",
+            ).fillna(0.0).iloc[0]
+        )
+
+        output.loc[candidate_index, "candidate_blocked_base_count"] = int(len(blocked))
+        output.loc[candidate_index, "candidate_blocked_base_adjusted_pnl"] = blocked_sum
+        output.loc[candidate_index, "candidate_blocked_base_positive_pnl"] = blocked_positive
+        output.loc[candidate_index, "candidate_blocked_base_negative_pnl"] = blocked_negative
+        output.loc[candidate_index, "candidate_stateful_net_adjusted_pnl"] = (
+            candidate_pnl - blocked_sum
+        )
+        output.loc[candidate_index, "candidate_stateful_positive_cost_adjusted_pnl"] = (
+            candidate_pnl - blocked_positive
+        )
+
+        for blocked_index, blocked_row in blocked.iterrows():
+            if pd.isna(output.loc[blocked_index, "blocked_by_candidate_row_id"]):
+                output.loc[blocked_index, "blocked_by_candidate_row_id"] = candidate_row[
+                    "trade_delta_row_id"
+                ]
+                output.loc[blocked_index, "blocked_by_candidate_direction"] = candidate_row[
+                    "direction"
+                ]
+                output.loc[blocked_index, "blocked_by_candidate_adjusted_pnl"] = candidate_pnl
+            blocked_row_pnl = float(blocked_row.get("base_adjusted_pnl", 0.0) or 0.0)
+            pairs.append(
+                {
+                    "month": candidate_row.get("month", ""),
+                    "candidate_row_id": candidate_row["trade_delta_row_id"],
+                    "candidate_delta_status": candidate_row["delta_status"],
+                    "candidate_entry_decision_timestamp": start,
+                    "candidate_exit_decision_timestamp": end,
+                    "candidate_direction": candidate_row["direction"],
+                    "candidate_combined_regime": candidate_row.get("combined_regime", ""),
+                    "candidate_session_regime": candidate_row.get("session_regime", ""),
+                    "candidate_adjusted_pnl": candidate_pnl,
+                    "candidate_gate_trade_quality_taken": candidate_row.get(
+                        "gate_trade_quality_taken",
+                        np.nan,
+                    ),
+                    "blocked_base_row_id": blocked_row["trade_delta_row_id"],
+                    "blocked_base_entry_decision_timestamp": blocked_row[
+                        "entry_decision_timestamp"
+                    ],
+                    "blocked_base_direction": blocked_row["direction"],
+                    "blocked_base_combined_regime": blocked_row.get("combined_regime", ""),
+                    "blocked_base_session_regime": blocked_row.get("session_regime", ""),
+                    "blocked_base_adjusted_pnl": blocked_row_pnl,
+                    "blocked_base_positive_pnl": max(blocked_row_pnl, 0.0),
+                    "blocked_base_negative_pnl": min(blocked_row_pnl, 0.0),
+                }
+            )
+
+    pairs_frame = pd.DataFrame(pairs)
+    return output, pairs_frame
+
+
+def trade_delta_blocking_group_summary(frame: pd.DataFrame, group_columns: list[str]) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame(columns=group_columns)
+    missing = sorted(set(group_columns) - set(frame.columns))
+    if missing:
+        raise ValueError(f"trade delta frame missing columns: {', '.join(missing)}")
+    candidates = frame[frame["candidate_present"].fillna(False).astype(bool)].copy()
+    if candidates.empty:
+        return pd.DataFrame(columns=group_columns)
+    for column in [
+        "candidate_adjusted_pnl",
+        "candidate_blocked_base_adjusted_pnl",
+        "candidate_blocked_base_positive_pnl",
+        "candidate_blocked_base_negative_pnl",
+        "candidate_stateful_net_adjusted_pnl",
+        "candidate_stateful_positive_cost_adjusted_pnl",
+        "gate_trade_quality_taken",
+    ]:
+        if column in candidates.columns:
+            candidates[column] = pd.to_numeric(candidates[column], errors="coerce")
+
+    aggregations: dict[str, tuple[str, str]] = {
+        "candidate_trade_count": ("candidate_present", "size"),
+        "candidate_adjusted_pnl": ("candidate_adjusted_pnl", "sum"),
+        "blocked_base_count": ("candidate_blocked_base_count", "sum"),
+        "blocked_base_adjusted_pnl": ("candidate_blocked_base_adjusted_pnl", "sum"),
+        "blocked_base_positive_pnl": ("candidate_blocked_base_positive_pnl", "sum"),
+        "blocked_base_negative_pnl": ("candidate_blocked_base_negative_pnl", "sum"),
+        "candidate_stateful_net_adjusted_pnl": (
+            "candidate_stateful_net_adjusted_pnl",
+            "sum",
+        ),
+        "candidate_stateful_positive_cost_adjusted_pnl": (
+            "candidate_stateful_positive_cost_adjusted_pnl",
+            "sum",
+        ),
+    }
+    if "gate_trade_quality_taken" in candidates.columns:
+        aggregations["gate_trade_quality_taken_mean"] = ("gate_trade_quality_taken", "mean")
+
+    summary = candidates.groupby(group_columns, dropna=False, observed=True).agg(**aggregations).reset_index()
+    sort_columns = [column for column in ["month"] if column in group_columns]
+    sort_columns.extend(["candidate_stateful_net_adjusted_pnl", "candidate_trade_count"])
     ascending = [True] * (len(sort_columns) - 2) + [True, False]
     return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
 
@@ -5858,9 +6028,11 @@ def handle_model_trade_delta(args: argparse.Namespace) -> int:
         args.gate_short_quality_column,
     )
     delta = pd.concat(delta_frames, ignore_index=True) if delta_frames else pd.DataFrame()
+    delta, blocking_pairs = add_trade_delta_blocking_diagnostics(delta)
 
     run_dir = make_run_dir(args.output_dir, args.label)
     delta.to_csv(run_dir / "trade_delta_rows.csv", index=False)
+    blocking_pairs.to_csv(run_dir / "blocking_pairs.csv", index=False)
     group_specs = {
         "month": ["month"],
         "month_status": ["month", "delta_status"],
@@ -5890,6 +6062,29 @@ def handle_model_trade_delta(args: argparse.Namespace) -> int:
             continue
         summary = trade_delta_group_summary(delta, group_columns)
         summaries[name] = summary
+        summary.to_csv(run_dir / f"group_by_{name}.csv", index=False)
+    blocking_group_specs = {
+        "blocking_candidate_month_status_direction": ["month", "delta_status", "direction"],
+        "blocking_candidate_month_status_direction_combined_regime": [
+            "month",
+            "delta_status",
+            "direction",
+            "combined_regime",
+        ],
+        "blocking_candidate_month_status_direction_session_regime": [
+            "month",
+            "delta_status",
+            "direction",
+            "session_regime",
+        ],
+    }
+    blocking_summaries: dict[str, pd.DataFrame] = {}
+    for name, group_columns in blocking_group_specs.items():
+        existing_group_columns = [column for column in group_columns if column in delta.columns]
+        if len(existing_group_columns) != len(group_columns):
+            continue
+        summary = trade_delta_blocking_group_summary(delta, group_columns)
+        blocking_summaries[name] = summary
         summary.to_csv(run_dir / f"group_by_{name}.csv", index=False)
 
     metadata = {
@@ -5940,6 +6135,28 @@ def handle_model_trade_delta(args: argparse.Namespace) -> int:
     ]
     existing_worst_columns = [column for column in worst_columns if column in worst.columns]
     print(worst.loc[:, existing_worst_columns].to_string(index=False))
+    if "blocking_candidate_month_status_direction_combined_regime" in blocking_summaries:
+        blocking = blocking_summaries["blocking_candidate_month_status_direction_combined_regime"]
+        if not blocking.empty:
+            print("worst candidate blocking stateful value:")
+            blocking_worst = blocking.groupby("month", group_keys=False).head(args.top_n)
+            blocking_columns = [
+                "month",
+                "delta_status",
+                "direction",
+                "combined_regime",
+                "candidate_trade_count",
+                "candidate_adjusted_pnl",
+                "blocked_base_count",
+                "blocked_base_adjusted_pnl",
+                "blocked_base_positive_pnl",
+                "candidate_stateful_net_adjusted_pnl",
+                "gate_trade_quality_taken_mean",
+            ]
+            existing_blocking_columns = [
+                column for column in blocking_columns if column in blocking_worst.columns
+            ]
+            print(blocking_worst.loc[:, existing_blocking_columns].to_string(index=False))
     print(f"artifacts: {run_dir}")
     return 0
 

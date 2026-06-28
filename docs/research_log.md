@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 08:35 Stateful blocking diagnostics
+
+- `model-trade-delta` にstateful blocking診断を追加した。candidate取引の保有中に消えたbase-only取引を `blocking_pairs.csv` と `group_by_blocking_candidate_*` に出力する。
+- `candidate_stateful_net_adjusted_pnl = candidate_adjusted_pnl - blocked_base_adjusted_pnl`、`candidate_stateful_positive_cost_adjusted_pnl = candidate_adjusted_pnl - blocked_base_positive_pnl` を追加した。
+- 2025-03では `only_candidate long` がcandidate pnl `-18.8318`、blocked base pnl `+51.0776`、stateful net `-69.9094`。`only_candidate short` もcandidate pnl `-45.9878`、blocked base pnl `+7.1968`、stateful net `-53.1846`。
+- 2025-03 `only_candidate long/up_low_vol` はcandidate pnl `-18.0778`、blocked base pnl `+38.3476`、blocked positive `+65.5600`、stateful net `-56.4254`。gate quality meanは `0.7288` で正なので、pointwise qualityは機会費用を見ていない。
+- 判断: 次は `stateful_entry_value` / `stateful_positive_cost_value` をOOFで作る。base policyを固定し、hard gateではなくranking/tie-breakまたはEV補正として検証する。
+- report: `docs/reports/00115_2026-06-29_stateful_blocking_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 08:27 Side outcome stack trade delta
 
 - `model-trade-delta` を追加した。base/candidateの `model-policy` runを `entry_decision_timestamp + direction` で比較し、`common` / `only_base` / `only_candidate` に分解する。candidate側のquality列もprediction parquetから結合する。

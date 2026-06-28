@@ -507,6 +507,9 @@ python -m trade_data.backtest model-trade-delta \
 This is especially important for one-position-at-a-time policies: a hard gate can
 change the trade path and block later opportunities, so evaluate `only_base` and
 `only_candidate` PnL rather than only counting removed trades.
+The command also writes `blocking_pairs.csv` and
+`group_by_blocking_candidate_*` summaries, which estimate the base-policy
+opportunities blocked while a candidate-policy trade was open.
 
 ## Rebuild Generated Artifacts
 
