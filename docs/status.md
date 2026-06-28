@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 00:45 JST
+最終更新: 2026-06-29 01:02 JST
 
 ## 現在の状態
 
@@ -137,6 +137,8 @@ selected-trade qualityから `raw EV - calibrated quality` の過大評価幅を
 `large_loss` threshold `5/10/15` を比較済み。OOF AUCは `5=0.4042`, `10=0.5736`, `15=0.5665`。validation 4fold topの最悪月PnLは `5=88.8168`, `10=92.8530`, `15=87.4970` で `10` が最良。fixed holdoutでは `5` が2024-12 `+22.3498` だが2025-02 `-19.6600`、`10` は2024-12 `-37.2928` / 2025-02 `+76.9254`、`15` は2024-12 `-55.4970` / 2025-02 `+21.5216`。threshold調整だけでは標準採用に足りないため、`threshold=10` を基準信号として side/regime別校正またはcandidate-entry集合拡張へ進む。詳細は `docs/reports/00079_2026-06-29_large_loss_threshold_comparison.md`。
 
 trade failure probabilityのside/regime別OOF校正CLIを追加済み。`oof-trade-failure-calibration` は `pred_trade_failure_<target>_<side>_calibrated_prob/risk` と support-aware `upper_prob/risk` を出力する。`large_loss threshold=10` で試したところ、OOF AUCは `volatility_regime+session_regime` が raw `0.5736` から `0.5837` へ少し上がったが、実行policyでは改善しなかった。`combined_regime` full grid topはrisk `0` に戻り min pnl `82.7176` でraw t10 top `92.8530` 未満。`vol+session calibrated risk=30` はvalidation sumを上げるがmin pnl `62.7122`、fixed 2024-12 `-159.2242` と大きく崩れた。標準採用せず、次はcandidate-entry集合へfailure targetを広げる。詳細は `docs/reports/00080_2026-06-29_trade_failure_probability_calibration.md`。
+
+candidate-entry failure modelを追加済み。`oof-candidate-failure-model` はentry候補行をside別に展開し、`large_adverse = max_adverse_pnl <= -10` をOOF分類して `pred_candidate_failure_<target>_<side>_prob/risk` を出力する。学習例はselected trades 106件からcandidate `9091` 件へ増えたが、OOF AUCは `0.3738` と逆相関気味。通常riskはvalidation min pnlをriskなし `82.7176` からrisk10 `5.9462` へ壊し、反転riskでもrisk5 `39.9032` でriskなしを超えない。fixed holdoutではrisk10が2024-12 `+19.2252` へ改善する一方、2025-02 `-18.6000` へ悪化。標準採用せず、次はcandidate rowの連続期待値・下方分位・exit timing込みtargetを検討する。詳細は `docs/reports/00081_2026-06-29_candidate_entry_failure_model.md`。
 
 `docs/reports` の実験レポートは、`00001_YYYY-MM-DD_slug.md` の通し番号形式へ統一済み。番号はファイルシステムの更新時刻(mtime)や本文の `更新日時` ではなく、レポートファイル内の `日時: YYYY-MM-DD HH:MM JST` の昇順で決める。既存レポートの確認、再採番、直近レポート参照でも、ファイルシステムのmtimeではなくファイル内の `日時` を正とする。通し番号はその順序に由来する補助情報として扱う。各レポート冒頭には `日時` と `更新日時` を `YYYY-MM-DD HH:MM JST` 形式で置く。
 

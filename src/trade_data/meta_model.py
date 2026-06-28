@@ -246,6 +246,42 @@ class TradeFailureModelBundle:
 
 
 @dataclass(frozen=True)
+class CandidateFailureModelConfig:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    max_depth: int | None
+    min_samples_leaf: int
+    l2_regularization: float
+    max_features: float
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
+    random_seed: int
+    sample_weighting: str
+    prediction_shrinkage: float
+    large_adverse_threshold: float
+    target_names: tuple[str, ...]
+    entry_threshold: float
+    long_entry_threshold_offset: float
+    short_entry_threshold_offset: float
+    side_margin: float
+    min_entry_rank: float
+    long_entry_rank_column: str = "pred_long_entry_local_rank"
+    short_entry_rank_column: str = "pred_short_entry_local_rank"
+
+
+@dataclass
+class CandidateFailureModelBundle:
+    config: CandidateFailureModelConfig
+    models: dict[str, HistGradientBoostingClassifier | None]
+    feature_columns: list[str]
+    category_mappings: dict[str, dict[str, int]]
+    target_means: dict[str, float]
+
+
+@dataclass(frozen=True)
 class TradeFailureProbabilityCalibrator:
     config: GroupEVCalibrationConfig
     target_name: str
@@ -262,6 +298,7 @@ TRADE_FAILURE_TARGET_NAMES = (
     "exit_regret_high",
     "any_failure",
 )
+CANDIDATE_FAILURE_TARGET_NAMES = ("large_adverse",)
 TRADE_SOURCE_LONG_EV_COLUMN = "pred_trade_source_long_ev"
 TRADE_SOURCE_SHORT_EV_COLUMN = "pred_trade_source_short_ev"
 TRADE_QUALITY_LONG_COLUMN = "pred_trade_quality_long_adjusted_pnl"
@@ -1440,6 +1477,8 @@ def trade_quality_features_from_predictions(
             output[column] = predictions[column].astype("string").fillna("__missing__")
         else:
             output[column] = "__missing__"
+    if "dataset_month" in predictions.columns:
+        output["dataset_month"] = predictions["dataset_month"].astype(str)
     return output
 
 
@@ -1765,6 +1804,280 @@ def trade_failure_scored_metrics(scored: pd.DataFrame, target_names: tuple[str, 
             auc = 0.5
         metrics[target_name] = {
             "trade_count": int(len(scored)),
+            "prevalence": float(y_true.mean()),
+            "predicted_mean": float(y_pred.mean()),
+            "bias": float(y_pred.mean() - y_true.mean()),
+            "brier": float(brier_score_loss(y_true, y_pred)),
+            "auc": auc,
+        }
+    return metrics
+
+
+def validate_candidate_failure_targets(target_names: tuple[str, ...]) -> None:
+    unknown = sorted(set(target_names) - set(CANDIDATE_FAILURE_TARGET_NAMES))
+    if unknown:
+        raise ValueError(f"unknown candidate failure targets: {', '.join(unknown)}")
+
+
+def candidate_failure_target_column(target_name: str) -> str:
+    return f"candidate_failure_{target_name}"
+
+
+def candidate_failure_prob_column(target_name: str, side_name: str) -> str:
+    return f"pred_candidate_failure_{target_name}_{side_name}_prob"
+
+
+def candidate_failure_risk_column(target_name: str, side_name: str) -> str:
+    return f"pred_candidate_failure_{target_name}_{side_name}_risk"
+
+
+def candidate_failure_taken_prob_column(target_name: str) -> str:
+    return f"pred_candidate_failure_{target_name}_taken_prob"
+
+
+def candidate_failure_mask_config(config: CandidateFailureModelConfig) -> ResidualPenaltyConfig:
+    return ResidualPenaltyConfig(
+        group_columns=(),
+        min_group_size=1,
+        prior_strength=0.0,
+        penalty_weight=0.0,
+        candidate_entry_only=True,
+        entry_threshold=config.entry_threshold,
+        long_entry_threshold_offset=config.long_entry_threshold_offset,
+        short_entry_threshold_offset=config.short_entry_threshold_offset,
+        side_margin=config.side_margin,
+        min_entry_rank=config.min_entry_rank,
+        long_entry_rank_column=config.long_entry_rank_column,
+        short_entry_rank_column=config.short_entry_rank_column,
+    )
+
+
+def candidate_failure_targets_from_predictions(
+    predictions: pd.DataFrame,
+    side_name: str,
+    config: CandidateFailureModelConfig,
+) -> pd.DataFrame:
+    validate_candidate_failure_targets(config.target_names)
+    actual_adverse_column = f"{side_name}_max_adverse_pnl"
+    if actual_adverse_column not in predictions.columns:
+        raise ValueError(f"predictions missing candidate target column: {actual_adverse_column}")
+    actual_adverse = finite_float_series(predictions, actual_adverse_column)
+    targets = pd.DataFrame(index=predictions.index)
+    if "large_adverse" in config.target_names:
+        targets[candidate_failure_target_column("large_adverse")] = (
+            actual_adverse <= -config.large_adverse_threshold
+        )
+    return targets.astype(int)
+
+
+def build_candidate_failure_training_frame(
+    predictions: pd.DataFrame,
+    config: CandidateFailureModelConfig,
+    *,
+    long_column: str,
+    short_column: str,
+) -> pd.DataFrame:
+    validate_candidate_failure_targets(config.target_names)
+    required_columns = {
+        long_column,
+        short_column,
+        "long_max_adverse_pnl",
+        "short_max_adverse_pnl",
+    }
+    if config.min_entry_rank > 0:
+        required_columns.update(
+            {
+                config.long_entry_rank_column,
+                config.short_entry_rank_column,
+            }
+        )
+    missing_columns = sorted(required_columns - set(predictions.columns))
+    if missing_columns:
+        raise ValueError(f"predictions missing candidate failure columns: {', '.join(missing_columns)}")
+
+    masks = candidate_entry_side_masks(
+        predictions,
+        candidate_failure_mask_config(config),
+        long_column=long_column,
+        short_column=short_column,
+    )
+    frames: list[pd.DataFrame] = []
+    for side_name in ("long", "short"):
+        side_predictions = predictions.loc[masks[side_name]].copy()
+        if side_predictions.empty:
+            continue
+        features = trade_quality_features_from_predictions(side_predictions, side_name)
+        features["candidate_side"] = side_name
+        features["candidate_source_index"] = side_predictions.index.astype(str)
+        if "decision_timestamp" in side_predictions.columns:
+            features["decision_timestamp"] = side_predictions["decision_timestamp"]
+        actual_adverse = finite_float_series(side_predictions, f"{side_name}_max_adverse_pnl")
+        features["candidate_actual_max_adverse_pnl"] = actual_adverse
+        targets = candidate_failure_targets_from_predictions(side_predictions, side_name, config)
+        frames.append(pd.concat([features, targets], axis=1))
+
+    if not frames:
+        return pd.DataFrame()
+    target_columns = [candidate_failure_target_column(target_name) for target_name in config.target_names]
+    frame = pd.concat(frames, ignore_index=True)
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(subset=target_columns)
+
+
+def fit_candidate_failure_model_from_frame(
+    frame: pd.DataFrame,
+    config: CandidateFailureModelConfig,
+) -> CandidateFailureModelBundle:
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if config.large_adverse_threshold < 0:
+        raise ValueError("large_adverse_threshold must be non-negative")
+    validate_candidate_failure_targets(config.target_names)
+    if frame.empty:
+        raise ValueError("candidate failure model training frame is empty")
+
+    mappings = category_mappings(frame, TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS)
+    encoded = encode_trade_quality_features(frame, mappings)
+    feature_columns = trade_quality_feature_columns(encoded)
+    models: dict[str, HistGradientBoostingClassifier | None] = {}
+    target_means: dict[str, float] = {}
+    for index, target_name in enumerate(config.target_names):
+        target_column = candidate_failure_target_column(target_name)
+        target = frame[target_column].astype(int)
+        target_means[target_name] = float(target.mean())
+        if target.nunique(dropna=True) < 2:
+            models[target_name] = None
+            continue
+        model = HistGradientBoostingClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            max_depth=config.max_depth,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            max_features=config.max_features,
+            early_stopping=config.early_stopping,
+            validation_fraction=config.validation_fraction,
+            n_iter_no_change=config.n_iter_no_change,
+            tol=config.tol,
+            random_state=config.random_seed + index,
+        )
+        weight_frame = frame.assign(target=target)
+        model.fit(
+            encoded[feature_columns].astype("float32").to_numpy(),
+            target.to_numpy(dtype="int8"),
+            sample_weight=trade_quality_sample_weights(weight_frame, config.sample_weighting),
+        )
+        models[target_name] = model
+    return CandidateFailureModelBundle(
+        config=config,
+        models=models,
+        feature_columns=feature_columns,
+        category_mappings=mappings,
+        target_means=target_means,
+    )
+
+
+def fit_candidate_failure_model(
+    predictions: pd.DataFrame,
+    config: CandidateFailureModelConfig,
+    *,
+    long_column: str,
+    short_column: str,
+) -> CandidateFailureModelBundle:
+    frame = build_candidate_failure_training_frame(
+        predictions,
+        config,
+        long_column=long_column,
+        short_column=short_column,
+    )
+    return fit_candidate_failure_model_from_frame(frame, config)
+
+
+def predict_candidate_failure_features(
+    raw_features: pd.DataFrame,
+    bundle: CandidateFailureModelBundle,
+    target_name: str,
+) -> np.ndarray:
+    if target_name not in bundle.target_means:
+        raise ValueError(f"unknown fitted candidate failure target: {target_name}")
+    model = bundle.models.get(target_name)
+    if model is None:
+        probabilities = np.full(len(raw_features), bundle.target_means[target_name], dtype="float64")
+    else:
+        encoded = encode_trade_quality_features(raw_features, bundle.category_mappings)
+        classes = list(model.classes_)
+        positive_index = classes.index(1) if 1 in classes else None
+        if positive_index is None:
+            probabilities = np.full(len(raw_features), bundle.target_means[target_name], dtype="float64")
+        else:
+            probabilities = model.predict_proba(
+                encoded[bundle.feature_columns].astype("float32").to_numpy()
+            )[:, positive_index]
+    if bundle.config.prediction_shrinkage < 1.0:
+        probabilities = (
+            bundle.config.prediction_shrinkage * probabilities
+            + (1.0 - bundle.config.prediction_shrinkage) * bundle.target_means[target_name]
+        )
+    return np.clip(probabilities, 0.0, 1.0)
+
+
+def add_candidate_failure_model_columns(
+    predictions: pd.DataFrame,
+    bundle: CandidateFailureModelBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        features = trade_quality_features_from_predictions(output, side_name)
+        for target_name in bundle.config.target_names:
+            probability = predict_candidate_failure_features(features, bundle, target_name)
+            prob_column = candidate_failure_prob_column(target_name, side_name)
+            output[prob_column] = probability
+            output[candidate_failure_risk_column(target_name, side_name)] = -output[prob_column]
+    return output
+
+
+def add_candidate_failure_model_values_to_examples(
+    examples: pd.DataFrame,
+    bundle: CandidateFailureModelBundle,
+) -> pd.DataFrame:
+    output = examples.copy()
+    for target_name in bundle.config.target_names:
+        output[candidate_failure_taken_prob_column(target_name)] = predict_candidate_failure_features(
+            output,
+            bundle,
+            target_name,
+        )
+    return output
+
+
+def candidate_failure_scored_metrics(
+    scored: pd.DataFrame,
+    target_names: tuple[str, ...],
+) -> dict[str, object]:
+    if scored.empty:
+        return {
+            target_name: {
+                "candidate_count": 0,
+                "prevalence": 0.0,
+                "predicted_mean": 0.0,
+                "bias": 0.0,
+                "brier": 0.0,
+                "auc": 0.5,
+            }
+            for target_name in target_names
+        }
+    metrics: dict[str, object] = {}
+    for target_name in target_names:
+        target_column = candidate_failure_target_column(target_name)
+        pred_column = candidate_failure_taken_prob_column(target_name)
+        y_true = scored[target_column].astype(int)
+        y_pred = scored[pred_column].astype(float).clip(0.0, 1.0)
+        if y_true.nunique(dropna=True) >= 2:
+            auc = float(roc_auc_score(y_true, y_pred))
+        else:
+            auc = 0.5
+        metrics[target_name] = {
+            "candidate_count": int(len(scored)),
             "prevalence": float(y_true.mean()),
             "predicted_mean": float(y_pred.mean()),
             "bias": float(y_pred.mean() - y_true.mean()),
@@ -3194,6 +3507,209 @@ def trade_failure_model_config_from_args(args: argparse.Namespace) -> TradeFailu
     )
 
 
+def candidate_failure_model_config_from_args(args: argparse.Namespace) -> CandidateFailureModelConfig:
+    target_names = tuple(parse_csv_strings(args.failure_targets) or list(CANDIDATE_FAILURE_TARGET_NAMES))
+    return CandidateFailureModelConfig(
+        max_iter=args.max_iter,
+        learning_rate=args.learning_rate,
+        max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
+        min_samples_leaf=args.min_samples_leaf,
+        l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
+        random_seed=args.random_seed,
+        sample_weighting=args.sample_weighting,
+        prediction_shrinkage=args.prediction_shrinkage,
+        large_adverse_threshold=args.large_adverse_threshold,
+        target_names=target_names,
+        entry_threshold=args.entry_threshold,
+        long_entry_threshold_offset=args.long_entry_threshold_offset,
+        short_entry_threshold_offset=args.short_entry_threshold_offset,
+        side_margin=args.side_margin,
+        min_entry_rank=args.min_entry_rank,
+        long_entry_rank_column=args.long_entry_rank_column,
+        short_entry_rank_column=args.short_entry_rank_column,
+    )
+
+
+def oof_candidate_failure_model(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF candidate failure model")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    config = candidate_failure_model_config_from_args(args)
+    validate_candidate_failure_targets(config.target_names)
+    validation_candidates = build_candidate_failure_training_frame(
+        validation_predictions,
+        config,
+        long_column=TRADE_SOURCE_LONG_EV_COLUMN,
+        short_column=TRADE_SOURCE_SHORT_EV_COLUMN,
+    )
+    if validation_candidates.empty:
+        raise ValueError("validation candidate failure frame is empty")
+
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_candidate_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for fold_index, holdout_month in enumerate(validation_months):
+        fit_predictions = validation_predictions[
+            validation_predictions["dataset_month"] != holdout_month
+        ].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_predictions.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build candidate failure OOF fold for {holdout_month}")
+        fold_config = CandidateFailureModelConfig(
+            **{
+                **asdict(config),
+                "random_seed": config.random_seed + 17 * fold_index,
+            }
+        )
+        fit_candidates = build_candidate_failure_training_frame(
+            fit_predictions,
+            fold_config,
+            long_column=TRADE_SOURCE_LONG_EV_COLUMN,
+            short_column=TRADE_SOURCE_SHORT_EV_COLUMN,
+        )
+        holdout_candidates = build_candidate_failure_training_frame(
+            holdout_predictions,
+            fold_config,
+            long_column=TRADE_SOURCE_LONG_EV_COLUMN,
+            short_column=TRADE_SOURCE_SHORT_EV_COLUMN,
+        )
+        if fit_candidates.empty:
+            raise ValueError(f"candidate failure fit frame is empty for {holdout_month}")
+        fold_bundle = fit_candidate_failure_model_from_frame(fit_candidates, fold_config)
+        holdout_prediction_output = add_candidate_failure_model_columns(
+            holdout_predictions,
+            fold_bundle,
+        )
+        holdout_candidate_output = add_candidate_failure_model_values_to_examples(
+            holdout_candidates,
+            fold_bundle,
+        )
+        fold_prediction_outputs.append(holdout_prediction_output)
+        fold_candidate_outputs.append(holdout_candidate_output)
+        fold_metrics[holdout_month] = {
+            "fit_candidates": int(len(fit_candidates)),
+            "holdout_candidates": int(len(holdout_candidates)),
+            "holdout_predictions": int(len(holdout_predictions)),
+            "holdout": candidate_failure_scored_metrics(
+                holdout_candidate_output,
+                config.target_names,
+            ),
+            "target_means": fold_bundle.target_means,
+            "feature_columns": fold_bundle.feature_columns,
+            "category_mappings": fold_bundle.category_mappings,
+        }
+
+    validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+    validation_oof_candidates = pd.concat(fold_candidate_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof_candidates.columns:
+        validation_oof_candidates = validation_oof_candidates.sort_values("decision_timestamp")
+
+    final_bundle = fit_candidate_failure_model_from_frame(validation_candidates, config)
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_candidate_failure_model_columns(apply_predictions, final_bundle)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_candidate_failure_model.parquet",
+        index=False,
+    )
+    validation_oof_candidates.to_csv(
+        run_dir / "validation_oof_candidate_failure_examples.csv",
+        index=False,
+    )
+    validation_candidates.to_csv(run_dir / "validation_fit_candidate_failure_examples.csv", index=False)
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_candidate_failure_model.parquet",
+            index=False,
+        )
+    joblib.dump(final_bundle, run_dir / "candidate_failure_model.joblib")
+    metrics = {
+        "mode": "validation_oof_candidate_failure_model",
+        "config": asdict(config),
+        "validation_predictions": str(args.validation_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "validation_predictions": int(len(validation_predictions)),
+            "validation_candidates": int(len(validation_candidates)),
+            "validation_oof": int(len(validation_oof)),
+            "validation_oof_candidates": int(len(validation_oof_candidates)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_predictions": month_counts(validation_predictions),
+            "validation_candidates": month_counts(validation_candidates),
+            "validation_oof": month_counts(validation_oof),
+            "validation_oof_candidates": month_counts(validation_oof_candidates),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "candidate_side_counts": (
+            {}
+            if validation_candidates.empty
+            else {
+                str(side): int(count)
+                for side, count in validation_candidates["candidate_side"].value_counts().items()
+            }
+        ),
+        "final_model": {
+            "target_means": final_bundle.target_means,
+            "feature_columns": final_bundle.feature_columns,
+            "category_mappings": final_bundle.category_mappings,
+        },
+        "folds": fold_metrics,
+        "validation_oof": candidate_failure_scored_metrics(
+            validation_oof_candidates,
+            config.target_names,
+        ),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def oof_trade_failure_model(args: argparse.Namespace) -> int:
     validation_months = parse_csv_months(args.validation_months)
     apply_months = parse_csv_months(args.apply_months)
@@ -3679,6 +4195,15 @@ def build_parser() -> argparse.ArgumentParser:
         )
         model_parser.add_argument("--prediction-shrinkage", type=float, default=0.7)
 
+    def add_candidate_entry_filter_args(candidate_parser: argparse.ArgumentParser) -> None:
+        candidate_parser.add_argument("--entry-threshold", type=float, default=12.0)
+        candidate_parser.add_argument("--long-entry-threshold-offset", type=float, default=0.0)
+        candidate_parser.add_argument("--short-entry-threshold-offset", type=float, default=6.0)
+        candidate_parser.add_argument("--side-margin", type=float, default=5.0)
+        candidate_parser.add_argument("--min-entry-rank", type=float, default=0.5)
+        candidate_parser.add_argument("--long-entry-rank-column", default="pred_long_entry_local_rank")
+        candidate_parser.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
+
     fit_parser = subparsers.add_parser("fit", help="fit a meta EV model and apply it")
     fit_parser.add_argument("--train-predictions", type=Path, required=True)
     fit_parser.add_argument("--apply-predictions", type=Path, required=True)
@@ -3880,6 +4405,35 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(trade_failure_model_parser)
     add_trade_quality_model_args(trade_failure_model_parser, include_target_clip_quantile=False)
     trade_failure_model_parser.set_defaults(func=oof_trade_failure_model)
+
+    candidate_failure_model_parser = subparsers.add_parser(
+        "oof-candidate-failure-model",
+        help="build validation OOF candidate-entry failure probability columns",
+    )
+    candidate_failure_model_parser.add_argument("--validation-predictions", type=Path, required=True)
+    candidate_failure_model_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation-candidate model",
+    )
+    candidate_failure_model_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    candidate_failure_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    candidate_failure_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    candidate_failure_model_parser.add_argument("--label", default="candidate_failure_model")
+    candidate_failure_model_parser.add_argument(
+        "--failure-targets",
+        default=",".join(CANDIDATE_FAILURE_TARGET_NAMES),
+        help="comma-separated candidate failure targets: large_adverse",
+    )
+    candidate_failure_model_parser.add_argument("--large-adverse-threshold", type=float, default=10.0)
+    add_trade_source_args(candidate_failure_model_parser)
+    add_trade_quality_model_args(candidate_failure_model_parser, include_target_clip_quantile=False)
+    add_candidate_entry_filter_args(candidate_failure_model_parser)
+    candidate_failure_model_parser.set_defaults(func=oof_candidate_failure_model)
 
     trade_failure_calibration_parser = subparsers.add_parser(
         "oof-trade-failure-calibration",

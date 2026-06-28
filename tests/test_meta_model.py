@@ -4,11 +4,14 @@ import unittest
 import pandas as pd
 
 from trade_data.meta_model import (
+    CandidateFailureModelConfig,
     GroupEVCalibrationConfig,
     MetaModelConfig,
     ResidualPenaltyConfig,
     TradeFailureModelConfig,
     TradeQualityModelConfig,
+    add_candidate_failure_model_columns,
+    add_candidate_failure_model_values_to_examples,
     add_group_calibrated_fixed_horizon_columns,
     add_group_calibrated_ev_columns,
     add_meta_predictions,
@@ -24,8 +27,14 @@ from trade_data.meta_model import (
     available_feature_columns,
     build_training_frame,
     build_sample_weights,
+    build_candidate_failure_training_frame,
     candidate_entry_side_masks,
+    candidate_failure_prob_column,
+    candidate_failure_risk_column,
+    candidate_failure_taken_prob_column,
+    candidate_failure_target_column,
     combine_fit_predictions,
+    fit_candidate_failure_model_from_frame,
     fit_group_target_calibrator,
     fit_group_ev_calibrator,
     fit_residual_penalty_calibrator,
@@ -581,6 +590,77 @@ class MetaModelTests(unittest.TestCase):
             self.assertEqual(output[short_risk].tolist(), (-output[short_prob]).tolist())
             self.assertIn(f"pred_trade_failure_{target_name}_taken_prob", scored.columns)
             self.assertIn(f"trade_failure_{target_name}", scored.columns)
+
+    def test_candidate_failure_model_adds_probability_and_risk_columns(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions["dataset_month"] = ["2024-07", "2024-07", "2024-09"]
+        predictions["decision_timestamp"] = pd.date_range(
+            "2025-01-01",
+            periods=3,
+            freq="h",
+            tz="UTC",
+        )
+        predictions["long_max_adverse_pnl"] = [-12.0, -3.0, -2.0]
+        predictions["short_max_adverse_pnl"] = [-2.0, -4.0, -14.0]
+        config = CandidateFailureModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            large_adverse_threshold=10.0,
+            target_names=("large_adverse",),
+            entry_threshold=7.0,
+            long_entry_threshold_offset=0.0,
+            short_entry_threshold_offset=0.0,
+            side_margin=1.0,
+            min_entry_rank=0.0,
+        )
+
+        examples = build_candidate_failure_training_frame(
+            predictions,
+            config,
+            long_column="pred_trade_source_long_ev",
+            short_column="pred_trade_source_short_ev",
+        )
+        bundle = fit_candidate_failure_model_from_frame(examples, config)
+        output = add_candidate_failure_model_columns(predictions, bundle)
+        scored = add_candidate_failure_model_values_to_examples(examples, bundle)
+
+        target_column = candidate_failure_target_column("large_adverse")
+        long_prob = candidate_failure_prob_column("large_adverse", "long")
+        short_prob = candidate_failure_prob_column("large_adverse", "short")
+        long_risk = candidate_failure_risk_column("large_adverse", "long")
+        short_risk = candidate_failure_risk_column("large_adverse", "short")
+        taken_prob = candidate_failure_taken_prob_column("large_adverse")
+
+        self.assertEqual(len(examples), 3)
+        self.assertEqual(examples[target_column].tolist(), [1, 0, 1])
+        self.assertIn(long_prob, output.columns)
+        self.assertIn(short_prob, output.columns)
+        self.assertFalse(output[long_prob].isna().any())
+        self.assertFalse(output[short_prob].isna().any())
+        self.assertEqual(output[long_risk].tolist(), (-output[long_prob]).tolist())
+        self.assertEqual(output[short_risk].tolist(), (-output[short_prob]).tolist())
+        self.assertIn(taken_prob, scored.columns)
+        self.assertFalse(scored[taken_prob].isna().any())
 
     def test_trade_failure_probability_calibration_adds_side_prob_and_risk_columns(self):
         predictions = prediction_frame().copy()

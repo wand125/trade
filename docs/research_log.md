@@ -3430,3 +3430,47 @@ Artifacts:
 - `combined` full gridではrisk `0` がtopに戻ったため、校正riskは選ばれていない。
 - `vol+session risk30` はsum pnlと一部diagnosticを改善するが、最悪月とfixed 2024-12を壊す。
 - 今回の校正riskは標準採用しない。基盤は残し、次はcandidate-entry集合へfailure targetを広げる。
+
+### 2026-06-29 01:02 JST Candidate-entry failure model
+
+作業:
+
+- `trade_data.meta_model` に `oof-candidate-failure-model` を追加した。
+- selected tradesだけでなく、entry条件を通ったcandidate rowをside別に展開し、`large_adverse = max_adverse_pnl <= -10` を学習する。
+- 出力列は `pred_candidate_failure_<target>_<side>_prob/risk`。
+- candidate条件は直近raw top骨格に合わせて entry `12`, short offset `6`, side margin `5`, min rank `0.5`。
+- 通常risk `-prob` と、診断用の反転risk `-(1 - prob)` をvalidation 4foldで比較した。
+- fixed holdout `2024-12` / `2025-02` でも通常riskをsmokeした。
+- report: `docs/reports/00081_2026-06-29_candidate_entry_failure_model.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+Artifacts:
+
+- candidate model 2024-12 apply: `data/reports/modeling/20260628_155801_candidate_failure_large_adverse_t10_2024_12/`
+- candidate model 2025-02 apply: `data/reports/modeling/20260628_155821_candidate_failure_large_adverse_t10_2025_02/`
+- normal validation summary: `data/reports/backtests/candidate_failure_large_adverse_t10_smoke_summary/20260628_160008_model_sweep_summary/`
+- inverse validation summary: `data/reports/backtests/candidate_failure_large_adverse_t10_inverse_smoke_summary/20260628_160203_model_sweep_summary/`
+- fixed smoke: `data/reports/backtests/candidate_failure_large_adverse_t10_fixed_smoke/`
+
+結果:
+
+| item | value |
+|---|---:|
+| candidate count | `9091` |
+| long candidates | `2530` |
+| short candidates | `6561` |
+| `large_adverse` prevalence | `0.5322` |
+| OOF AUC | `0.3738` |
+| normal risk0 validation min pnl | `82.7176` |
+| normal risk10 validation min pnl | `5.9462` |
+| inverse risk5 validation min pnl | `39.9032` |
+| raw large_loss t10 validation min pnl reference | `92.8530` |
+| fixed 2024-12 normal risk10 | `19.2252` |
+| fixed 2025-02 normal risk10 | `-18.6000` |
+
+判断:
+
+- candidate rowへ広げることで件数不足は緩和したが、`large_adverse` 二値targetは意思決定riskとしては弱い。
+- `large_adverse` は保有中の逆行を捉えるが、24h以内のexit込み最終損益最大化とはズレる。
+- fixed holdout改善は片月依存で、validationでもriskなしに勝てない。標準採用しない。
+- 次はcandidate rowを使う場合でも、二値adverse分類ではなく、連続EV、下方分位、exit timing込みの実現可能PnL targetを優先する。
