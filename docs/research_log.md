@@ -2642,3 +2642,39 @@ Artifacts:
 - 2024-12ではcombo top2がentry penalty単独より `13.7786` 改善したが、NoTradeには大きく負ける。
 - validation topの `time shrink=0.50` は2024-12でdirection error `0.6383` と壊れた。
 - 標準policyには昇格しない。次は保有中にprobabilityを再評価するdynamic / hazard-like exit policyを実装する。
+
+### 2026-06-28 19:01 JST Dynamic Exit Probability Thresholds
+
+作業:
+
+- `time_exit_exit_threshold` と `loss_first_exit_threshold` を `ModelPolicyConfig`, `model-policy`, `model-sweep` に追加した。
+- 保有中に現在sideの `pred_*_exit_event_prob_0` / `pred_*_exit_event_prob_2` を再評価し、finite閾値以上ならflat signalを出して予定exit時刻を消すdynamic / hazard-like exitを実装した。
+- validation 4foldで `time_exit_penalty=0,6`, `loss_first_penalty=0,6`, `time_exit_holding_shrink=0,0.25`, `time_exit_exit_threshold=inf,0.75,0.90`, `loss_first_exit_threshold=inf,0.50,0.75`, max hold `480,720` を比較した。
+- validation上位、entry penalty + holding shrink reference、entry penalty reference、no-penalty referenceを2024-12反証月へ固定適用した。
+- report: `docs/reports/00056_2026-06-28_dynamic_exit_probability.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
+
+Artifacts:
+
+- validation sweeps: `data/reports/backtests/dynamic_exit_probability/`
+- validation summary: `data/reports/backtests/20260628_dynamic_exit_probability_summary.csv`
+- 2024-12 fixed diagnostics: `data/reports/backtests/dynamic_exit_probability/fixed_2024_12/`
+- 2024-12 fixed summary: `data/reports/backtests/20260628_dynamic_exit_probability_2024_12_fixed.csv`
+
+結果:
+
+| policy | validation strict | min pnl | total pnl | 2024-12 adjusted pnl | trades | profit factor |
+|---|---|---:|---:|---:|---:|---:|
+| penalty `6/6` + time shrink `0.25` + dynamic `time=0.90`, `loss=0.75` | `false` | `81.1178` | `528.8282` | `-162.9304` | `46` | `0.5146` |
+| penalty `6/6` + dynamic `time=0.90`, `loss=0.75` | `false` | `76.2212` | `543.3552` | `-176.3334` | `46` | `0.4905` |
+| penalty `6/6` + time shrink `0.25`, no dynamic | `false` | `80.0648` | `513.3876` | `-159.0158` | `46` | `0.5211` |
+| entry penalty `6/6`, no dynamic | `false` | `75.1682` | `531.6246` | `-172.7944` | `46` | `0.4960` |
+| no-penalty dynamic high-turnover | `false` | `72.1134` | `377.7014` | `-104.0014` | `171` | `0.7174` |
+| no-penalty no-dynamic reference | `false` | `12.5636` | `287.8596` | `-227.4118` | `63` | `0.4507` |
+
+判断:
+
+- dynamic exit thresholdはvalidation basic条件ではわずかに改善したが、smoothed miss maxが高くstrict eligibleは0件。
+- 2024-12ではpenalty込みdynamic topがno-dynamic comboよりわずかに悪化し、NoTradeにも大きく負けた。
+- no-penalty dynamic high-turnoverは2024-12損失を `-104.0014` まで縮めたが、direction error `0.6316`、smoothed miss `0.9075` で汎化候補としては弱い。
+- dynamic exitは探索軸として残すが、標準policyには昇格しない。次はexit制御単独ではなく、side/entry calibrationとprofit-barrier missの同時制御へ戻る。
