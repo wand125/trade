@@ -8573,7 +8573,7 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
     if args.apply_predictions is None and apply_months is not None:
         raise ValueError("--apply-months requires --apply-predictions")
 
-    examples = pd.read_csv(args.examples)
+    examples = read_stateful_examples(args.examples)
     validation_examples = build_stateful_value_training_frame(
         examples,
         target_column=args.target_column,

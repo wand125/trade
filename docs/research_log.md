@@ -4606,3 +4606,39 @@ Artifacts:
 - supportを1093例に増やしてもrank能力は大きく改善しない。
 - `blocking_cost_high` はAUC `0.5439` だが、policy接続ではbaseline未満。標準riskには採用しない。
 - source別target率が大きく異なるため、次は同一固定policyのwalk-forward examplesを増やし、source driftを抑えて再評価する。
+
+### 2026-06-29 16:59 JST Fixed policy stateful examples
+
+作業:
+
+- `fixed_highcost_risk5` vs `fixed_highcost_risk0` の2024-11..2025-05を `model-trade-delta` で比較し、同一固定policy pair由来のstateful examplesを607件作った。
+- 2024-11..2025-04のOOF predictionと2025-05 apply predictionを結合し、2025-02..2025-05をchronological OOFで再評価した。
+- `oof-stateful-value-model` 側にも `read_stateful_examples()` を適用し、risk modelと同じ複数CSV/ディレクトリ入力に揃えた。
+- report: `docs/reports/00154_2026-06-29_fixed_policy_stateful_examples.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| target | prevalence | AUC |
+|---|---:|---:|
+| positive_blocking | `0.0881` | `0.4393` |
+| blocking_cost_high | `0.0570` | `0.3563` |
+| replacement_regret_high | `0.2746` | `0.4895` |
+| positive_replacement_regret_high | `0.2876` | `0.4623` |
+| stateful_nonpositive | `0.4819` | `0.5216` |
+
+| label | total PnL | min month PnL | trades |
+|---|---:|---:|---:|
+| risk0 | `111.3582` | `-66.1420` | `408` |
+| baseline risk5 | `101.6610` | `-52.9764` | `386` |
+| blockcost w5 | `78.5882` | `-61.3746` | `385` |
+| blockcost w10 | `35.7162` | `-56.3702` | `382` |
+| nonpositive w5 | `-88.3904` | `-140.8344` | `295` |
+| nonpositive w10 | `-96.3226` | `-74.7448` | `196` |
+
+判断:
+
+- 同一固定policyに絞っても、`blocking_cost_high` / `stateful_nonpositive` の追加riskは標準採用しない。
+- `blocking_cost_high` はOOF AUCが逆方向。`stateful_nonpositive` は薄いsignalがあるが、policyでは取引を削りすぎる。
+- 高コスト2025-02..2025-05ではrisk0がrisk5のtotalを上回る。risk5はmin month / max DD改善用の防御diagnosticとして扱い、利益最大化signalとは分ける。
+- 次はcandidate差分targetではなく、selected trade全体のEV overestimate residual、exit timing target、context prior floorの校正へ戻る。

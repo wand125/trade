@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 16:47 JST
+最終更新: 2026-06-29 16:59 JST
 
 ## 現在の状態
 
@@ -29,6 +29,8 @@ trade overestimate scale診断も追加済み。chronological OOFでは、select
 trade overestimate high分類targetも追加済み。`oof-trade-overestimate-high-model` はside別fit分布の高分位を超えるselected trade overestimateを分類し、side別prob/risk列を出す。chronological q75はAUC `0.5509` と薄いsignalがあるが、既存stateful risk5へ追加すると2025-02..2025-04 totalは baseline `154.6374` に対し w0.5 `94.7914`, w1.0 `109.3234`, w2.0 `86.1926` へ悪化した。q90分類はAUC `0.4574`。単独riskには採用せず、stacking featureまたはblocking/exit失敗targetの補助特徴として扱う。詳細は `docs/reports/00152_2026-06-29_trade_overestimate_high_classifier.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 stateful examplesの追加support実験も実施済み。`oof-stateful-value-model` / `oof-stateful-risk-model` の `--examples` を複数CSV/ディレクトリ対応にし、`example_source` と `example_source_rows` を保存するようにした。3つのdelta sourceを混ぜて1093例に増やしたが、chronological OOFでは `blocking_cost_high` だけAUC `0.5439`、他は概ね0.5未満。`blocking_cost_high` を既存stateful risk5へ追加しても、2025-02..2025-04 totalは baseline `154.6374` に対し w5 `123.7672`, w10 `92.1764` へ悪化した。source別target率が大きく違うため、次は複数source混合ではなく同一固定policyのwalk-forward examplesを増やす。詳細は `docs/reports/00153_2026-06-29_augmented_stateful_blocking_examples.md`。
+
+同一固定policyのstateful examples再評価も完了。`fixed_highcost_risk5` vs `fixed_highcost_risk0` の2024-11..2025-05から607例を作り、2025-02..2025-05をchronological OOF評価した。`blocking_cost_high` はAUC `0.3563` と逆方向、`stateful_nonpositive` はAUC `0.5216` と薄いsignalに留まる。既存risk5へ追加すると、2025-02..2025-05 totalは baseline risk5 `101.6610` に対し blockcost w5 `78.5882`, blockcost w10 `35.7162`, nonpositive w5 `-88.3904`, nonpositive w10 `-96.3226` で全て悪化。高コスト4ヶ月ではrisk0 total `111.3582` がrisk5を上回るため、risk5は利益最大化signalではなく防御diagnosticとして扱う。詳細は `docs/reports/00154_2026-06-29_fixed_policy_stateful_examples.md`。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
