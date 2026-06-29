@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 10:33 Guard-fixed entry/side drift diagnostics
+
+- `00127` のvalidation top候補と現行標準候補を、validation/apply x base/high costで固定 `model-policy` 実行し、`model-trade-exposure` と `model-trade-delta` でtrade-level差分を確認した。
+- validationではtopが取引数を `275 -> 228` に減らし、base/high cost PnLを `+62.8970`, `+86.4218` 改善した。一方applyでは `377 -> 306` / `380 -> 308` に減らして、base/high cost PnLを `-289.3090`, `-290.4310` 悪化させた。
+- base deltaでは、validation topは `only_candidate +359.4784` で `only_base +328.6498` の喪失を上回ったが、applyでは `only_base +261.9228` を捨て、`only_candidate` は `+19.6058` に留まった。high cost applyでは `only_candidate -26.6700` まで悪化した。
+- top候補側のstateful target meanはvalidation baseで全月プラス (`1.8330`, `1.7054`, `2.8303`, `1.9971`) だが、apply baseでは `2025-02=-1.7983`, `2025-03=-0.1697`, `2025-04=-2.1726` と3/4ヶ月でマイナス化した。
+- 2025-02のtop専用 `long:up_low_vol` は自身 `-42.9714` に加え、標準側 `+101.6036` をブロックし、stateful net `-144.5750`。一玉制約下の機会損失が主因。
+- 判断: validation topは採用しない。entry threshold / short offset / side penaltyの追加grid探索は本流にしない。次はOOF calibration、stateful blocking / replacement regret target、より広いwalk-forwardへ戻る。
+- report: `docs/reports/00128_2026-06-29_guard_fixed_entry_side_drift_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 10:23 Guard-fixed entry/side grid
 
 - MLP holding auto guardを固定した状態で、entry threshold `10/12/14/16`, short offset `4/6/8`, side margin `3/5/7`, short low-vol penalty rule set `none/down5up10/down5up10range5/down10up10` の小gridをvalidation 4ヶ月で再評価した。
