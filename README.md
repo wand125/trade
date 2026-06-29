@@ -125,14 +125,16 @@ data/processed/datasets/xauusd_m1/
 ```
 
 The dataset includes leak-free features, continuous regression targets, quantile
-classification targets, dense entry quality targets, and the coarse
-`long/short/stay_flat` label.
+classification targets, dense entry quality targets, dense exit/holding
+shortening targets, and the coarse `long/short/stay_flat` label.
 
 Dense entry quality targets include `profit_barrier_hit`, `wait_regret`,
 `entry_local_rank`, and `entry_urgency` for both long and short. Existing
-datasets generated before this schema change must be regenerated before
-training current models. Do not use `--skip-existing` when refreshing an old
-dataset directory to the current schema.
+Dense exit/holding targets include exit-event adjusted PnL and fixed-horizon
+minus exit-event adjusted PnL / beat labels for 60, 240, and 720 minutes.
+Existing datasets generated before these schema changes must be regenerated
+before training current models. Do not use `--skip-existing` when refreshing an
+old dataset directory to the current schema.
 
 ## Train Initial Models
 

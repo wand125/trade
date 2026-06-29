@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 18:45 Dense holding shortening targets
+
+- `00159` の直接cap診断を、全decision rowで学べるdense targetへ拡張した。
+- `src/trade_data/dataset.py` に `long/short_exit_event_raw_pnl`, `long/short_exit_event_adjusted_pnl`, `long/short_fixed_60m/240m/720m_minus_exit_event_adjusted_pnl`, `long/short_fixed_60m/240m/720m_beats_exit_event` を追加した。
+- `src/trade_data/modeling.py` の `policy` / `full` target-setへ、exit-event adjusted PnLとfixed-vs-event deltaを回帰target、beat labelを分類targetとして追加した。`prediction_frame` にも実測列を残す。
+- 2025-08 smoke datasetを `data/processed/datasets/xauusd_m1_dense_holding_target_smoke/` へ生成し、rows `28,971`、新targetは全行非欠損。60分beat rateはlong `0.5032`, short `0.5530`。
+- `python3 -m unittest tests.test_dataset tests.test_modeling` と `python3 -m py_compile src/trade_data/dataset.py src/trade_data/modeling.py` はOK。
+- 判断: これはpolicy改善確認ではなくschema/teacher target実装。次は主dataset再生成、chronological OOF、holding policyへの接続で検証する。
+- report: `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 18:06 Holding risk overlay
 
 - `scripts/experiments/holding_risk_overlay.py` を追加し、`pred_hit_actual_miss_prob * q75 high-overestimate prob` をentry riskではなくMLP予測保有時間capとして使えるようにした。

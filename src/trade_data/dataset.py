@@ -48,6 +48,24 @@ EXIT_EVENT_LOG_MINUTE_TARGETS = [
     "long_exit_event_log_minutes",
     "short_exit_event_log_minutes",
 ]
+EXIT_EVENT_RAW_PNL_TARGETS = [
+    "long_exit_event_raw_pnl",
+    "short_exit_event_raw_pnl",
+]
+EXIT_EVENT_ADJUSTED_PNL_TARGETS = [
+    "long_exit_event_adjusted_pnl",
+    "short_exit_event_adjusted_pnl",
+]
+EXIT_FIXED_HORIZON_DELTA_TARGETS = [
+    f"{side}_fixed_{minutes}m_minus_exit_event_adjusted_pnl"
+    for minutes in EXIT_FIXED_HORIZON_MINUTES
+    for side in ["long", "short"]
+]
+EXIT_FIXED_HORIZON_BEAT_TARGETS = [
+    f"{side}_fixed_{minutes}m_beats_exit_event"
+    for minutes in EXIT_FIXED_HORIZON_MINUTES
+    for side in ["long", "short"]
+]
 
 
 @dataclass(frozen=True)
@@ -199,6 +217,10 @@ def future_best_labels(
     short_exit_event = np.full(n, np.nan)
     long_exit_event_minutes = np.full(n, np.nan)
     short_exit_event_minutes = np.full(n, np.nan)
+    long_exit_event_raw = np.full(n, np.nan)
+    short_exit_event_raw = np.full(n, np.nan)
+    long_exit_event_adjusted = np.full(n, np.nan)
+    short_exit_event_adjusted = np.full(n, np.nan)
     profit_barrier_horizon_targets: dict[str, np.ndarray] = {}
     for minutes in PROFIT_BARRIER_HORIZON_MINUTES:
         profit_barrier_horizon_targets[f"long_profit_barrier_hit_{minutes}m"] = np.full(n, np.nan)
@@ -207,6 +229,17 @@ def future_best_labels(
     for minutes in EXIT_FIXED_HORIZON_MINUTES:
         fixed_horizon_targets[f"long_fixed_{minutes}m_adjusted_pnl"] = np.full(n, np.nan)
         fixed_horizon_targets[f"short_fixed_{minutes}m_adjusted_pnl"] = np.full(n, np.nan)
+    fixed_horizon_delta_targets: dict[str, np.ndarray] = {}
+    fixed_horizon_beat_targets: dict[str, np.ndarray] = {}
+    for minutes in EXIT_FIXED_HORIZON_MINUTES:
+        fixed_horizon_delta_targets[
+            f"long_fixed_{minutes}m_minus_exit_event_adjusted_pnl"
+        ] = np.full(n, np.nan)
+        fixed_horizon_delta_targets[
+            f"short_fixed_{minutes}m_minus_exit_event_adjusted_pnl"
+        ] = np.full(n, np.nan)
+        fixed_horizon_beat_targets[f"long_fixed_{minutes}m_beats_exit_event"] = np.full(n, np.nan)
+        fixed_horizon_beat_targets[f"short_fixed_{minutes}m_beats_exit_event"] = np.full(n, np.nan)
     long_best_exit_idx = np.full(n, -1, dtype="int64")
     short_best_exit_idx = np.full(n, -1, dtype="int64")
     long_best_exit_price = np.full(n, np.nan)
@@ -274,8 +307,24 @@ def future_best_labels(
         )
         long_event_idx = exit_start + long_event_relative_idx
         short_event_idx = exit_start + short_event_relative_idx
+        long_event_raw_value = opens[long_event_idx] - entry_price
+        short_event_raw_value = entry_price - opens[short_event_idx]
+        long_event_adjusted_value = adjusted_pnl(
+            long_event_raw_value,
+            profit_multiplier,
+            loss_multiplier,
+        )
+        short_event_adjusted_value = adjusted_pnl(
+            short_event_raw_value,
+            profit_multiplier,
+            loss_multiplier,
+        )
         long_exit_event[decision_idx] = long_event
         short_exit_event[decision_idx] = short_event
+        long_exit_event_raw[decision_idx] = long_event_raw_value
+        short_exit_event_raw[decision_idx] = short_event_raw_value
+        long_exit_event_adjusted[decision_idx] = long_event_adjusted_value
+        short_exit_event_adjusted[decision_idx] = short_event_adjusted_value
         long_exit_event_minutes[decision_idx] = (
             timestamps.iloc[long_event_idx] - timestamps.iloc[entry_idx]
         ) / pd.Timedelta(minutes=1)
@@ -307,16 +356,36 @@ def future_best_labels(
             if fixed_exit_idx <= exit_end and fixed_exit_idx < n:
                 long_fixed_raw = opens[fixed_exit_idx] - entry_price
                 short_fixed_raw = entry_price - opens[fixed_exit_idx]
-                fixed_horizon_targets[f"long_fixed_{minutes}m_adjusted_pnl"][decision_idx] = adjusted_pnl(
+                long_fixed_adjusted = adjusted_pnl(
                     long_fixed_raw,
                     profit_multiplier,
                     loss_multiplier,
                 )
-                fixed_horizon_targets[f"short_fixed_{minutes}m_adjusted_pnl"][decision_idx] = adjusted_pnl(
+                short_fixed_adjusted = adjusted_pnl(
                     short_fixed_raw,
                     profit_multiplier,
                     loss_multiplier,
                 )
+                fixed_horizon_targets[f"long_fixed_{minutes}m_adjusted_pnl"][
+                    decision_idx
+                ] = long_fixed_adjusted
+                fixed_horizon_targets[f"short_fixed_{minutes}m_adjusted_pnl"][
+                    decision_idx
+                ] = short_fixed_adjusted
+                long_delta = long_fixed_adjusted - long_event_adjusted_value
+                short_delta = short_fixed_adjusted - short_event_adjusted_value
+                fixed_horizon_delta_targets[
+                    f"long_fixed_{minutes}m_minus_exit_event_adjusted_pnl"
+                ][decision_idx] = long_delta
+                fixed_horizon_delta_targets[
+                    f"short_fixed_{minutes}m_minus_exit_event_adjusted_pnl"
+                ][decision_idx] = short_delta
+                fixed_horizon_beat_targets[f"long_fixed_{minutes}m_beats_exit_event"][
+                    decision_idx
+                ] = int(long_delta > 0.0)
+                fixed_horizon_beat_targets[f"short_fixed_{minutes}m_beats_exit_event"][
+                    decision_idx
+                ] = int(short_delta > 0.0)
 
         if long_value >= short_value:
             chosen_label = 1
@@ -384,12 +453,18 @@ def future_best_labels(
             "short_profit_barrier_hit": short_profit_barrier_hit,
             "long_exit_event": long_exit_event,
             "short_exit_event": short_exit_event,
+            "long_exit_event_raw_pnl": long_exit_event_raw,
+            "short_exit_event_raw_pnl": short_exit_event_raw,
+            "long_exit_event_adjusted_pnl": long_exit_event_adjusted,
+            "short_exit_event_adjusted_pnl": short_exit_event_adjusted,
             "long_exit_event_minutes": long_exit_event_minutes,
             "short_exit_event_minutes": short_exit_event_minutes,
             "long_exit_event_log_minutes": np.log1p(long_exit_event_minutes),
             "short_exit_event_log_minutes": np.log1p(short_exit_event_minutes),
             **profit_barrier_horizon_targets,
             **fixed_horizon_targets,
+            **fixed_horizon_delta_targets,
+            **fixed_horizon_beat_targets,
             "long_best_exit_idx": long_best_exit_idx,
             "short_best_exit_idx": short_best_exit_idx,
             "long_best_exit_price": long_best_exit_price,
@@ -617,6 +692,10 @@ def build_month_dataset(
         for minutes in EXIT_FIXED_HORIZON_MINUTES
         for side in ["long", "short"]
     ]
+    exit_event_raw_target_columns = EXIT_EVENT_RAW_PNL_TARGETS
+    exit_event_adjusted_target_columns = EXIT_EVENT_ADJUSTED_PNL_TARGETS
+    fixed_horizon_delta_target_columns = EXIT_FIXED_HORIZON_DELTA_TARGETS
+    fixed_horizon_beat_target_columns = EXIT_FIXED_HORIZON_BEAT_TARGETS
 
     ordered_columns = [
         "decision_timestamp",
@@ -631,6 +710,8 @@ def build_month_dataset(
         "short_exit_event",
         *profit_barrier_horizon_target_columns,
         *fixed_horizon_target_columns,
+        *fixed_horizon_delta_target_columns,
+        *fixed_horizon_beat_target_columns,
         "open",
         "high",
         "low",
@@ -650,6 +731,8 @@ def build_month_dataset(
         "long_exit_event_minutes",
         "short_exit_event_minutes",
         *EXIT_EVENT_LOG_MINUTE_TARGETS,
+        *exit_event_raw_target_columns,
+        *exit_event_adjusted_target_columns,
         "long_wait_regret",
         "short_wait_regret",
         "long_entry_local_rank",
@@ -682,8 +765,12 @@ def build_month_dataset(
             "long_exit_event_minutes",
             "short_exit_event_minutes",
             *EXIT_EVENT_LOG_MINUTE_TARGETS,
+            *exit_event_raw_target_columns,
+            *exit_event_adjusted_target_columns,
             *profit_barrier_horizon_target_columns,
             *fixed_horizon_target_columns,
+            *fixed_horizon_delta_target_columns,
+            *fixed_horizon_beat_target_columns,
             *timing_target_columns,
         ],
     )

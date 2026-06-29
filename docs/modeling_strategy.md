@@ -201,7 +201,7 @@ short_utility > long_utility なら short
 - `fixed_horizon_ev` の固定horizon集約は `max/mean/median/min` を比較できる。ただし 2026-06-28 14:10 JST のvalidationでは `mean/median/min` が全てeligible 0件で、従来の `max` のみ残った。単純な保守的集約は採用せず、診断・ablation用に留める。
 - long/short 別、regime 別の calibration を追加する。
 - 直近数日トレンド、ボラティリティ、ATR percentile、MA乖離、drawdown などの regime feature を追加する。
-- exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target と比較する。
+- exit timing は best holding minutes 回帰だけでなく、exit probability / hazard target、固定horizon PnLとexit-event PnLの差分targetを比較する。
 - HGBの予測済みtargetを入力にした二段階meta modelを作り、executable trade outcomeをvalidationでcalibrateする。
 - meta model は同じvalidation月でfitとpolicy selectionをしない。validation内walk-forwardで、meta fit月、policy selection月、test月を分ける。
 - stateful value / candidate quality系のOOF診断では、月抜きOOFに加えて `--oof-scheme expanding` を優先確認する。対象月より後の月をfitに入れるleave-one-monthは探索・比較用として残すが、採用判断ではchronological OOFのbias/R2/overestimateを重視する。

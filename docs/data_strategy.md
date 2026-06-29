@@ -119,11 +119,19 @@ python -m trade_data.dataset build --month 2025-01 --min-adjusted-edge 15
 - long/short forced raw pnl
 - long/short max adverse pnl
 - long/short best holding minutes
+- long/short exit event class, minutes, log minutes
+- long/short exit-event raw pnl
+- long/short exit-event adjusted pnl
+- long/short fixed horizon adjusted pnl: 60, 240, 720 minutes
+- long/short fixed horizon minus exit-event adjusted pnl: 60, 240, 720 minutes
+- long/short fixed horizon beats exit-event label: 60, 240, 720 minutes
 - side score
 - forced side score
 - best adjusted pnl quantile
 - side score quantile
 - best holding time bin
+
+`fixed_{minutes}m_minus_exit_event_adjusted_pnl` は、固定horizonで手放した場合のadjusted PnLから、profit/loss barrierまたはtime exitで手放した場合のadjusted PnLを引いた値。正なら固定horizon決済のほうが良い。`*_beats_exit_event` はその二値targetで、exit timing / holding短縮判断のdense teacherとして使う。
 
 ## 欠損・ノイズ対応
 

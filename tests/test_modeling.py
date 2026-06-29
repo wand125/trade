@@ -398,10 +398,13 @@ class ModelingTests(unittest.TestCase):
         self.assertIn("short_best_adjusted_pnl", regression_targets)
         self.assertIn("long_fixed_60m_adjusted_pnl", regression_targets)
         self.assertIn("short_fixed_720m_adjusted_pnl", regression_targets)
+        self.assertIn("long_exit_event_adjusted_pnl", regression_targets)
+        self.assertIn("long_fixed_60m_minus_exit_event_adjusted_pnl", regression_targets)
         self.assertIn("long_wait_regret", regression_targets)
         self.assertIn("short_entry_local_rank", regression_targets)
         self.assertIn("long_profit_barrier_hit", classification_targets)
         self.assertIn("long_profit_barrier_hit_60m", classification_targets)
+        self.assertIn("long_fixed_60m_beats_exit_event", classification_targets)
         self.assertIn("best_side", classification_targets)
 
     def test_full_target_set_includes_fixed_exit_horizon_targets(self):
@@ -409,7 +412,10 @@ class ModelingTests(unittest.TestCase):
 
         self.assertIn("long_fixed_60m_adjusted_pnl", regression_targets)
         self.assertIn("short_fixed_720m_adjusted_pnl", regression_targets)
+        self.assertIn("short_exit_event_adjusted_pnl", regression_targets)
+        self.assertIn("short_fixed_720m_minus_exit_event_adjusted_pnl", regression_targets)
         self.assertIn("long_profit_barrier_hit_240m", classification_targets)
+        self.assertIn("short_fixed_720m_beats_exit_event", classification_targets)
 
     def test_side_confidence_target_set_keeps_only_side_diagnostics(self):
         regression_targets, classification_targets = resolve_target_names("side_confidence")
@@ -493,6 +499,12 @@ class ModelingTests(unittest.TestCase):
                 "long_forced_adjusted_pnl": [1.5, -3.0],
                 "short_forced_adjusted_pnl": [-1.8, 2.5],
                 "forced_side_score": [3.3, -5.5],
+                "long_exit_event_adjusted_pnl": [0.8, -1.2],
+                "short_exit_event_adjusted_pnl": [-1.1, 1.4],
+                "long_fixed_60m_minus_exit_event_adjusted_pnl": [0.2, -0.3],
+                "short_fixed_60m_minus_exit_event_adjusted_pnl": [-0.4, 0.5],
+                "long_fixed_60m_beats_exit_event": [1, 0],
+                "short_fixed_60m_beats_exit_event": [0, 1],
                 "side_score": [-1.0, 1.0],
                 "best_adjusted_pnl": [2.0, 2.0],
                 "best_holding_minutes": [10.0, 20.0],
@@ -534,6 +546,8 @@ class ModelingTests(unittest.TestCase):
             "long_exit_event_time_bin_prob_3": [0.0, 1.0],
             "short_exit_event_time_bin_prob_4": [0.25, 0.0],
             "short_exit_event_time_bin_prob_5": [0.75, 1.0],
+            "long_fixed_60m_minus_exit_event_adjusted_pnl": [0.1, -0.2],
+            "long_fixed_60m_beats_exit_event": [1, 0],
         }
 
         output = prediction_frame(df, predictions)
@@ -543,7 +557,11 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(output["best_side"].tolist(), [-1, 1])
         self.assertEqual(output["long_forced_adjusted_pnl"].tolist(), [1.5, -3.0])
         self.assertEqual(output["short_forced_adjusted_pnl"].tolist(), [-1.8, 2.5])
+        self.assertEqual(output["long_exit_event_adjusted_pnl"].tolist(), [0.8, -1.2])
+        self.assertEqual(output["short_fixed_60m_beats_exit_event"].tolist(), [0, 1])
         self.assertIn("pred_long_best_adjusted_pnl", output.columns)
+        self.assertIn("pred_long_fixed_60m_minus_exit_event_adjusted_pnl", output.columns)
+        self.assertIn("pred_long_fixed_60m_beats_exit_event", output.columns)
         self.assertAlmostEqual(output["pred_long_exit_event_minutes_from_log"].iloc[0], 60.0)
         self.assertAlmostEqual(output["pred_long_exit_event_minutes_from_log"].iloc[1], 0.0)
         self.assertAlmostEqual(output["pred_short_exit_event_minutes_from_log"].iloc[0], 1440.0)

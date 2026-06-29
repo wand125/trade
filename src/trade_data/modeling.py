@@ -26,7 +26,10 @@ from sklearn.compose import TransformedTargetRegressor
 from sklearn.preprocessing import StandardScaler
 
 from trade_data.dataset import (
+    EXIT_EVENT_ADJUSTED_PNL_TARGETS,
     EXIT_FIXED_HORIZON_MINUTES,
+    EXIT_FIXED_HORIZON_BEAT_TARGETS,
+    EXIT_FIXED_HORIZON_DELTA_TARGETS,
     EXIT_EVENT_LOG_MINUTE_TARGETS,
     PROFIT_BARRIER_HORIZON_MINUTES,
     iter_months,
@@ -51,6 +54,7 @@ EXIT_FIXED_HORIZON_TARGETS = [
     for minutes in EXIT_FIXED_HORIZON_MINUTES
     for side in ["long", "short"]
 ]
+EXIT_EVENT_PNL_TARGETS = list(EXIT_EVENT_ADJUSTED_PNL_TARGETS)
 PROFIT_BARRIER_HORIZON_TARGETS = [
     f"{side}_profit_barrier_hit_{minutes}m"
     for minutes in PROFIT_BARRIER_HORIZON_MINUTES
@@ -63,6 +67,8 @@ EXIT_EVENT_TIME_BIN_REPRESENTATIVE_MINUTES = np.array([7.5, 37.5, 150.0, 480.0, 
 REGRESSION_TARGETS = [
     *EV_TARGETS,
     *EXIT_FIXED_HORIZON_TARGETS,
+    *EXIT_EVENT_PNL_TARGETS,
+    *EXIT_FIXED_HORIZON_DELTA_TARGETS,
     "side_score",
     "long_best_holding_minutes",
     "short_best_holding_minutes",
@@ -96,6 +102,7 @@ CLASSIFICATION_TARGETS = [
     "short_exit_event",
     "long_exit_event_time_bin",
     "short_exit_event_time_bin",
+    *EXIT_FIXED_HORIZON_BEAT_TARGETS,
     "best_side",
     "label",
 ]
@@ -103,6 +110,8 @@ CLASSIFICATION_TARGETS = [
 POLICY_REGRESSION_TARGETS = [
     *EV_TARGETS,
     *EXIT_FIXED_HORIZON_TARGETS,
+    *EXIT_EVENT_PNL_TARGETS,
+    *EXIT_FIXED_HORIZON_DELTA_TARGETS,
     "side_score",
     "long_best_holding_minutes",
     "short_best_holding_minutes",
@@ -125,6 +134,7 @@ POLICY_CLASSIFICATION_TARGETS = [
     "short_exit_event",
     "long_exit_event_time_bin",
     "short_exit_event_time_bin",
+    *EXIT_FIXED_HORIZON_BEAT_TARGETS,
     "best_side",
     "label",
 ]
@@ -859,6 +869,9 @@ def prediction_frame(df: pd.DataFrame, predictions: dict[str, np.ndarray]) -> pd
         "short_best_adjusted_pnl",
         *FORCED_EXIT_TARGET_COLUMNS,
         *EXIT_FIXED_HORIZON_TARGETS,
+        *EXIT_EVENT_PNL_TARGETS,
+        *EXIT_FIXED_HORIZON_DELTA_TARGETS,
+        *EXIT_FIXED_HORIZON_BEAT_TARGETS,
         "side_score",
         "best_adjusted_pnl",
         "best_holding_minutes",
