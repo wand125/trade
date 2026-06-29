@@ -57,6 +57,7 @@
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。
 - raw online context stateをそのままselected-trade classifierへ足すとOOF AUCが悪化したため、次は `side_drift_short_bias`, `prior_context_active_loss`, `entry_margin` の低容量な相互作用だけを候補化し、post-trade filterではなくdynamic backtestで評価する。
+- side drift context全体へのonline drawdown guardはtotalだけ少し改善してもshort driftを直せない。次は short限定で、prior side/context lossがactiveかつprediction short biasが高い場合にだけ追加entry marginまたはstay-flatへ寄せる。
 
 ## 外部データ候補
 

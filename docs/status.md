@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 08:08 JST
+最終更新: 2026-06-30 08:21 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+side drift guarded context と online context drawdown の低容量interactionをdynamic backtestで試した。`side_context_interaction_guard_apply.py` は `side_ev_penalty_rules` に該当するrowだけ `guarded|...` contextとしてonline drawdown guard対象にし、非該当rowは一意contextへ逃がす。`dataset_month` だけでは selected_side_rule が実約定active trade 4件で無効、any_rule は悪化。`dataset_month,combined_regime` の any_rule/threshold20 は totalを `-90.1378 -> -46.8210` へ改善したが、worst month `-292.2070`, max DD `292.2070` へ悪化し、short PnLは `-434.3938` のまま。標準採用せず、次は short側限定の prior loss + prediction short bias + strong margin/stay-flat をdynamic backtestで評価する。詳細は `docs/reports/00186_2026-06-30_side_context_interaction_guard.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 online context stateをraw featureとして戻す前段診断を追加した。`scripts/experiments/online_context_feature_model.py` で `enriched_context_state_trades.csv` から base特徴 vs base+online context state特徴の chronological OOF classifier を比較する。min4では base/large_loss AUC `0.5810` に対し context/large_loss `0.5606`、min8でも base/large_loss `0.5523` に対し context/large_loss `0.5364` で、単純なcontext追加はAUCを改善しなかった。min8のpost-filter診断では context/large_loss/q70 が2025-09..12を `-626.1752 -> -271.9178` へ削るが、これは実行済みtrade削除でreplacementを再現しないためpolicy採用判断には使わない。raw online context stateは標準featureへ昇格せず、side drift / prediction-side-biasとの相互作用に絞って真のdynamic backtestで評価する。詳細は `docs/reports/00185_2026-06-30_online_context_feature_model.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

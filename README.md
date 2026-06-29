@@ -242,6 +242,25 @@ This is a feature diagnostic. Its risk-filter output deletes already executed
 trades and does not simulate replacement trades under the one-position
 constraint, so it is not a policy promotion test.
 
+To test a low-capacity dynamic interaction between an existing side-drift guard
+and online context drawdown, apply context drawdown only inside side-EV penalty
+rule contexts:
+
+```bash
+python scripts/experiments/side_context_interaction_guard_apply.py \
+  --runs data/reports/backtests/<side_drift_guard_runs> \
+  --data data/processed/histdata/xauusd/xauusd_m1.parquet \
+  --context-columns dataset_month,combined_regime \
+  --match-modes any_rule,selected_side_rule \
+  --thresholds 20,40,60 \
+  --min-entry-margins inf,20
+```
+
+Rows outside the side-drift guarded prediction context are assigned unique
+inactive contexts, so ordinary trades do not share drawdown state. This is a
+dynamic backtest diagnostic and should still be judged by worst month,
+drawdown, and side-level PnL, not total PnL alone.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 

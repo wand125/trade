@@ -4,6 +4,17 @@
 
 ## 2026-06-30 JST
 
+### 08:21 Side context interaction guard
+
+- `scripts/experiments/side_context_interaction_guard_apply.py` を追加し、post-trade filterではなくdynamic backtestで `side drift guarded context × online context drawdown` の低容量interactionを試した。
+- 既存の `p10 + replacement margin10` runを入力にし、`side_ev_penalty_rules` に該当するrowだけ `guarded|...` contextでonline context drawdown guard対象にする。非該当rowは一意な `inactive|row=...|ts=...` contextへ逃がし、通常trade同士のdrawdown連鎖を起こさない。
+- `context_columns=dataset_month` では `selected_side_rule` が実約定active trade 4件だけで全く変化なし。`any_rule` は threshold `60` でも total `-93.2048` で baseline `-90.1378` より悪化。
+- `context_columns=dataset_month,combined_regime` では `any_rule / threshold20` が total `-46.8210` へ改善したが、worst monthは `-292.2070`、max DD `292.2070` へ悪化し、short PnLは `-434.3938` のまま。margin20もhard blockと同一。
+- 判断: dynamic interactionとしてはpost-filterより妥当だが、core late-year short driftを直せていない。標準採用しない。次に進むなら short側限定の `prior side/context loss + prediction short bias + strong margin/stay-flat` に絞る。
+- report: `docs/reports/00186_2026-06-30_side_context_interaction_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 108 tests
+
 ### 08:08 Online context feature model
 
 - `scripts/experiments/online_context_feature_model.py` を追加し、`enriched_context_state_trades.csv` から base特徴 vs base+online context state特徴の chronological OOF classifier を比較できるようにした。
