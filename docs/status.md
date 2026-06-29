@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 07:06 JST
+最終更新: 2026-06-30 07:32 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+online context drawdown guard に cooldown 型を追加した。`context_drawdown_guard_cooldown_minutes=0` は従来通りhard block、正の有限値はbreachした同一side/contextを一定分数だけブロックする。2025-01..12 side-month contextのcooldown sweepでは、all-window topは引き続き cooldown `0` の `threshold=60, margin=20`, total `142.9750`。prior-only `worst` selectionは min4 total `38.8288`, min8 total `-209.1152` で、`00182` の cooldownなし margin-aware hard block案より悪化した。cooldownは2025-05..07の利益機会を戻す一方、2025-08以降のshort損失も戻すため標準採用しない。詳細は `docs/reports/00183_2026-06-30_context_drawdown_guard_cooldown_sweep.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 dense holding-shortening targetをdataset schemaへ追加した。barrier/time exit時点の `long/short_exit_event_adjusted_pnl` と、固定horizon決済がexit-event決済より良いかを表す `long/short_fixed_60m/240m/720m_minus_exit_event_adjusted_pnl` / `*_beats_exit_event` を生成し、`policy` / `full` target-setで学習できるようにした。2023-01..2025-08の32ヶ月を `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined_dense_holding/` へ再生成し、899,408行で新target欠損0を確認。全policy OOFは重すぎたため `target-set holding_shortening` を追加し、2025-02..04の20% sample smokeではbeat分類balanced accuracy `0.5214..0.5430`、delta回帰R2は概ね `-0.026..0.015`。強いsignalではないがbeat probabilityは補助特徴として試す価値がある。詳細は `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

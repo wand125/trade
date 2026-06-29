@@ -88,6 +88,7 @@ SWEEP_KEY_COLUMNS = [
     "side_block_rules",
     "context_drawdown_guard_loss_threshold",
     "context_drawdown_guard_min_entry_margin",
+    "context_drawdown_guard_cooldown_minutes",
     "context_drawdown_guard_context_columns",
     "context_drawdown_guard_reset_monthly",
     "block_trend_regimes",
@@ -398,6 +399,7 @@ class ModelPolicyConfig:
     side_block_rules: tuple[str, ...] = ()
     context_drawdown_guard_loss_threshold: float = float("inf")
     context_drawdown_guard_min_entry_margin: float = float("inf")
+    context_drawdown_guard_cooldown_minutes: float = 0.0
     context_drawdown_guard_context_columns: tuple[str, ...] = ("combined_regime", "session_regime")
     context_drawdown_guard_reset_monthly: bool = True
     block_trend_regimes: tuple[str, ...] = ()
@@ -1517,6 +1519,7 @@ def run_backtest(
     entry_margin: pd.Series | None = None,
     context_drawdown_guard_loss_threshold: float = float("inf"),
     context_drawdown_guard_min_entry_margin: float = float("inf"),
+    context_drawdown_guard_cooldown_minutes: float = 0.0,
     context_drawdown_guard_reset_monthly: bool = True,
 ) -> list[Trade]:
     if len(df) != len(desired_position):
@@ -1545,6 +1548,8 @@ def run_backtest(
             )
         if entry_margin is not None and len(df) != len(entry_margin):
             raise ValueError("df and entry_margin must have the same length")
+        if context_drawdown_guard_cooldown_minutes < 0:
+            raise ValueError("context_drawdown_guard_cooldown_minutes must be non-negative")
     if config.execution_delay_bars < 0:
         raise ValueError("execution_delay_bars must be non-negative")
     if len(df) < 2:
@@ -1567,7 +1572,7 @@ def run_backtest(
     position: Position | None = None
     trades: list[Trade] = []
     context_pnl: dict[str, float] = {}
-    blocked_contexts: set[str] = set()
+    blocked_contexts: dict[str, pd.Timestamp | None] = {}
 
     def context_drawdown_key(
         decision_timestamp: pd.Timestamp,
@@ -1616,7 +1621,18 @@ def run_backtest(
                         context_pnl[position.context_drawdown_key]
                         <= -context_drawdown_guard_loss_threshold
                     ):
-                        blocked_contexts.add(position.context_drawdown_key)
+                        if (
+                            context_drawdown_guard_cooldown_minutes > 0
+                            and np.isfinite(context_drawdown_guard_cooldown_minutes)
+                        ):
+                            blocked_contexts[position.context_drawdown_key] = (
+                                execution_timestamp
+                                + pd.Timedelta(
+                                    minutes=float(context_drawdown_guard_cooldown_minutes),
+                                )
+                            )
+                        else:
+                            blocked_contexts[position.context_drawdown_key] = None
                 position = None
                 continue
 
@@ -1630,15 +1646,19 @@ def run_backtest(
                         str(context_values[decision_idx]),
                     )
                     if drawdown_key in blocked_contexts:
-                        if np.isposinf(context_drawdown_guard_min_entry_margin):
-                            continue
-                        if not np.isneginf(context_drawdown_guard_min_entry_margin):
-                            current_entry_margin = entry_margin_values[decision_idx]
-                            if (
-                                not np.isfinite(current_entry_margin)
-                                or current_entry_margin < context_drawdown_guard_min_entry_margin
-                            ):
+                        blocked_until = blocked_contexts[drawdown_key]
+                        if blocked_until is not None and decision_timestamp >= blocked_until:
+                            del blocked_contexts[drawdown_key]
+                        else:
+                            if np.isposinf(context_drawdown_guard_min_entry_margin):
                                 continue
+                            if not np.isneginf(context_drawdown_guard_min_entry_margin):
+                                current_entry_margin = entry_margin_values[decision_idx]
+                                if (
+                                    not np.isfinite(current_entry_margin)
+                                    or current_entry_margin < context_drawdown_guard_min_entry_margin
+                                ):
+                                    continue
                 position = Position(
                     direction=desired,
                     entry_timestamp=execution_timestamp,
@@ -2787,6 +2807,7 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "side_ev_penalty_replacement_min_margin",
         "context_drawdown_guard_loss_threshold",
         "context_drawdown_guard_min_entry_margin",
+        "context_drawdown_guard_cooldown_minutes",
     ]
     for column in numeric_columns:
         output[column] = pd.to_numeric(output[column], errors="raise")
@@ -3375,6 +3396,7 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         side_block_rules=parse_optional_csv_strings(args.side_block_rules),
         context_drawdown_guard_loss_threshold=args.context_drawdown_guard_loss_threshold,
         context_drawdown_guard_min_entry_margin=args.context_drawdown_guard_min_entry_margin,
+        context_drawdown_guard_cooldown_minutes=args.context_drawdown_guard_cooldown_minutes,
         context_drawdown_guard_context_columns=parse_csv_string_tuple(
             args.context_drawdown_guard_context_columns
         ),
@@ -3461,6 +3483,9 @@ def run_model_policy(
             ),
             context_drawdown_guard_min_entry_margin=(
                 model_policy_config.context_drawdown_guard_min_entry_margin
+            ),
+            context_drawdown_guard_cooldown_minutes=(
+                model_policy_config.context_drawdown_guard_cooldown_minutes
             ),
             context_drawdown_guard_reset_monthly=(
                 model_policy_config.context_drawdown_guard_reset_monthly
@@ -3846,6 +3871,15 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--context-drawdown-guard-cooldown-minutes",
+        type=float,
+        default=0.0,
+        help=(
+            "if positive, block breached direction/context only for this many minutes; "
+            "0 preserves the existing hard block"
+        ),
+    )
+    parser.add_argument(
         "--context-drawdown-guard-context-columns",
         default="combined_regime,session_regime",
         help="comma-separated prediction columns used with direction as the online drawdown context",
@@ -3914,6 +3948,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     )
     context_drawdown_guard_min_entry_margins = parse_csv_floats(
         args.context_drawdown_guard_min_entry_margins
+    )
+    context_drawdown_guard_cooldown_minutes_values = parse_csv_floats(
+        args.context_drawdown_guard_cooldown_minutes_values
     )
     regime_blocks = regime_blocks_from_args(args)
     side_ev_penalty_rule_sets = parse_optional_rule_sets(
@@ -4049,6 +4086,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
             context_drawdown_guard_context_columns=parse_csv_string_tuple(
                 args.context_drawdown_guard_context_columns
             ),
+            context_drawdown_guard_cooldown_minutes=max(
+                context_drawdown_guard_cooldown_minutes_values
+            ),
             context_drawdown_guard_reset_monthly=args.context_drawdown_guard_reset_monthly,
             **regime_blocks,
         )
@@ -4091,6 +4131,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_block_rule_sets,
         context_drawdown_guard_loss_thresholds,
         context_drawdown_guard_min_entry_margins,
+        context_drawdown_guard_cooldown_minutes_values,
     )
     for (
         policy,
@@ -4125,6 +4166,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_block_rules,
         context_drawdown_guard_loss_threshold,
         context_drawdown_guard_min_entry_margin,
+        context_drawdown_guard_cooldown_minutes,
     ) in base_grid:
         if max_predicted_hold_minutes < min_predicted_hold_minutes:
             raise SystemExit(
@@ -4150,6 +4192,10 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         ):
             raise SystemExit(
                 "context_drawdown_guard_min_entry_margins must contain non-negative values, inf, or -inf"
+            )
+        if context_drawdown_guard_cooldown_minutes < 0:
+            raise SystemExit(
+                "context_drawdown_guard_cooldown_minutes_values must contain non-negative values"
             )
         policy_exit_thresholds = exit_thresholds if policy == "stateful_ev" else [0.0]
         active_profit_barrier_thresholds = (
@@ -4239,6 +4285,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     context_drawdown_guard_min_entry_margin=(
                         context_drawdown_guard_min_entry_margin
                     ),
+                    context_drawdown_guard_cooldown_minutes=(
+                        context_drawdown_guard_cooldown_minutes
+                    ),
                     context_drawdown_guard_context_columns=parse_csv_string_tuple(
                         args.context_drawdown_guard_context_columns
                     ),
@@ -4323,6 +4372,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "context_drawdown_guard_min_entry_margin": (
                         context_drawdown_guard_min_entry_margin
                     ),
+                    "context_drawdown_guard_cooldown_minutes": (
+                        context_drawdown_guard_cooldown_minutes
+                    ),
                     "context_drawdown_guard_context_columns": regime_values_to_string(
                         model_policy_config.context_drawdown_guard_context_columns
                     ),
@@ -4403,6 +4455,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         ),
         "context_drawdown_guard_min_entry_margins": (
             context_drawdown_guard_min_entry_margins
+        ),
+        "context_drawdown_guard_cooldown_minutes_values": (
+            context_drawdown_guard_cooldown_minutes_values
         ),
         "context_drawdown_guard_context_columns": parse_csv_string_tuple(
             args.context_drawdown_guard_context_columns
@@ -4574,6 +4629,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         late_defaults["context_drawdown_guard_loss_threshold"] = float("inf")
     if "context_drawdown_guard_min_entry_margin" not in output.columns:
         late_defaults["context_drawdown_guard_min_entry_margin"] = float("inf")
+    if "context_drawdown_guard_cooldown_minutes" not in output.columns:
+        late_defaults["context_drawdown_guard_cooldown_minutes"] = 0.0
     if "context_drawdown_guard_context_columns" not in output.columns:
         late_defaults["context_drawdown_guard_context_columns"] = "combined_regime,session_regime"
     if "context_drawdown_guard_reset_monthly" not in output.columns:
@@ -4617,6 +4674,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "side_ev_penalty_replacement_min_margin",
         "context_drawdown_guard_loss_threshold",
         "context_drawdown_guard_min_entry_margin",
+        "context_drawdown_guard_cooldown_minutes",
         "min_predicted_hold_minutes",
         "max_predicted_hold_minutes",
         "profit_barrier_miss_penalty",
@@ -10289,6 +10347,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "comma-separated selected-score margins required after a context drawdown "
             "breach; inf preserves hard blocking"
+        ),
+    )
+    model_sweep.add_argument(
+        "--context-drawdown-guard-cooldown-minutes-values",
+        default="0",
+        help=(
+            "comma-separated cooldown durations in minutes after a context drawdown "
+            "breach; 0 preserves hard blocking"
         ),
     )
     model_sweep.add_argument(

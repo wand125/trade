@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 07:32 Context drawdown guard cooldown sweep
+
+- `context_drawdown_guard_cooldown_minutes` を追加した。既定値 `0` は従来通りhard block、正の有限値はbreachした同一side/contextを `close_timestamp + cooldown_minutes` までだけブロックする。
+- `context_drawdown_guard_apply.py` を cooldown grid 対応にし、`model-policy` / `model-sweep` CLIにも cooldown option を追加した。
+- all-window topは cooldown `0` の `threshold=60, margin=20` で total `142.9750`。cooldown `720` の `threshold=40` は total `110.2922` まで届くが、short損失とmax DDが大きくなる。
+- prior-only selectionでは cooldown候補込み `worst` が min4 total `38.8288`, worst `-126.1230`; min8 total `-209.1152`, worst `-126.1230`。`00182` の cooldownなし margin-aware `worst` より悪化。
+- 月別には cooldown `60` が2025-05..07を改善する一方、2025-08/09/11/12のshort損失を再入場させる。side drift が強い局面では時間経過だけでは回復判定にならない。
+- 判断: cooldown infrastructureは残すが標準採用しない。次はbreach後の再入場を、recent side drift / realized context loss / prediction-side biasの特徴量・selectionで審査する。
+- report: `docs/reports/00183_2026-06-30_context_drawdown_guard_cooldown_sweep.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/context_drawdown_guard_selection.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection`: OK, 99 tests
+
 ### 07:05 Context drawdown guard margin sweep
 
 - online context drawdown guard に `context_drawdown_guard_min_entry_margin` を追加した。既定値 `inf` は従来通りhard block、有限値はbreach済みcontextでも `selected_score - normal_entry_threshold` が指定値以上ならentryを許可する。
