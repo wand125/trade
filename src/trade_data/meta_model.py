@@ -18,6 +18,7 @@ from sklearn.metrics import brier_score_loss, mean_absolute_error, mean_squared_
 from trade_data.backtest import (
     FIXED_HORIZON_SCORE_MODES,
     enrich_trades_with_predictions,
+    expand_stateful_example_paths,
     prepare_analysis_predictions,
     read_trades_csv,
 )
@@ -715,6 +716,21 @@ def parse_csv_paths(value: str | None) -> list[Path]:
     if not paths:
         raise argparse.ArgumentTypeError("at least one path is required")
     return paths
+
+
+def read_stateful_examples(value: str | Path) -> pd.DataFrame:
+    paths = expand_stateful_example_paths(parse_csv_paths(str(value)))
+    frames: list[pd.DataFrame] = []
+    for path in paths:
+        frame = pd.read_csv(path)
+        frame["example_source"] = str(path)
+        frames.append(frame)
+    if not frames:
+        raise ValueError("no stateful example files were provided")
+    output = pd.concat(frames, ignore_index=True, sort=False)
+    if output.empty:
+        raise ValueError("stateful example files are empty")
+    return output
 
 
 def fixed_horizon_score_series(frame: pd.DataFrame, columns: tuple[str, ...], score_mode: str) -> pd.Series:
@@ -4736,7 +4752,7 @@ def stateful_near_tie_bucket_metrics(
 
 
 def stateful_near_tie_report_cli(args: argparse.Namespace) -> int:
-    examples = pd.read_csv(args.examples)
+    examples = read_stateful_examples(args.examples)
     predictions = pd.read_parquet(args.predictions) if args.predictions is not None else None
     tie_margins = tuple(parse_csv_floats(args.tie_margins) or [5.0, 10.0, 15.0, 20.0])
     top_fractions = tuple(parse_csv_floats(args.top_fractions) or [0.25, 0.5])
@@ -8688,7 +8704,7 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
     metrics = {
         "mode": "validation_oof_stateful_value_model",
         "config": asdict(config),
-        "examples": str(args.examples),
+        "examples": [str(path) for path in expand_stateful_example_paths(parse_csv_paths(str(args.examples)))],
         "target_column": args.target_column,
         "validation_predictions": (
             None if args.validation_predictions is None else str(args.validation_predictions)
@@ -8730,6 +8746,12 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
             else month_counts(validation_oof_predictions),
             "apply": {} if apply_predictions is None else month_counts(apply_predictions),
         },
+        "example_source_rows": {
+            str(source): int(count)
+            for source, count in examples["example_source"].value_counts().items()
+        }
+        if "example_source" in examples.columns
+        else {},
         "candidate_side_counts": {
             str(side): int(count)
             for side, count in validation_examples["candidate_side"].value_counts().items()
@@ -8760,7 +8782,7 @@ def oof_stateful_risk_model(args: argparse.Namespace) -> int:
     if args.apply_predictions is None and apply_months is not None:
         raise ValueError("--apply-months requires --apply-predictions")
 
-    examples = pd.read_csv(args.examples)
+    examples = read_stateful_examples(args.examples)
     config = stateful_risk_model_config_from_args(args)
     validate_stateful_risk_targets(config.target_names)
     validation_examples = build_stateful_risk_training_frame(examples, config)
@@ -8892,7 +8914,7 @@ def oof_stateful_risk_model(args: argparse.Namespace) -> int:
     metrics = {
         "mode": "validation_oof_stateful_risk_model",
         "config": asdict(config),
-        "examples": str(args.examples),
+        "examples": [str(path) for path in expand_stateful_example_paths(parse_csv_paths(str(args.examples)))],
         "validation_predictions": (
             None if args.validation_predictions is None else str(args.validation_predictions)
         ),
@@ -8933,6 +8955,12 @@ def oof_stateful_risk_model(args: argparse.Namespace) -> int:
             else month_counts(validation_oof_predictions),
             "apply": {} if apply_predictions is None else month_counts(apply_predictions),
         },
+        "example_source_rows": {
+            str(source): int(count)
+            for source, count in examples["example_source"].value_counts().items()
+        }
+        if "example_source" in examples.columns
+        else {},
         "candidate_side_counts": {
             str(side): int(count)
             for side, count in validation_examples["candidate_side"].value_counts().items()
@@ -10117,7 +10145,14 @@ def build_parser() -> argparse.ArgumentParser:
         "oof-stateful-value-model",
         help="build validation OOF model columns from stateful_candidate_examples.csv",
     )
-    stateful_value_model_parser.add_argument("--examples", type=Path, required=True)
+    stateful_value_model_parser.add_argument(
+        "--examples",
+        required=True,
+        help=(
+            "comma-separated stateful_candidate_examples.csv files or directories "
+            "containing stateful_candidate_examples.csv"
+        ),
+    )
     stateful_value_model_parser.add_argument(
         "--validation-predictions",
         type=Path,
@@ -10175,7 +10210,14 @@ def build_parser() -> argparse.ArgumentParser:
         "oof-stateful-risk-model",
         help="build validation OOF risk probability columns from stateful_candidate_examples.csv",
     )
-    stateful_risk_model_parser.add_argument("--examples", type=Path, required=True)
+    stateful_risk_model_parser.add_argument(
+        "--examples",
+        required=True,
+        help=(
+            "comma-separated stateful_candidate_examples.csv files or directories "
+            "containing stateful_candidate_examples.csv"
+        ),
+    )
     stateful_risk_model_parser.add_argument(
         "--validation-predictions",
         type=Path,

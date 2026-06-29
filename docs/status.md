@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 16:37 JST
+最終更新: 2026-06-29 16:47 JST
 
 ## 現在の状態
 
@@ -27,6 +27,8 @@ EV overestimate residualの連続targetを実装済み。`trade_overestimate_tar
 trade overestimate scale診断も追加済み。chronological OOFでは、selected targetがfit q90を超えるtradeは36件あるが、selected prediction > fit q90も全side prediction行での発火も0件。q75なら全side prediction行で13093件発火するが、selected trade上の捕捉は12/79件で、short側は全foldで0件。fold-local q75 threshold + lambda `2.0` をpolicy接続すると、2025-02..2025-04 totalが baseline `154.6374` から `135.9620` へ悪化した。q90は発火せず、q75は発火するが悪化するため、thresholdを下げるだけでは解決しない。詳細は `docs/reports/00151_2026-06-29_trade_overestimate_scale_diagnostics.md`。
 
 trade overestimate high分類targetも追加済み。`oof-trade-overestimate-high-model` はside別fit分布の高分位を超えるselected trade overestimateを分類し、side別prob/risk列を出す。chronological q75はAUC `0.5509` と薄いsignalがあるが、既存stateful risk5へ追加すると2025-02..2025-04 totalは baseline `154.6374` に対し w0.5 `94.7914`, w1.0 `109.3234`, w2.0 `86.1926` へ悪化した。q90分類はAUC `0.4574`。単独riskには採用せず、stacking featureまたはblocking/exit失敗targetの補助特徴として扱う。詳細は `docs/reports/00152_2026-06-29_trade_overestimate_high_classifier.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+stateful examplesの追加support実験も実施済み。`oof-stateful-value-model` / `oof-stateful-risk-model` の `--examples` を複数CSV/ディレクトリ対応にし、`example_source` と `example_source_rows` を保存するようにした。3つのdelta sourceを混ぜて1093例に増やしたが、chronological OOFでは `blocking_cost_high` だけAUC `0.5439`、他は概ね0.5未満。`blocking_cost_high` を既存stateful risk5へ追加しても、2025-02..2025-04 totalは baseline `154.6374` に対し w5 `123.7672`, w10 `92.1764` へ悪化した。source別target率が大きく違うため、次は複数source混合ではなく同一固定policyのwalk-forward examplesを増やす。詳細は `docs/reports/00153_2026-06-29_augmented_stateful_blocking_examples.md`。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 

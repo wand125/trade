@@ -1,4 +1,5 @@
 import argparse
+import tempfile
 import unittest
 
 import numpy as np
@@ -98,6 +99,7 @@ from trade_data.meta_model import (
     parse_csv_strings,
     prepare_candidate_quality_report_frame,
     prepare_stateful_near_tie_report_frame,
+    read_stateful_examples,
     residual_penalty_output_column,
     residual_penalty_scored_metrics,
     side_outcome_columns_for_side,
@@ -206,6 +208,25 @@ class MetaModelTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             filter_months(df, ["2024-09"], "test")
+
+    def test_read_stateful_examples_combines_csv_paths_and_marks_source(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = f"{tmpdir}/first.csv"
+            second = f"{tmpdir}/second.csv"
+            pd.DataFrame({"dataset_month": ["2024-07"], "target": [1.0]}).to_csv(
+                first,
+                index=False,
+            )
+            pd.DataFrame({"dataset_month": ["2024-09"], "target": [2.0]}).to_csv(
+                second,
+                index=False,
+            )
+
+            combined = read_stateful_examples(f"{first},{second}")
+
+        self.assertEqual(combined["dataset_month"].tolist(), ["2024-07", "2024-09"])
+        self.assertEqual(combined["target"].tolist(), [1.0, 2.0])
+        self.assertEqual(combined["example_source"].tolist(), [first, second])
 
     def test_prepare_stateful_near_tie_report_frame_joins_side_secondary_score(self):
         examples = pd.DataFrame(

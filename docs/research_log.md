@@ -4573,3 +4573,36 @@ Artifacts:
 - q90分類は尾部検知として弱く、AUCが逆方向気味。
 - deltaではw1.0が2025-02/04の良いbase tradeを落とし、一部悪いcandidate tradeを追加した。fold-local q75 thresholdと同じ失敗形。
 - high-overestimate probabilityは標準riskに採用しない。使う場合はstacking feature、blocking/replacement regret、exit/holding失敗targetの補助特徴に限定する。
+
+### 2026-06-29 16:47 JST Augmented stateful blocking examples
+
+作業:
+
+- `oof-stateful-value-model` / `oof-stateful-risk-model` の `--examples` を、複数CSV/ディレクトリ入力に対応した。
+- 読み込んだexamplesへ `example_source` を付与し、metricsへ `example_source_rows` を保存するようにした。
+- 3つのdelta sourceから1093例を作り、`positive_blocking`, `blocking_cost_high`, `replacement_regret_high`, `positive_replacement_regret_high`, `stateful_nonpositive` をchronological OOFで再評価した。
+- report: `docs/reports/00153_2026-06-29_augmented_stateful_blocking_examples.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| target | prevalence | AUC |
+|---|---:|---:|
+| positive_blocking | `0.0281` | `0.4751` |
+| blocking_cost_high | `0.0211` | `0.5439` |
+| replacement_regret_high | `0.2485` | `0.4795` |
+| positive_replacement_regret_high | `0.2591` | `0.4445` |
+| stateful_nonpositive | `0.4783` | `0.5070` |
+
+| label | total PnL | min month PnL | trades |
+|---|---:|---:|---:|
+| baseline | `154.6374` | `14.3072` | `281` |
+| aug blockcost w5 | `123.7672` | `2.6652` | `280` |
+| aug blockcost w10 | `92.1764` | `2.7732` | `280` |
+
+判断:
+
+- 複数examples入力の実装は、追加support検証の基盤として採用。
+- supportを1093例に増やしてもrank能力は大きく改善しない。
+- `blocking_cost_high` はAUC `0.5439` だが、policy接続ではbaseline未満。標準riskには採用しない。
+- source別target率が大きく異なるため、次は同一固定policyのwalk-forward examplesを増やし、source driftを抑えて再評価する。
