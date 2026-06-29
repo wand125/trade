@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 23:50 Context drawdown guard threshold selection
+
+- `scripts/experiments/context_drawdown_guard_selection.py` を追加し、online side-month drawdown guard のしきい値を対象月より前の月だけで選ぶ診断を作った。
+- `min_train_months=8` では target 2025-09..12。total基準は `60,inf` を選び total `-480.8728`, worst `-289.0056` と大崩れを防げない。一方 `worst` 基準は全月 `20` を選び、total `-206.0758`, worst `-116.4516`, trades `54` までtailを縮めた。
+- `min_train_months=4` では target 2025-05..12。`worst` 基準は total `63.3054`, worst `-116.4516`, max DD `129.1668`, trades `448`。2025-05..08では `inf`、2025-09以降は `20` を選ぶ形になる。
+- tight-tail risk budget (`min_validation_worst_month_pnl=-80`) は2025-09の `inf` を事前に落とせるが、2025-10以降はeligible候補がなくfallbackが混ざるため、採用候補ではなく制約感度診断として読む。
+- 判断: fixed all-window `40/60` は後知恵なので採用しない。prior-only `worst` objective はrisk-control candidateとして残すが、利益最大化policyではない。未使用月/追加データで mandate 固定後に再探索なし検証する。
+- report: `docs/reports/00181_2026-06-29_context_drawdown_guard_threshold_selection.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/context_drawdown_guard_selection.py`: OK; `python3 -m unittest tests.test_context_drawdown_guard_selection`: OK, 5 tests; `python3 -m unittest tests.test_backtest tests.test_residual_trade_failure_diagnostics tests.test_context_drawdown_guard_selection tests.test_docs_reports`: OK, 97 tests
+
 ### 23:41 Online context drawdown guard
 
 - 決済済み実績だけを使う online drawdown guard を `run_backtest` / `model-policy` / `model-sweep` に追加した。`direction + context + entry month` の実現adjusted PnLが `-threshold` 以下になると、同月内の同side/context entryを以後ブロックする。

@@ -772,6 +772,26 @@ preserves ranking within the fold, but it does not use future holdout
 prevalence and should still be validated with fresh months before any policy
 promotion.
 
+To audit whether an online context drawdown guard threshold can be selected
+without looking at the target month, run the prior-only threshold selector on a
+`context_drawdown_guard_apply.py` `summary_by_run.csv`:
+
+```bash
+python scripts/experiments/context_drawdown_guard_selection.py \
+  --summary-by-run data/reports/backtests/<context_drawdown_apply>/summary_by_run.csv \
+  --output-dir data/reports/backtests \
+  --label context_drawdown_guard_selection \
+  --min-train-months 8 \
+  --objectives total,worst,risk_adjusted,risk_budget \
+  --worst-weights 1,2,4 \
+  --drawdown-weights 0,0.5 \
+  --min-validation-worst-month-pnls=-inf,-150,-120
+```
+
+Use the `worst` objective only as a pre-registered risk-control mandate, not as
+a profit-maximizing selector. Report ordering in `docs/reports/` is based on
+the internal `日時:` line, not filesystem mtime or `更新日時:`.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:

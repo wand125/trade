@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 23:41 JST
+最終更新: 2026-06-29 23:54 JST
 
 ## 現在の状態
 
@@ -53,6 +53,8 @@ holding error / exit regretをdense教師候補として分解した。`scripts/
 `p10 + margin10` の残存失敗を `model-trade-exposure-diagnostics` と `residual_trade_failure_diagnostics.py` で分解した。負け月は2025-08..12で合計 `-725.1116`、そのうちshortが155 trades `-716.6702`、longは119 trades `-8.4414`。最大文脈は2025-09 `short/range_low_vol/ny_overlap` 5 trades `-144.2160` で、direction error `0.8000`, actual profit-barrier hit `0.0000`, EV overestimate mean `50.9439`。side gapやconfidenceだけでは解けず、`pred_side_gap > 10` でも大きなshort損失が残る。次は静的session blockではなく、決済済み実績だけを使うonline context drawdown guardを検証する。詳細は `docs/reports/00179_2026-06-29_side_drift_guard_residual_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 online drawdown guardを `run_backtest` / `model-policy` / `model-sweep` へ追加した。決済済み実績だけを使い、`direction + context + entry month` の実現adjusted PnLが `-threshold` 以下になると以後の同side/context entryをブロックする。`combined_regime + session_regime` contextでは小改善止まり、`combined_regime` onlyでもNoTrade未満。一方、side-month guard (`context_columns=dataset_month`) はthreshold `60` で 2025-01..12 total `135.6350`, worst `-153.6646` まで改善した。ただし2025-01..08 validation total基準では `inf` が選ばれるため、`40/60` は全12ヶ月を見た後知恵。標準採用せず、tail-risk込みの閾値選定または未使用futureでの事前登録検証へ回す。詳細は `docs/reports/00180_2026-06-29_online_context_drawdown_guard.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`context_drawdown_guard_selection.py` を追加し、online side-month guard のしきい値を対象月より前の月だけで選ぶ診断を作った。`min_train_months=8` の2025-09..12では、total基準が `60,inf` を選んで total `-480.8728`, worst `-289.0056` と大崩れを防げない一方、worst-month基準は `20` を選び total `-206.0758`, worst `-116.4516`, trades `54` までtailを縮めた。`min_train_months=4` の2025-05..12では、worst基準が total `63.3054`, worst `-116.4516`, max DD `129.1668`, trades `448`。ただしこれは利益最大化ではなくrisk-control mandateであり、固定all-window `40/60` は引き続き後知恵として扱う。詳細は `docs/reports/00181_2026-06-29_context_drawdown_guard_threshold_selection.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
