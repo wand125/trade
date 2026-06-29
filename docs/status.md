@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 08:21 JST
+最終更新: 2026-06-30 08:29 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+short raw score gapでshort側だけをactiveにするdynamic context guard診断を追加した。`signal_short_raw_gap` は最終signalがshort、かつ `raw_short_score - raw_long_score >= short_gap_threshold` のrowだけを `guarded|dataset_month|combined_regime` contextへ入れる。全12ヶ月bestは `short_gap=5, threshold=20, min_entry_margin=20` で total `+18.5106`、short PnL `-434.3938 -> -325.7454` と初めてNoTradeを上回ったが、prior-only selectionでは min4/worst total `-274.9360`、min8/worst `-527.8212` と2025-09..12に崩れた。`signal_short_raw_gap` は診断軸として残すが標準採用しない。次は target-month-independent な prior side-drift profile と short exposure budget を評価する。詳細は `docs/reports/00187_2026-06-30_short_raw_gap_context_guard.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 side drift guarded context と online context drawdown の低容量interactionをdynamic backtestで試した。`side_context_interaction_guard_apply.py` は `side_ev_penalty_rules` に該当するrowだけ `guarded|...` contextとしてonline drawdown guard対象にし、非該当rowは一意contextへ逃がす。`dataset_month` だけでは selected_side_rule が実約定active trade 4件で無効、any_rule は悪化。`dataset_month,combined_regime` の any_rule/threshold20 は totalを `-90.1378 -> -46.8210` へ改善したが、worst month `-292.2070`, max DD `292.2070` へ悪化し、short PnLは `-434.3938` のまま。標準採用せず、次は short側限定の prior loss + prediction short bias + strong margin/stay-flat をdynamic backtestで評価する。詳細は `docs/reports/00186_2026-06-30_side_context_interaction_guard.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -58,6 +58,7 @@
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。
 - raw online context stateをそのままselected-trade classifierへ足すとOOF AUCが悪化したため、次は `side_drift_short_bias`, `prior_context_active_loss`, `entry_margin` の低容量な相互作用だけを候補化し、post-trade filterではなくdynamic backtestで評価する。
 - side drift context全体へのonline drawdown guardはtotalだけ少し改善してもshort driftを直せない。次は short限定で、prior side/context lossがactiveかつprediction short biasが高い場合にだけ追加entry marginまたはstay-flatへ寄せる。
+- raw short score gapによる `signal_short_raw_gap` はall-windowでtotalを改善できるが、prior-only selectionでは2025-09..12に崩れる。score gap閾値そのものを採用せず、対象月より前だけで見える prior side-drift profile、short active PnL、short exposure budget を組み合わせて評価する。
 
 ## 外部データ候補
 

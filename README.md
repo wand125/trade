@@ -256,6 +256,21 @@ python scripts/experiments/side_context_interaction_guard_apply.py \
   --min-entry-margins inf,20
 ```
 
+`signal_short_raw_gap` is a stricter diagnostic mode for short-side drift. It
+activates the guarded context only when the final desired signal is short and
+the raw short score exceeds the raw long score by `--short-gap-thresholds`:
+
+```bash
+python scripts/experiments/side_context_interaction_guard_apply.py \
+  --runs data/reports/backtests/<side_drift_guard_runs> \
+  --data data/processed/histdata/xauusd/xauusd_m1.parquet \
+  --context-columns dataset_month,combined_regime \
+  --match-modes signal_short_raw_gap \
+  --short-gap-thresholds 0,5,10 \
+  --thresholds 20,40,60 \
+  --min-entry-margins inf,20
+```
+
 Rows outside the side-drift guarded prediction context are assigned unique
 inactive contexts, so ordinary trades do not share drawdown state. This is a
 dynamic backtest diagnostic and should still be judged by worst month,
@@ -840,8 +855,9 @@ python scripts/experiments/context_drawdown_guard_selection.py \
 ```
 
 Use the `worst` objective only as a pre-registered risk-control mandate, not as
-a profit-maximizing selector. Report ordering in `docs/reports/` is based on
-the internal `日時:` line, not filesystem mtime or `更新日時:`.
+a profit-maximizing selector. Report ordering, latest-report detection, and
+renumbering in `docs/reports/` are based on the internal creation-time `日時:`
+line, not filesystem mtime or the edit-history `更新日時:` line.
 
 For a two-dimensional candidate such as drawdown threshold plus post-breach
 entry margin, include both numeric columns:

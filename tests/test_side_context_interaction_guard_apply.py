@@ -76,6 +76,41 @@ class SideContextInteractionGuardApplyTests(unittest.TestCase):
         self.assertTrue(selected_context.iloc[1].startswith("inactive|"))
         self.assertNotEqual(any_context.iloc[2], selected_context.iloc[1])
 
+    def test_signal_short_raw_gap_mode_uses_final_short_signal_and_raw_gap(self):
+        timestamps = pd.to_datetime(
+            [
+                "2025-01-01T00:00:00Z",
+                "2025-01-01T00:01:00Z",
+                "2025-01-01T00:02:00Z",
+            ]
+        )
+        df = pd.DataFrame({"timestamp": timestamps})
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "dataset_month": ["2025-01", "2025-01", "2025-01"],
+                "pred_long_best_adjusted_pnl": [10.0, 10.0, 10.0],
+                "pred_short_best_adjusted_pnl": [17.0, 13.0, 25.0],
+            }
+        )
+        config = ModelPolicyConfig(predictions=Path("predictions.parquet"))
+        signal = pd.Series([-1, -1, 1], index=df.index)
+
+        context, active = side_context_interaction_guard_apply.interaction_entry_context(
+            df,
+            predictions,
+            config,
+            signal,
+            context_columns=("dataset_month",),
+            match_mode="signal_short_raw_gap",
+            short_gap_threshold=5.0,
+        )
+
+        self.assertEqual(active.tolist(), [True, False, False])
+        self.assertEqual(context.iloc[0], "guarded|dataset_month=2025-01")
+        self.assertTrue(context.iloc[1].startswith("inactive|"))
+        self.assertTrue(context.iloc[2].startswith("inactive|"))
+
 
 if __name__ == "__main__":
     unittest.main()

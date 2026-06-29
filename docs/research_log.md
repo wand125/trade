@@ -4,6 +4,17 @@
 
 ## 2026-06-30 JST
 
+### 08:29 Short raw gap context guard
+
+- `scripts/experiments/side_context_interaction_guard_apply.py` に `signal_short_raw_gap` modeを追加した。active条件は `final desired signal == short` かつ `raw_short_score - raw_long_score >= short_gap_threshold`。
+- `context_columns=dataset_month,combined_regime`、`short_gap_threshold=0,5,10`、drawdown threshold `20,40,60`、min entry margin `inf,20` でdynamic backtestを実行した。
+- 全12ヶ月を見たbestは `short_gap=5, threshold=20, min_entry_margin=20` で total `+18.5106`、trades `921`、worst month `-259.3024`、max DD `259.3024`。baseline source run `-90.1378` からは改善し、short PnLも `-434.3938 -> -325.7454` へ改善した。
+- ただしprior-only selectionは失敗。min4/worstは target 8ヶ月 total `-274.9360`、min4 total/risk系は `-353.6094`。min8/worstは target 4ヶ月 total `-527.8212`、min8 total/risk系は `-606.4946`。
+- 判断: `signal_short_raw_gap` は短期short driftの診断軸として残すが、all-windowで良い候補は後知恵。標準policyには昇格しない。次は raw score gap単独ではなく、target-month-independent な prior side-drift profile と short exposure budget を評価する。
+- report: `docs/reports/00187_2026-06-30_short_raw_gap_context_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 109 tests; `git diff --check`: OK
+
 ### 08:21 Side context interaction guard
 
 - `scripts/experiments/side_context_interaction_guard_apply.py` を追加し、post-trade filterではなくdynamic backtestで `side drift guarded context × online context drawdown` の低容量interactionを試した。
