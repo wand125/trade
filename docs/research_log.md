@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 10:23 Guard-fixed entry/side grid
+
+- MLP holding auto guardを固定した状態で、entry threshold `10/12/14/16`, short offset `4/6/8`, side margin `3/5/7`, short low-vol penalty rule set `none/down5up10/down5up10range5/down10up10` の小gridをvalidation 4ヶ月で再評価した。
+- `model-candidate-selection` はbase/high costとも4fold全通過、月10trades以上、forced rate `<=0.05`, DD `<=300`, 月次PnL `>0`, max side share `<=0.9` を要求した。144候補中82候補がeligible。
+- validation topは `entry=14`, short offset `4`, side margin `5`, `short:down_low_vol:5,up_low_vol:10,range_low_vol:5`。validation base/high costは sum/min `685.5456 / 154.4590`, `586.9640 / 138.6648`。
+- 現行標準 `entry=12`, short offset `6`, side margin `5`, `short:down_low_vol:5,up_low_vol:10` は validation base/high cost sum/min `622.6486 / 138.0338`, `500.5422 / 96.8776`。
+- しかしvalidation topをapply 4ヶ月へ固定すると base sum/min `-42.4328 / -50.1562`, high cost sum/min `-157.7340 / -69.2394`。現行標準guard候補の apply base/high cost `246.8762 / -18.7168`, `132.6970 / -34.3748` を大きく下回った。
+- 判断: guardは高回転破綻を止めるが、entry threshold / short offset / side penaltyのvalidation最適化はまだ外挿しない。validation top候補は標準採用しない。次はパラメータ探索を増やさず、OOF校正・downside feature・regime drift診断へ戻る。
+- report: `docs/reports/00127_2026-06-29_guard_fixed_entry_side_grid.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 10:13 MLP holding auto guard CLI
 
 - `00125` / ADR `0009` の標準安全制約をCLI defaultへ反映した。

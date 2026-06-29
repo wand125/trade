@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 10:13 JST
+最終更新: 2026-06-29 10:23 JST
 
 ## 現在の状態
 
@@ -59,6 +59,8 @@ stateful blocking risk modelを追加済み。`positive_blocking`, `positive_rep
 MLP holding guard/fallbackをvalidation/applyで再評価済み。代表validation 4ヶ月では `min_valid=-inf/30/60/120` が完全に同じで、PnL最適化の根拠にはならない。一方、apply 4ヶ月では従来挙動が2025-04で異常高回転化し、`skip min_valid=30` が base sum PnL `-261.3216 -> 246.8762`, high cost sum PnL `-1435.1746 -> 132.6970` へ改善した。`fallback` はskipより弱い。今後、MLP holdingを使う `timed_ev` 実験では `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約として固定する。これはvalidation edgeではなく、外挿破綻値を売買ルールへ渡さないための制約。詳細は `docs/reports/00125_2026-06-29_holding_guard_validation_apply.md` と `docs/decisions/0009_mlp_holding_fail_close_guard.md`。
 
 MLP holding fail-close guardをCLI標準に反映済み。`model-policy` では `--min-valid-predicted-hold-minutes` を省略した場合、holding columnが `pred_mlp_*` なら `30`、それ以外なら従来通り `-inf` に解決する。`model-sweep` のdefault `auto` も同じ解決を行う。明示的に `-inf` や数値CSVを渡した場合はそちらを優先する。2025-04 smokeでは自動解決された `min_valid=30.0` で、前回の `skip min_valid=30` と同じ adjusted PnL `-18.7168`, trades `77`, max DD `249.9600` を再現した。詳細は `docs/reports/00126_2026-06-29_mlp_holding_auto_guard_cli.md`。
+
+guard固定後のentry/side小gridを再評価済み。validationでは `entry=14`, short offset `4`, side margin `5`, `short down5/up10/range5` がbase/high cost min月を `154.4590 / 138.6648` まで上げ、現行標準の `138.0338 / 96.8776` を上回った。しかし同候補をapply 4ヶ月へ固定すると base sum/min `-42.4328 / -50.1562`, high cost sum/min `-157.7340 / -69.2394` で、現行標準guard候補の `246.8762 / -18.7168`, `132.6970 / -34.3748` を大きく下回った。したがってvalidation top候補は棄却し、entry threshold/short offset/side penaltyの追加最適化は本流にしない。詳細は `docs/reports/00127_2026-06-29_guard_fixed_entry_side_grid.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
@@ -300,6 +302,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 47. `model-candidate-selection` のplateau supportは、数値列だけでなくカテゴリrule set列にも対応済み。文字列plateauは同一カテゴリのeligible supportを数える。現時点では `side_ev_penalty_rules` のカテゴリplateauを採用条件には使わず、候補比較の互換修正として扱う。
 48. candidate-entry failure targetは `large_adverse` 以外にも拡張済み。ただし `normal_vol_selected_failure` riskはholdoutで悪化し、`wrong_side` / `time_session_selected_failure` はOOFで逆相関寄り。分類targetをentry scoreへ直接penalty接続する方向は標準採用せず、診断特徴として残す。
 49. candidate quality drift診断では、fixed componentがtimed/clippedよりdownside targetとして現実的。ただし上位prediction bucketほど過大評価が強く、2024-11/2025-01でdownside prevalenceが上がる。quality scoreは単調rankではなく、support-aware calibrated downside featureとして扱う。
+50. guard固定後のentry/side小gridでも、validation top (`entry=14`, short offset `4`, `range_low_vol` 追加penalty) はapplyへ外挿せず現行標準を大きく下回った。今後はentry threshold/side penaltyのパラメータ探索を増やさず、OOF校正・downside feature・regime drift診断へ戻る。
 
 ## 未決定事項
 
@@ -310,6 +313,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 10:23 JST 更新: guard固定後にentry threshold / short offset / side margin / short low-vol penaltyの小gridをvalidationで再選定した。validation topは `entry=14`, short offset `4`, `down5/up10/range5` でbase/high cost min月 `154.4590 / 138.6648` と強いが、apply 4ヶ月ではbase sum/min `-42.4328 / -50.1562`, high cost sum/min `-157.7340 / -69.2394` に崩れ、現行標準guard候補を下回った。標準採用しない。次はパラメータ探索ではなく、OOF校正・downside feature・regime driftの扱いへ戻る。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 10:13 JST 更新: MLP holding fail-close guardをCLI標準に反映した。`model-policy` では `--min-valid-predicted-hold-minutes` 省略時、holding columnが `pred_mlp_*` なら `30`、それ以外なら `-inf` に解決する。`model-sweep` defaultの `auto` も同じ。2025-04 smokeではconfig上 `min_valid=30.0` を確認し、前回の `skip min_valid=30` と同じ adjusted PnL `-18.7168`, trades `77`, max DD `249.9600` を再現した。今後の代表候補再評価は、このguard固定後にentry/side EV calibrationとexit timing targetへ戻る。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
