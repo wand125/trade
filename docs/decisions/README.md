@@ -29,3 +29,4 @@
 - `0006_loss_multiplier_120_standard.md`: 評価倍率 1.0 / 1.20 へ統一
 - `0007_high_turnover_gate_selection.md`: 2025-07 blind前のhigh-turnover gate選定基準
 - `0008_trade_analysis_diagnostic_gate_policy.md`: diagnostic gateをpost-hoc閾値でhard採用しない
+- `0009_mlp_holding_fail_close_guard.md`: MLP holding predictionにはfail-close guardを固定する

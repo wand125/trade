@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 09:53 JST
+最終更新: 2026-06-29 10:05 JST
 
 ## 現在の状態
 
@@ -55,6 +55,8 @@ near-tie局所診断 `stateful-near-tie-report` を追加済み。validation exa
 stateful blocking risk modelを追加済み。`positive_blocking`, `positive_replacement_regret_high`, `stateful_nonpositive` を月抜きOOF分類し、side別 `prob/risk` 列をprediction parquetへ出力できる。OOF AUCは `positive_blocking=0.4878`, `positive_replacement_regret_high=0.4869`, `stateful_nonpositive=0.4520` とrank能力は弱い。validationでは `positive_blocking risk=5` がsum/min/DDを `622.6486 / 138.0338 / 85.0166` から `675.7414 / 157.0628 / 74.7688` へ改善したが、apply 3ヶ月ではsum `242.5008 -> 198.9860`, maxDD `122.9852 -> 128.1944` に悪化。実装は採用するが標準riskにはせず、追加walk-forwardで固定評価する事前登録候補として扱う。詳細は `docs/reports/00123_2026-06-29_stateful_blocking_risk_model.md`。
 
 `positive_blocking risk=5` を2025-04へ固定外挿した。2025-04は baseline `-503.8224`, risk `5` `-509.6742`, risk `20` `-486.2782` で、追加月ではrisk `5` が改善せず、riskを強くしても根本解決しない。apply 4ヶ月合計でも baseline sum/min/DD `-261.3216 / -503.8224 / 718.7252` に対し、risk `5` は `-310.6882 / -509.6742 / 729.0912`。`positive_blocking risk=5` は事前登録候補からも降格し、次はstateful riskではなくholding guard/fallbackを本流に戻す。詳細は `docs/reports/00124_2026-06-29_stateful_blocking_risk_2025_04_fixed_check.md`。
+
+MLP holding guard/fallbackをvalidation/applyで再評価済み。代表validation 4ヶ月では `min_valid=-inf/30/60/120` が完全に同じで、PnL最適化の根拠にはならない。一方、apply 4ヶ月では従来挙動が2025-04で異常高回転化し、`skip min_valid=30` が base sum PnL `-261.3216 -> 246.8762`, high cost sum PnL `-1435.1746 -> 132.6970` へ改善した。`fallback` はskipより弱い。今後、MLP holdingを使う `timed_ev` 実験では `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約として固定する。これはvalidation edgeではなく、外挿破綻値を売買ルールへ渡さないための制約。詳細は `docs/reports/00125_2026-06-29_holding_guard_validation_apply.md` と `docs/decisions/0009_mlp_holding_fail_close_guard.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
@@ -247,7 +249,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-1. raw fixed horizon + `score_mode=max` + `profit_barrier_miss_penalty=0.0` + `min_trade_quality=-inf` を現行基準にする。
+1. MLP holdingを使う `timed_ev` 実験では `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約にする。従来のclip-only挙動は2025-04型の異常高回転を再発するため、標準比較から外す。
 2. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
 3. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
 4. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。

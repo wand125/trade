@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 10:05 Holding guard validation/apply
+
+- `00124` の結論に沿って、stateful riskではなくMLP holding guard/fallbackを再評価した。
+- validation 4ヶ月 (`2024-07`, `2024-09`, `2024-11`, `2025-01`) では、skip/fallback とも `min_valid=-inf/30/60/120` が完全に同じ。validation上はholding guardの優劣をPnLで選べない。
+- apply 4ヶ月 (`2024-12`, `2025-02`, `2025-03`, `2025-04`) では、従来挙動が2025-04で異常高回転化し、base/high costとも大きく崩れた。`skip min_valid=30` はbase sum PnL `-261.3216 -> 246.8762`, high cost sum PnL `-1435.1746 -> 132.6970` に改善し、trade数を約2910件から約380件へ抑えた。
+- `fallback` は損失を縮めるがskipより弱い。HGB holdingへ逃がすことで、壊れたMLP holding候補を取引として残してしまう。
+- 判断: `min_valid_predicted_hold_minutes=30` の fail-close skip を、MLP holdingを使う `timed_ev` 実験の標準安全制約にする。ただしvalidation PnLで選ばれたedgeではなく、外挿破綻値を売買ルールへ渡さないための固定制約として扱う。
+- report: `docs/reports/00125_2026-06-29_holding_guard_validation_apply.md`
+- decision: `docs/decisions/0009_mlp_holding_fail_close_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 09:53 Stateful blocking risk 2025-04 fixed check
 
 - `00123` の事前登録候補 `positive_blocking risk=5` を、追加walk-forward月として 2025-04 に固定適用した。
