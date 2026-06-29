@@ -2504,6 +2504,7 @@ def prepare_analysis_predictions(
     predictions: pd.DataFrame,
     long_column: str,
     short_column: str,
+    extra_prediction_columns: Iterable[str] = (),
 ) -> pd.DataFrame:
     required = [
         "decision_timestamp",
@@ -2515,7 +2516,12 @@ def prepare_analysis_predictions(
     missing = sorted(set(required) - set(predictions.columns))
     if missing:
         raise ValueError(f"predictions are missing columns: {', '.join(missing)}")
-    analysis_columns = [*ANALYSIS_PREDICTION_COLUMNS, long_column, short_column]
+    analysis_columns = [
+        *ANALYSIS_PREDICTION_COLUMNS,
+        long_column,
+        short_column,
+        *extra_prediction_columns,
+    ]
     columns = list(dict.fromkeys(column for column in analysis_columns if column in predictions.columns))
     predictions = predictions[columns].copy()
     predictions["pred_long_best_adjusted_pnl"] = predictions[long_column]
@@ -2604,9 +2610,20 @@ def add_trade_analysis_buckets(enriched: pd.DataFrame) -> pd.DataFrame:
     return output
 
 
-def enrich_trades_with_predictions(trades: pd.DataFrame, predictions: pd.DataFrame) -> pd.DataFrame:
+def enrich_trades_with_predictions(
+    trades: pd.DataFrame,
+    predictions: pd.DataFrame,
+    extra_prediction_columns: Iterable[str] = (),
+) -> pd.DataFrame:
+    prediction_column_candidates = [
+        *ANALYSIS_PREDICTION_COLUMNS,
+        *extra_prediction_columns,
+    ]
     if trades.empty:
         output = trades.copy()
+        for column in prediction_column_candidates:
+            if column not in output.columns:
+                output[column] = pd.Series(dtype="float64")
         for column in [
             "matched_prediction",
             "direction_error",
@@ -2629,7 +2646,9 @@ def enrich_trades_with_predictions(trades: pd.DataFrame, predictions: pd.DataFra
     for column in ["entry_timestamp", "exit_timestamp", "entry_decision_timestamp", "exit_decision_timestamp"]:
         output[column] = pd.to_datetime(output[column], utc=True)
 
-    prediction_columns = [column for column in ANALYSIS_PREDICTION_COLUMNS if column in predictions.columns]
+    prediction_columns = list(
+        dict.fromkeys(column for column in prediction_column_candidates if column in predictions.columns)
+    )
     prediction_frame = predictions[prediction_columns].copy()
     prediction_frame["decision_timestamp"] = pd.to_datetime(
         prediction_frame["decision_timestamp"], utc=True
@@ -2643,7 +2662,7 @@ def enrich_trades_with_predictions(trades: pd.DataFrame, predictions: pd.DataFra
     )
     output["matched_prediction"] = output["decision_timestamp"].notna()
 
-    for column in ANALYSIS_PREDICTION_COLUMNS:
+    for column in prediction_column_candidates:
         if column != "decision_timestamp" and column not in output.columns:
             output[column] = np.nan
 

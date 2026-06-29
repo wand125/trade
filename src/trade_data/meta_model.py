@@ -525,6 +525,21 @@ TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_SPECS = [
         )
         for target_name in TRADE_FAILURE_TARGET_NAMES
     ],
+    *[
+        (
+            f"holding_shortening_{minutes}m_prob",
+            f"pred_{{side}}_fixed_{minutes}m_beats_exit_event_prob_1",
+        )
+        for minutes in FIXED_HORIZON_MINUTES
+    ],
+    (
+        "holding_shortening_60m_valid_quantile",
+        "pred_{side}_fixed_60m_beats_exit_event_valid_quantile",
+    ),
+    (
+        "holding_shortening_60m_multimonth_quantile",
+        "pred_{side}_fixed_60m_beats_exit_event_multimonth_quantile",
+    ),
     (
         "side_outcome_target_mean",
         "pred_side_outcome_evdist_{side}_calibrated_target_mean",
@@ -586,6 +601,11 @@ TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_COLUMNS = [
         f"pred_opposite_{feature_name}",
         f"pred_{feature_name}_gap",
     )
+]
+TRADE_QUALITY_OPTIONAL_SOURCE_COLUMNS = [
+    template.format(side=side_name)
+    for _, template in TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_SPECS
+    for side_name in ("long", "short")
 ]
 TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS = [
     "side",
@@ -7560,8 +7580,13 @@ def enrich_trades_for_trade_quality(
         predictions,
         TRADE_SOURCE_LONG_EV_COLUMN,
         TRADE_SOURCE_SHORT_EV_COLUMN,
+        extra_prediction_columns=TRADE_QUALITY_OPTIONAL_SOURCE_COLUMNS,
     )
-    return enrich_trades_with_predictions(trades, analysis_predictions)
+    return enrich_trades_with_predictions(
+        trades,
+        analysis_predictions,
+        extra_prediction_columns=TRADE_QUALITY_OPTIONAL_SOURCE_COLUMNS,
+    )
 
 
 def oof_trade_quality_calibration(args: argparse.Namespace) -> int:

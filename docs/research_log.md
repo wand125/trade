@@ -4892,3 +4892,25 @@ Artifacts:
 - 2025-05ではshort側のmultimonth quantile `>=0.75` が464行しかなく、OOF validation分布とchronological apply分布のズレが残る。
 - holding-shortening probabilityを直接cap発火に使う方向は本流から外す。
 - 次はこのprobabilityをentry/exit risk modelの補助featureに戻し、長く持つ予測の信用度やexit regret/EV過大評価の校正に使う。
+
+### 2026-06-29 20:15 JST Holding shortening quality features
+
+作業:
+
+- holding-shortening probability / quantileをtrade quality / trade overestimate系のoptional side featureへ接続した。
+- 60/240/720mの `pred_long/short_fixed_*m_beats_exit_event_prob_1` から、taken/opposite/gap特徴を作るようにした。
+- 60mのvalid quantileとmultimonth quantileも、同じoptional side feature経路へ追加した。
+- `prepare_analysis_predictions` / `enrich_trades_with_predictions` に `extra_prediction_columns` を追加し、selected trade enrichmentで任意特徴の元列を落とさないようにした。
+- report: `docs/reports/00166_2026-06-29_holding_shortening_quality_features.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+検証:
+
+- `python3 -m unittest tests.test_meta_model`: OK, 48 tests
+- `python3 -m unittest tests.test_backtest`: OK, 82 tests
+- `python3 -m unittest tests.test_docs_reports`: OK, 3 tests
+
+判断:
+
+- 今回はPnL改善実験ではなく、直接capからrisk/quality featureへ戻すための配線。
+- 次はholding-shortening列を含むmerged predictionを使い、trade overestimate / qualityのOOFとchronological applyを比較する。

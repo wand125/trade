@@ -1829,6 +1829,16 @@ class MetaModelTests(unittest.TestCase):
                 "pred_best_side_prob_-1": [0.35],
                 "pred_trade_failure_pred_hit_actual_miss_long_prob": [0.20],
                 "pred_trade_failure_pred_hit_actual_miss_short_prob": [0.55],
+                "pred_long_fixed_60m_beats_exit_event_prob_1": [0.80],
+                "pred_short_fixed_60m_beats_exit_event_prob_1": [0.30],
+                "pred_long_fixed_240m_beats_exit_event_prob_1": [0.70],
+                "pred_short_fixed_240m_beats_exit_event_prob_1": [0.40],
+                "pred_long_fixed_720m_beats_exit_event_prob_1": [0.60],
+                "pred_short_fixed_720m_beats_exit_event_prob_1": [0.50],
+                "pred_long_fixed_60m_beats_exit_event_valid_quantile": [0.75],
+                "pred_short_fixed_60m_beats_exit_event_valid_quantile": [0.20],
+                "pred_long_fixed_60m_beats_exit_event_multimonth_quantile": [0.65],
+                "pred_short_fixed_60m_beats_exit_event_multimonth_quantile": [0.10],
                 "pred_side_outcome_evdist_long_wrong_side_prob": [0.25],
                 "pred_side_outcome_evdist_short_wrong_side_prob": [0.60],
                 "pred_candidate_quality_component_fixed_weighted_long_adjusted_pnl": [4.0],
@@ -1867,6 +1877,34 @@ class MetaModelTests(unittest.TestCase):
             -0.35,
         )
         self.assertAlmostEqual(
+            long_features["pred_taken_holding_shortening_60m_prob"].iloc[0],
+            0.80,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_opposite_holding_shortening_60m_prob"].iloc[0],
+            0.30,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_holding_shortening_60m_prob_gap"].iloc[0],
+            0.50,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_taken_holding_shortening_240m_prob"].iloc[0],
+            0.70,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_taken_holding_shortening_720m_prob"].iloc[0],
+            0.60,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_taken_holding_shortening_60m_valid_quantile"].iloc[0],
+            0.75,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_taken_holding_shortening_60m_multimonth_quantile"].iloc[0],
+            0.65,
+        )
+        self.assertAlmostEqual(
             short_features["pred_taken_side_outcome_wrong_side_prob"].iloc[0],
             0.60,
         )
@@ -1890,6 +1928,18 @@ class MetaModelTests(unittest.TestCase):
             0.35,
         )
         self.assertAlmostEqual(
+            short_features["pred_taken_holding_shortening_60m_prob"].iloc[0],
+            0.30,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_opposite_holding_shortening_60m_prob"].iloc[0],
+            0.80,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_holding_shortening_60m_prob_gap"].iloc[0],
+            -0.50,
+        )
+        self.assertAlmostEqual(
             short_features["pred_taken_component_fixed_weighted_quality"].iloc[0],
             -2.0,
         )
@@ -1909,6 +1959,8 @@ class MetaModelTests(unittest.TestCase):
                 "pred_best_ev": [12.0, 12.0],
                 "pred_trade_failure_pred_hit_actual_miss_long_prob": [0.20, 0.25],
                 "pred_trade_failure_pred_hit_actual_miss_short_prob": [0.55, 0.65],
+                "pred_long_fixed_60m_beats_exit_event_prob_1": [0.80, 0.30],
+                "pred_short_fixed_60m_beats_exit_event_prob_1": [0.40, 0.90],
                 "entry_decision_timestamp": pd.date_range(
                     "2025-01-01",
                     periods=2,
@@ -1936,6 +1988,14 @@ class MetaModelTests(unittest.TestCase):
             features["pred_trade_failure_pred_hit_actual_miss_prob_gap"].iloc[1],
             0.40,
         )
+        self.assertEqual(
+            features["pred_taken_holding_shortening_60m_prob"].tolist(),
+            [0.80, 0.90],
+        )
+        self.assertEqual(
+            features["pred_opposite_holding_shortening_60m_prob"].tolist(),
+            [0.40, 0.30],
+        )
 
     def test_enrich_trades_for_trade_quality_preserves_failure_probability_columns(self):
         predictions = add_trade_source_ev_columns(
@@ -1955,6 +2015,8 @@ class MetaModelTests(unittest.TestCase):
         )
         predictions["pred_trade_failure_pred_hit_actual_miss_long_prob"] = [0.20, 0.25, 0.30]
         predictions["pred_trade_failure_pred_hit_actual_miss_short_prob"] = [0.55, 0.60, 0.65]
+        predictions["pred_long_fixed_60m_beats_exit_event_prob_1"] = [0.80, 0.85, 0.90]
+        predictions["pred_short_fixed_60m_beats_exit_event_prob_1"] = [0.55, 0.60, 0.65]
         trades = pd.DataFrame(
             {
                 "direction": ["short"],
@@ -1975,6 +2037,7 @@ class MetaModelTests(unittest.TestCase):
         features = trade_quality_features_from_enriched(enriched)
 
         self.assertIn("pred_trade_failure_pred_hit_actual_miss_long_prob", enriched.columns)
+        self.assertIn("pred_short_fixed_60m_beats_exit_event_prob_1", enriched.columns)
         self.assertAlmostEqual(
             features["pred_taken_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
             0.60,
@@ -1982,6 +2045,14 @@ class MetaModelTests(unittest.TestCase):
         self.assertAlmostEqual(
             features["pred_opposite_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
             0.25,
+        )
+        self.assertAlmostEqual(
+            features["pred_taken_holding_shortening_60m_prob"].iloc[0],
+            0.60,
+        )
+        self.assertAlmostEqual(
+            features["pred_opposite_holding_shortening_60m_prob"].iloc[0],
+            0.85,
         )
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):

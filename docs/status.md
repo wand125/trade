@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 20:06 JST
+最終更新: 2026-06-29 20:15 JST
 
 ## 現在の状態
 
@@ -23,6 +23,8 @@ holding-shortening固定候補を未使用月2025-05へchronological applyした
 holding-shortening probabilityのvalidation quantile化を追加した。2025-04 validの経験CDFから `pred_long/short_fixed_60m_beats_exit_event_valid_quantile` を作り、既存hookのholding-shortening columnとして使う。valid最良は quantile `0.25 / cap60` で disabled `-156.1574 -> -43.7680`。2025-05固定適用では disabled `-179.2516 -> -89.7428` と改善したが、raw valid-calibrated `0.50 / cap60` の `-79.7894` より少し悪い。`short/up_normal_vol` blockは2025-05を `-77.1744` へ改善するが、2025-04 validのPnLを悪化させる。visible-bad blockはvalidを `+45.2330` へ良化させる一方testを `-115.9068` へ壊し、regime block過学習の典型。quantile実装は残すが、単月validからblock ruleを増やす方向は本流にしない。詳細は `docs/reports/00164_2026-06-29_holding_shortening_quantile_calibration.md`。
 
 holding-shortening quantileを2025-02..04の複数月validation分布でも確認した。3ヶ月combined CDFで作ったquantile列のvalidation最良は `0.75 / cap60` で、disabled合計 `-172.4522` を `-75.2444` へ改善したが、raw threshold版best `0.60 / cap60` の `-53.9566` には負けた。さらに2025-05固定適用では `-186.1276` となり、disabled `-179.2516` より悪化。2025-05のshort quantileは `>=0.75` が464行しかなく、OOF validation分布とchronological apply分布のズレが残る。holding-shortening probabilityを直接cap発火に使う方向は本流から外し、exit/entry risk modelの補助featureへ戻す。詳細は `docs/reports/00165_2026-06-29_holding_shortening_multimonth_quantile_check.md`。
+
+holding-shortening probability / quantileをtrade quality / trade overestimate系のoptional side featureへ接続した。`pred_long/short_fixed_60m/240m/720m_beats_exit_event_prob_1` から `pred_taken_holding_shortening_*m_prob` / `pred_opposite_*` / gapを作り、60mのvalid/multimonth quantileも同じ経路へ入る。`prepare_analysis_predictions` / `enrich_trades_with_predictions` は `extra_prediction_columns` を受け取れるようにし、selected trade enrichment時に任意特徴の元列を落とさない。これはPnL改善実験ではなく、直接capからrisk/quality featureへ戻すための配線。詳細は `docs/reports/00166_2026-06-29_holding_shortening_quality_features.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
