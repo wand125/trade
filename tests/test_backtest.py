@@ -37,6 +37,7 @@ from trade_data.backtest import (
     summarize_model_trade_delta_preflight_group_drift,
     summarize_model_trade_delta_preflight,
     stateful_examples_drift_metrics,
+    stateful_examples_walkforward_stress_targets,
     add_stateful_examples_context_stress_columns,
     stateful_examples_metric_summary,
     stateful_examples_month_group_metrics,
@@ -3165,6 +3166,98 @@ class BacktestTests(unittest.TestCase):
         self.assertAlmostEqual(stressed_short["target_context_stress_adjusted"], -3.0)
         self.assertFalse(unstressed_long["context_stress_flag"])
         self.assertAlmostEqual(unstressed_long["context_stress_penalty"], 0.0)
+
+    def test_stateful_examples_walkforward_stress_uses_only_prior_months(self):
+        examples = pd.DataFrame(
+            [
+                {
+                    "dataset_month": "2025-01",
+                    "candidate_side": "long",
+                    "combined_regime": "up_low_vol",
+                    "target": 6.0,
+                    "pred_taken_ev": 10.0,
+                },
+                {
+                    "dataset_month": "2025-01",
+                    "candidate_side": "long",
+                    "combined_regime": "up_low_vol",
+                    "target": 4.0,
+                    "pred_taken_ev": 8.0,
+                },
+                {
+                    "dataset_month": "2025-02",
+                    "candidate_side": "long",
+                    "combined_regime": "up_low_vol",
+                    "target": -3.0,
+                    "pred_taken_ev": 9.0,
+                },
+                {
+                    "dataset_month": "2025-02",
+                    "candidate_side": "long",
+                    "combined_regime": "up_low_vol",
+                    "target": -5.0,
+                    "pred_taken_ev": 11.0,
+                },
+                {
+                    "dataset_month": "2025-03",
+                    "candidate_side": "long",
+                    "combined_regime": "up_low_vol",
+                    "target": 2.0,
+                    "pred_taken_ev": 12.0,
+                },
+                {
+                    "dataset_month": "2025-03",
+                    "candidate_side": "short",
+                    "combined_regime": "down_low_vol",
+                    "target": 7.0,
+                    "pred_taken_ev": 13.0,
+                },
+            ]
+        )
+
+        annotated, drift, month_summary = stateful_examples_walkforward_stress_targets(
+            examples,
+            group_columns=["candidate_side", "combined_regime"],
+            min_validation_support=2,
+            min_holdout_support=2,
+        )
+
+        march_long = annotated[
+            annotated["dataset_month"].eq("2025-03")
+            & annotated["candidate_side"].eq("long")
+        ].iloc[0]
+        march_short = annotated[
+            annotated["dataset_month"].eq("2025-03")
+            & annotated["candidate_side"].eq("short")
+        ].iloc[0]
+        self.assertEqual(march_long["walkforward_profile_status"], "profiled")
+        self.assertEqual(march_long["walkforward_profile_validation_months"], "2025-01")
+        self.assertEqual(march_long["walkforward_profile_holdout_months"], "2025-02")
+        self.assertTrue(march_long["walkforward_context_stress_flag"])
+        self.assertAlmostEqual(march_long["walkforward_context_stress_penalty"], 9.0)
+        self.assertAlmostEqual(
+            march_long["target_walkforward_context_stress_adjusted"],
+            -7.0,
+        )
+        self.assertFalse(march_short["walkforward_context_stress_flag"])
+        self.assertAlmostEqual(
+            march_short["target_walkforward_context_stress_adjusted"],
+            7.0,
+        )
+
+        march_drift = drift[
+            drift["target_month"].eq("2025-03")
+            & drift["candidate_side"].eq("long")
+        ].iloc[0]
+        self.assertTrue(march_drift["walkforward_context_stress_flag"])
+        self.assertEqual(march_drift["profile_holdout_months"], "2025-02")
+        self.assertEqual(
+            month_summary.loc[
+                month_summary["target_month"].eq("2025-01"),
+                "profile_status",
+            ].iloc[0],
+            "insufficient_prior_months",
+        )
 
     def test_model_trade_delta_pairs_parent_runs_by_config_month(self):
         months = ["2025-01", "2025-02"]

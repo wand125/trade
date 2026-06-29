@@ -5712,6 +5712,17 @@ def add_stateful_examples_context_stress_columns(
         if column not in group_columns
     }
     profile = profile.rename(columns=rename)
+    generated_columns = [
+        *rename.values(),
+        "context_stress_flag",
+        "context_stress_penalty",
+        "target_context_stress_adjusted",
+        "target_context_holdout_mean_floor",
+    ]
+    output = output.drop(
+        columns=[column for column in generated_columns if column in output.columns],
+        errors="ignore",
+    )
 
     merge_keys: list[str] = []
     for index, column in enumerate(group_columns):
@@ -5725,10 +5736,11 @@ def add_stateful_examples_context_stress_columns(
     output = output.merge(profile, on=merge_keys, how="left")
     output = output.drop(columns=merge_keys)
 
-    flag = output.get(
+    flag_source = output.get(
         "context_validation_positive_holdout_negative_mean",
         pd.Series(False, index=output.index),
-    ).fillna(False).astype(bool)
+    )
+    flag = flag_source.mask(flag_source.isna(), False).astype(bool)
     validation_mean = pd.to_numeric(
         output.get("context_validation_target_mean", pd.Series(np.nan, index=output.index)),
         errors="coerce",
@@ -5749,6 +5761,293 @@ def add_stateful_examples_context_stress_columns(
         holdout_mean.fillna(target),
     )
     return output
+
+
+def add_blank_walkforward_stress_columns(
+    frame: pd.DataFrame,
+    *,
+    target_column: str,
+    status: str,
+) -> pd.DataFrame:
+    output = frame.copy()
+    target = pd.to_numeric(output[target_column], errors="coerce")
+    output["walkforward_profile_status"] = status
+    output["walkforward_context_stress_flag"] = False
+    output["walkforward_context_stress_penalty"] = 0.0
+    output["target_walkforward_context_stress_adjusted"] = target
+    output["target_walkforward_context_holdout_mean_floor"] = target
+    return output
+
+
+def rename_walkforward_stress_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    rename = {
+        column: f"walkforward_{column}"
+        for column in frame.columns
+        if column.startswith("context_")
+    }
+    rename.update(
+        {
+            "target_context_stress_adjusted": (
+                "target_walkforward_context_stress_adjusted"
+            ),
+            "target_context_holdout_mean_floor": (
+                "target_walkforward_context_holdout_mean_floor"
+            ),
+        }
+    )
+    return frame.rename(columns=rename)
+
+
+def stateful_examples_walkforward_stress_targets(
+    examples: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    target_column: str = "target",
+    raw_prediction_column: str = "pred_taken_ev",
+    downside_threshold: float = 0.0,
+    large_downside_threshold: float = -15.0,
+    holdout_month_count: int = 1,
+    min_validation_months: int = 1,
+    min_validation_support: int = 1,
+    min_holdout_support: int = 1,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    if examples.empty:
+        raise ValueError("stateful examples are empty")
+    if holdout_month_count <= 0:
+        raise ValueError("holdout_month_count must be positive")
+    if min_validation_months <= 0:
+        raise ValueError("min_validation_months must be positive")
+    if min_validation_support <= 0:
+        raise ValueError("min_validation_support must be positive")
+    if min_holdout_support <= 0:
+        raise ValueError("min_holdout_support must be positive")
+
+    missing_group_columns = [column for column in group_columns if column not in examples.columns]
+    if missing_group_columns:
+        raise ValueError(f"stateful examples missing group columns: {missing_group_columns}")
+    if target_column not in examples.columns:
+        raise ValueError(f"stateful examples missing target column: {target_column}")
+
+    working = examples.copy()
+    if "dataset_month" not in working.columns and "month" in working.columns:
+        working["dataset_month"] = working["month"].astype(str)
+    if "dataset_month" not in working.columns:
+        raise ValueError("stateful examples missing dataset_month/month column")
+    month_values = working["dataset_month"].astype("string").str.slice(0, 7)
+    if month_values.isna().any() or month_values.eq("").any():
+        raise ValueError("stateful examples contain missing dataset_month values")
+    working["__walkforward_month"] = month_values
+    months = sorted(str(month) for month in working["__walkforward_month"].unique())
+
+    annotated_frames: list[pd.DataFrame] = []
+    drift_frames: list[pd.DataFrame] = []
+    summary_rows: list[dict[str, object]] = []
+
+    for month_index, target_month in enumerate(months):
+        target_rows = working.loc[working["__walkforward_month"].eq(target_month)].copy()
+        prior_months = months[:month_index]
+        profile_validation_months: list[str] = []
+        profile_holdout_months: list[str] = []
+        status = "profiled"
+        if len(prior_months) < holdout_month_count + min_validation_months:
+            status = "insufficient_prior_months"
+            annotated = add_blank_walkforward_stress_columns(
+                target_rows,
+                target_column=target_column,
+                status=status,
+            )
+        else:
+            profile_holdout_months = prior_months[-holdout_month_count:]
+            profile_validation_months = prior_months[:-holdout_month_count]
+            if len(profile_validation_months) < min_validation_months:
+                status = "insufficient_validation_months"
+                annotated = add_blank_walkforward_stress_columns(
+                    target_rows,
+                    target_column=target_column,
+                    status=status,
+                )
+            else:
+                profile = working.loc[
+                    working["__walkforward_month"].isin(
+                        [*profile_validation_months, *profile_holdout_months]
+                    )
+                ].copy()
+                profile["split"] = np.where(
+                    profile["__walkforward_month"].isin(profile_holdout_months),
+                    "holdout",
+                    "validation",
+                )
+                split_metrics = stateful_examples_metric_summary(
+                    profile,
+                    group_columns=group_columns,
+                    target_column=target_column,
+                    raw_prediction_column=raw_prediction_column,
+                    downside_threshold=downside_threshold,
+                    large_downside_threshold=large_downside_threshold,
+                )
+                drift = stateful_examples_drift_metrics(
+                    split_metrics,
+                    group_columns=group_columns,
+                )
+                if not drift.empty:
+                    validation_support = pd.to_numeric(
+                        drift.get(
+                            "validation_support",
+                            pd.Series(0.0, index=drift.index),
+                        ),
+                        errors="coerce",
+                    ).fillna(0.0)
+                    holdout_support = pd.to_numeric(
+                        drift.get("holdout_support", pd.Series(0.0, index=drift.index)),
+                        errors="coerce",
+                    ).fillna(0.0)
+                    validation_mean = pd.to_numeric(
+                        drift.get(
+                            "validation_target_mean",
+                            pd.Series(np.nan, index=drift.index),
+                        ),
+                        errors="coerce",
+                    )
+                    holdout_mean = pd.to_numeric(
+                        drift.get(
+                            "holdout_target_mean",
+                            pd.Series(np.nan, index=drift.index),
+                        ),
+                        errors="coerce",
+                    )
+                    support_ok = (
+                        validation_support.ge(min_validation_support)
+                        & holdout_support.ge(min_holdout_support)
+                    )
+                    flag_source = drift.get(
+                        "validation_positive_holdout_negative_mean",
+                        pd.Series(False, index=drift.index),
+                    )
+                    stress_flag = flag_source.mask(
+                        flag_source.isna(),
+                        False,
+                    ).astype(bool)
+                    stress_flag = stress_flag & support_ok
+                    drift["target_month"] = target_month
+                    drift["profile_validation_months"] = ",".join(
+                        profile_validation_months
+                    )
+                    drift["profile_holdout_months"] = ",".join(profile_holdout_months)
+                    drift["profile_validation_month_count"] = len(
+                        profile_validation_months
+                    )
+                    drift["profile_holdout_month_count"] = len(profile_holdout_months)
+                    drift["walkforward_support_ok"] = support_ok
+                    drift["walkforward_context_stress_flag"] = stress_flag
+                    drift["walkforward_context_stress_penalty"] = (
+                        (validation_mean - holdout_mean).clip(lower=0.0).fillna(0.0)
+                    ).where(stress_flag, 0.0)
+                    drift_frames.append(drift)
+
+                annotated = add_stateful_examples_context_stress_columns(
+                    target_rows,
+                    drift,
+                    group_columns=group_columns,
+                    target_column=target_column,
+                )
+                validation_support = pd.to_numeric(
+                    annotated.get(
+                        "context_validation_support",
+                        pd.Series(0.0, index=annotated.index),
+                    ),
+                    errors="coerce",
+                ).fillna(0.0)
+                holdout_support = pd.to_numeric(
+                    annotated.get(
+                        "context_holdout_support",
+                        pd.Series(0.0, index=annotated.index),
+                    ),
+                    errors="coerce",
+                ).fillna(0.0)
+                support_ok = (
+                    validation_support.ge(min_validation_support)
+                    & holdout_support.ge(min_holdout_support)
+                )
+                target = pd.to_numeric(annotated[target_column], errors="coerce")
+                holdout_mean = pd.to_numeric(
+                    annotated.get(
+                        "context_holdout_target_mean",
+                        pd.Series(np.nan, index=annotated.index),
+                    ),
+                    errors="coerce",
+                )
+                flag_source = annotated["context_stress_flag"]
+                stress_flag = flag_source.mask(flag_source.isna(), False).astype(bool)
+                stress_flag = stress_flag & support_ok
+                penalty = (
+                    pd.to_numeric(annotated["context_stress_penalty"], errors="coerce")
+                    .fillna(0.0)
+                    .where(stress_flag, 0.0)
+                )
+                annotated["context_stress_flag"] = stress_flag
+                annotated["context_stress_penalty"] = penalty
+                annotated["target_context_stress_adjusted"] = target - penalty
+                holdout_floor = pd.Series(
+                    np.minimum(target, holdout_mean.fillna(target)),
+                    index=annotated.index,
+                )
+                annotated["target_context_holdout_mean_floor"] = holdout_floor.where(
+                    support_ok,
+                    target,
+                )
+                annotated["walkforward_profile_status"] = status
+
+        annotated["walkforward_target_month"] = target_month
+        annotated["walkforward_profile_validation_months"] = ",".join(
+            profile_validation_months
+        )
+        annotated["walkforward_profile_holdout_months"] = ",".join(
+            profile_holdout_months
+        )
+        annotated["walkforward_profile_validation_month_count"] = len(
+            profile_validation_months
+        )
+        annotated["walkforward_profile_holdout_month_count"] = len(profile_holdout_months)
+        annotated = rename_walkforward_stress_columns(annotated)
+        annotated_frames.append(annotated)
+
+        flag_source = annotated["walkforward_context_stress_flag"]
+        stress_flag = flag_source.mask(flag_source.isna(), False).astype(bool)
+        penalty = pd.to_numeric(
+            annotated["walkforward_context_stress_penalty"],
+            errors="coerce",
+        ).fillna(0.0)
+        target = pd.to_numeric(annotated[target_column], errors="coerce")
+        adjusted = pd.to_numeric(
+            annotated["target_walkforward_context_stress_adjusted"],
+            errors="coerce",
+        )
+        summary_rows.append(
+            {
+                "target_month": target_month,
+                "profile_status": status,
+                "row_count": int(len(annotated)),
+                "profile_validation_months": ",".join(profile_validation_months),
+                "profile_holdout_months": ",".join(profile_holdout_months),
+                "profile_validation_month_count": len(profile_validation_months),
+                "profile_holdout_month_count": len(profile_holdout_months),
+                "stress_flag_count": int(stress_flag.sum()),
+                "stress_penalty_sum": float(penalty.sum()),
+                "stress_penalty_mean": float(penalty.mean()) if len(penalty) else 0.0,
+                "target_mean": float(target.mean()),
+                "target_walkforward_context_stress_adjusted_mean": float(
+                    adjusted.mean()
+                ),
+            }
+        )
+
+    annotated_examples = pd.concat(annotated_frames, ignore_index=True)
+    annotated_examples = annotated_examples.drop(columns=["__walkforward_month"], errors="ignore")
+    profile_drift = (
+        pd.concat(drift_frames, ignore_index=True) if drift_frames else pd.DataFrame()
+    )
+    month_summary = pd.DataFrame(summary_rows)
+    return annotated_examples, profile_drift, month_summary
 
 
 def read_model_trade_delta_frames(
@@ -6640,8 +6939,12 @@ def handle_stateful_examples_drift(args: argparse.Namespace) -> int:
 
     run_dir = make_run_dir(args.output_dir, args.label)
     examples_with_stress.to_csv(run_dir / "combined_stateful_examples.csv", index=False)
+    context_stress_flag = examples_with_stress["context_stress_flag"].mask(
+        examples_with_stress["context_stress_flag"].isna(),
+        False,
+    ).astype(bool)
     stressed_examples = examples_with_stress.loc[
-        examples_with_stress["context_stress_flag"].fillna(False).astype(bool)
+        context_stress_flag
     ]
     if not stressed_examples.empty:
         stressed_examples.to_csv(run_dir / "context_stressed_examples.csv", index=False)
@@ -6679,9 +6982,7 @@ def handle_stateful_examples_drift(args: argparse.Namespace) -> int:
                 pd.Series(False, index=drift.index),
             ).sum()
         ),
-        "context_stress_flag_count": int(
-            examples_with_stress["context_stress_flag"].fillna(False).astype(bool).sum()
-        ),
+        "context_stress_flag_count": int(context_stress_flag.sum()),
         "context_stress_penalty_sum": float(
             pd.to_numeric(
                 examples_with_stress["context_stress_penalty"],
@@ -6736,6 +7037,105 @@ def handle_stateful_examples_drift(args: argparse.Namespace) -> int:
     existing_display_columns = [column for column in display_columns if column in drift.columns]
     print("worst stateful example drift:")
     print(drift.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def handle_stateful_examples_walkforward_stress(args: argparse.Namespace) -> int:
+    example_paths = parse_csv_paths(args.examples)
+    group_columns = parse_csv_strings(args.group_columns)
+    if not group_columns:
+        raise ValueError("at least one group column is required")
+    examples = read_stateful_example_frames(example_paths, "examples")
+    annotated, profile_drift, month_summary = stateful_examples_walkforward_stress_targets(
+        examples,
+        group_columns=group_columns,
+        target_column=args.target_column,
+        raw_prediction_column=args.raw_prediction_column,
+        downside_threshold=args.downside_threshold,
+        large_downside_threshold=args.large_downside_threshold,
+        holdout_month_count=args.holdout_month_count,
+        min_validation_months=args.min_validation_months,
+        min_validation_support=args.min_validation_support,
+        min_holdout_support=args.min_holdout_support,
+    )
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    annotated.to_csv(run_dir / "walkforward_stateful_examples.csv", index=False)
+    walkforward_stress_flag = annotated["walkforward_context_stress_flag"].mask(
+        annotated["walkforward_context_stress_flag"].isna(),
+        False,
+    ).astype(bool)
+    stressed = annotated.loc[walkforward_stress_flag]
+    if not stressed.empty:
+        stressed.to_csv(run_dir / "walkforward_context_stressed_examples.csv", index=False)
+    if not profile_drift.empty:
+        profile_drift.to_csv(run_dir / "walkforward_profile_drift.csv", index=False)
+    month_summary.to_csv(run_dir / "walkforward_month_summary.csv", index=False)
+
+    summary = {
+        "examples": [str(path) for path in example_paths],
+        "expanded_examples": [
+            str(path) for path in expand_stateful_example_paths(example_paths)
+        ],
+        "target_column": args.target_column,
+        "raw_prediction_column": args.raw_prediction_column,
+        "group_columns": group_columns,
+        "downside_threshold": args.downside_threshold,
+        "large_downside_threshold": args.large_downside_threshold,
+        "holdout_month_count": args.holdout_month_count,
+        "min_validation_months": args.min_validation_months,
+        "min_validation_support": args.min_validation_support,
+        "min_holdout_support": args.min_holdout_support,
+        "row_count": int(len(annotated)),
+        "month_count": int(month_summary["target_month"].nunique()),
+        "profiled_month_count": int(month_summary["profile_status"].eq("profiled").sum()),
+        "stress_flag_count": int(walkforward_stress_flag.sum()),
+        "stress_penalty_sum": float(
+            pd.to_numeric(
+                annotated["walkforward_context_stress_penalty"],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .sum()
+        ),
+        "stress_penalty_mean": float(
+            pd.to_numeric(
+                annotated["walkforward_context_stress_penalty"],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .mean()
+        ),
+        "target_mean": float(
+            pd.to_numeric(annotated[args.target_column], errors="coerce").mean()
+        ),
+        "target_walkforward_context_stress_adjusted_mean": float(
+            pd.to_numeric(
+                annotated["target_walkforward_context_stress_adjusted"],
+                errors="coerce",
+            ).mean()
+        ),
+    }
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=json_default)
+
+    print("stateful examples walk-forward stress summary:")
+    for key, value in summary.items():
+        if not isinstance(value, list):
+            print(f"{key}: {value}")
+    display_columns = [
+        "target_month",
+        "profile_status",
+        "row_count",
+        "profile_validation_months",
+        "profile_holdout_months",
+        "stress_flag_count",
+        "stress_penalty_mean",
+        "target_mean",
+        "target_walkforward_context_stress_adjusted_mean",
+    ]
+    print(month_summary.loc[:, display_columns].tail(args.top_n).to_string(index=False))
     print(f"artifacts: {run_dir}")
     return 0
 
@@ -8722,6 +9122,73 @@ def build_parser() -> argparse.ArgumentParser:
     stateful_examples_drift.add_argument("--label", default="stateful_examples_drift")
     stateful_examples_drift.add_argument("--top-n", type=int, default=20)
     stateful_examples_drift.set_defaults(func=handle_stateful_examples_drift)
+
+    stateful_examples_walkforward_stress = subparsers.add_parser(
+        "stateful-examples-walkforward-stress",
+        help="build leak-free walk-forward stress targets for stateful examples",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--examples",
+        required=True,
+        help="comma-separated stateful_candidate_examples.csv files, run dirs, or parent dirs",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--group-columns",
+        default="candidate_side,combined_regime",
+        help="comma-separated decision-time context columns for rolling stress profiles",
+    )
+    stateful_examples_walkforward_stress.add_argument("--target-column", default="target")
+    stateful_examples_walkforward_stress.add_argument(
+        "--raw-prediction-column",
+        default="pred_taken_ev",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--downside-threshold",
+        type=float,
+        default=0.0,
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--large-downside-threshold",
+        type=float,
+        default=-15.0,
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--holdout-month-count",
+        type=int,
+        default=1,
+        help="number of immediately prior months used as pseudo-holdout profile",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--min-validation-months",
+        type=int,
+        default=1,
+        help="minimum older months required before the pseudo-holdout window",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--min-validation-support",
+        type=int,
+        default=1,
+        help="minimum prior validation examples required for a context penalty",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--min-holdout-support",
+        type=int,
+        default=1,
+        help="minimum prior pseudo-holdout examples required for a context penalty",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--label",
+        default="stateful_examples_walkforward_stress",
+    )
+    stateful_examples_walkforward_stress.add_argument("--top-n", type=int, default=20)
+    stateful_examples_walkforward_stress.set_defaults(
+        func=handle_stateful_examples_walkforward_stress
+    )
 
     model_trade_delta_preflight = subparsers.add_parser(
         "model-trade-delta-preflight",

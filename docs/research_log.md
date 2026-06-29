@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 11:42 Stateful walk-forward stress target
+
+- `stateful-examples-walkforward-stress` を追加した。対象月より前の月だけを使い、直前月をpseudo holdout、それ以前をpseudo validationとしてcontext stress profileを作る。
+- 出力列は `walkforward_context_stress_flag`, `walkforward_context_stress_penalty`, `target_walkforward_context_stress_adjusted`, `target_walkforward_context_holdout_mean_floor`。事後holdout監査列と区別するため `walkforward_` prefixにした。
+- available contextはsupport `20/10` で1544例中397例がstress flag、penalty mean `1.8977`、target mean `+0.6154`、stress-adjusted mean `-1.2823`。
+- session contextはsupport `10/5` で1544例中208例がstress flag、penalty mean `1.3989`、stress-adjusted mean `-0.7835`。
+- 2025-03/04でpenaltyが強く出た。availableでは2025-03の `short/up_normal_vol`, `long/up_low_vol`, `short/range_normal_vol`, `short/down_normal_vol` が大きく、sessionでは2025-03の `long/up_low_vol/london`, `short/down_normal_vol/london`, `short/range_normal_vol/london` が目立つ。
+- 判断: これは対象月より未来を見ないので、次のstateful value modelのtarget候補にできる。ただし月数はまだ8ヶ月で少ないため、まずtarget比較・OOF診断に使い、policyへの直接gate化はしない。
+- report: `docs/reports/00137_2026-06-29_stateful_walkforward_stress_target.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 11:30 Stateful context stress target
 
 - `stateful-examples-drift` の `combined_stateful_examples.csv` にstress-aware target監査列を追加した。

@@ -599,6 +599,25 @@ computed from the validation-vs-holdout comparison, they are audit targets by
 default; for training, recompute the same idea from prior walk-forward folds
 only.
 
+To create leak-controlled walk-forward stress targets from all available
+stateful examples, use:
+
+```bash
+python -m trade_data.backtest stateful-examples-walkforward-stress \
+  --examples data/reports/backtests/<delta_run_a>,data/reports/backtests/<delta_run_b> \
+  --group-columns candidate_side,combined_regime \
+  --min-validation-support 20 \
+  --min-holdout-support 10
+```
+
+For each target month, this uses only earlier months: the immediately prior
+month(s) become a pseudo-holdout profile, and older months become the
+pseudo-validation profile. It writes `walkforward_stateful_examples.csv`,
+`walkforward_profile_drift.csv`, `walkforward_month_summary.csv`, and
+`summary.json`. Use `target_walkforward_context_stress_adjusted` as a candidate
+OOF target; keep the validation-vs-holdout `target_context_stress_adjusted`
+column as an audit-only target.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:
