@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 10:13 MLP holding auto guard CLI
+
+- `00125` / ADR `0009` の標準安全制約をCLI defaultへ反映した。
+- `model-policy` では `--min-valid-predicted-hold-minutes` 省略時、holding columnが `pred_mlp_*` なら `30`、それ以外なら従来通り `-inf` に解決する。
+- `model-sweep` のdefaultは `auto` とし、同じ列名判定で1値に解決する。明示的な `-inf` や数値CSVはautoより優先する。
+- `ModelPolicyConfig` のdataclass defaultは従来通り `-inf` のままにし、CLI標準だけを変えた。直接API利用や非MLP holding実験の互換性を保つため。
+- 2025-04 smokeでは config に `min_valid_predicted_hold_minutes=30.0` が入り、前回の `skip min_valid=30` と同じ adjusted PnL `-18.7168`, trades `77`, max DD `249.9600`, forced `1` を再現した。
+- 判断: MLP holdingを使う標準比較では、今後フラグを明示しなくてもfail-close guardが入る。従来clip-onlyを再現する場合だけ `--min-valid-predicted-hold-minutes -inf` を明示する。
+- report: `docs/reports/00126_2026-06-29_mlp_holding_auto_guard_cli.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 10:05 Holding guard validation/apply
 
 - `00124` の結論に沿って、stateful riskではなくMLP holding guard/fallbackを再評価した。

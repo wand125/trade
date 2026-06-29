@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 10:05 JST
+最終更新: 2026-06-29 10:13 JST
 
 ## 現在の状態
 
@@ -57,6 +57,8 @@ stateful blocking risk modelを追加済み。`positive_blocking`, `positive_rep
 `positive_blocking risk=5` を2025-04へ固定外挿した。2025-04は baseline `-503.8224`, risk `5` `-509.6742`, risk `20` `-486.2782` で、追加月ではrisk `5` が改善せず、riskを強くしても根本解決しない。apply 4ヶ月合計でも baseline sum/min/DD `-261.3216 / -503.8224 / 718.7252` に対し、risk `5` は `-310.6882 / -509.6742 / 729.0912`。`positive_blocking risk=5` は事前登録候補からも降格し、次はstateful riskではなくholding guard/fallbackを本流に戻す。詳細は `docs/reports/00124_2026-06-29_stateful_blocking_risk_2025_04_fixed_check.md`。
 
 MLP holding guard/fallbackをvalidation/applyで再評価済み。代表validation 4ヶ月では `min_valid=-inf/30/60/120` が完全に同じで、PnL最適化の根拠にはならない。一方、apply 4ヶ月では従来挙動が2025-04で異常高回転化し、`skip min_valid=30` が base sum PnL `-261.3216 -> 246.8762`, high cost sum PnL `-1435.1746 -> 132.6970` へ改善した。`fallback` はskipより弱い。今後、MLP holdingを使う `timed_ev` 実験では `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約として固定する。これはvalidation edgeではなく、外挿破綻値を売買ルールへ渡さないための制約。詳細は `docs/reports/00125_2026-06-29_holding_guard_validation_apply.md` と `docs/decisions/0009_mlp_holding_fail_close_guard.md`。
+
+MLP holding fail-close guardをCLI標準に反映済み。`model-policy` では `--min-valid-predicted-hold-minutes` を省略した場合、holding columnが `pred_mlp_*` なら `30`、それ以外なら従来通り `-inf` に解決する。`model-sweep` のdefault `auto` も同じ解決を行う。明示的に `-inf` や数値CSVを渡した場合はそちらを優先する。2025-04 smokeでは自動解決された `min_valid=30.0` で、前回の `skip min_valid=30` と同じ adjusted PnL `-18.7168`, trades `77`, max DD `249.9600` を再現した。詳細は `docs/reports/00126_2026-06-29_mlp_holding_auto_guard_cli.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
@@ -249,7 +251,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-1. MLP holdingを使う `timed_ev` 実験では `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約にする。従来のclip-only挙動は2025-04型の異常高回転を再発するため、標準比較から外す。
+1. MLP holdingを使う `timed_ev` 実験ではCLI defaultのauto guardにより `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約にする。従来のclip-only挙動を再現する場合だけ明示的に `--min-valid-predicted-hold-minutes -inf` を渡す。
 2. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
 3. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
 4. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。
@@ -308,6 +310,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 10:13 JST 更新: MLP holding fail-close guardをCLI標準に反映した。`model-policy` では `--min-valid-predicted-hold-minutes` 省略時、holding columnが `pred_mlp_*` なら `30`、それ以外なら `-inf` に解決する。`model-sweep` defaultの `auto` も同じ。2025-04 smokeではconfig上 `min_valid=30.0` を確認し、前回の `skip min_valid=30` と同じ adjusted PnL `-18.7168`, trades `77`, max DD `249.9600` を再現した。今後の代表候補再評価は、このguard固定後にentry/side EV calibrationとexit timing targetへ戻る。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 06:17 JST 更新: `candidate-quality-report` を追加し、timed/fixed/clipped componentのOOF examplesを月・regime・bucket別に診断した。fixed componentはoverallで mean bias `0.2982`, mean MAE `7.9169`, lower coverage `0.7055` と最も現実的だが、2024-11は lower coverage `0.6125`, `target<=-15` `0.1151`、prediction bucket `q09/q10` はmean overestimate `6.5076` / `6.3060` と過大評価が強い。global quality gateやscalar risk直結は採用しない。次はfixed component中心にmonth/regime/bucket別のsupport-aware calibrated downside featureをOOFで作り、policy適用前にvalidation/holdout反証する。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の `日時` を基準にする。
 

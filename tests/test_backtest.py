@@ -10,16 +10,19 @@ from trade_data.backtest import (
     ModelPolicyConfig,
     apply_execution_cost,
     combined_regime_diagnostics,
+    default_min_valid_predicted_hold_minutes,
     direction_session_diagnostics,
     enrich_trades_with_predictions,
     fixed_horizon_scores,
     model_signal_from_predictions,
     normalize_sweep_metrics,
     plateau_support_counts,
+    parse_min_valid_predicted_hold_minutes_values,
     parse_optional_rule_sets,
     prepare_analysis_predictions,
     profit_barrier_calibration_diagnostics,
     profit_barrier_diagnostics,
+    resolve_min_valid_predicted_hold_minutes,
     add_trade_delta_blocking_diagnostics,
     read_holdout_run_frame,
     read_model_trade_exposure_frame,
@@ -76,6 +79,53 @@ class BacktestTests(unittest.TestCase):
         fallback = ("long:session_regime=ny_late",)
 
         self.assertEqual(parse_optional_rule_sets(None, fallback), [fallback])
+
+    def test_min_valid_hold_auto_guard_applies_to_mlp_holding_columns(self):
+        long_column = "pred_mlp_long_exit_event_minutes"
+        short_column = "pred_mlp_short_exit_event_minutes"
+
+        self.assertEqual(
+            default_min_valid_predicted_hold_minutes(long_column, short_column),
+            30.0,
+        )
+        self.assertEqual(
+            resolve_min_valid_predicted_hold_minutes(None, long_column, short_column),
+            30.0,
+        )
+        self.assertEqual(
+            parse_min_valid_predicted_hold_minutes_values("auto", long_column, short_column),
+            [30.0],
+        )
+
+    def test_min_valid_hold_auto_keeps_clip_only_for_non_mlp_holding_columns(self):
+        long_column = "pred_long_exit_event_minutes"
+        short_column = "pred_short_exit_event_minutes"
+
+        self.assertEqual(
+            default_min_valid_predicted_hold_minutes(long_column, short_column),
+            -float("inf"),
+        )
+        self.assertEqual(
+            resolve_min_valid_predicted_hold_minutes(None, long_column, short_column),
+            -float("inf"),
+        )
+        self.assertEqual(
+            parse_min_valid_predicted_hold_minutes_values("auto", long_column, short_column),
+            [-float("inf")],
+        )
+
+    def test_min_valid_hold_explicit_values_override_auto_default(self):
+        long_column = "pred_mlp_long_exit_event_minutes"
+        short_column = "pred_mlp_short_exit_event_minutes"
+
+        self.assertEqual(
+            resolve_min_valid_predicted_hold_minutes(-float("inf"), long_column, short_column),
+            -float("inf"),
+        )
+        self.assertEqual(
+            parse_min_valid_predicted_hold_minutes_values("-inf,60", long_column, short_column),
+            [-float("inf"), 60.0],
+        )
 
     def test_run_model_policy_filters_preloaded_predictions_by_candidate_requirements(self):
         df = frame_with_opens([100, 101, 102, 103])

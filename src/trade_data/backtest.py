@@ -30,6 +30,7 @@ DEFAULT_SHORT_FIXED_HORIZON_COLUMNS = tuple(
 )
 FIXED_HORIZON_SCORE_MODES = ("max", "mean", "median", "min")
 CANDIDATE_RANK_MODES = ("pnl", "near_top_risk", "stress_score")
+DEFAULT_MLP_MIN_VALID_HOLD_MINUTES = 30.0
 
 TRADE_COLUMNS = [
     "direction",
@@ -2012,6 +2013,44 @@ def parse_csv_floats(value: str) -> list[float]:
     return values
 
 
+def default_min_valid_predicted_hold_minutes(
+    long_holding_column: str,
+    short_holding_column: str,
+) -> float:
+    holding_columns = (long_holding_column, short_holding_column)
+    if any(column.startswith("pred_mlp_") for column in holding_columns):
+        return DEFAULT_MLP_MIN_VALID_HOLD_MINUTES
+    return -float("inf")
+
+
+def resolve_min_valid_predicted_hold_minutes(
+    value: float | None,
+    long_holding_column: str,
+    short_holding_column: str,
+) -> float:
+    if value is not None:
+        return value
+    return default_min_valid_predicted_hold_minutes(
+        long_holding_column,
+        short_holding_column,
+    )
+
+
+def parse_min_valid_predicted_hold_minutes_values(
+    value: str,
+    long_holding_column: str,
+    short_holding_column: str,
+) -> list[float]:
+    if value.strip().lower() == "auto":
+        return [
+            default_min_valid_predicted_hold_minutes(
+                long_holding_column,
+                short_holding_column,
+            )
+        ]
+    return parse_csv_floats(value)
+
+
 def parse_csv_strings(value: str) -> list[str]:
     values = [part.strip() for part in value.split(",") if part.strip()]
     if not values:
@@ -2774,7 +2813,11 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         short_holding_column=args.short_holding_column,
         min_predicted_hold_minutes=args.min_predicted_hold_minutes,
         max_predicted_hold_minutes=args.max_predicted_hold_minutes,
-        min_valid_predicted_hold_minutes=args.min_valid_predicted_hold_minutes,
+        min_valid_predicted_hold_minutes=resolve_min_valid_predicted_hold_minutes(
+            args.min_valid_predicted_hold_minutes,
+            args.long_holding_column,
+            args.short_holding_column,
+        ),
         long_holding_fallback_column=args.long_holding_fallback_column,
         short_holding_fallback_column=args.short_holding_fallback_column,
         fixed_horizon_minutes=parse_csv_float_tuple(args.fixed_horizon_minutes),
@@ -3048,10 +3091,11 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--min-valid-predicted-hold-minutes",
         type=float,
-        default=-float("inf"),
+        default=None,
         help=(
             "minimum raw timed_ev holding prediction required before an entry; "
-            "use -inf to keep the historical clip-only behavior"
+            "omit to use 30 for pred_mlp_* holding columns and -inf otherwise; "
+            "use -inf to force the historical clip-only behavior"
         ),
     )
     parser.add_argument(
@@ -3236,8 +3280,10 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     max_wait_regrets = parse_csv_floats(args.max_wait_regrets)
     min_predicted_hold_minutes_values = parse_csv_floats(args.min_predicted_hold_minutes)
     max_predicted_hold_minutes_values = parse_csv_floats(args.max_predicted_hold_minutes)
-    min_valid_predicted_hold_minutes_values = parse_csv_floats(
-        args.min_valid_predicted_hold_minutes
+    min_valid_predicted_hold_minutes_values = parse_min_valid_predicted_hold_minutes_values(
+        args.min_valid_predicted_hold_minutes,
+        args.long_holding_column,
+        args.short_holding_column,
     )
     min_entry_ranks = parse_csv_floats(args.min_entry_ranks)
     min_trade_qualities = parse_csv_floats(args.min_trade_qualities)
@@ -6690,10 +6736,11 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--max-predicted-hold-minutes", default="1440")
     model_sweep.add_argument(
         "--min-valid-predicted-hold-minutes",
-        default="-inf",
+        default="auto",
         help=(
             "comma-separated raw timed_ev holding validity thresholds; entries below the "
-            "threshold are skipped unless a valid fallback holding column is supplied"
+            "threshold are skipped unless a valid fallback holding column is supplied; "
+            "auto uses 30 for pred_mlp_* holding columns and -inf otherwise"
         ),
     )
     model_sweep.add_argument(

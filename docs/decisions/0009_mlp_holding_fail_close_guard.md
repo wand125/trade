@@ -23,6 +23,7 @@ MLP holdingを使う `timed_ev` 系実験では、標準安全制約として `m
 - apply 4ヶ月では base sum PnLが `-261.3216 -> 246.8762`、high cost sum PnLが `-1435.1746 -> 132.6970` に改善した。
 - 代表validation 4ヶ月では `min_valid=-inf/30/60/120` が完全に同じ結果だったため、過去validationに対する過剰最適化ではない。
 - MLP holding系の比較では、今後 `trade_count`, `median_holding_minutes`, high-cost drawdownを必ず確認する。
+- CLIでは、`model-policy` の `--min-valid-predicted-hold-minutes` 省略時と `model-sweep` の default `auto` により、holding columnが `pred_mlp_*` なら `30` を自動適用する。従来clip-onlyを再現する場合だけ明示的に `-inf` を指定する。
 
 ## 代替案
 

@@ -414,6 +414,13 @@ python -m trade_data.backtest model-sweep \
   --loss-multiplier 1.20
 ```
 
+When `timed_ev` uses MLP holding columns such as
+`pred_mlp_long_exit_event_minutes` and `pred_mlp_short_exit_event_minutes`,
+omitting `--min-valid-predicted-hold-minutes` applies the standard 30 minute
+fail-close guard. Use `--min-valid-predicted-hold-minutes -inf` only when
+intentionally reproducing the historical clip-only behavior. Non-MLP holding
+columns keep the historical `-inf` default unless a threshold is supplied.
+
 Regime-conditioned side EV penalties can be swept with rule sets. These rules
 subtract EV from the matching side before side selection, instead of hard
 blocking a trade:
