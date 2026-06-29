@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 09:05 Stateful EV blend risk
+
+- `stateful_entry_value` meanをentry EVへ直接置換せず、`raw_ev - alpha * max(raw_ev - stateful_mean, 0)` の形でraw EVの過大評価penaltyとして検証した。
+- validation 4ヶ月では `risk_penalty=0` がsum `622.6486`, min month `138.0338`, trades `275` で最良。`0.10` はsum `571.1410`, min `70.0596`、`0.25` はsum `416.3896`, min `73.3056` に悪化した。
+- apply 3ヶ月でも `0.10` は2024-12を `-20.8252 -> -10.1916` に改善するが、2025-02を `179.2484 -> 132.4320`、2025-03を `84.0776 -> -25.6206` に壊した。
+- 判断: stateful overestimate riskの単純な線形penaltyは標準policyに採用しない。stateful meanは校正信号として有用だが、順位付け能力が弱いため良い取引まで削る。
+- 次は `stateful_positive_cost_value` target、near-tie ranking/tie-break、追加月examples、month/regime別drift診断へ進む。
+- report: `docs/reports/00119_2026-06-29_stateful_ev_blend_risk.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 08:59 Stateful value model
 
 - `trade_data.meta_model oof-stateful-value-model` を追加した。`stateful_candidate_examples.csv` を直接読み、`stateful_entry_value` など任意target列を月抜きOOFで学習する。

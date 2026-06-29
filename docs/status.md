@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 08:59 JST
+最終更新: 2026-06-29 09:05 JST
 
 ## 現在の状態
 
@@ -43,6 +43,8 @@ raw vs stack gateの取引差分診断 `model-trade-delta` を追加済み。`en
 代表validation 4ヶ月でも `stateful_candidate_examples.csv` を作成済み。254例、target mean `2.4123`、raw EV mean `16.4274`、raw bias `14.0151`、`target<=0` 率 `0.3976`。stack0 policyは4ヶ月合計ではrawを上回るが、raw EVはstateful targetをまだ大きく過大評価している。次は月抜きOOFで `stateful_entry_value` modelを作り、hard gateではなくEV補正/ranking tie-breakとして検証する。詳細は `docs/reports/00117_2026-06-29_validation_stateful_candidate_examples.md`。
 
 `oof-stateful-value-model` を追加済み。`stateful_entry_value` のvalidation OOFではraw bias `14.0151` がmean bias `0.0753` まで縮み、raw overestimate meanも `15.0311 -> 4.2816` に下がった。ただしR2は `-0.0141` で順位付け能力は弱い。stateful meanのdirect EV replacementはvalidation threshold `3.5` でsum `148.5810`, min `-0.4126` だが2024-09が0 trade、apply 3ヶ月も全月0 trade。標準policyには採用せず、raw EVとの混合・tie-break・追加examplesへ進む。詳細は `docs/reports/00118_2026-06-29_stateful_value_model.md`。
+
+stateful overestimate riskをraw EVの線形penaltyとして検証済み。`risk_penalty=0.10/0.25/0.50/0.75` はvalidation 4ヶ月でbaseline `0` を超えず、`0.10` でもsum `622.6486 -> 571.1410`, min month `138.0338 -> 70.0596` に悪化した。apply 3ヶ月でも `0.10` は2024-12を `-20.8252 -> -10.1916` に改善する一方、2025-03を `84.0776 -> -25.6206` へ壊した。標準policyには採用せず、次は `stateful_positive_cost_value`、tie-break利用、追加examplesへ進む。詳細は `docs/reports/00119_2026-06-29_stateful_ev_blend_risk.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
