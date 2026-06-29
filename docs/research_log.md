@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 11:23 Stateful examples drift
+
+- `stateful-examples-drift` を追加した。複数の `stateful_candidate_examples.csv` をvalidation/holdoutに分け、context別のtarget sum/mean、downside率、raw EV過大評価、validation-positive/holdout-negative反転を出す。
+- guard validation/highcost + stack0 validation と guard apply/highcost + stack0 smoke をまとめ、1544例で診断した。
+- `candidate_side + combined_regime` では15group中6groupがmean/sumとも反転。主な反転は `short/range_normal_vol` `+501.7660 -> -298.2216`, `long/down_low_vol` `+358.3530 -> -234.8292`, `short/down_normal_vol` `+303.8836 -> -19.4788`。
+- `session_regime` も加えると52group中10groupが反転し、`long/up_low_vol:london` `+254.3226 -> -284.4936`, `short/range_normal_vol:rollover` `+125.9528 -> -227.1028` が目立つ。
+- 判断: これはhard ruleにしない。validation内でよく見える文脈がholdout/stressで反転することを、stress-aware target / 追加walk-forward / candidate採用前監査に使う。
+- report: `docs/reports/00135_2026-06-29_stateful_examples_drift.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 11:17 Available-context drift
 
 - `model-trade-delta-preflight` に `direction + combined_regime` だけのavailable-context drift出力を追加した。`delta_status=only_candidate` は比較後に分かる情報なので、live特徴へ直接入れない。

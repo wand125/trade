@@ -577,6 +577,21 @@ python -m trade_data.meta_model oof-stateful-value-model \
   --short-column pred_short_best_adjusted_pnl
 ```
 
+To audit those examples across validation and holdout splits before turning a
+context into a feature or rule, use:
+
+```bash
+python -m trade_data.backtest stateful-examples-drift \
+  --validation-examples data/reports/backtests/<validation_delta_run_a>,data/reports/backtests/<validation_delta_run_b> \
+  --holdout-examples data/reports/backtests/<holdout_delta_run_a>,data/reports/backtests/<holdout_delta_run_b> \
+  --group-columns candidate_side,combined_regime
+```
+
+This writes `combined_stateful_examples.csv`, `split_group_metrics.csv`,
+`month_group_metrics.csv`, `group_drift.csv`, and `summary.json`. Use it to
+check whether a decision-time context is stable or flips under holdout/stress
+before adding it to a model.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:

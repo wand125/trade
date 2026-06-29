@@ -36,6 +36,9 @@ from trade_data.backtest import (
     summarize_model_trade_delta_drift_monthly_support,
     summarize_model_trade_delta_preflight_group_drift,
     summarize_model_trade_delta_preflight,
+    stateful_examples_drift_metrics,
+    stateful_examples_metric_summary,
+    stateful_examples_month_group_metrics,
     summarize_trades,
     summarize_sweep_frames,
     stateful_candidate_examples_from_delta,
@@ -3098,6 +3101,51 @@ class BacktestTests(unittest.TestCase):
             positive_cost_examples["delta_status"] == "only_candidate"
         ].iloc[0]
         self.assertAlmostEqual(positive_cost_only_candidate["target"], -11.8)
+
+    def test_stateful_examples_drift_metrics_compare_validation_and_holdout_context(self):
+        examples = pd.DataFrame(
+            {
+                "split": ["validation", "validation", "holdout", "holdout", "holdout"],
+                "dataset_month": ["2025-01", "2025-02", "2025-03", "2025-04", "2025-04"],
+                "candidate_side": ["short", "short", "short", "short", "long"],
+                "combined_regime": [
+                    "down_normal_vol",
+                    "down_normal_vol",
+                    "down_normal_vol",
+                    "down_normal_vol",
+                    "up_low_vol",
+                ],
+                "target": [4.0, 2.0, -3.0, -5.0, 6.0],
+                "pred_taken_ev": [10.0, 8.0, 9.0, 7.0, 8.0],
+            }
+        )
+
+        group_columns = ["candidate_side", "combined_regime"]
+        split_metrics = stateful_examples_metric_summary(
+            examples,
+            group_columns=group_columns,
+        )
+        month_metrics = stateful_examples_month_group_metrics(
+            examples,
+            group_columns=group_columns,
+        )
+        drift = stateful_examples_drift_metrics(split_metrics, group_columns=group_columns)
+
+        short_drift = drift[
+            drift["candidate_side"].eq("short")
+            & drift["combined_regime"].eq("down_normal_vol")
+        ].iloc[0]
+        self.assertAlmostEqual(short_drift["validation_target_sum"], 6.0)
+        self.assertAlmostEqual(short_drift["holdout_target_sum"], -8.0)
+        self.assertAlmostEqual(short_drift["validation_target_mean"], 3.0)
+        self.assertAlmostEqual(short_drift["holdout_target_mean"], -4.0)
+        self.assertTrue(short_drift["validation_positive_holdout_negative_sum"])
+        self.assertTrue(short_drift["validation_positive_holdout_negative_mean"])
+        self.assertAlmostEqual(short_drift["downside_rate_holdout_minus_validation"], 1.0)
+        self.assertEqual(
+            set(month_metrics["dataset_month"]),
+            {"2025-01", "2025-02", "2025-03", "2025-04"},
+        )
 
     def test_model_trade_delta_pairs_parent_runs_by_config_month(self):
         months = ["2025-01", "2025-02"]

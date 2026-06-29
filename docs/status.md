@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 11:17 JST
+最終更新: 2026-06-29 11:23 JST
 
 ## 現在の状態
 
@@ -75,6 +75,8 @@ guard固定後entry/side候補のtrade-level drift診断を実施済み。valida
 `model-trade-delta-drift-stability` は共通flip groupの月別supportも出力する。guard top / stack0の実行では通常PnL support 49行、stateful support 99行。`only_candidate long down_low_vol` はguard topでvalidation 4ヶ月/holdout 3ヶ月、stack0でvalidation 3ヶ月/holdout 2ヶ月に出ており単月偶然ではない。一方validation内にも負月が混じるため、hard blockにはしない。次は `direction + combined_regime + candidate-added文脈` をOOF downside/stateful targetへ戻す。詳細は `docs/reports/00133_2026-06-29_drift_stability_monthly_support.md`。
 
 `model-trade-delta-preflight` / `model-trade-delta-drift-stability` に、`delta_status` を落としたavailable-context driftを追加済み。これは比較後にしか分からない `only_candidate` をlive特徴として使わず、予測時点で見える `direction + combined_regime` だけで反転が残るかを見る。guard top / stack0を再実行すると、通常PnLの共通available flipは `short/down_normal_vol` 1件、statefulの共通available flipは `long/down_low_vol`, `long/up_normal_vol` 2件。ただしstateful OOF validation上では `short/down_normal_vol` target mean `+4.7383`, `long/down_low_vol` target mean `+2.1228` で、既存validation教師だけではholdout崩れを悪い文脈として学べていない。したがってavailable contextはhard ruleや単純特徴追加ではなく、追加walk-forward / stress-aware target / regime drift診断として扱う。詳細は `docs/reports/00134_2026-06-29_available_context_drift.md`。
+
+`stateful-examples-drift` を追加済み。複数の `stateful_candidate_examples.csv` をvalidation/holdoutに分けて読み、decision-time contextごとのtarget sum/mean、downside率、raw EV過大評価、validation-positive/holdout-negative反転を出す。guard validation/highcost + stack0 validation 対 guard apply/highcost + stack0 smoke の1544例では、`candidate_side + combined_regime` で15group中6groupがmean/sumとも反転。`short/range_normal_vol` はtarget sum `+501.7660 -> -298.2216`、`long/down_low_vol` は `+358.3530 -> -234.8292`、`short/down_normal_vol` は `+303.8836 -> -19.4788`。sessionまで足すと52group中10groupが反転し、`long/up_low_vol:london` が `+254.3226 -> -284.4936`、`short/range_normal_vol:rollover` が `+125.9528 -> -227.1028`。これはhard ruleではなく、stress-aware targetと追加walk-forward評価の監査軸として使う。詳細は `docs/reports/00135_2026-06-29_stateful_examples_drift.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

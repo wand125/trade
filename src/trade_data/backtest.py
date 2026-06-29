@@ -5458,6 +5458,200 @@ def stateful_candidate_examples_from_delta(
     return candidates.dropna(subset=["target"]).reset_index(drop=True)
 
 
+def expand_stateful_example_paths(paths: list[Path]) -> list[Path]:
+    expanded: list[Path] = []
+    for path in paths:
+        if path.is_file():
+            expanded.append(path)
+            continue
+        direct = path / "stateful_candidate_examples.csv"
+        if direct.exists():
+            expanded.append(direct)
+            continue
+        if path.is_dir():
+            children = [
+                child / "stateful_candidate_examples.csv"
+                for child in sorted(path.iterdir())
+                if child.is_dir() and (child / "stateful_candidate_examples.csv").exists()
+            ]
+            if children:
+                expanded.extend(children)
+                continue
+        expanded.append(direct)
+    return expanded
+
+
+def read_stateful_example_frames(paths: list[Path], split: str) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for path in expand_stateful_example_paths(paths):
+        if not path.exists():
+            raise FileNotFoundError(f"stateful examples not found: {path}")
+        frame = pd.read_csv(path)
+        if frame.empty:
+            continue
+        frame = frame.copy()
+        frame["split"] = split
+        frame["example_source"] = str(path)
+        frame["case_label"] = path.parent.name
+        if "dataset_month" not in frame.columns and "month" in frame.columns:
+            frame["dataset_month"] = frame["month"].astype(str)
+        if "month" not in frame.columns and "dataset_month" in frame.columns:
+            frame["month"] = frame["dataset_month"].astype(str)
+        if "candidate_side" not in frame.columns and "direction" in frame.columns:
+            frame["candidate_side"] = frame["direction"].astype(str).str.lower()
+        frames.append(frame)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def stateful_examples_metric_summary(
+    frame: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    target_column: str = "target",
+    raw_prediction_column: str = "pred_taken_ev",
+    downside_threshold: float = 0.0,
+    large_downside_threshold: float = -15.0,
+) -> pd.DataFrame:
+    columns = ["split", *group_columns]
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+    missing_group_columns = [column for column in group_columns if column not in frame.columns]
+    if missing_group_columns:
+        raise ValueError(f"stateful examples missing group columns: {missing_group_columns}")
+    if target_column not in frame.columns:
+        raise ValueError(f"stateful examples missing target column: {target_column}")
+
+    working = frame.copy()
+    working["_target"] = pd.to_numeric(working[target_column], errors="coerce")
+    if raw_prediction_column in working.columns:
+        working["_raw_pred"] = pd.to_numeric(working[raw_prediction_column], errors="coerce")
+    else:
+        working["_raw_pred"] = np.nan
+    working["_raw_error"] = working["_raw_pred"] - working["_target"]
+    working["_raw_overestimate"] = working["_raw_error"].clip(lower=0.0)
+    working["_downside"] = working["_target"] <= downside_threshold
+    working["_large_downside"] = working["_target"] <= large_downside_threshold
+    working = working.replace([np.inf, -np.inf], np.nan).dropna(subset=["_target"])
+    if working.empty:
+        return pd.DataFrame(columns=columns)
+    for column in group_columns:
+        working[column] = working[column].astype("string").fillna("__missing__")
+    if "dataset_month" not in working.columns:
+        working["dataset_month"] = ""
+
+    grouped = (
+        working.groupby(["split", *group_columns], dropna=False, observed=True)
+        .agg(
+            support=("_target", "size"),
+            month_count=("dataset_month", "nunique"),
+            target_sum=("_target", "sum"),
+            target_mean=("_target", "mean"),
+            target_min=("_target", "min"),
+            target_q10=("_target", lambda series: float(series.quantile(0.10))),
+            downside_rate=("_downside", "mean"),
+            large_downside_rate=("_large_downside", "mean"),
+            raw_predicted_mean=("_raw_pred", "mean"),
+            raw_bias=("_raw_error", "mean"),
+            raw_overestimate_mean=("_raw_overestimate", "mean"),
+        )
+        .reset_index()
+    )
+    return grouped.sort_values(["split", "target_mean", "support"], ascending=[True, True, False])
+
+
+def stateful_examples_month_group_metrics(
+    frame: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    target_column: str = "target",
+    raw_prediction_column: str = "pred_taken_ev",
+    downside_threshold: float = 0.0,
+    large_downside_threshold: float = -15.0,
+) -> pd.DataFrame:
+    if "dataset_month" not in frame.columns and "month" not in frame.columns:
+        return pd.DataFrame()
+    working = frame.copy()
+    if "dataset_month" not in working.columns:
+        working["dataset_month"] = working["month"].astype(str)
+    return stateful_examples_metric_summary(
+        working,
+        group_columns=["dataset_month", *group_columns],
+        target_column=target_column,
+        raw_prediction_column=raw_prediction_column,
+        downside_threshold=downside_threshold,
+        large_downside_threshold=large_downside_threshold,
+    )
+
+
+def stateful_examples_drift_metrics(
+    split_metrics: pd.DataFrame,
+    *,
+    group_columns: list[str],
+) -> pd.DataFrame:
+    if split_metrics.empty:
+        return pd.DataFrame()
+
+    metric_columns = [
+        column
+        for column in split_metrics.columns
+        if column not in ["split", *group_columns]
+    ]
+
+    def prefixed(split: str) -> pd.DataFrame:
+        subset = split_metrics.loc[split_metrics["split"].eq(split)].drop(columns=["split"])
+        rename = {
+            column: f"{split}_{column}"
+            for column in metric_columns
+            if column in subset.columns
+        }
+        return subset.rename(columns=rename)
+
+    validation = prefixed("validation")
+    holdout = prefixed("holdout")
+    drift = validation.merge(holdout, on=group_columns, how="outer")
+    for split in ["validation", "holdout"]:
+        for column in metric_columns:
+            prefixed_column = f"{split}_{column}"
+            if prefixed_column not in drift.columns:
+                continue
+            if column in {"support", "month_count"}:
+                drift[prefixed_column] = drift[prefixed_column].fillna(0.0)
+
+    if "validation_target_mean" in drift.columns and "holdout_target_mean" in drift.columns:
+        drift["target_mean_holdout_minus_validation"] = (
+            drift["holdout_target_mean"] - drift["validation_target_mean"]
+        )
+        drift["validation_positive_holdout_negative_mean"] = (
+            drift["validation_target_mean"].gt(0.0) & drift["holdout_target_mean"].lt(0.0)
+        )
+    if "validation_target_sum" in drift.columns and "holdout_target_sum" in drift.columns:
+        drift["target_sum_holdout_minus_validation"] = (
+            drift["holdout_target_sum"] - drift["validation_target_sum"]
+        )
+        drift["validation_positive_holdout_negative_sum"] = (
+            drift["validation_target_sum"].gt(0.0) & drift["holdout_target_sum"].lt(0.0)
+        )
+    if "validation_downside_rate" in drift.columns and "holdout_downside_rate" in drift.columns:
+        drift["downside_rate_holdout_minus_validation"] = (
+            drift["holdout_downside_rate"] - drift["validation_downside_rate"]
+        )
+
+    sort_columns = [
+        column
+        for column in [
+            "validation_positive_holdout_negative_mean",
+            "validation_positive_holdout_negative_sum",
+            "target_sum_holdout_minus_validation",
+            "target_mean_holdout_minus_validation",
+        ]
+        if column in drift.columns
+    ]
+    ascending = [False, False, True, True][: len(sort_columns)]
+    if sort_columns:
+        drift = drift.sort_values(sort_columns, ascending=ascending)
+    return drift.reset_index(drop=True)
+
+
 def read_model_trade_delta_frames(
     base_paths: list[Path],
     candidate_paths: list[Path],
@@ -6305,6 +6499,105 @@ def handle_model_trade_exposure(args: argparse.Namespace) -> int:
         "trade_share",
     ]
     print(worst.loc[:, worst_columns].to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def handle_stateful_examples_drift(args: argparse.Namespace) -> int:
+    validation_paths = parse_csv_paths(args.validation_examples)
+    holdout_paths = parse_csv_paths(args.holdout_examples)
+    group_columns = parse_csv_strings(args.group_columns)
+    if not group_columns:
+        raise ValueError("at least one group column is required")
+    validation = read_stateful_example_frames(validation_paths, "validation")
+    holdout = read_stateful_example_frames(holdout_paths, "holdout")
+    examples = pd.concat([validation, holdout], ignore_index=True)
+    if examples.empty:
+        raise ValueError("stateful examples are empty")
+
+    split_metrics = stateful_examples_metric_summary(
+        examples,
+        group_columns=group_columns,
+        target_column=args.target_column,
+        raw_prediction_column=args.raw_prediction_column,
+        downside_threshold=args.downside_threshold,
+        large_downside_threshold=args.large_downside_threshold,
+    )
+    month_metrics = stateful_examples_month_group_metrics(
+        examples,
+        group_columns=group_columns,
+        target_column=args.target_column,
+        raw_prediction_column=args.raw_prediction_column,
+        downside_threshold=args.downside_threshold,
+        large_downside_threshold=args.large_downside_threshold,
+    )
+    drift = stateful_examples_drift_metrics(split_metrics, group_columns=group_columns)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    examples.to_csv(run_dir / "combined_stateful_examples.csv", index=False)
+    split_metrics.to_csv(run_dir / "split_group_metrics.csv", index=False)
+    if not month_metrics.empty:
+        month_metrics.to_csv(run_dir / "month_group_metrics.csv", index=False)
+    drift.to_csv(run_dir / "group_drift.csv", index=False)
+    summary = {
+        "validation_examples": [str(path) for path in validation_paths],
+        "expanded_validation_examples": [
+            str(path) for path in expand_stateful_example_paths(validation_paths)
+        ],
+        "holdout_examples": [str(path) for path in holdout_paths],
+        "expanded_holdout_examples": [
+            str(path) for path in expand_stateful_example_paths(holdout_paths)
+        ],
+        "target_column": args.target_column,
+        "raw_prediction_column": args.raw_prediction_column,
+        "group_columns": group_columns,
+        "downside_threshold": args.downside_threshold,
+        "large_downside_threshold": args.large_downside_threshold,
+        "row_count": int(len(examples)),
+        "validation_row_count": int(len(validation)),
+        "holdout_row_count": int(len(holdout)),
+        "group_count": int(len(drift)),
+        "validation_positive_holdout_negative_mean_count": int(
+            drift.get(
+                "validation_positive_holdout_negative_mean",
+                pd.Series(False, index=drift.index),
+            ).sum()
+        ),
+        "validation_positive_holdout_negative_sum_count": int(
+            drift.get(
+                "validation_positive_holdout_negative_sum",
+                pd.Series(False, index=drift.index),
+            ).sum()
+        ),
+    }
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=json_default)
+
+    print("stateful examples drift summary:")
+    for key, value in summary.items():
+        if not isinstance(value, list):
+            print(f"{key}: {value}")
+    display_columns = [
+        *group_columns,
+        "validation_support",
+        "holdout_support",
+        "validation_target_sum",
+        "holdout_target_sum",
+        "target_sum_holdout_minus_validation",
+        "validation_target_mean",
+        "holdout_target_mean",
+        "target_mean_holdout_minus_validation",
+        "validation_downside_rate",
+        "holdout_downside_rate",
+        "downside_rate_holdout_minus_validation",
+        "validation_raw_overestimate_mean",
+        "holdout_raw_overestimate_mean",
+        "validation_positive_holdout_negative_mean",
+        "validation_positive_holdout_negative_sum",
+    ]
+    existing_display_columns = [column for column in display_columns if column in drift.columns]
+    print("worst stateful example drift:")
+    print(drift.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
     print(f"artifacts: {run_dir}")
     return 0
 
@@ -8259,6 +8552,38 @@ def build_parser() -> argparse.ArgumentParser:
     model_trade_delta.add_argument("--label", default="model_trade_delta")
     model_trade_delta.add_argument("--top-n", type=int, default=5)
     model_trade_delta.set_defaults(func=handle_model_trade_delta)
+
+    stateful_examples_drift = subparsers.add_parser(
+        "stateful-examples-drift",
+        help="compare validation and holdout stateful_candidate_examples by context",
+    )
+    stateful_examples_drift.add_argument(
+        "--validation-examples",
+        required=True,
+        help="comma-separated stateful_candidate_examples.csv files, run dirs, or parent dirs",
+    )
+    stateful_examples_drift.add_argument(
+        "--holdout-examples",
+        required=True,
+        help="comma-separated stateful_candidate_examples.csv files, run dirs, or parent dirs",
+    )
+    stateful_examples_drift.add_argument(
+        "--group-columns",
+        default="candidate_side,combined_regime",
+        help="comma-separated decision-time context columns for split drift",
+    )
+    stateful_examples_drift.add_argument("--target-column", default="target")
+    stateful_examples_drift.add_argument("--raw-prediction-column", default="pred_taken_ev")
+    stateful_examples_drift.add_argument("--downside-threshold", type=float, default=0.0)
+    stateful_examples_drift.add_argument("--large-downside-threshold", type=float, default=-15.0)
+    stateful_examples_drift.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    stateful_examples_drift.add_argument("--label", default="stateful_examples_drift")
+    stateful_examples_drift.add_argument("--top-n", type=int, default=20)
+    stateful_examples_drift.set_defaults(func=handle_stateful_examples_drift)
 
     model_trade_delta_preflight = subparsers.add_parser(
         "model-trade-delta-preflight",
