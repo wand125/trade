@@ -52,6 +52,7 @@
 - expected pnl の絶対値は過大評価されやすいため、validation で calibration してから policy に入れる。
 - exit timing target を追加し、oracle best exit と実行可能な close timing の差を縮める。
 - データを増やしても単月最適化を始めると同じ問題が再発するため、walk-forward を必須にする。
+- `direction + combined_regime + session_regime` の決済済み実績だけを使う online context drawdown guard。月内またはrolling recent tradesの同一文脈損失が閾値を超えたら、追加admission marginまたはcooldownでstay flatに寄せる。
 
 ## 外部データ候補
 

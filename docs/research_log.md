@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 23:20 Side drift guard residual diagnostics
+
+- `p10 + admission margin10` の残存失敗を `model-trade-exposure-diagnostics` と新規 `scripts/experiments/residual_trade_failure_diagnostics.py` で分解した。
+- 対象policyは total PnL `-90.1378`, trades `949`。負け月は `2025-08`, `2025-09`, `2025-10`, `2025-11`, `2025-12` で、負け月合計は `-725.1116`。
+- 負け月内では short 155 trades が `-716.6702`、long 119 trades は `-8.4414`。残存損失のほぼ全てはshort側。
+- 最大文脈は `2025-09 short/range_low_vol/ny_overlap` 5 trades `-144.2160`。direction error `0.8000`, actual profit-barrier hit `0.0000`, EV overestimate mean `50.9439`。
+- side gapやconfidenceだけのhard thresholdでは解けない。`pred_side_gap > 10` でも `2025-09 short/range_low_vol/ny_overlap -89.6280` が残る。
+- 判断: `p10 + margin10` は標準採用しない。次は静的session blockではなく、決済済み実績だけを使うonline context drawdown guardを検証する。
+- report: `docs/reports/00179_2026-06-29_side_drift_guard_residual_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/residual_trade_failure_diagnostics.py`: OK; `python3 -m unittest tests.test_residual_trade_failure_diagnostics`: OK, 2 tests
+
 ### 23:10 Side drift guard admission margin
 
 - `ModelPolicyConfig` / `model-policy` / `model-sweep` に `side_ev_penalty_replacement_min_margin` を追加した。side-EV penaltyが選択sideにかかる、またはpenaltyで選択sideが変わるentryだけ、通常entry thresholdに追加score marginを要求する。

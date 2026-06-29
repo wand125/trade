@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 23:10 JST
+最終更新: 2026-06-29 23:20 JST
 
 ## 現在の状態
 
@@ -49,6 +49,8 @@ holding error / exit regretをdense教師候補として分解した。`scripts/
 `00176` の no guard vs side drift guard を `model-trade-delta` で分解した。broad p5は total `-419.0574 -> -394.7214`、strict short-only p10は `-419.0574 -> -317.4998`。strict p10は `only_base` で悪いbase tradeを `+531.6232` 分消したが、`only_candidate` replacement が `-502.3672` とほぼ同規模で悪化した。方向別では `only_base short +431.5526` に対し `only_candidate short -435.4884`。最大replacement損失は2025-09 `short/range_low_vol -119.5560`、2025-12 `short/range_low_vol -74.2140`。結論として、side drift guardは悪いshort文脈の検出器として残すが標準policyには採用せず、次はguard後の代替tradeを `stateful_positive_cost_value` / `positive_replacement_regret` / stay-flat marginで審査する。詳細は `docs/reports/00177_2026-06-29_side_drift_guard_delta.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 `side_ev_penalty_replacement_min_margin` を追加し、side-EV penaltyが選択sideにかかる、またはpenaltyで選択sideが変わるentryだけに追加score marginを要求できるようにした。strict short-only p10 guardへmargin `10` を加えると、2025-01..12 coststress `260m` は p10単体 `-317.4998` から `-90.1378` へ大幅改善。no guard `-419.0574`、no guard replm10 `-290.8978` と比べても改善しており、既存side penaltyのadmission効果とprior-only drift guardの上乗せ効果が両方ある。ただしworst monthは2025-09 `-289.0056` で、2025-08/09/11/12がまだNoTrade未満。標準採用せず、`p10 + margin10` を次の残存失敗診断baselineにする。詳細は `docs/reports/00178_2026-06-29_side_drift_guard_admission_margin.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`p10 + margin10` の残存失敗を `model-trade-exposure-diagnostics` と `residual_trade_failure_diagnostics.py` で分解した。負け月は2025-08..12で合計 `-725.1116`、そのうちshortが155 trades `-716.6702`、longは119 trades `-8.4414`。最大文脈は2025-09 `short/range_low_vol/ny_overlap` 5 trades `-144.2160` で、direction error `0.8000`, actual profit-barrier hit `0.0000`, EV overestimate mean `50.9439`。side gapやconfidenceだけでは解けず、`pred_side_gap > 10` でも大きなshort損失が残る。次は静的session blockではなく、決済済み実績だけを使うonline context drawdown guardを検証する。詳細は `docs/reports/00179_2026-06-29_side_drift_guard_residual_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
