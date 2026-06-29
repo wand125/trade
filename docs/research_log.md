@@ -4676,3 +4676,33 @@ Artifacts:
 - `blocking_cost_high` はOOF AUCが逆方向。`stateful_nonpositive` は薄いsignalがあるが、policyでは取引を削りすぎる。
 - 高コスト2025-02..2025-05ではrisk0がrisk5のtotalを上回る。risk5はmin month / max DD改善用の防御diagnosticとして扱い、利益最大化signalとは分ける。
 - 次はcandidate差分targetではなく、selected trade全体のEV overestimate residual、exit timing target、context prior floorの校正へ戻る。
+
+### 2026-06-29 18:26 JST Holding overlay 2025-08 fixed check
+
+作業:
+
+- 2025-08の現行schema dataset/HGB/MLP/hybrid/stateful/failure/quality/q75 apply predictionを生成した。
+- `short-only q0.75 cap60` を2025-08へ再探索なしで固定適用した。
+- `model-trade-delta` で悪化要因を確認し、`short/range_low_vol` の勝ちtradeを早く切りすぎる問題を特定した。
+- `holding_risk_overlay.py` に `--include-combined-regimes` / `--exclude-combined-regimes` を追加し、`range_low_vol` 除外版を検証した。
+- 複数月評価では各runのpredictionを `dataset_month == month` に絞るようにし、月次独立評価へ揃えた。
+- report: `docs/reports/00158_2026-06-29_holding_overlay_2025_08_fixed.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| scope | variant | total/adjusted pnl | min month | max DD | trades |
+|---|---|---:|---:|---:|---:|
+| 2025-08 | risk0 | `71.7412` | - | `78.6346` | `99` |
+| 2025-08 | short-only q0.75 cap60 risk0 | `65.7002` | - | `78.6346` | `100` |
+| 2025-08 | exclude range_low_vol risk0 | `72.4252` | - | `78.6346` | `99` |
+| 2025-02..08 | no-context cap risk0 | `378.8870` | `-52.3036` | `145.4232` | `825` |
+| 2025-02..08 | exclude range_low_vol risk0 | `398.2740` | `-51.3760` | `181.8916` | `801` |
+| 2025-02..08 | no-context cap risk5 | `351.2370` | `-48.5396` | `146.3352` | `790` |
+| 2025-02..08 | exclude range_low_vol risk5 | `364.8860` | `-43.2404` | `166.9948` | `765` |
+
+判断:
+
+- 単純な `short-only q0.75 cap60` は2025-08単月で悪化したため標準採用しない。
+- `range_low_vol` 除外版は2025-08とtotal/min月PnLを改善するが、2025-04のDD悪化が大きい。regime hard ruleとしてはまだ不安定。
+- holding capは有望な補正軸だが、次は `range_low_vol` 内でcapすべきshortと保持すべきshortを分ける教師targetを作る。

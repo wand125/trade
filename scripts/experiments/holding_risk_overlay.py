@@ -56,6 +56,12 @@ def parse_csv_strings(value: str) -> list[str]:
     return values
 
 
+def parse_optional_csv_strings(value: str) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
 def parse_side_modes(value: str) -> list[str]:
     values = parse_csv_strings(value)
     allowed = {"both", "long_only", "short_only"}
@@ -112,6 +118,8 @@ def add_holding_cap_columns(
     threshold_quantiles: list[float],
     caps: list[float],
     side_modes: list[str],
+    include_combined_regimes: list[str],
+    exclude_combined_regimes: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     output = frame.copy()
     required = [
@@ -124,6 +132,13 @@ def add_holding_cap_columns(
     ]
     require_columns(output, required)
     require_columns(threshold_frame, required[2:])
+    if include_combined_regimes or exclude_combined_regimes:
+        require_columns(output, ["combined_regime"])
+    context_mask = pd.Series(True, index=output.index)
+    if include_combined_regimes:
+        context_mask &= output["combined_regime"].astype(str).isin(include_combined_regimes)
+    if exclude_combined_regimes:
+        context_mask &= ~output["combined_regime"].astype(str).isin(exclude_combined_regimes)
 
     threshold_rows: list[dict[str, object]] = []
     for side in ("long", "short"):
@@ -132,13 +147,15 @@ def add_holding_cap_columns(
         holding = pd.to_numeric(output[f"pred_mlp_{side}_exit_event_minutes"], errors="raise")
         for quantile in threshold_quantiles:
             threshold = float(threshold_risk.quantile(quantile))
-            high_risk = live_risk >= threshold
+            high_risk = (live_risk >= threshold) & context_mask
             threshold_rows.append(
                 {
                     "side": side,
                     "threshold_quantile": quantile,
                     "threshold": threshold,
                     "threshold_source_rows": int(len(threshold_risk)),
+                    "include_combined_regimes": ",".join(include_combined_regimes),
+                    "exclude_combined_regimes": ",".join(exclude_combined_regimes),
                     "active_rows": int(high_risk.sum()),
                     "active_rate": float(high_risk.mean()),
                     "active_mean_risk": float(live_risk[high_risk].mean()) if high_risk.any() else 0.0,
@@ -357,11 +374,12 @@ def run_policy_grid(
                 slippage_points=0.1,
                 execution_delay_bars=1,
             )
+            month_predictions = predictions[predictions["dataset_month"].astype(str).eq(month)].copy()
             metrics, trades, curve, signal = run_model_policy(
                 data,
                 backtest_config,
                 config,
-                predictions=predictions,
+                predictions=month_predictions,
             )
             run_dir = make_run_dir(backtest_dir, f"{label}_{month}")
             write_result(
@@ -417,6 +435,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threshold-quantiles", default="0.75,0.9")
     parser.add_argument("--caps", default="60,120,240")
     parser.add_argument("--side-modes", type=parse_side_modes, default=parse_side_modes("both"))
+    parser.add_argument(
+        "--include-combined-regimes",
+        type=parse_optional_csv_strings,
+        default=[],
+        help="optional comma-separated combined_regime values where holding caps may trigger",
+    )
+    parser.add_argument(
+        "--exclude-combined-regimes",
+        type=parse_optional_csv_strings,
+        default=[],
+        help="optional comma-separated combined_regime values where holding caps must not trigger",
+    )
     parser.add_argument("--data", type=Path, default=Path("data/processed/histdata/xauusd/xauusd_m1.parquet"))
     parser.add_argument("--label", default="holding_risk_overlay_2025_02_06")
     parser.add_argument("--modeling-output-dir", type=Path, default=Path("data/reports/modeling"))
@@ -442,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
         threshold_quantiles=threshold_quantiles,
         caps=caps,
         side_modes=args.side_modes,
+        include_combined_regimes=args.include_combined_regimes,
+        exclude_combined_regimes=args.exclude_combined_regimes,
     )
     predictions_path = modeling_dir / "predictions_holding_overlay.parquet"
     scored.to_parquet(predictions_path, index=False)
@@ -474,6 +506,8 @@ def main(argv: list[str] | None = None) -> int:
         "threshold_quantiles": threshold_quantiles,
         "caps": caps,
         "side_modes": args.side_modes,
+        "include_combined_regimes": args.include_combined_regimes,
+        "exclude_combined_regimes": args.exclude_combined_regimes,
         "stateful_prefix": STATEFUL_PREFIX,
         "risk_source": "pred_trade_failure_pred_hit_actual_miss_prob * pred_trade_overestimate_high_q75_prob",
         "policy": {
