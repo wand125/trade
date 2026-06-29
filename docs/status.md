@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 14:58 JST
+最終更新: 2026-06-29 15:09 JST
 
 ## 現在の状態
 
@@ -13,6 +13,8 @@
 特徴量・教師ラベル生成パイプラインは作成済み。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
+
+failure probabilityをtrade quality modelのoptional side featureへ接続済み。OOF quality指標ではfailure-prob feature入りがbaselineよりbias/overestimate/MAEをわずかに改善したが、RMSE/R2は改善しない。2025-05の `min_trade_quality` hard filterはbaseline quality `-92.2498`、failure-prob quality `-101.9736` と悪化したため採用しない。配線は残し、near-tie ranking / EV overestimate residual / 連続targetへ回す。詳細は `docs/reports/00146_2026-06-29_failure_probability_quality_feature.md`。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
@@ -289,7 +291,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-直近更新: `pred_hit_actual_miss` は単独risk penaltyとして2025-05を改善したが、OOF validationを悪化させたため標準採用しない。次は同targetをhard penaltyではなく、exit timing / EV calibration / ranking featureとして接続する。`ev_overestimate_high` と `exit_regret_high` は現状の閾値分類ではrank能力が弱いため、連続過大評価量、分位loss、holding ratio、profit-first失敗とのjoint targetへ作り替える。
+直近更新: failure probabilityをtrade quality featureへ戻す配線は追加したが、`min_trade_quality` hard filterは2025-05で悪化したため採用しない。次はquality scoreをnear-tie rankingやEV overestimate residualの説明変数に限定し、`ev_overestimate_high` / `exit_regret_high` は連続過大評価量、分位loss、holding ratio、profit-first失敗とのjoint targetへ作り替える。
 
 1. MLP holdingを使う `timed_ev` 実験ではCLI defaultのauto guardにより `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約にする。従来のclip-only挙動を再現する場合だけ明示的に `--min-valid-predicted-hold-minutes -inf` を渡す。
 2. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
@@ -355,6 +357,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 15:09 JST 更新: failure probabilityをtrade quality modelのoptional side featureへ接続した。OOF qualityではfailure-prob feature入りが calibrated bias `0.2061`, overestimate mean `4.4255`, MAE `8.6450` で、baseline qualityの `0.2806`, `4.4680`, `8.6555` より微改善。ただしRMSE/R2は改善せず、2025-05 policyでは `min_trade_quality=0.5` がbaseline quality `-92.2498`, failure-prob quality `-101.9736` と悪化した。quality hard filterには採用せず、near-tie ranking / EV overestimate residual / 連続targetへ回す。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 14:58 JST 更新: `pred_hit_actual_miss` / `ev_overestimate_high` をselected trade failure targetへ追加した。`pred_hit_actual_miss` はOOF AUC `0.9626` だが、profit-barrier予測列を条件にするためAUCは過大評価しない。2025-05 highcostでは `failure only risk10` が `-52.9764 -> -7.1330` に改善した一方、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化し、`stateful + predhit w1` も `240.9596` に悪化した。標準policyには採用せず、exit timing / EV calibration / ranking featureとして使う。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

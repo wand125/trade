@@ -500,6 +500,13 @@ CANDIDATE_QUALITY_SHORT_LOWER_OVERESTIMATE_RISK_COLUMN = (
     "pred_candidate_quality_short_lower_overestimate_risk"
 )
 TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_SPECS = [
+    *[
+        (
+            f"trade_failure_{target_name}_prob",
+            f"pred_trade_failure_{target_name}_{{side}}_prob",
+        )
+        for target_name in TRADE_FAILURE_TARGET_NAMES
+    ],
     (
         "side_outcome_target_mean",
         "pred_side_outcome_evdist_{side}_calibrated_target_mean",
@@ -1695,6 +1702,7 @@ def trade_quality_features_from_enriched(enriched: pd.DataFrame) -> pd.DataFrame
         enriched,
         "entry_decision_timestamp",
     )
+    add_optional_side_feature_columns_from_enriched(output, enriched)
     for column in TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS:
         if column in enriched.columns:
             output[column] = enriched[column].astype("string").fillna("__missing__")
@@ -1747,6 +1755,40 @@ def add_optional_side_feature_columns(
         gap_feature = f"pred_{feature_name}_gap"
         taken = finite_float_series(predictions, template.format(side=side_name))
         opposite = finite_float_series(predictions, template.format(side=opposite_name))
+        output[taken_feature] = taken
+        output[opposite_feature] = opposite
+        output[gap_feature] = taken - opposite
+
+
+def add_optional_side_feature_columns_from_enriched(
+    output: pd.DataFrame,
+    enriched: pd.DataFrame,
+) -> None:
+    direction = (
+        enriched["direction"].astype(str).str.lower()
+        if "direction" in enriched.columns
+        else pd.Series("", index=enriched.index)
+    )
+    for feature_name, template in TRADE_QUALITY_OPTIONAL_SIDE_FEATURE_SPECS:
+        taken_feature = f"pred_taken_{feature_name}"
+        opposite_feature = f"pred_opposite_{feature_name}"
+        gap_feature = f"pred_{feature_name}_gap"
+        if taken_feature in enriched.columns:
+            taken = finite_float_series(enriched, taken_feature)
+            opposite = finite_float_series(enriched, opposite_feature)
+        else:
+            long = finite_float_series(enriched, template.format(side="long"))
+            short = finite_float_series(enriched, template.format(side="short"))
+            taken = pd.Series(
+                np.where(direction.eq("long"), long, short),
+                index=enriched.index,
+                dtype="float64",
+            )
+            opposite = pd.Series(
+                np.where(direction.eq("long"), short, long),
+                index=enriched.index,
+                dtype="float64",
+            )
         output[taken_feature] = taken
         output[opposite_feature] = opposite
         output[gap_feature] = taken - opposite

@@ -77,6 +77,7 @@ from trade_data.meta_model import (
     fit_trade_quality_model,
     filter_months,
     fixed_horizon_target_specs,
+    enrich_trades_for_trade_quality,
     parse_csv_ints,
     parse_csv_months,
     parse_csv_strings,
@@ -92,6 +93,7 @@ from trade_data.meta_model import (
     stateful_risk_target_column,
     stateful_value_oof_fold_plan,
     trade_quality_calibration_metrics,
+    trade_quality_features_from_enriched,
     trade_quality_features_from_predictions,
     side_target_means,
     add_candidate_quality_model_columns,
@@ -1535,6 +1537,8 @@ class MetaModelTests(unittest.TestCase):
                 "pred_trade_source_short_ev": [7.0],
                 "pred_best_side_prob_1": [0.65],
                 "pred_best_side_prob_-1": [0.35],
+                "pred_trade_failure_pred_hit_actual_miss_long_prob": [0.20],
+                "pred_trade_failure_pred_hit_actual_miss_short_prob": [0.55],
                 "pred_side_outcome_evdist_long_wrong_side_prob": [0.25],
                 "pred_side_outcome_evdist_short_wrong_side_prob": [0.60],
                 "pred_candidate_quality_component_fixed_weighted_long_adjusted_pnl": [4.0],
@@ -1561,6 +1565,18 @@ class MetaModelTests(unittest.TestCase):
         self.assertAlmostEqual(long_features["pred_opposite_side_confidence"].iloc[0], 0.35)
         self.assertAlmostEqual(long_features["pred_side_confidence_gap"].iloc[0], 0.30)
         self.assertAlmostEqual(
+            long_features["pred_taken_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
+            0.20,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_opposite_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
+            0.55,
+        )
+        self.assertAlmostEqual(
+            long_features["pred_trade_failure_pred_hit_actual_miss_prob_gap"].iloc[0],
+            -0.35,
+        )
+        self.assertAlmostEqual(
             short_features["pred_taken_side_outcome_wrong_side_prob"].iloc[0],
             0.60,
         )
@@ -1572,12 +1588,110 @@ class MetaModelTests(unittest.TestCase):
         self.assertAlmostEqual(short_features["pred_opposite_side_confidence"].iloc[0], 0.65)
         self.assertAlmostEqual(short_features["pred_side_confidence_gap"].iloc[0], -0.30)
         self.assertAlmostEqual(
+            short_features["pred_taken_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
+            0.55,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_opposite_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
+            0.20,
+        )
+        self.assertAlmostEqual(
+            short_features["pred_trade_failure_pred_hit_actual_miss_prob_gap"].iloc[0],
+            0.35,
+        )
+        self.assertAlmostEqual(
             short_features["pred_taken_component_fixed_weighted_quality"].iloc[0],
             -2.0,
         )
         self.assertAlmostEqual(
             short_features["pred_component_fixed_weighted_quality_gap"].iloc[0],
             -6.0,
+        )
+
+    def test_trade_quality_features_from_enriched_include_failure_probability_features(self):
+        enriched = pd.DataFrame(
+            {
+                "direction": ["long", "short"],
+                "direction_sign": [1, -1],
+                "adjusted_pnl": [1.0, -2.0],
+                "pred_taken_ev": [12.0, 7.0],
+                "pred_opposite_ev": [7.0, 12.0],
+                "pred_best_ev": [12.0, 12.0],
+                "pred_trade_failure_pred_hit_actual_miss_long_prob": [0.20, 0.25],
+                "pred_trade_failure_pred_hit_actual_miss_short_prob": [0.55, 0.65],
+                "entry_decision_timestamp": pd.date_range(
+                    "2025-01-01",
+                    periods=2,
+                    freq="h",
+                    tz="UTC",
+                ),
+            }
+        )
+
+        features = trade_quality_features_from_enriched(enriched)
+
+        self.assertEqual(
+            features["pred_taken_trade_failure_pred_hit_actual_miss_prob"].tolist(),
+            [0.20, 0.65],
+        )
+        self.assertEqual(
+            features["pred_opposite_trade_failure_pred_hit_actual_miss_prob"].tolist(),
+            [0.55, 0.25],
+        )
+        self.assertAlmostEqual(
+            features["pred_trade_failure_pred_hit_actual_miss_prob_gap"].iloc[0],
+            -0.35,
+        )
+        self.assertAlmostEqual(
+            features["pred_trade_failure_pred_hit_actual_miss_prob_gap"].iloc[1],
+            0.40,
+        )
+
+    def test_enrich_trades_for_trade_quality_preserves_failure_probability_columns(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions["decision_timestamp"] = pd.date_range(
+            "2025-01-01",
+            periods=3,
+            freq="h",
+            tz="UTC",
+        )
+        predictions["pred_trade_failure_pred_hit_actual_miss_long_prob"] = [0.20, 0.25, 0.30]
+        predictions["pred_trade_failure_pred_hit_actual_miss_short_prob"] = [0.55, 0.60, 0.65]
+        trades = pd.DataFrame(
+            {
+                "direction": ["short"],
+                "entry_timestamp": [pd.Timestamp("2025-01-01 01:01", tz="UTC")],
+                "exit_timestamp": [pd.Timestamp("2025-01-01 02:01", tz="UTC")],
+                "entry_price": [100.0],
+                "exit_price": [99.0],
+                "raw_pnl": [1.0],
+                "adjusted_pnl": [1.0],
+                "holding_minutes": [60.0],
+                "exit_reason": ["signal_close"],
+                "entry_decision_timestamp": [pd.Timestamp("2025-01-01 01:00", tz="UTC")],
+                "exit_decision_timestamp": [pd.Timestamp("2025-01-01 02:00", tz="UTC")],
+            }
+        )
+
+        enriched = enrich_trades_for_trade_quality(trades, predictions)
+        features = trade_quality_features_from_enriched(enriched)
+
+        self.assertIn("pred_trade_failure_pred_hit_actual_miss_long_prob", enriched.columns)
+        self.assertAlmostEqual(
+            features["pred_taken_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
+            0.60,
+        )
+        self.assertAlmostEqual(
+            features["pred_opposite_trade_failure_pred_hit_actual_miss_prob"].iloc[0],
+            0.25,
         )
 
     def test_candidate_quality_barrier_event_target_uses_forced_pnl_on_time_exit(self):

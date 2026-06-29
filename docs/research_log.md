@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 15:09 Failure probability quality feature
+
+- `pred_trade_failure_*_{long,short}_prob` をtrade quality modelのoptional side featureとして使えるようにした。selected side視点で `pred_taken_*`, `pred_opposite_*`, `*_gap` を作る。
+- `enrich_trades_for_trade_quality` がfailure probability列をselected tradesへ保持できるように、analysis prediction columnsにも追加した。
+- highcost risk5の2024-11..2025-04 OOF qualityでは、failure-prob feature入りが calibrated bias `0.2061`, overestimate mean `4.4255`, MAE `8.6450`。baseline qualityは `0.2806`, `4.4680`, `8.6555`。微改善だが、RMSE/R2は改善しない。
+- 2025-05 policyでは `min_trade_quality=0.5` がbaseline quality `-92.2498`, failure-prob quality `-101.9736` と悪化。failure-prob quality `1.0` は `-124.0614` でさらに悪い。
+- 判断: failure probabilityをEV校正featureとして使う配線は残すが、quality hard filterには採用しない。次はnear-tie ranking、EV overestimate residual、連続/分位targetへ進む。
+- report: `docs/reports/00146_2026-06-29_failure_probability_quality_feature.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 14:58 Pred-hit actual-miss failure target
 
 - `oof-trade-failure-model` に `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加し、side confidence系の特徴量 `pred_taken_side_confidence`, `pred_opposite_side_confidence`, `pred_side_confidence_gap` をselected trade failure modelへ入れた。

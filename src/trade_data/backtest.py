@@ -98,6 +98,21 @@ REGIME_BLOCK_FIELDS = [
     ("block_combined_regimes", "combined_regime"),
 ]
 
+ANALYSIS_TRADE_FAILURE_TARGETS = [
+    "large_loss",
+    "wrong_side",
+    "profit_barrier_miss",
+    "pred_hit_actual_miss",
+    "exit_regret_high",
+    "ev_overestimate_high",
+    "any_failure",
+]
+ANALYSIS_TRADE_FAILURE_COLUMNS = [
+    f"pred_trade_failure_{target_name}_{side_name}_prob"
+    for target_name in ANALYSIS_TRADE_FAILURE_TARGETS
+    for side_name in ("long", "short")
+]
+
 ANALYSIS_PREDICTION_COLUMNS = [
     "decision_timestamp",
     "dataset_month",
@@ -129,6 +144,7 @@ ANALYSIS_PREDICTION_COLUMNS = [
     "pred_best_side",
     "pred_best_side_prob_1",
     "pred_best_side_prob_-1",
+    *ANALYSIS_TRADE_FAILURE_COLUMNS,
 ]
 
 ANALYSIS_GROUP_COLUMNS = [
