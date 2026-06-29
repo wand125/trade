@@ -4,6 +4,15 @@
 
 ## 2026-06-29 JST
 
+### 15:17 Quality secondary tiebreak validation
+
+- failure-prob quality scoreを `secondary_score_tie_margin` でnear-tie side選択だけに使った。raw EV、entry threshold、stateful risk5、MLP holding guardは固定。
+- highcost risk5 OOF validation 2024-11..2025-04では、baseline total PnL `407.8172`、margin 5は完全同一、margin 10は `154.2024`、margin 20は `-84.8690`。
+- margin 10は2025-04を `14.3072 -> 105.1364` に改善したが、2025-03を `27.1660 -> -156.0008` へ壊した。margin 20は2024-11を `129.9968 -> -212.8968` へ壊した。
+- 判断: quality secondary tiebreakは採用しない。2025-05固定適用も行わない。次はside反転ではなく、同一side内ranking、EV overestimate residual、連続/分位targetへ進む。
+- report: `docs/reports/00147_2026-06-29_quality_secondary_tiebreak_validation.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 15:09 Failure probability quality feature
 
 - `pred_trade_failure_*_{long,short}_prob` をtrade quality modelのoptional side featureとして使えるようにした。selected side視点で `pred_taken_*`, `pred_opposite_*`, `*_gap` を作る。
