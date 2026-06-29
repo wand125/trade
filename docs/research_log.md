@@ -4,6 +4,17 @@
 
 ## 2026-06-30 JST
 
+### 08:08 Online context feature model
+
+- `scripts/experiments/online_context_feature_model.py` を追加し、`enriched_context_state_trades.csv` から base特徴 vs base+online context state特徴の chronological OOF classifier を比較できるようにした。
+- targetは `nonpositive` と `large_loss(adjusted_pnl <= -15)`。target月は学習に使わず、risk filter閾値もtrain score quantileから決める。
+- min4では base/nonpositive AUC `0.5622`, base/large_loss AUC `0.5810` に対し、context/nonpositive `0.5517`, context/large_loss `0.5606` で、online context追加はAUCを改善しなかった。
+- min8でも base/nonpositive AUC `0.6207`, base/large_loss `0.5523` に対し、context/nonpositive `0.5471`, context/large_loss `0.5364`。後半4ヶ月のpost-filterでは context/large_loss/q70 が `-626.1752 -> -271.9178` と損失を削るが、実行済みtrade削除でありreplacementを再現しない。
+- 判断: raw online context stateを標準featureへ昇格しない。side drift / prediction-side-biasとの相互作用に絞り、採用判断は真のdynamic backtestで行う。
+- report: `docs/reports/00185_2026-06-30_online_context_feature_model.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/online_context_feature_model.py tests/test_online_context_feature_model.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_docs_reports`: OK, 107 tests
+
 ### 07:47 Online context state recovery
 
 - `scripts/experiments/online_context_state_diagnostics.py` を追加し、executed tradeごとにentry時点で既に見えていた同一side/contextの累積PnL、trade数、breach有無、breachからの経過分、entry marginを付与できるようにした。

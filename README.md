@@ -227,6 +227,21 @@ python scripts/experiments/online_context_state_diagnostics.py \
   --thresholds 20,40,60
 ```
 
+Evaluate whether those online context state columns help as chronological OOF
+trade-risk features before wiring them into a dynamic policy:
+
+```bash
+python scripts/experiments/online_context_feature_model.py \
+  --trades data/reports/backtests/<online_context_state_run>/enriched_context_state_trades.csv \
+  --output-dir data/reports/modeling \
+  --label online_context_feature_model \
+  --min-train-months 4
+```
+
+This is a feature diagnostic. Its risk-filter output deletes already executed
+trades and does not simulate replacement trades under the one-position
+constraint, so it is not a policy promotion test.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 
