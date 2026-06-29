@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 18:26 JST
+最終更新: 2026-06-29 18:36 JST
 
 ## 現在の状態
 
@@ -39,6 +39,8 @@ stateful examplesの追加support実験も実施済み。`oof-stateful-value-mod
 `pred_hit_actual_miss * q75 high-overestimate` をentry riskではなくMLP予測保有時間capとして使う `holding_risk_overlay.py` を追加した。both-side capはlong側を壊したが、short-onlyでは2025-02..2025-06で `short-only q0.75 cap60 risk0` が total `314.7458`, min month `-47.5324`, max DD `145.4232` となり、risk0 `222.1276 / -61.3708 / 259.0392` とbaseline risk5 `203.3466 / -48.2052 / 224.7524` を上回った。2025-07固定適用でもrisk0 `-9.4002 -> -0.8914`, risk5 `8.2858 -> 16.7946` と小幅改善。標準採用はまだせず、固定候補として2025-08またはshort context filterへ進める。詳細は `docs/reports/00157_2026-06-29_holding_risk_overlay.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 `short-only q0.75 cap60` を2025-08へ再探索なし固定適用した。単純capはrisk0 `71.7412 -> 65.7002`、risk5 `58.7592 -> 52.7182` で悪化し、主因は `short/range_low_vol` の勝ちtradeを `233` 分保持から `61` 分に短縮して `20.1170 -> 5.0500` へ削ったこと。`range_low_vol` をcap対象から除外すると2025-08はrisk0 `72.4252`、risk5 `59.4432` へ小幅改善した。月次独立評価のためoverlay scriptは各runで `dataset_month == month` のpredictionに絞るよう修正した。2025-02..2025-08の月次独立再集計ではno-context capが total/min/DD `378.8870 / -52.3036 / 145.4232`、range_low_vol除外が `398.2740 / -51.3760 / 181.8916`。除外版はtotal/min月PnLを伸ばすがDDを悪化させるため標準採用せず、context-aware holding cap候補として継続検証する。詳細は `docs/reports/00158_2026-06-29_holding_overlay_2025_08_fixed.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+holding capのdirect target診断を追加した。`model-trade-delta` のcommon tradeから `cap_value = candidate_adjusted_pnl - base_adjusted_pnl` を作り、`short/range_low_vol` 内のcap有益/有害を調べた。no-contextではdirect target 51件、cap value sum `14.8088`、beneficial rate `0.4706`。session別では `asia` がrisk0/risk5とも約 `+37`、`london` が約 `-22..-25`、`rollover` が `-6.6476`。このため `range_low_vol:london,range_low_vol:rollover` だけcap対象から外すペア除外を実装し、2025-02..2025-08月次独立でrisk0 `404.9366 / -51.3760 / 145.4232`、risk5 `360.9802 / -43.2404 / 146.3352`。no-contextよりtotal/minが良く、range全除外よりDDが良い。ただしpost-hoc診断候補であり標準採用しない。次は未使用月固定確認かdense holding-shortening target生成へ進む。詳細は `docs/reports/00159_2026-06-29_holding_cap_target_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 

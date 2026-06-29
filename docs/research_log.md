@@ -4706,3 +4706,36 @@ Artifacts:
 - 単純な `short-only q0.75 cap60` は2025-08単月で悪化したため標準採用しない。
 - `range_low_vol` 除外版は2025-08とtotal/min月PnLを改善するが、2025-04のDD悪化が大きい。regime hard ruleとしてはまだ不安定。
 - holding capは有望な補正軸だが、次は `range_low_vol` 内でcapすべきshortと保持すべきshortを分ける教師targetを作る。
+
+### 2026-06-29 18:36 JST Holding cap target diagnostics
+
+作業:
+
+- `holding_cap_target_diagnostics.py` を追加し、`model-trade-delta` のcommon tradeから `cap_value = candidate_adjusted_pnl - base_adjusted_pnl` を作るようにした。
+- no-context capのrisk0/risk5全月deltaを使い、`short/range_low_vol` のdirect cap targetを抽出した。
+- `holding_risk_overlay.py` に `--include-combined-session-pairs` / `--exclude-combined-session-pairs` を追加した。
+- `range_low_vol:london,range_low_vol:rollover` だけcap対象から外す候補を2025-02..2025-08月次独立評価で検証した。
+- report: `docs/reports/00159_2026-06-29_holding_cap_target_diagnostics.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| scope | examples | cap value sum | beneficial rate |
+|---|---:|---:|---:|
+| no-context `short/range_low_vol` | `51` | `14.8088` | `0.4706` |
+| after excluding london/rollover | `20` | `74.4080` | `0.6500` |
+
+| variant | total pnl | min month pnl | max DD | trades |
+|---|---:|---:|---:|---:|
+| no-context cap risk0 | `378.8870` | `-52.3036` | `145.4232` | `825` |
+| exclude all range_low_vol risk0 | `398.2740` | `-51.3760` | `181.8916` | `801` |
+| exclude range_low_vol:london/rollover risk0 | `404.9366` | `-51.3760` | `145.4232` | `810` |
+| no-context cap risk5 | `351.2370` | `-48.5396` | `146.3352` | `790` |
+| exclude all range_low_vol risk5 | `364.8860` | `-43.2404` | `166.9948` | `765` |
+| exclude range_low_vol:london/rollover risk5 | `360.9802` | `-43.2404` | `146.3352` | `774` |
+
+判断:
+
+- `range_low_vol:london/rollover` 除外は現診断セットでは最もバランスが良いが、post-hoc候補なので標準採用しない。
+- direct cap targetはsupportが少ない。深層学習の直接教師にするには、prediction全行に対するdenseなholding短縮targetを作る必要がある。
+- 次は未使用月への固定確認、またはdataset生成側に `cap60_vs_event_holding_delta` のようなdense targetを追加する。

@@ -71,6 +71,27 @@ def parse_side_modes(value: str) -> list[str]:
     return values
 
 
+def parse_combined_session_pairs(value: str) -> list[tuple[str, str]]:
+    if not value:
+        return []
+    pairs: list[tuple[str, str]] = []
+    for part in value.split(","):
+        raw = part.strip()
+        if not raw:
+            continue
+        if ":" not in raw:
+            raise argparse.ArgumentTypeError(
+                f"combined/session pair must use combined_regime:session_regime: {raw}"
+            )
+        combined, session = [piece.strip() for piece in raw.split(":", 1)]
+        if not combined or not session:
+            raise argparse.ArgumentTypeError(
+                f"combined/session pair must use combined_regime:session_regime: {raw}"
+            )
+        pairs.append((combined, session))
+    return pairs
+
+
 def value_label(value: float) -> str:
     return f"{value:g}".replace(".", "p").replace("-", "m")
 
@@ -120,6 +141,8 @@ def add_holding_cap_columns(
     side_modes: list[str],
     include_combined_regimes: list[str],
     exclude_combined_regimes: list[str],
+    include_combined_session_pairs: list[tuple[str, str]],
+    exclude_combined_session_pairs: list[tuple[str, str]],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     output = frame.copy()
     required = [
@@ -134,11 +157,25 @@ def add_holding_cap_columns(
     require_columns(threshold_frame, required[2:])
     if include_combined_regimes or exclude_combined_regimes:
         require_columns(output, ["combined_regime"])
+    if include_combined_session_pairs or exclude_combined_session_pairs:
+        require_columns(output, ["combined_regime", "session_regime"])
     context_mask = pd.Series(True, index=output.index)
     if include_combined_regimes:
         context_mask &= output["combined_regime"].astype(str).isin(include_combined_regimes)
     if exclude_combined_regimes:
         context_mask &= ~output["combined_regime"].astype(str).isin(exclude_combined_regimes)
+    combined_values = output.get("combined_regime", pd.Series("", index=output.index)).astype(str)
+    session_values = output.get("session_regime", pd.Series("", index=output.index)).astype(str)
+    if include_combined_session_pairs:
+        pair_mask = pd.Series(False, index=output.index)
+        for combined, session in include_combined_session_pairs:
+            pair_mask |= combined_values.eq(combined) & session_values.eq(session)
+        context_mask &= pair_mask
+    if exclude_combined_session_pairs:
+        pair_mask = pd.Series(False, index=output.index)
+        for combined, session in exclude_combined_session_pairs:
+            pair_mask |= combined_values.eq(combined) & session_values.eq(session)
+        context_mask &= ~pair_mask
 
     threshold_rows: list[dict[str, object]] = []
     for side in ("long", "short"):
@@ -156,6 +193,12 @@ def add_holding_cap_columns(
                     "threshold_source_rows": int(len(threshold_risk)),
                     "include_combined_regimes": ",".join(include_combined_regimes),
                     "exclude_combined_regimes": ",".join(exclude_combined_regimes),
+                    "include_combined_session_pairs": ",".join(
+                        f"{combined}:{session}" for combined, session in include_combined_session_pairs
+                    ),
+                    "exclude_combined_session_pairs": ",".join(
+                        f"{combined}:{session}" for combined, session in exclude_combined_session_pairs
+                    ),
                     "active_rows": int(high_risk.sum()),
                     "active_rate": float(high_risk.mean()),
                     "active_mean_risk": float(live_risk[high_risk].mean()) if high_risk.any() else 0.0,
@@ -447,6 +490,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="optional comma-separated combined_regime values where holding caps must not trigger",
     )
+    parser.add_argument(
+        "--include-combined-session-pairs",
+        type=parse_combined_session_pairs,
+        default=[],
+        help=(
+            "optional comma-separated combined_regime:session_regime pairs where holding caps may trigger"
+        ),
+    )
+    parser.add_argument(
+        "--exclude-combined-session-pairs",
+        type=parse_combined_session_pairs,
+        default=[],
+        help=(
+            "optional comma-separated combined_regime:session_regime pairs where holding caps must not trigger"
+        ),
+    )
     parser.add_argument("--data", type=Path, default=Path("data/processed/histdata/xauusd/xauusd_m1.parquet"))
     parser.add_argument("--label", default="holding_risk_overlay_2025_02_06")
     parser.add_argument("--modeling-output-dir", type=Path, default=Path("data/reports/modeling"))
@@ -474,6 +533,8 @@ def main(argv: list[str] | None = None) -> int:
         side_modes=args.side_modes,
         include_combined_regimes=args.include_combined_regimes,
         exclude_combined_regimes=args.exclude_combined_regimes,
+        include_combined_session_pairs=args.include_combined_session_pairs,
+        exclude_combined_session_pairs=args.exclude_combined_session_pairs,
     )
     predictions_path = modeling_dir / "predictions_holding_overlay.parquet"
     scored.to_parquet(predictions_path, index=False)
@@ -508,6 +569,12 @@ def main(argv: list[str] | None = None) -> int:
         "side_modes": args.side_modes,
         "include_combined_regimes": args.include_combined_regimes,
         "exclude_combined_regimes": args.exclude_combined_regimes,
+        "include_combined_session_pairs": [
+            f"{combined}:{session}" for combined, session in args.include_combined_session_pairs
+        ],
+        "exclude_combined_session_pairs": [
+            f"{combined}:{session}" for combined, session in args.exclude_combined_session_pairs
+        ],
         "stateful_prefix": STATEFUL_PREFIX,
         "risk_source": "pred_trade_failure_pred_hit_actual_miss_prob * pred_trade_overestimate_high_q75_prob",
         "policy": {
