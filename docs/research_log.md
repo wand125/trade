@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 16:05 Trade overestimate chronological q90 check
+
+- `oof-trade-overestimate-model` に `--oof-scheme expanding` と `--min-train-months` を追加し、対象月より前だけでfitするchronological OOFを実行した。
+- `min_train_months=3` により2025-02..2025-04を評価。chronological OOFは target mean `5.3943`, predicted mean `4.3290`, R2 `0.0145`, high-overestimate AUC `0.6328`。leave-one-monthの R2 `0.1273` から大きく落ちた。
+- `00148` の固定threshold long `18.8171`, short `21.1886`, lambda `2.0` を再調整せず適用したところ、chronological prediction maxは long `7.1065`, short `7.8064` で、active rowsは `0 / 85361`。
+- 2025-02..2025-04のbacktestはbaselineと完全同一。total PnLは baseline `154.6374`, leave-one-month q90 `165.9728`, chronological q90 `154.6374`。`model-trade-delta` でもonly_base/only_candidateは0。
+- fit側selected-trade target q90も long `10.9981..12.8793`, short `13.3550..13.5405` でprediction maxより高く、q90方式では発火しない。問題はthreshold参照元だけでなく、chronological fit時のamount prediction scaleが低く潰れる点。
+- report: `docs/reports/00150_2026-06-29_trade_overestimate_chronological_q90_check.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 15:49 Trade overestimate q90 delta diagnostics
 
 - `q90 w2.0` とbaseline stateful risk5を `model-trade-delta` で比較した。

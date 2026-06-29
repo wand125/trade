@@ -7323,8 +7323,29 @@ def oof_trade_overestimate_model(args: argparse.Namespace) -> int:
     fold_prediction_outputs: list[pd.DataFrame] = []
     fold_trade_outputs: list[pd.DataFrame] = []
     fold_metrics: dict[str, object] = {}
-    for fold_index, holdout_month in enumerate(validation_months):
-        fit_trades = validation_enriched[validation_enriched["dataset_month"] != holdout_month].copy()
+    fold_plan = stateful_value_oof_fold_plan(
+        validation_months,
+        scheme=args.oof_scheme,
+        min_train_months=args.min_train_months,
+    )
+    for fold_index, fold in enumerate(fold_plan):
+        holdout_month = str(fold["holdout_month"])
+        fit_months = list(fold["fit_months"])
+        if fold["status"] != "profiled":
+            fold_metrics[holdout_month] = {
+                **fold,
+                "fit_trades": 0,
+                "holdout_trades": int(
+                    (validation_enriched["dataset_month"] == holdout_month).sum()
+                ),
+                "holdout_predictions": int(
+                    (validation_predictions["dataset_month"] == holdout_month).sum()
+                ),
+            }
+            continue
+        fit_trades = validation_enriched[
+            validation_enriched["dataset_month"].isin(fit_months)
+        ].copy()
         holdout_trades = validation_enriched[validation_enriched["dataset_month"] == holdout_month].copy()
         holdout_predictions = validation_predictions[
             validation_predictions["dataset_month"] == holdout_month
@@ -7346,6 +7367,7 @@ def oof_trade_overestimate_model(args: argparse.Namespace) -> int:
         fold_prediction_outputs.append(holdout_prediction_output)
         fold_trade_outputs.append(holdout_trade_output)
         fold_metrics[holdout_month] = {
+            **fold,
             "fit_trades": int(len(fit_trades)),
             "holdout_trades": int(len(holdout_trades)),
             "holdout_predictions": int(len(holdout_predictions)),
@@ -7354,6 +7376,12 @@ def oof_trade_overestimate_model(args: argparse.Namespace) -> int:
             "feature_columns": fold_bundle.feature_columns,
             "category_mappings": fold_bundle.category_mappings,
         }
+
+    if not fold_prediction_outputs:
+        raise ValueError(
+            "no trade overestimate OOF folds were profiled; lower --min-train-months "
+            "or provide more validation months"
+        )
 
     validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
     if "decision_timestamp" in validation_oof.columns:
@@ -7388,6 +7416,9 @@ def oof_trade_overestimate_model(args: argparse.Namespace) -> int:
         "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
         "validation_months": validation_months,
         "apply_months": apply_months,
+        "oof_scheme": args.oof_scheme,
+        "min_train_months": args.min_train_months,
+        "fold_plan": fold_plan,
         "source": {
             "source_mode": args.source_mode,
             "long_column": args.long_column,
@@ -9089,6 +9120,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated validation dataset months for OOF folds",
     )
     trade_overestimate_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    trade_overestimate_model_parser.add_argument(
+        "--oof-scheme",
+        choices=("leave_one_month", "expanding"),
+        default="leave_one_month",
+        help="month OOF scheme; expanding only trains on months before the holdout month",
+    )
+    trade_overestimate_model_parser.add_argument(
+        "--min-train-months",
+        type=int,
+        default=1,
+        help="minimum number of fit months required for an OOF fold",
+    )
     trade_overestimate_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
     trade_overestimate_model_parser.add_argument("--label", default="trade_overestimate_model")
     add_trade_source_args(trade_overestimate_model_parser)
