@@ -4,6 +4,15 @@
 
 ## 2026-06-29 JST
 
+### 12:23 Stateful downside mean-match risk budget
+
+- `oof-stateful-risk-model` に `--probability-calibration none|mean_match` を追加した。`mean_match` はlogit interceptだけをずらして、scored foldの平均probabilityをfit側target prevalenceへ合わせる。fold内順位は保つがfold間スケールは変わるため、OOF全体AUCは動き得る。
+- `session_floor_lowered` のexpanding OOFでは predicted mean が `0.1051 -> 0.1214`、biasが `-0.1703 -> -0.1540`、Brierが `0.2181 -> 0.2129` に改善した。一方、AUCは `0.6473 -> 0.6371` に低下した。
+- 6ヶ月policy接続では `risk=5` がbase合計をほぼ維持しつつ最悪月を `-18.7168 -> +8.0868` に改善し、high costも合計 `391.2374 -> 407.8172`、最悪月 `-34.3748 -> -16.9006`、max DD `259.0392 -> 224.7524` に改善した。
+- candidate selectionでは `risk=5` だけがbase/high cost条件を通過した。ただし同じ6ヶ月診断セット上で選んだため標準採用はせず、次の未使用月で固定確認する事前登録candidateにする。
+- report: `docs/reports/00140_2026-06-29_stateful_downside_mean_match_risk_budget.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 12:11 Stateful downside risk policy
 
 - `oof-stateful-risk-model` に `--oof-scheme` / `--min-train-months` を追加し、walk-forward stress/floor由来の分類targetを追加した。

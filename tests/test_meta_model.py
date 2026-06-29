@@ -1,6 +1,7 @@
 import argparse
 import unittest
 
+import numpy as np
 import pandas as pd
 
 from trade_data.meta_model import (
@@ -48,6 +49,7 @@ from trade_data.meta_model import (
     build_stateful_value_training_frame,
     build_stateful_risk_training_frame,
     build_training_frame,
+    calibrate_probabilities_to_mean,
     candidate_quality_bucket_metrics,
     candidate_entry_side_masks,
     candidate_failure_prob_column,
@@ -305,6 +307,7 @@ class MetaModelTests(unittest.TestCase):
             random_seed=3,
             sample_weighting="none",
             prediction_shrinkage=1.0,
+            probability_calibration="none",
             target_names=(
                 "positive_blocking",
                 "positive_replacement_regret_high",
@@ -360,6 +363,15 @@ class MetaModelTests(unittest.TestCase):
             self.assertTrue(output[long_prob].between(0.0, 1.0).all())
             self.assertTrue((output[long_risk] == -output[long_prob]).all())
             self.assertFalse(scored[taken_prob].isna().any())
+
+    def test_stateful_risk_mean_match_calibration_preserves_order_and_matches_mean(self):
+        probabilities = np.array([0.02, 0.05, 0.10, 0.30, 0.70], dtype="float64")
+
+        calibrated = calibrate_probabilities_to_mean(probabilities, 0.4)
+
+        self.assertAlmostEqual(float(calibrated.mean()), 0.4, places=6)
+        self.assertEqual(np.argsort(calibrated).tolist(), np.argsort(probabilities).tolist())
+        self.assertTrue(((calibrated > 0.0) & (calibrated < 1.0)).all())
 
     def test_combine_fit_predictions_prepends_base_and_resets_index(self):
         primary = pd.DataFrame({"dataset_month": ["2024-07"], "value": [2]}, index=[10])

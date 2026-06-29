@@ -312,6 +312,7 @@ class StatefulRiskModelConfig:
     random_seed: int
     sample_weighting: str
     prediction_shrinkage: float
+    probability_calibration: str
     target_names: tuple[str, ...]
     blocking_cost_threshold: float
     replacement_regret_threshold: float
@@ -2474,6 +2475,36 @@ def validate_stateful_risk_targets(target_names: tuple[str, ...]) -> None:
         raise ValueError(f"unknown stateful risk targets: {', '.join(unknown)}")
 
 
+def calibrate_probabilities_to_mean(
+    probabilities: np.ndarray,
+    target_mean: float,
+) -> np.ndarray:
+    if len(probabilities) == 0:
+        return probabilities
+    if not np.isfinite(target_mean):
+        return np.clip(probabilities, 0.0, 1.0)
+    target_mean = float(np.clip(target_mean, 0.0, 1.0))
+    if target_mean <= 0.0:
+        return np.zeros_like(probabilities, dtype="float64")
+    if target_mean >= 1.0:
+        return np.ones_like(probabilities, dtype="float64")
+    clipped = np.clip(probabilities.astype("float64"), 1e-6, 1.0 - 1e-6)
+    if abs(float(clipped.mean()) - target_mean) <= 1e-6:
+        return clipped
+    logits = np.log(clipped / (1.0 - clipped))
+    low = -40.0
+    high = 40.0
+    for _ in range(60):
+        middle = (low + high) / 2.0
+        shifted = 1.0 / (1.0 + np.exp(-(logits + middle)))
+        if float(shifted.mean()) < target_mean:
+            low = middle
+        else:
+            high = middle
+    calibrated = 1.0 / (1.0 + np.exp(-(logits + ((low + high) / 2.0))))
+    return np.clip(calibrated, 0.0, 1.0)
+
+
 def stateful_risk_target_column(target_name: str) -> str:
     return f"stateful_risk_{target_name}"
 
@@ -2627,6 +2658,8 @@ def fit_stateful_risk_model_from_frame(
 ) -> StatefulRiskModelBundle:
     if not 0.0 <= config.prediction_shrinkage <= 1.0:
         raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if config.probability_calibration not in {"none", "mean_match"}:
+        raise ValueError("probability_calibration must be none or mean_match")
     validate_stateful_risk_targets(config.target_names)
     validate_candidate_quality_prediction_prefix(config.prediction_prefix)
     if frame.empty:
@@ -2698,6 +2731,11 @@ def predict_stateful_risk_features(
         probabilities = (
             bundle.config.prediction_shrinkage * probabilities
             + (1.0 - bundle.config.prediction_shrinkage) * bundle.target_means[target_name]
+        )
+    if bundle.config.probability_calibration == "mean_match":
+        probabilities = calibrate_probabilities_to_mean(
+            probabilities,
+            bundle.target_means[target_name],
         )
     return np.clip(probabilities, 0.0, 1.0)
 
@@ -7184,6 +7222,7 @@ def stateful_risk_model_config_from_args(args: argparse.Namespace) -> StatefulRi
         random_seed=args.random_seed,
         sample_weighting=args.sample_weighting,
         prediction_shrinkage=args.prediction_shrinkage,
+        probability_calibration=args.probability_calibration,
         target_names=target_names,
         blocking_cost_threshold=args.blocking_cost_threshold,
         replacement_regret_threshold=args.replacement_regret_threshold,
@@ -8919,6 +8958,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "prefix for output columns, producing "
             "pred_stateful_risk_<prefix>_<target>_<side>_prob/risk"
+        ),
+    )
+    stateful_risk_model_parser.add_argument(
+        "--probability-calibration",
+        choices=("none", "mean_match"),
+        default="none",
+        help=(
+            "optional probability calibration for stateful risk outputs; "
+            "mean_match preserves ranking and shifts logits so scored mean "
+            "matches the fitted target prevalence"
         ),
     )
     stateful_risk_model_parser.add_argument(

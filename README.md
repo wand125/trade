@@ -618,6 +618,28 @@ pseudo-validation profile. It writes `walkforward_stateful_examples.csv`,
 OOF target; keep the validation-vs-holdout `target_context_stress_adjusted`
 column as an audit-only target.
 
+To turn walk-forward stress/floor targets into side-specific stateful downside
+risk columns, use the stateful risk model. Prefer chronological OOF when judging
+whether a signal generalizes:
+
+```bash
+python -m trade_data.meta_model oof-stateful-risk-model \
+  --examples data/reports/backtests/<walkforward_examples>/walkforward_stateful_examples.csv \
+  --validation-predictions data/reports/modeling/<run>/predictions_validation_oof.parquet \
+  --validation-months 2024-07,2024-09,2024-11,2024-12,2025-01,2025-02,2025-03,2025-04 \
+  --risk-targets walkforward_floor_lowered \
+  --prediction-prefix wf_exp_session_mm \
+  --oof-scheme expanding \
+  --min-train-months 2 \
+  --probability-calibration mean_match
+```
+
+`--probability-calibration mean_match` shifts the predicted logits so each
+scored fold's mean probability matches the fitted target prevalence. It
+preserves ranking within the fold, but it does not use future holdout
+prevalence and should still be validated with fresh months before any policy
+promotion.
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:
