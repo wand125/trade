@@ -4865,3 +4865,30 @@ Artifacts:
 - `short/up_normal_vol` blockはtestだけ見ると改善するが、valid PnL最大化では選ばれない。
 - visible-bad blockはvalidだけ大幅に良く、testで悪化した。少数月deltaからregime blockを増やすのは過学習しやすい。
 - 次は単月block rule追加ではなく、複数月walk-forwardでquantile thresholdを選ぶか、holding-shortening probabilityをentry quality/risk modelのfeatureへ戻す。
+
+### 2026-06-29 20:06 JST Holding shortening multimonth quantile check
+
+作業:
+
+- 2025-02..04のmerged predictionを結合し、3ヶ月validation分布の経験CDFでholding-shortening quantile列を生成した。
+- 2025-02..04の各月に同じmultimonth CDFを適用し、threshold/cap gridを再評価した。
+- 3ヶ月validation最良 `0.75 / cap60` を2025-05へ再探索なしで固定適用した。
+- 2025-05のpost-hoc gridとdelta診断も確認した。
+- report: `docs/reports/00165_2026-06-29_holding_shortening_multimonth_quantile_check.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| variant | validation total | fixed 2025-05 adjusted pnl | note |
+|---|---:|---:|---|
+| disabled | `-172.4522` | `-179.2516` | no cap |
+| raw validation best `0.60 / 60` | `-53.9566` | n/a | 2025-05 chronological raw `0.60` は前回発火0 |
+| single-month quantile `0.25 / 60` | n/a | `-89.7428` | 2025-04 CDF |
+| multimonth quantile `0.75 / 60` | `-75.2444` | `-186.1276` | 2025-02..04 CDF |
+
+判断:
+
+- 複数月quantileでもraw threshold版のvalidation bestを超えず、2025-05固定ではdisabledより悪化した。
+- 2025-05ではshort側のmultimonth quantile `>=0.75` が464行しかなく、OOF validation分布とchronological apply分布のズレが残る。
+- holding-shortening probabilityを直接cap発火に使う方向は本流から外す。
+- 次はこのprobabilityをentry/exit risk modelの補助featureに戻し、長く持つ予測の信用度やexit regret/EV過大評価の校正に使う。
