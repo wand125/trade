@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 09:22 JST
+最終更新: 2026-06-29 09:30 JST
 
 ## 現在の状態
 
@@ -49,6 +49,8 @@ stateful overestimate riskをraw EVの線形penaltyとして検証済み。`risk
 `stateful_positive_cost_value` modelを作成済み。OOFではraw bias `14.7685` がmean bias `0.0853` へ縮むが、R2は `-0.0085`。direct replacementはvalidation bestでもsum `270.3750`, min `-64.5430` とbaseline未満。positive-cost overestimate riskもvalidation `risk=0.10` がsum `606.7320`, min `73.5066`、apply `risk=0.10` がsum `14.1920`, min `-38.4826` でbaselineを下回る。scalar penaltyには採用せず、次はprimary raw EVを維持したnear-tie専用secondary scoreを実装する。詳細は `docs/reports/00120_2026-06-29_stateful_positive_cost_value.md`。
 
 near-tie専用secondary scoreを `model-policy` / `model-sweep` に追加済み。primary raw EVのentry判定は維持し、`secondary_score_tie_margin` 内だけ `stateful_positive_cost_value` 系scoreでsideを選び直せる。validation 4ヶ月ではbaseline `sum=622.6486`, min `138.0338` に対し、margin `10` はsum `563.7984`, min `115.1392`、margin `20` はsum `582.2844`, min `120.2830` で悪化した。実装は探索軸として残すが、今回のtie-break設定は標準policyに採用しない。詳細は `docs/reports/00121_2026-06-29_stateful_secondary_tiebreak.md`。
+
+near-tie局所診断 `stateful-near-tie-report` を追加済み。validation examples 254件で `stateful_positive_cost_value` secondary scoreを調べると、biasはraw `14.7685` から `0.0853` へ縮むが、target Spearmanはmargin `20` で `-0.1327`。secondary top25 liftは一部正でもtop-bottom25 spreadは全marginで負、margin `20` の最高score bucketはtarget mean `-0.1244` と最悪だった。したがって同scoreをentry優先順位/risk budgetへも使わず、次は追加examplesと `blocking_cost` / `replacement_regret` の分類・下方リスクtargetへ進む。詳細は `docs/reports/00122_2026-06-29_stateful_near_tie_local_diagnostics.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

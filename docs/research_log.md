@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 09:30 Stateful near-tie local diagnostics
+
+- `trade_data.meta_model stateful-near-tie-report` を追加した。`stateful_candidate_examples.csv` とside別secondary score入りprediction parquetをjoinし、primary EV near-tie内でsecondary scoreがtargetを順位付けできるかを診断する。
+- validation examples 254件で `stateful_positive_cost_value` をtargetに診断。`min_primary_score=12` でもusable examplesは254件で変わらなかった。
+- margin `20` では raw bias `14.7685` に対しsecondary bias `0.0853`、raw overestimate `15.6463` に対しsecondary overestimate `4.2896` まで縮む。一方、secondary target Spearmanは `-0.1327`。
+- secondary top25 liftはmargin `20` で `+0.4830` だが、top-bottom25 spreadは `-1.2899`。margin `5/10/15/20` 全てでtop-bottom25 spreadは負。
+- margin `20` のsecondary score bucketでは最高score bucket `q05` のtarget meanが `-0.1244` と最悪で、最低score bucket `q01` が `2.6477`。
+- 判断: `stateful_positive_cost_value` meanは校正値として有用だが、ranking scoreとしては使わない。`00121` のtie-break悪化はscoreのrank能力不足と整合する。
+- 次は追加月examplesでsupportを増やし、`blocking_cost` / `replacement_regret` を分類・下方リスクtargetとして扱う。
+- report: `docs/reports/00122_2026-06-29_stateful_near_tie_local_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 09:22 Stateful secondary tie-break
 
 - `model-policy` / `model-sweep` に `long_secondary_score_column`, `short_secondary_score_column`, `secondary_score_tie_margin(s)` を追加した。

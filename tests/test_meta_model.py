@@ -74,9 +74,11 @@ from trade_data.meta_model import (
     parse_csv_months,
     parse_csv_strings,
     prepare_candidate_quality_report_frame,
+    prepare_stateful_near_tie_report_frame,
     residual_penalty_output_column,
     residual_penalty_scored_metrics,
     side_outcome_columns_for_side,
+    stateful_near_tie_margin_metrics,
     trade_quality_calibration_metrics,
     trade_quality_features_from_predictions,
     side_target_means,
@@ -165,6 +167,73 @@ class MetaModelTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             filter_months(df, ["2024-09"], "test")
+
+    def test_prepare_stateful_near_tie_report_frame_joins_side_secondary_score(self):
+        examples = pd.DataFrame(
+            {
+                "decision_timestamp": [
+                    "2024-07-01 00:00:00+00:00",
+                    "2024-07-01 00:01:00+00:00",
+                ],
+                "candidate_side": ["long", "short"],
+                "stateful_positive_cost_value": [5.0, -2.0],
+                "pred_taken_ev": [13.0, 12.0],
+                "pred_opposite_ev": [10.0, 11.0],
+            }
+        )
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(
+                    [
+                        "2024-07-01 00:00:00+00:00",
+                        "2024-07-01 00:01:00+00:00",
+                    ],
+                    utc=True,
+                ),
+                "secondary_long": [4.0, 1.0],
+                "secondary_short": [0.0, -3.0],
+            }
+        )
+
+        frame = prepare_stateful_near_tie_report_frame(
+            examples,
+            predictions=predictions,
+            secondary_long_column="secondary_long",
+            secondary_short_column="secondary_short",
+        )
+
+        self.assertEqual(frame["_secondary_score"].tolist(), [4.0, -3.0])
+        self.assertEqual(frame["_secondary_opposite_score"].tolist(), [0.0, 1.0])
+        self.assertEqual(frame["_primary_gap"].tolist(), [3.0, 1.0])
+
+    def test_stateful_near_tie_margin_metrics_reports_secondary_top_lift(self):
+        examples = pd.DataFrame(
+            {
+                "decision_timestamp": pd.date_range("2024-07-01", periods=4, freq="min", tz="UTC"),
+                "candidate_side": ["long", "long", "short", "short"],
+                "stateful_positive_cost_value": [10.0, 8.0, -4.0, -6.0],
+                "pred_taken_ev": [12.0, 12.0, 12.0, 12.0],
+                "pred_opposite_ev": [10.0, 10.0, 10.0, 10.0],
+                "secondary_taken": [9.0, 7.0, -1.0, -2.0],
+            }
+        )
+        frame = prepare_stateful_near_tie_report_frame(
+            examples,
+            secondary_taken_column="secondary_taken",
+        )
+
+        metrics = stateful_near_tie_margin_metrics(
+            frame,
+            tie_margins=(1.0, 2.0),
+            top_fractions=(0.5,),
+        )
+
+        support_by_margin = dict(zip(metrics["tie_margin"], metrics["support"]))
+        self.assertEqual(support_by_margin[1.0], 0)
+        self.assertEqual(support_by_margin[2.0], 4)
+        margin_two = metrics[metrics["tie_margin"] == 2.0].iloc[0]
+        self.assertAlmostEqual(margin_two["secondary_top_0p5_target_mean"], 9.0)
+        self.assertAlmostEqual(margin_two["secondary_top_0p5_target_lift"], 7.0)
 
     def test_combine_fit_predictions_prepends_base_and_resets_index(self):
         primary = pd.DataFrame({"dataset_month": ["2024-07"], "value": [2]}, index=[10])

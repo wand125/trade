@@ -3246,6 +3246,403 @@ def candidate_quality_bucket_metrics(
     return pd.DataFrame(rows)
 
 
+def normalize_candidate_side(series: pd.Series) -> pd.Series:
+    text = series.astype("string").str.lower()
+    numeric = pd.to_numeric(series, errors="coerce")
+    return pd.Series(
+        np.select(
+            [
+                text.eq("long") | numeric.gt(0),
+                text.eq("short") | numeric.lt(0),
+            ],
+            ["long", "short"],
+            default="",
+        ),
+        index=series.index,
+        dtype="string",
+    )
+
+
+def safe_correlation(left: pd.Series, right: pd.Series, method: str) -> float:
+    aligned = pd.concat([left, right], axis=1).dropna()
+    if len(aligned) < 2:
+        return 0.0
+    if (
+        aligned.iloc[:, 0].nunique(dropna=True) < 2
+        or aligned.iloc[:, 1].nunique(dropna=True) < 2
+    ):
+        return 0.0
+    value = aligned.iloc[:, 0].corr(aligned.iloc[:, 1], method=method)
+    return 0.0 if pd.isna(value) else float(value)
+
+
+def prepare_stateful_near_tie_report_frame(
+    examples: pd.DataFrame,
+    *,
+    predictions: pd.DataFrame | None = None,
+    target_column: str = "stateful_positive_cost_value",
+    primary_score_column: str = "pred_taken_ev",
+    opposite_primary_score_column: str = "pred_opposite_ev",
+    secondary_taken_column: str = "",
+    secondary_long_column: str = (
+        "pred_candidate_quality_stateful_positive_cost_long_adjusted_pnl"
+    ),
+    secondary_short_column: str = (
+        "pred_candidate_quality_stateful_positive_cost_short_adjusted_pnl"
+    ),
+    timestamp_column: str = "decision_timestamp",
+    side_column: str = "candidate_side",
+) -> pd.DataFrame:
+    required_columns = {
+        target_column,
+        primary_score_column,
+        opposite_primary_score_column,
+        timestamp_column,
+        side_column,
+    }
+    missing = sorted(required_columns - set(examples.columns))
+    if missing:
+        raise ValueError(f"stateful near-tie examples missing columns: {', '.join(missing)}")
+
+    output = examples.copy()
+    output["_decision_timestamp"] = pd.to_datetime(
+        output[timestamp_column],
+        utc=True,
+        errors="coerce",
+    )
+    output["_candidate_side_name"] = normalize_candidate_side(output[side_column])
+    output["_target"] = pd.to_numeric(output[target_column], errors="coerce")
+    output["_primary_score"] = pd.to_numeric(output[primary_score_column], errors="coerce")
+    output["_opposite_primary_score"] = pd.to_numeric(
+        output[opposite_primary_score_column],
+        errors="coerce",
+    )
+
+    if secondary_taken_column:
+        if secondary_taken_column not in output.columns:
+            raise ValueError(f"stateful near-tie examples missing column: {secondary_taken_column}")
+        output["_secondary_score"] = pd.to_numeric(output[secondary_taken_column], errors="coerce")
+        output["_secondary_opposite_score"] = np.nan
+    else:
+        if predictions is None:
+            raise ValueError("--predictions is required when --secondary-taken-column is empty")
+        missing_prediction_columns = sorted(
+            {timestamp_column, secondary_long_column, secondary_short_column}
+            - set(predictions.columns)
+        )
+        if missing_prediction_columns:
+            raise ValueError(
+                "stateful near-tie predictions missing columns: "
+                + ", ".join(missing_prediction_columns)
+            )
+        prediction_scores = predictions[
+            [timestamp_column, secondary_long_column, secondary_short_column]
+        ].copy()
+        prediction_scores["_decision_timestamp"] = pd.to_datetime(
+            prediction_scores[timestamp_column],
+            utc=True,
+            errors="coerce",
+        )
+        prediction_scores = (
+            prediction_scores.dropna(subset=["_decision_timestamp"])
+            .drop_duplicates("_decision_timestamp", keep="last")
+            .set_index("_decision_timestamp")
+        )
+        output = output.join(
+            prediction_scores[[secondary_long_column, secondary_short_column]],
+            on="_decision_timestamp",
+            how="left",
+        )
+        long_secondary = pd.to_numeric(output[secondary_long_column], errors="coerce")
+        short_secondary = pd.to_numeric(output[secondary_short_column], errors="coerce")
+        is_long = output["_candidate_side_name"].eq("long")
+        is_short = output["_candidate_side_name"].eq("short")
+        output["_secondary_score"] = np.where(is_long, long_secondary, short_secondary)
+        output["_secondary_opposite_score"] = np.where(is_long, short_secondary, long_secondary)
+        output.loc[~(is_long | is_short), ["_secondary_score", "_secondary_opposite_score"]] = np.nan
+
+    output["_primary_gap"] = (
+        output["_primary_score"] - output["_opposite_primary_score"]
+    ).abs()
+    output["_primary_error"] = output["_primary_score"] - output["_target"]
+    output["_secondary_error"] = output["_secondary_score"] - output["_target"]
+    output["_primary_overestimate"] = output["_primary_error"].clip(lower=0.0)
+    output["_secondary_overestimate"] = output["_secondary_error"].clip(lower=0.0)
+    output["_secondary_gap"] = (
+        output["_secondary_score"] - output["_secondary_opposite_score"]
+    )
+    output["_secondary_prefers_candidate"] = output["_secondary_gap"] >= 0
+    output = output.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=[
+            "_decision_timestamp",
+            "_candidate_side_name",
+            "_target",
+            "_primary_score",
+            "_opposite_primary_score",
+            "_secondary_score",
+            "_primary_gap",
+        ]
+    )
+    return output.reset_index(drop=True)
+
+
+def stateful_near_tie_metrics(
+    frame: pd.DataFrame,
+    *,
+    top_fractions: tuple[float, ...] = (0.25, 0.5),
+) -> dict[str, float]:
+    if frame.empty:
+        metrics: dict[str, float] = {
+            "support": 0,
+            "target_mean": 0.0,
+            "target_le_0_rate": 0.0,
+            "primary_predicted_mean": 0.0,
+            "secondary_predicted_mean": 0.0,
+            "primary_bias": 0.0,
+            "secondary_bias": 0.0,
+            "primary_mae": 0.0,
+            "secondary_mae": 0.0,
+            "primary_overestimate_mean": 0.0,
+            "secondary_overestimate_mean": 0.0,
+            "primary_target_spearman": 0.0,
+            "secondary_target_spearman": 0.0,
+            "primary_target_pearson": 0.0,
+            "secondary_target_pearson": 0.0,
+            "secondary_prefers_candidate_rate": 0.0,
+        }
+        for fraction in top_fractions:
+            suffix = f"{fraction:g}".replace(".", "p")
+            metrics[f"secondary_top_{suffix}_target_mean"] = 0.0
+            metrics[f"secondary_top_{suffix}_target_lift"] = 0.0
+            metrics[f"secondary_top_{suffix}_target_le_0_rate"] = 0.0
+            metrics[f"secondary_top_bottom_{suffix}_target_spread"] = 0.0
+            metrics[f"primary_top_{suffix}_target_mean"] = 0.0
+            metrics[f"primary_top_{suffix}_target_lift"] = 0.0
+        return metrics
+
+    target = frame["_target"].astype(float)
+    primary = frame["_primary_score"].astype(float)
+    secondary = frame["_secondary_score"].astype(float)
+    metrics = {
+        "support": int(len(frame)),
+        "target_mean": float(target.mean()),
+        "target_le_0_rate": float((target <= 0).mean()),
+        "primary_predicted_mean": float(primary.mean()),
+        "secondary_predicted_mean": float(secondary.mean()),
+        "primary_bias": float((primary - target).mean()),
+        "secondary_bias": float((secondary - target).mean()),
+        "primary_mae": float((primary - target).abs().mean()),
+        "secondary_mae": float((secondary - target).abs().mean()),
+        "primary_overestimate_mean": float((primary - target).clip(lower=0.0).mean()),
+        "secondary_overestimate_mean": float((secondary - target).clip(lower=0.0).mean()),
+        "primary_target_spearman": safe_correlation(primary, target, "spearman"),
+        "secondary_target_spearman": safe_correlation(secondary, target, "spearman"),
+        "primary_target_pearson": safe_correlation(primary, target, "pearson"),
+        "secondary_target_pearson": safe_correlation(secondary, target, "pearson"),
+        "secondary_prefers_candidate_rate": (
+            float(frame["_secondary_prefers_candidate"].mean())
+            if frame["_secondary_prefers_candidate"].notna().any()
+            else 0.0
+        ),
+    }
+    for fraction in top_fractions:
+        if not 0.0 < fraction <= 1.0:
+            raise ValueError("top fractions must be in (0, 1]")
+        suffix = f"{fraction:g}".replace(".", "p")
+        take_count = max(1, int(np.ceil(len(frame) * fraction)))
+        secondary_sorted = frame.sort_values("_secondary_score", ascending=False)
+        primary_sorted = frame.sort_values("_primary_score", ascending=False)
+        secondary_top = secondary_sorted.head(take_count)
+        secondary_bottom = secondary_sorted.tail(take_count)
+        primary_top = primary_sorted.head(take_count)
+        secondary_top_target = secondary_top["_target"].astype(float)
+        secondary_bottom_target = secondary_bottom["_target"].astype(float)
+        primary_top_target = primary_top["_target"].astype(float)
+        metrics[f"secondary_top_{suffix}_target_mean"] = float(secondary_top_target.mean())
+        metrics[f"secondary_top_{suffix}_target_lift"] = float(
+            secondary_top_target.mean() - target.mean()
+        )
+        metrics[f"secondary_top_{suffix}_target_le_0_rate"] = float(
+            (secondary_top_target <= 0).mean()
+        )
+        metrics[f"secondary_top_bottom_{suffix}_target_spread"] = float(
+            secondary_top_target.mean() - secondary_bottom_target.mean()
+        )
+        metrics[f"primary_top_{suffix}_target_mean"] = float(primary_top_target.mean())
+        metrics[f"primary_top_{suffix}_target_lift"] = float(
+            primary_top_target.mean() - target.mean()
+        )
+    return metrics
+
+
+def stateful_near_tie_margin_metrics(
+    frame: pd.DataFrame,
+    *,
+    tie_margins: tuple[float, ...],
+    min_primary_score: float = -float("inf"),
+    top_fractions: tuple[float, ...] = (0.25, 0.5),
+    group_column: str = "",
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    groups: list[tuple[object, pd.DataFrame]]
+    if group_column:
+        if group_column not in frame.columns:
+            raise ValueError(f"stateful near-tie frame missing group column: {group_column}")
+        groups = list(frame.groupby(group_column, dropna=False, sort=True, observed=False))
+    else:
+        groups = [("", frame)]
+    for margin in tie_margins:
+        for group_value, group in groups:
+            subset = group[group["_primary_gap"] <= margin].copy()
+            if np.isfinite(min_primary_score):
+                subset = subset[subset["_primary_score"] >= min_primary_score].copy()
+            row: dict[str, object] = {
+                "tie_margin": margin,
+                "min_primary_score": min_primary_score,
+            }
+            if group_column:
+                row[group_column] = "__missing__" if pd.isna(group_value) else group_value
+            row.update(stateful_near_tie_metrics(subset, top_fractions=top_fractions))
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def stateful_near_tie_bucket_metrics(
+    frame: pd.DataFrame,
+    *,
+    tie_margins: tuple[float, ...],
+    bucket_count: int = 5,
+    min_primary_score: float = -float("inf"),
+    min_support: int = 1,
+) -> pd.DataFrame:
+    if bucket_count < 2:
+        raise ValueError("bucket_count must be at least 2")
+    rows: list[dict[str, object]] = []
+    for margin in tie_margins:
+        subset = frame[frame["_primary_gap"] <= margin].copy()
+        if np.isfinite(min_primary_score):
+            subset = subset[subset["_primary_score"] >= min_primary_score].copy()
+        if len(subset) < max(2, min_support):
+            continue
+        bucket_total = min(bucket_count, len(subset))
+        labels = [f"q{index + 1:02d}" for index in range(bucket_total)]
+        ranks = subset["_secondary_score"].rank(method="first")
+        subset["_secondary_score_bucket"] = pd.qcut(ranks, q=bucket_total, labels=labels)
+        for bucket, group in subset.groupby(
+            "_secondary_score_bucket",
+            dropna=False,
+            sort=True,
+            observed=False,
+        ):
+            if len(group) < min_support:
+                continue
+            metrics = stateful_near_tie_metrics(group, top_fractions=(1.0,))
+            row: dict[str, object] = {
+                "tie_margin": margin,
+                "bucket": str(bucket),
+                "secondary_score_min": float(group["_secondary_score"].min()),
+                "secondary_score_max": float(group["_secondary_score"].max()),
+            }
+            row.update(metrics)
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def stateful_near_tie_report_cli(args: argparse.Namespace) -> int:
+    examples = pd.read_csv(args.examples)
+    predictions = pd.read_parquet(args.predictions) if args.predictions is not None else None
+    tie_margins = tuple(parse_csv_floats(args.tie_margins) or [5.0, 10.0, 15.0, 20.0])
+    top_fractions = tuple(parse_csv_floats(args.top_fractions) or [0.25, 0.5])
+    frame = prepare_stateful_near_tie_report_frame(
+        examples,
+        predictions=predictions,
+        target_column=args.target_column,
+        primary_score_column=args.primary_score_column,
+        opposite_primary_score_column=args.opposite_primary_score_column,
+        secondary_taken_column=args.secondary_taken_column,
+        secondary_long_column=args.secondary_long_column,
+        secondary_short_column=args.secondary_short_column,
+        timestamp_column=args.timestamp_column,
+        side_column=args.side_column,
+    )
+
+    overall_metrics = stateful_near_tie_margin_metrics(
+        frame,
+        tie_margins=tie_margins,
+        min_primary_score=args.min_primary_score,
+        top_fractions=top_fractions,
+    )
+    month_metrics = stateful_near_tie_margin_metrics(
+        frame,
+        tie_margins=tie_margins,
+        min_primary_score=args.min_primary_score,
+        top_fractions=top_fractions,
+        group_column=args.month_column if args.month_column in frame.columns else "",
+    )
+    bucket_metrics = stateful_near_tie_bucket_metrics(
+        frame,
+        tie_margins=tie_margins,
+        bucket_count=args.bucket_count,
+        min_primary_score=args.min_primary_score,
+        min_support=args.min_bucket_support,
+    )
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    frame.to_csv(run_dir / "scored_examples.csv", index=False)
+    overall_metrics.to_csv(run_dir / "overall_metrics.csv", index=False)
+    month_metrics.to_csv(run_dir / "month_metrics.csv", index=False)
+    bucket_metrics.to_csv(run_dir / "bucket_metrics.csv", index=False)
+
+    best_secondary_rows: list[dict[str, object]] = []
+    if not overall_metrics.empty:
+        lift_column = "secondary_top_0p25_target_lift"
+        if lift_column not in overall_metrics.columns:
+            lift_column = "secondary_top_0p5_target_lift"
+        best_secondary_rows = (
+            overall_metrics.sort_values([lift_column, "support"], ascending=[False, False])
+            .head(args.summary_rows)
+            .to_dict(orient="records")
+        )
+    summary = {
+        "mode": "stateful_near_tie_report",
+        "examples": str(args.examples),
+        "predictions": None if args.predictions is None else str(args.predictions),
+        "rows": {
+            "input_examples": int(len(examples)),
+            "usable_examples": int(len(frame)),
+            "overall_metrics": int(len(overall_metrics)),
+            "month_metrics": int(len(month_metrics)),
+            "bucket_metrics": int(len(bucket_metrics)),
+        },
+        "columns": {
+            "target": args.target_column,
+            "primary_score": args.primary_score_column,
+            "opposite_primary_score": args.opposite_primary_score_column,
+            "secondary_taken": args.secondary_taken_column,
+            "secondary_long": args.secondary_long_column,
+            "secondary_short": args.secondary_short_column,
+        },
+        "tie_margins": list(tie_margins),
+        "min_primary_score": args.min_primary_score,
+        "top_fractions": list(top_fractions),
+        "best_secondary_lift_rows": best_secondary_rows,
+    }
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=str)
+    print(
+        json.dumps(
+            {
+                "rows": summary["rows"],
+                "best": best_secondary_rows,
+                "artifacts": str(run_dir),
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    return 0
+
+
 def candidate_quality_report_cli(args: argparse.Namespace) -> int:
     examples = pd.read_csv(args.examples)
     downside_thresholds = tuple(parse_csv_floats(args.downside_thresholds) or [0.0, -15.0])
@@ -7803,6 +8200,70 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(stateful_value_model_parser)
     add_trade_quality_model_args(stateful_value_model_parser)
     stateful_value_model_parser.set_defaults(func=oof_stateful_value_model)
+
+    stateful_near_tie_report_parser = subparsers.add_parser(
+        "stateful-near-tie-report",
+        help=(
+            "diagnose whether stateful secondary scores rank candidate examples "
+            "inside near-tie primary EV gaps"
+        ),
+    )
+    stateful_near_tie_report_parser.add_argument("--examples", type=Path, required=True)
+    stateful_near_tie_report_parser.add_argument(
+        "--predictions",
+        type=Path,
+        help=(
+            "prediction parquet containing side-specific secondary score columns; "
+            "optional when --secondary-taken-column is present in examples"
+        ),
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("experiments"),
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--label",
+        default="stateful_near_tie_report",
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--target-column",
+        default="stateful_positive_cost_value",
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--primary-score-column",
+        default="pred_taken_ev",
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--opposite-primary-score-column",
+        default="pred_opposite_ev",
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--secondary-taken-column",
+        default="",
+        help="optional already-side-selected secondary score column in examples",
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--secondary-long-column",
+        default="pred_candidate_quality_stateful_positive_cost_long_adjusted_pnl",
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--secondary-short-column",
+        default="pred_candidate_quality_stateful_positive_cost_short_adjusted_pnl",
+    )
+    stateful_near_tie_report_parser.add_argument(
+        "--timestamp-column",
+        default="decision_timestamp",
+    )
+    stateful_near_tie_report_parser.add_argument("--side-column", default="candidate_side")
+    stateful_near_tie_report_parser.add_argument("--month-column", default="dataset_month")
+    stateful_near_tie_report_parser.add_argument("--tie-margins", default="5,10,15,20")
+    stateful_near_tie_report_parser.add_argument("--min-primary-score", type=float, default=-float("inf"))
+    stateful_near_tie_report_parser.add_argument("--top-fractions", default="0.25,0.5")
+    stateful_near_tie_report_parser.add_argument("--bucket-count", type=int, default=5)
+    stateful_near_tie_report_parser.add_argument("--min-bucket-support", type=int, default=1)
+    stateful_near_tie_report_parser.add_argument("--summary-rows", type=int, default=10)
+    stateful_near_tie_report_parser.set_defaults(func=stateful_near_tie_report_cli)
 
     combine_candidate_quality_parser = subparsers.add_parser(
         "combine-candidate-quality-components",
