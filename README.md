@@ -191,6 +191,26 @@ python -m trade_data.meta_model fit \
   --label meta_ev_dense_entry_quality
 ```
 
+Train a selected-trade failure classifier with chronological OOF. For exit
+timing diagnostics, `exit_shortening_high` marks executed trades where the
+oracle hold is at least 30 minutes shorter and exit regret is at least 5:
+
+```bash
+python -m trade_data.meta_model oof-trade-failure-model \
+  --validation-trades data/reports/backtests/<validation_runs>/trades.csv \
+  --validation-predictions data/reports/modeling/<run>/predictions_validation_oof.parquet \
+  --validation-months 2024-11,2024-12,2025-01,2025-02,2025-03 \
+  --failure-targets exit_shortening_high \
+  --exit-regret-threshold 5 \
+  --exit-shortening-gap-minutes 30 \
+  --oof-scheme expanding \
+  --min-train-months 2
+```
+
+The resulting `pred_trade_failure_exit_shortening_high_<side>_prob` columns can
+be tested as holding-shortening inputs; the matching `<side>_risk` columns are
+available but should only be promoted after chronological policy validation.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 

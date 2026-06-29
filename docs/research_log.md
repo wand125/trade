@@ -5033,3 +5033,45 @@ risk5結果:
 
 - `python3 -m unittest tests.test_holding_error_target_diagnostics`: OK, 3 tests
 - `python3 -m py_compile scripts/experiments/holding_error_target_diagnostics.py`: OK
+
+### 2026-06-29 21:22 JST Exit shortening failure policy
+
+作業:
+
+- `oof-trade-failure-model` に `exit_shortening_high` targetを追加した。
+- targetは `oracle_holding_gap_minutes <= -30 and exit_regret >= 5`。
+- `--exit-shortening-gap-minutes`、`--oof-scheme expanding`、`--min-train-months` を追加し、対象月より前の月だけでfitするchronological OOFを実行した。
+- fixed highcost risk5の2024-11..2025-05 selected tradesを使い、2024-11/12は学習月不足でskip、2025-01..05を評価した。
+- entry risk、既存stateful riskへの上乗せ、holding-time cap接続を比較した。
+- report: `docs/reports/00170_2026-06-29_exit_shortening_failure_policy.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+OOF結果:
+
+| scope | trades | prevalence | pred mean | bias | brier | AUC |
+|---|---:|---:|---:|---:|---:|---:|
+| 2025-01..05 | `453` | `0.1987` | `0.2461` | `0.0475` | `0.1623` | `0.5269` |
+
+Policy結果:
+
+| variant | trades | total pnl | worst month | max DD |
+|---|---:|---:|---:|---:|
+| no_risk | `474` | `414.1398` | `-30.2776` | `249.9600` |
+| stateful_p5 baseline | `452` | `405.3160` | `8.5354` | `218.4530` |
+| exit_short_p5 | `435` | `268.5116` | `-27.2746` | `250.3360` |
+| stateful + exit_short w0.2 | `448` | `354.3786` | `-0.6716` | `219.2490` |
+| stateful_p5 + cap `0.30/60m` | `511` | `457.3926` | `8.6094` | `210.6890` |
+| stateful_p5 + cap `0.28/60m` | `534` | `451.5832` | `10.1594` | `210.6890` |
+| stateful_p5 + cap `0.30/90m` | `498` | `450.3364` | `15.9594` | `218.7290` |
+
+判断:
+
+- `exit_shortening_high` はentry riskとしては採用しない。AUCが薄く、probability binごとのPnL単調性も弱い。
+- exit timingとしては意味が合っており、既存 `stateful_p5` の予測保有を短縮する形で改善した。
+- `0.28..0.30` 周辺に小さな台地があるが、同期間内でpolicy選択しているため標準採用はしない。
+- 次は `threshold=0.30`, `cap=60m` を固定し、2025-06..2025-08に再探索なしで適用する。あわせてtrade deltaで、改善が短縮そのものか追加entry機会かを分解する。
+
+検証:
+
+- `python3 -m trade_data.meta_model oof-trade-failure-model ... --failure-targets exit_shortening_high --oof-scheme expanding --min-train-months 2`: OK
+- `python3 -m trade_data.backtest model-policy ... --holding-shortening-threshold 0.30 --holding-shortening-cap-minutes 60`: OK, 5 months

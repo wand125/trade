@@ -234,6 +234,7 @@ class TradeFailureModelConfig:
     prediction_shrinkage: float
     large_loss_threshold: float
     exit_regret_threshold: float
+    exit_shortening_gap_minutes: float
     ev_overestimate_threshold: float
     target_names: tuple[str, ...]
 
@@ -456,6 +457,7 @@ TRADE_FAILURE_TARGET_NAMES = (
     "profit_barrier_miss",
     "pred_hit_actual_miss",
     "exit_regret_high",
+    "exit_shortening_high",
     "ev_overestimate_high",
     "any_failure",
 )
@@ -2717,6 +2719,7 @@ def trade_failure_targets_from_enriched(
     validate_trade_failure_targets(config.target_names)
     adjusted = finite_float_series(enriched, "adjusted_pnl")
     exit_regret = finite_float_series(enriched, "exit_regret")
+    oracle_holding_gap = finite_float_series(enriched, "oracle_holding_gap_minutes")
     predicted_barrier_hit = finite_float_series(
         enriched,
         "pred_taken_profit_barrier_hit",
@@ -2737,6 +2740,9 @@ def trade_failure_targets_from_enriched(
     targets["profit_barrier_miss"] = actual_barrier_miss
     targets["pred_hit_actual_miss"] = predicted_barrier_hit & actual_barrier_miss
     targets["exit_regret_high"] = exit_regret >= config.exit_regret_threshold
+    targets["exit_shortening_high"] = (
+        oracle_holding_gap <= -config.exit_shortening_gap_minutes
+    ) & (exit_regret >= config.exit_regret_threshold)
     targets["ev_overestimate_high"] = ev_overestimate >= config.ev_overestimate_threshold
     targets["any_failure"] = targets[
         [
@@ -2745,6 +2751,7 @@ def trade_failure_targets_from_enriched(
             "profit_barrier_miss",
             "pred_hit_actual_miss",
             "exit_regret_high",
+            "exit_shortening_high",
             "ev_overestimate_high",
         ]
     ].any(axis=1)
@@ -2771,6 +2778,8 @@ def fit_trade_failure_model(
         raise ValueError("large_loss_threshold must be non-negative")
     if config.exit_regret_threshold < 0:
         raise ValueError("exit_regret_threshold must be non-negative")
+    if config.exit_shortening_gap_minutes < 0:
+        raise ValueError("exit_shortening_gap_minutes must be non-negative")
     if config.ev_overestimate_threshold < 0:
         raise ValueError("ev_overestimate_threshold must be non-negative")
     validate_trade_failure_targets(config.target_names)
@@ -8252,6 +8261,7 @@ def trade_failure_model_config_from_args(args: argparse.Namespace) -> TradeFailu
         prediction_shrinkage=args.prediction_shrinkage,
         large_loss_threshold=args.large_loss_threshold,
         exit_regret_threshold=args.exit_regret_threshold,
+        exit_shortening_gap_minutes=args.exit_shortening_gap_minutes,
         ev_overestimate_threshold=args.ev_overestimate_threshold,
         target_names=target_names,
     )
@@ -9264,12 +9274,27 @@ def oof_trade_failure_model(args: argparse.Namespace) -> int:
     fold_prediction_outputs: list[pd.DataFrame] = []
     fold_trade_outputs: list[pd.DataFrame] = []
     fold_metrics: dict[str, object] = {}
-    for fold_index, holdout_month in enumerate(validation_months):
-        fit_trades = validation_enriched[validation_enriched["dataset_month"] != holdout_month].copy()
+    fold_plan = stateful_value_oof_fold_plan(
+        validation_months,
+        scheme=args.oof_scheme,
+        min_train_months=args.min_train_months,
+    )
+    for fold_index, fold in enumerate(fold_plan):
+        holdout_month = str(fold["holdout_month"])
+        fit_months = list(fold["fit_months"])
         holdout_trades = validation_enriched[validation_enriched["dataset_month"] == holdout_month].copy()
         holdout_predictions = validation_predictions[
             validation_predictions["dataset_month"] == holdout_month
         ].copy()
+        if fold["status"] != "profiled":
+            fold_metrics[holdout_month] = {
+                **fold,
+                "fit_trades": 0,
+                "holdout_trades": int(len(holdout_trades)),
+                "holdout_predictions": int(len(holdout_predictions)),
+            }
+            continue
+        fit_trades = validation_enriched[validation_enriched["dataset_month"].isin(fit_months)].copy()
         if fit_trades.empty or holdout_predictions.empty:
             raise ValueError(f"cannot build trade failure model OOF fold for {holdout_month}")
         fold_config = TradeFailureModelConfig(
@@ -9284,6 +9309,7 @@ def oof_trade_failure_model(args: argparse.Namespace) -> int:
         fold_prediction_outputs.append(holdout_prediction_output)
         fold_trade_outputs.append(holdout_trade_output)
         fold_metrics[holdout_month] = {
+            **fold,
             "fit_trades": int(len(fit_trades)),
             "holdout_trades": int(len(holdout_trades)),
             "holdout_predictions": int(len(holdout_predictions)),
@@ -9293,6 +9319,11 @@ def oof_trade_failure_model(args: argparse.Namespace) -> int:
             "category_mappings": fold_bundle.category_mappings,
         }
 
+    if not fold_prediction_outputs:
+        raise ValueError(
+            "no trade failure OOF folds were profiled; lower min_train_months "
+            "or add validation months"
+        )
     validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
     if "decision_timestamp" in validation_oof.columns:
         validation_oof = validation_oof.sort_values("decision_timestamp")
@@ -9326,6 +9357,9 @@ def oof_trade_failure_model(args: argparse.Namespace) -> int:
         "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
         "validation_months": validation_months,
         "apply_months": apply_months,
+        "oof_scheme": args.oof_scheme,
+        "min_train_months": args.min_train_months,
+        "fold_plan": fold_plan,
         "source": {
             "source_mode": args.source_mode,
             "long_column": args.long_column,
@@ -10017,6 +10051,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated validation dataset months for OOF folds",
     )
     trade_failure_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    trade_failure_model_parser.add_argument(
+        "--oof-scheme",
+        choices=("leave_one_month", "expanding"),
+        default="leave_one_month",
+        help="month OOF scheme; expanding only trains on months before the holdout month",
+    )
+    trade_failure_model_parser.add_argument(
+        "--min-train-months",
+        type=int,
+        default=1,
+        help="minimum number of fit months required for an OOF fold",
+    )
     trade_failure_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
     trade_failure_model_parser.add_argument("--label", default="trade_failure_model")
     trade_failure_model_parser.add_argument(
@@ -10024,11 +10070,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=",".join(TRADE_FAILURE_TARGET_NAMES),
         help=(
             "comma-separated failure targets: large_loss,wrong_side,profit_barrier_miss,"
-            "pred_hit_actual_miss,exit_regret_high,ev_overestimate_high,any_failure"
+            "pred_hit_actual_miss,exit_regret_high,exit_shortening_high,"
+            "ev_overestimate_high,any_failure"
         ),
     )
     trade_failure_model_parser.add_argument("--large-loss-threshold", type=float, default=10.0)
     trade_failure_model_parser.add_argument("--exit-regret-threshold", type=float, default=10.0)
+    trade_failure_model_parser.add_argument("--exit-shortening-gap-minutes", type=float, default=30.0)
     trade_failure_model_parser.add_argument("--ev-overestimate-threshold", type=float, default=20.0)
     add_trade_source_args(trade_failure_model_parser)
     add_trade_quality_model_args(trade_failure_model_parser, include_target_clip_quantile=False)

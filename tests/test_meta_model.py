@@ -1082,6 +1082,7 @@ class MetaModelTests(unittest.TestCase):
                 "direction_error": [False, True, False, True],
                 "actual_taken_profit_barrier_hit": [1.0, 0.0, 1.0, 0.0],
                 "exit_regret": [0.0, 6.0, 0.0, 8.0],
+                "oracle_holding_gap_minutes": [0.0, -45.0, 120.0, -20.0],
                 "pred_taken_ev": [11.0, 13.0, 12.0, 10.0],
                 "pred_opposite_ev": [8.0, 9.0, 4.0, 5.0],
                 "pred_best_ev": [11.0, 13.0, 12.0, 10.0],
@@ -1118,6 +1119,7 @@ class MetaModelTests(unittest.TestCase):
             prediction_shrinkage=1.0,
             large_loss_threshold=5.0,
             exit_regret_threshold=5.0,
+            exit_shortening_gap_minutes=30.0,
             ev_overestimate_threshold=20.0,
             target_names=(
                 "large_loss",
@@ -1125,6 +1127,7 @@ class MetaModelTests(unittest.TestCase):
                 "profit_barrier_miss",
                 "pred_hit_actual_miss",
                 "exit_regret_high",
+                "exit_shortening_high",
                 "ev_overestimate_high",
                 "any_failure",
             ),
@@ -1148,6 +1151,7 @@ class MetaModelTests(unittest.TestCase):
             self.assertIn(f"pred_trade_failure_{target_name}_taken_prob", scored.columns)
             self.assertIn(f"trade_failure_{target_name}", scored.columns)
         self.assertEqual(scored["trade_failure_pred_hit_actual_miss"].tolist(), [0, 1, 0, 0])
+        self.assertEqual(scored["trade_failure_exit_shortening_high"].tolist(), [0, 1, 0, 0])
         self.assertEqual(scored["trade_failure_ev_overestimate_high"].tolist(), [0, 0, 0, 0])
         self.assertEqual(scored["trade_failure_any_failure"].tolist(), [0, 1, 0, 1])
 

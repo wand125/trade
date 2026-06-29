@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 20:54 JST
+最終更新: 2026-06-29 21:22 JST
 
 ## 現在の状態
 
@@ -31,6 +31,8 @@ holding-shortening featureを2025-02..04 highcost risk5 selected tradesで実診
 holding cap contextをwalk-forward化した。`scripts/experiments/holding_cap_context_walkforward.py` で、no-context capのdirect targetから対象月より前の月だけを使ってharmful contextを選び、`holding_risk_overlay.py --exclude-combined-session-pairs-by-month` で月別除外をpolicyへ接続した。direct target上はpooledで cap value `+10.6172`、risk0 `+6.6628`、risk5 `+3.9544` の改善余地があったが、full policyでは context-WF risk0 `376.6688 / -52.1236 / 145.4232`、risk5 `348.6384 / -43.9880 / 146.3352` で、no-context capの risk0 `378.8870 / -52.3036 / 145.4232`、risk5 `351.2370 / -48.5396 / 146.3352` をtotalで下回った。risk5のmin monthは改善するが利益最大化には不足。post-hoc static pair除外にも届かないため標準採用せず、`holding_error` / `exit_regret` / `cap_value` 系のdense教師設計へ回す。採番監査では既存167レポートが本文内 `日時` 順で問題0件。詳細は `docs/reports/00168_2026-06-29_holding_cap_context_walkforward.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 holding error / exit regretをdense教師候補として分解した。`scripts/experiments/holding_error_target_diagnostics.py` を追加し、`oracle_holding_gap_minutes <= -30 and exit_regret >= 5` を `exit_shortening_target`、`oracle_holding_gap_minutes >= 30 and exit_regret >= 5` を `hold_extension_target` として診断した。fixed highcost risk5では `should_exit_earlier` が141 tradesで total `-1301.9486`, avg `-9.2337`, large loss rate `0.2270` と明確に損失側。`near_correct` は `+315.8636`, `should_hold_longer` は `+1340.9258` で、hold-extensionは利益機会も多く含む。`pred_minus_oracle_holding_minutes` はadjusted PnLと `-0.2120` の相関で、予測保有がoracleより長すぎるほど悪い。次は `exit_shortening_high` を selected trade failure / stateful risk 系へ追加し、chronological OOFでAUCとpolicy接続を確認する。詳細は `docs/reports/00169_2026-06-29_holding_error_target_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`exit_shortening_high` をselected trade failure modelへ追加し、chronological expanding OOFとpolicy接続を確認した。target定義は `oracle_holding_gap_minutes <= -30 and exit_regret >= 5`。2025-01..05のOOFはAUC `0.5269`, prevalence `0.1987`, pred mean `0.2461` と薄く、probability bin上のPnL単調性も弱い。entry riskとしては単独/既存stateful riskへの上乗せがすべて悪化した。一方、既存 `stateful_p5` に exit timingとして接続し、`pred_trade_failure_exit_shortening_high_*_prob >= 0.30` のとき予測保有を `60m` capにすると、2025-01..05 total adjusted PnLは baseline `405.3160` から `457.3926` へ改善、worst month `8.6094`, max DD `210.6890`。`0.28/60m` と `0.30/90m` も近く、0.28..0.30付近に候補帯がある。まだ同期間内でのpolicy選択なので標準採用せず、次は `0.30/60m` を固定して2025-06..08へ再探索なしで適用する。詳細は `docs/reports/00170_2026-06-29_exit_shortening_failure_policy.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
@@ -337,7 +339,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-直近更新: dense holding-shortening targetを追加し、別dirで32ヶ月dataset再生成と3ヶ月OOF smokeまで完了した。次は `pred_*_fixed_*_beats_exit_event_prob_1` をholding短縮の補助特徴としてpolicyへ接続し、連続deltaは直接使わずcalibration/bucket化から試す。
+直近更新: `exit_shortening_high` を selected trade failure targetへ追加し、chronological OOFとpolicy接続を確認した。entry riskとしては悪化するため採用せず、exit timingとして既存 `stateful_p5` の予測保有を短縮する候補にする。次は `threshold=0.30`, `cap=60m` を固定し、2025-06..2025-08へ再探索なしで適用し、trade deltaで改善が保有短縮由来か追加entry由来かを分解する。
 
 - 新targetを使う実験では、旧datasetを `--skip-existing` で流用しない。旧parquetでは新列が欠けるため、policy改善確認には再生成が必須。
 
@@ -412,6 +414,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 21:22 JST 更新: `exit_shortening_high = oracle_holding_gap_minutes <= -30 and exit_regret >= 5` をselected-trade failure modelへ追加した。chronological OOFのAUCは `0.5269` と薄く、entry riskは単独/既存risk上乗せとも悪化。一方、exit timingとして `pred_trade_failure_exit_shortening_high_*_prob >= 0.30` で予測保有を `60m` capにすると、2025-01..05 highcost risk5で baseline `405.3160` から `457.3926` へ改善した。まだ同期間内で選んだ候補なので標準採用せず、`0.30/60m` を固定して2025-06..08へ再探索なしで適用する。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 15:39 JST 更新: `trade_overestimate_target_amount = max(pred_taken_ev - adjusted_pnl, 0)` のOOFモデルを追加した。highcost risk5 2024-11..2025-04では R2 `0.1273`, high-overestimate AUC `0.6814`。amount全体の直接penaltyはvalidationを悪化させたが、validation OOF prediction分布のq90超過分だけを使う `q90 w2.0` はvalidation total `407.8172 -> 460.6640`, min month `-16.9006 -> -2.3046`, max DD `224.7524 -> 204.8324` に改善し、2025-05 fixed applyも `-52.9764 -> +25.5248` に改善した。max DDは2025-05で悪化するため即標準採用ではなく、固定候補として未使用月・chronological validation・trade delta診断へ進める。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
