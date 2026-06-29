@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 12:36 Stateful downside mean-match 2025-05 fixed
+
+- `00140` で事前登録candidateにした `mean_match + session_floor_lowered risk=5` を、同じ6ヶ月内で追加調整せず、2025-05へ固定適用した。
+- 2025-05の同一形式dataset / HGB entry-side / MLP exit / forced predictionを生成した。HGB best-side balanced accuracyは `0.4571`、selected side accuracyは `0.4924`。MLP exit minutes R2はlong `0.1177`, short `0.1361` だが、holding中央値はlong `-82.44`, short `-76.93` で、`min_valid_predicted_hold_minutes=30` のfail-close guard頼みが続く。
+- 固定policyでは、baseが `risk0=13.9990 -> risk5=25.3104`、highcostが `risk0=-66.1420 -> risk5=-52.9764`。防御方向には働いたが、highcostはNoTrade未満で、`00140` のcost min基準 `>= -20` を満たさない。
+- trade deltaでは改善が少数の入れ替えに依存し、common tradeには `long:down_low_vol` と `short:up_normal_vol` の大きな損失が残った。risk=5後のstateful target meanもhighcostでは `-0.6984` と負。
+- 判断: `risk=5` は標準policyへ採用しない。candidate ranking / diagnostic featureへ降格寄りに扱い、同じ2025-05上でrisk閾値を追加最適化しない。
+- report: `docs/reports/00141_2026-06-29_stateful_downside_mean_match_2025_05_fixed.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 12:23 Stateful downside mean-match risk budget
 
 - `oof-stateful-risk-model` に `--probability-calibration none|mean_match` を追加した。`mean_match` はlogit interceptだけをずらして、scored foldの平均probabilityをfit側target prevalenceへ合わせる。fold内順位は保つがfold間スケールは変わるため、OOF全体AUCは動き得る。

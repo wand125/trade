@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 12:23 JST
+最終更新: 2026-06-29 12:36 JST
 
 ## 現在の状態
 
@@ -87,6 +87,8 @@ guard固定後entry/side候補のtrade-level drift診断を実施済み。valida
 `oof-stateful-risk-model` にchronological OOFとwalk-forward stress/floor分類targetを追加済み。expanding OOFではavailable `walkforward_stress_flag` AUC `0.6512`、session `walkforward_floor_lowered` AUC `0.6473` と、回帰よりはrank signalがある。ただしpredicted meanがprevalenceを大きく下回りcalibrationは弱い。6ヶ月policy接続では `session_floor_lowered risk=10` がbase最悪月 `-18.7168 -> +8.0320`、high cost最悪月 `-34.3748 -> -20.8080` を改善したが、合計PnLをbase `543.9972 -> 422.1416`、high cost `391.2374 -> 311.0372` へ削った。標準policyには採用せず、risk budget / drawdown-aware ranking / candidate selectionの補助特徴として残す。詳細は `docs/reports/00139_2026-06-29_stateful_downside_risk_policy.md`。
 
 stateful downside riskにmean-match probability calibrationを追加済み。`session_floor_lowered` expanding OOFではpredicted mean `0.1051 -> 0.1214`、Brier `0.2181 -> 0.2129` と校正が少し改善したが、AUCは `0.6473 -> 0.6371` へ低下した。6ヶ月policy接続では `risk=5` がbase合計をほぼ維持しつつ最悪月を `-18.7168 -> +8.0868` に改善し、high costも合計 `391.2374 -> 407.8172`、最悪月 `-34.3748 -> -16.9006`、max DD `259.0392 -> 224.7524` へ改善した。candidate selectionでは `risk=5` だけが通過したが、同じ6ヶ月診断セット上で選んだため標準policyには採用せず、次の未使用月で固定確認する事前登録candidateにする。詳細は `docs/reports/00140_2026-06-29_stateful_downside_mean_match_risk_budget.md`。
+
+`mean_match + session_floor_lowered risk=5` を2025-05へ固定適用済み。baseは `13.9990 -> 25.3104`、highcostは `-66.1420 -> -52.9764` へ改善し、防御方向の効果は残った。ただしhighcostはNoTrade未満で、`00140` のcost min基準 `>= -20` を満たさない。trade-deltaでは改善が少数の入れ替えに依存し、common tradeに `long:down_low_vol` と `short:up_normal_vol` の大きな損失が残った。標準採用せず、candidate ranking / diagnostic featureへ降格寄りに扱う。詳細は `docs/reports/00141_2026-06-29_stateful_downside_mean_match_2025_05_fixed.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
@@ -332,6 +334,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 51. stateful value target比較は、leave-one-monthではなくchronologicalな `--oof-scheme expanding` を標準診断にする。floor targetは直接EV回帰として使わず、下方リスク分類やsupport-aware calibrationへ変換して試す。
 52. walk-forward floor分類targetのうち `session_floor_lowered` は防御signalとして有望だが、単独risk penaltyは合計PnLを削りすぎる。標準policyに固定せず、drawdown-aware candidate rankingかcalibrated risk budgetへ回す。
 53. `mean_match + session_floor_lowered risk=5` は6ヶ月診断ではbase/high costの最悪月とdrawdownを改善したが、同じ期間で選抜した候補である。これ以上この6ヶ月で細かく調整せず、未使用月へ固定適用して反証する。
+54. 2025-05固定では `risk=5` がbase/highcostを改善したが、highcostはNoTrade未満で事前基準に届かない。直接policy採用は止め、残ったcommon trade損失をwalk-forward downside/context targetへ戻す。
 
 ## 未決定事項
 
@@ -342,6 +345,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 12:36 JST 更新: `mean_match + session_floor_lowered risk=5` を2025-05へ固定適用した。baseは `13.9990 -> 25.3104`、highcostは `-66.1420 -> -52.9764` に改善し、防御signalとしては一部再現した。ただしhighcostはNoTrade未満で、事前のcost min基準 `>= -20` を満たさない。trade-deltaでは改善が少数の入れ替えに依存し、common `long:down_low_vol` / `short:up_normal_vol` 損失が残る。標準採用せず、diagnostic/ranking featureへ降格寄りに扱う。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 12:23 JST 更新: stateful downside riskにmean-match probability calibrationを追加した。`session_floor_lowered` のBrier/biasは少し改善し、6ヶ月policy接続では `risk=5` がbase最悪月を `-18.7168 -> +8.0868`、high cost最悪月を `-34.3748 -> -16.9006`、high cost max DDを `259.0392 -> 224.7524` に改善した。candidate selectionでも `risk=5` だけが通過したが、同じ6ヶ月診断セットで選んでいるため標準採用せず、次の未使用月で固定確認する。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
