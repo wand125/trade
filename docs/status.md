@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 17:28 JST
+最終更新: 2026-06-29 17:43 JST
 
 ## 現在の状態
 
@@ -33,6 +33,8 @@ stateful examplesの追加support実験も実施済み。`oof-stateful-value-mod
 同一固定policyのstateful examples再評価も完了。`fixed_highcost_risk5` vs `fixed_highcost_risk0` の2024-11..2025-05から607例を作り、2025-02..2025-05をchronological OOF評価した。`blocking_cost_high` はAUC `0.3563` と逆方向、`stateful_nonpositive` はAUC `0.5216` と薄いsignalに留まる。既存risk5へ追加すると、2025-02..2025-05 totalは baseline risk5 `101.6610` に対し blockcost w5 `78.5882`, blockcost w10 `35.7162`, nonpositive w5 `-88.3904`, nonpositive w10 `-96.3226` で全て悪化。高コスト4ヶ月ではrisk0 total `111.3582` がrisk5を上回るため、risk5は利益最大化signalではなく防御diagnosticとして扱う。詳細は `docs/reports/00154_2026-06-29_fixed_policy_stateful_examples.md`。
 
 `pred_hit_actual_miss` と high-overestimate q75 probabilityのinteraction riskを検証した。`scripts/experiments/predhit_overestimate_interaction.py` を追加し、標準CLIと同じく統合prediction frame全体を月別評価へ渡す形で2025-02..2025-05を再基準化した。`predhit_evhigh` interactionはほぼbaseline同等だが、`predhit_q75_w4` は total `107.2486`, min month `-22.9762`, max monthly DD `233.5124` で、この固定4ヶ月ではrisk0 `101.5974` / baseline risk5 `91.9002` を上回った。ただし `w3=80.5836`, `w5=97.4686`, `w8=62.9580` とweight感度が大きく、安定した台地ではないため標準採用しない。固定候補として `w4` / `w6` を未使用月・別walk-forwardで再探索なし確認へ回す。詳細は `docs/reports/00155_2026-06-29_predhit_overestimate_interaction.md`。
+
+`predhit_q75_w4` / `w6` を再探索なしで未使用月2025-06へ固定適用した。現行schemaの2025-06 predictionが不足していたため、2025-05固定確認と同じ設定でdataset/HGB/MLP/hybrid/stateful/failure/quality/q75 applyを作り直した。2025-06 highcostでは risk0 `120.5302`, baseline risk5 `111.4464`, `predhit_q75_w4` `105.8618`, `predhit_q75_w6` `102.0418` で、q75 interactionはbaselineを下回った。delta診断でも baseline側の良い `only_base short/range_normal_vol +25.6700` を落としており、固定候補から降格する。q75 high-overestimateは直接risk penaltyではなく、exit timing calibration / EV過大評価校正 / selected trade診断特徴として残す。詳細は `docs/reports/00156_2026-06-29_predhit_overestimate_fixed_2025_06.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 

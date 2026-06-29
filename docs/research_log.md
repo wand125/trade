@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 17:43 Predhit overestimate fixed 2025-06
+
+- `00155` の固定候補 `predhit_q75_w4` / `w6` を再探索なしで未使用月2025-06へ適用した。
+- 既存2025-06 blind artifactは旧schemaで現行policyの補助列が揃わなかったため、2025-05固定確認と同じ設定で2025-06 dataset、HGB、MLP、hybrid、stateful risk、failure probability、trade quality、q75 high-overestimateを作り直した。
+- 2025-06 highcost評価では risk0 `120.5302`, baseline risk5 `111.4464`, `predhit_q75_w4` `105.8618`, `predhit_q75_w6` `102.0418`。q75 interactionはbaseline risk5を下回った。
+- `predhit_evhigh` interactionはw4/w6ともbaselineと同一で、risk scaleが小さすぎる。
+- delta診断では、q75 w4/w6とも baseline側の良い `only_base short/range_normal_vol +25.6700` を落とし、追加分で完全には取り返せなかった。`only_candidate long/up_low_vol -3.9156` も悪化に寄与した。
+- 判断: `predhit_q75_w4` / `w6` は固定候補から降格し、標準policyへ採用しない。q75 high-overestimateは直接risk penaltyではなく、exit timing calibration / EV過大評価校正 / selected trade診断特徴として残す。
+- report: `docs/reports/00156_2026-06-29_predhit_overestimate_fixed_2025_06.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 17:28 Predhit overestimate interaction
 
 - `scripts/experiments/predhit_overestimate_interaction.py` を追加し、chronological q75 high-overestimate予測と2025-05 apply予測を結合して、`pred_hit_actual_miss_prob` とのinteraction riskを作れるようにした。
