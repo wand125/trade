@@ -4542,3 +4542,34 @@ Artifacts:
 - global `min_side_confidence` は取引数とPnLを落としすぎる。採用しない。
 - calibrated EV列の単純差し替えは2024-11を大きく壊す。採用しない。
 - 次は後段のglobal補正ではなく、教師・特徴側でside不確実性と実現EV分布を直接扱う。
+
+### 2026-06-29 16:37 JST Trade overestimate high classifier
+
+作業:
+
+- `oof-trade-overestimate-high-model` を追加し、selected tradeの `trade_overestimate_target_amount` がside別fit分布のq75/q90を超えるかをchronological OOFで分類した。
+- q75 high probabilityを既存stateful risk5へ追加するcombined riskを作り、2025-02..2025-04で `w=0.5/1.0/2.0` を固定policy検証した。
+- bestのw1.0について `model-trade-delta` を実行し、何を落として何を追加したかを確認した。
+- report: `docs/reports/00152_2026-06-29_trade_overestimate_high_classifier.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| target | AUC | target rate | predicted mean | top quartile target rate |
+|---|---:|---:|---:|---:|
+| q75 | `0.5509` | `0.2811` | `0.2488` | `0.3662` |
+| q90 | `0.4574` | `0.1281` | `0.1070` | `0.1268` |
+
+| label | total PnL | min month PnL | trades |
+|---|---:|---:|---:|
+| baseline | `154.6374` | `14.3072` | `281` |
+| q75 high prob w0.5 | `94.7914` | `-12.8388` | `280` |
+| q75 high prob w1.0 | `109.3234` | `-12.7308` | `279` |
+| q75 high prob w2.0 | `86.1926` | `4.9996` | `273` |
+
+判断:
+
+- q75分類には薄いrank signalがあるが、単独risk化するとbaselineを下回る。
+- q90分類は尾部検知として弱く、AUCが逆方向気味。
+- deltaではw1.0が2025-02/04の良いbase tradeを落とし、一部悪いcandidate tradeを追加した。fold-local q75 thresholdと同じ失敗形。
+- high-overestimate probabilityは標準riskに採用しない。使う場合はstacking feature、blocking/replacement regret、exit/holding失敗targetの補助特徴に限定する。

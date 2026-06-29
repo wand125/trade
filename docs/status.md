@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 16:23 JST
+最終更新: 2026-06-29 16:37 JST
 
 ## 現在の状態
 
@@ -25,6 +25,8 @@ EV overestimate residualの連続targetを実装済み。`trade_overestimate_tar
 `q90 w2.0` のchronological確認も完了。`oof-trade-overestimate-model` に `--oof-scheme expanding` / `--min-train-months` を追加し、2025-02..2025-04を対象月より前だけでfitした。chronological OOFは R2 `0.0145`, high-overestimate AUC `0.6328` で、leave-one-monthの R2 `0.1273` から低下。固定threshold long `18.8171`, short `21.1886`, lambda `2.0` を再調整せず適用すると、chronological prediction maxが long `7.1065`, short `7.8064` に留まり、active rowsは `0 / 85361`。backtestはbaselineと完全同一で、2025-02..2025-04 total PnLは baseline `154.6374`, leave-one-month q90 `165.9728`, chronological q90 `154.6374`。q90 w2.0は候補に残すが単独標準採用しない。詳細は `docs/reports/00150_2026-06-29_trade_overestimate_chronological_q90_check.md`。
 
 trade overestimate scale診断も追加済み。chronological OOFでは、selected targetがfit q90を超えるtradeは36件あるが、selected prediction > fit q90も全side prediction行での発火も0件。q75なら全side prediction行で13093件発火するが、selected trade上の捕捉は12/79件で、short側は全foldで0件。fold-local q75 threshold + lambda `2.0` をpolicy接続すると、2025-02..2025-04 totalが baseline `154.6374` から `135.9620` へ悪化した。q90は発火せず、q75は発火するが悪化するため、thresholdを下げるだけでは解決しない。詳細は `docs/reports/00151_2026-06-29_trade_overestimate_scale_diagnostics.md`。
+
+trade overestimate high分類targetも追加済み。`oof-trade-overestimate-high-model` はside別fit分布の高分位を超えるselected trade overestimateを分類し、side別prob/risk列を出す。chronological q75はAUC `0.5509` と薄いsignalがあるが、既存stateful risk5へ追加すると2025-02..2025-04 totalは baseline `154.6374` に対し w0.5 `94.7914`, w1.0 `109.3234`, w2.0 `86.1926` へ悪化した。q90分類はAUC `0.4574`。単独riskには採用せず、stacking featureまたはblocking/exit失敗targetの補助特徴として扱う。詳細は `docs/reports/00152_2026-06-29_trade_overestimate_high_classifier.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 

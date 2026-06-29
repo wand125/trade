@@ -246,6 +246,17 @@ class TradeFailureModelBundle:
     target_means: dict[str, float]
 
 
+@dataclass
+class TradeOverestimateHighModelBundle:
+    config: TradeQualityModelConfig
+    model: HistGradientBoostingClassifier | None
+    feature_columns: list[str]
+    category_mappings: dict[str, dict[str, int]]
+    target_mean: float
+    threshold_quantile: float
+    side_thresholds: dict[str, float]
+
+
 @dataclass(frozen=True)
 class CandidateFailureModelConfig:
     max_iter: int
@@ -490,6 +501,7 @@ TRADE_OVERESTIMATE_SHORT_COLUMN = "pred_trade_overestimate_short_amount"
 TRADE_OVERESTIMATE_TAKEN_COLUMN = "pred_trade_overestimate_taken_amount"
 TRADE_OVERESTIMATE_LONG_RISK_COLUMN = "pred_trade_overestimate_long_risk"
 TRADE_OVERESTIMATE_SHORT_RISK_COLUMN = "pred_trade_overestimate_short_risk"
+TRADE_OVERESTIMATE_HIGH_PREFIX = "pred_trade_overestimate_high"
 CANDIDATE_QUALITY_LONG_COLUMN = "pred_candidate_quality_long_adjusted_pnl"
 CANDIDATE_QUALITY_SHORT_COLUMN = "pred_candidate_quality_short_adjusted_pnl"
 CANDIDATE_QUALITY_LONG_LOWER_COLUMN = "pred_candidate_quality_long_lower_adjusted_pnl"
@@ -2076,6 +2088,227 @@ def add_trade_overestimate_model_values_to_enriched(
     output["trade_overestimate_target_amount"] = target
     output[TRADE_OVERESTIMATE_TAKEN_COLUMN] = predictions
     return output
+
+
+def trade_overestimate_high_suffix(threshold_quantile: float) -> str:
+    return quantile_label(threshold_quantile)
+
+
+def trade_overestimate_high_prob_column(side_name: str, threshold_quantile: float) -> str:
+    return f"{TRADE_OVERESTIMATE_HIGH_PREFIX}_{trade_overestimate_high_suffix(threshold_quantile)}_{side_name}_prob"
+
+
+def trade_overestimate_high_risk_column(side_name: str, threshold_quantile: float) -> str:
+    return f"{TRADE_OVERESTIMATE_HIGH_PREFIX}_{trade_overestimate_high_suffix(threshold_quantile)}_{side_name}_risk"
+
+
+def trade_overestimate_high_taken_prob_column(threshold_quantile: float) -> str:
+    return f"{TRADE_OVERESTIMATE_HIGH_PREFIX}_{trade_overestimate_high_suffix(threshold_quantile)}_taken_prob"
+
+
+def trade_overestimate_high_target_column(threshold_quantile: float) -> str:
+    return f"trade_overestimate_high_{trade_overestimate_high_suffix(threshold_quantile)}_target"
+
+
+def trade_overestimate_high_side_thresholds(
+    enriched: pd.DataFrame,
+    threshold_quantile: float,
+) -> dict[str, float]:
+    if not 0.0 < threshold_quantile < 1.0:
+        raise ValueError("threshold_quantile must be between 0 and 1")
+    if "direction" not in enriched.columns:
+        raise ValueError("direction column is required to compute side thresholds")
+    target = trade_overestimate_target_amount(enriched)
+    direction = enriched["direction"].astype(str).str.lower()
+    global_threshold = float(target.quantile(threshold_quantile)) if len(target) else 0.0
+    thresholds: dict[str, float] = {}
+    for side_name in ("long", "short"):
+        side_target = target[direction == side_name]
+        thresholds[side_name] = (
+            float(side_target.quantile(threshold_quantile))
+            if len(side_target)
+            else global_threshold
+        )
+    return thresholds
+
+
+def build_trade_overestimate_high_training_frame(
+    enriched: pd.DataFrame,
+    *,
+    threshold_quantile: float,
+    side_thresholds: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    if side_thresholds is None:
+        side_thresholds = trade_overestimate_high_side_thresholds(enriched, threshold_quantile)
+    frame = trade_quality_features_from_enriched(enriched)
+    direction = enriched["direction"].astype(str).str.lower()
+    threshold = direction.map(side_thresholds)
+    target_amount = trade_overestimate_target_amount(enriched)
+    frame["trade_overestimate_target_amount"] = target_amount
+    frame["trade_overestimate_high_threshold"] = threshold.astype("float64")
+    frame["target"] = (target_amount >= frame["trade_overestimate_high_threshold"]).astype(int)
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(
+        subset=["target", "trade_overestimate_high_threshold"]
+    )
+
+
+def fit_trade_overestimate_high_model(
+    enriched: pd.DataFrame,
+    config: TradeQualityModelConfig,
+    *,
+    threshold_quantile: float,
+    side_thresholds: dict[str, float] | None = None,
+) -> TradeOverestimateHighModelBundle:
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    if side_thresholds is None:
+        side_thresholds = trade_overestimate_high_side_thresholds(enriched, threshold_quantile)
+    frame = build_trade_overestimate_high_training_frame(
+        enriched,
+        threshold_quantile=threshold_quantile,
+        side_thresholds=side_thresholds,
+    )
+    if frame.empty:
+        raise ValueError("trade overestimate high training frame is empty")
+    mappings = category_mappings(frame, TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS)
+    encoded = encode_trade_quality_features(frame, mappings)
+    feature_columns = trade_quality_feature_columns(encoded)
+    target = frame["target"].astype(int)
+    model: HistGradientBoostingClassifier | None
+    if target.nunique(dropna=True) < 2:
+        model = None
+    else:
+        model = HistGradientBoostingClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            max_depth=config.max_depth,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            max_features=config.max_features,
+            early_stopping=config.early_stopping,
+            validation_fraction=config.validation_fraction,
+            n_iter_no_change=config.n_iter_no_change,
+            tol=config.tol,
+            random_state=config.random_seed,
+        )
+        model.fit(
+            encoded[feature_columns].astype("float32").to_numpy(),
+            target.to_numpy(dtype="int8"),
+            sample_weight=trade_quality_sample_weights(frame.assign(target=target), config.sample_weighting),
+        )
+    return TradeOverestimateHighModelBundle(
+        config=config,
+        model=model,
+        feature_columns=feature_columns,
+        category_mappings=mappings,
+        target_mean=float(target.mean()),
+        threshold_quantile=threshold_quantile,
+        side_thresholds={side: float(value) for side, value in side_thresholds.items()},
+    )
+
+
+def predict_trade_overestimate_high_features(
+    raw_features: pd.DataFrame,
+    bundle: TradeOverestimateHighModelBundle,
+) -> np.ndarray:
+    if bundle.model is None:
+        probabilities = np.full(len(raw_features), bundle.target_mean, dtype="float64")
+    else:
+        encoded = encode_trade_quality_features(raw_features, bundle.category_mappings)
+        classes = list(bundle.model.classes_)
+        positive_index = classes.index(1) if 1 in classes else None
+        if positive_index is None:
+            probabilities = np.full(len(raw_features), bundle.target_mean, dtype="float64")
+        else:
+            probabilities = bundle.model.predict_proba(
+                encoded[bundle.feature_columns].astype("float32").to_numpy()
+            )[:, positive_index]
+    if bundle.config.prediction_shrinkage < 1.0:
+        probabilities = (
+            bundle.config.prediction_shrinkage * probabilities
+            + (1.0 - bundle.config.prediction_shrinkage) * bundle.target_mean
+        )
+    return np.clip(probabilities, 0.0, 1.0)
+
+
+def add_trade_overestimate_high_model_columns(
+    predictions: pd.DataFrame,
+    bundle: TradeOverestimateHighModelBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    quantile = bundle.threshold_quantile
+    for side_name in ("long", "short"):
+        probability = predict_trade_overestimate_high_features(
+            trade_quality_features_from_predictions(output, side_name),
+            bundle,
+        )
+        prob_column = trade_overestimate_high_prob_column(side_name, quantile)
+        output[prob_column] = probability
+        output[trade_overestimate_high_risk_column(side_name, quantile)] = -output[prob_column]
+    return output
+
+
+def add_trade_overestimate_high_model_values_to_enriched(
+    enriched: pd.DataFrame,
+    bundle: TradeOverestimateHighModelBundle,
+) -> pd.DataFrame:
+    output = enriched.copy()
+    quantile = bundle.threshold_quantile
+    target_amount = trade_overestimate_target_amount(output)
+    direction = output["direction"].astype(str).str.lower()
+    threshold = direction.map(bundle.side_thresholds).astype("float64")
+    output["trade_overestimate_target_amount"] = target_amount
+    output["trade_overestimate_high_threshold"] = threshold
+    output[trade_overestimate_high_target_column(quantile)] = (target_amount >= threshold).astype(int)
+    output[trade_overestimate_high_taken_prob_column(quantile)] = predict_trade_overestimate_high_features(
+        trade_quality_features_from_enriched(output),
+        bundle,
+    )
+    return output
+
+
+def trade_overestimate_high_scored_metrics(
+    scored: pd.DataFrame,
+    *,
+    threshold_quantile: float,
+) -> dict[str, float]:
+    target_column = trade_overestimate_high_target_column(threshold_quantile)
+    prob_column = trade_overestimate_high_taken_prob_column(threshold_quantile)
+    if scored.empty:
+        return {
+            "trade_count": 0,
+            "target_rate": 0.0,
+            "predicted_mean": 0.0,
+            "bias": 0.0,
+            "brier": 0.0,
+            "auc": 0.5,
+            "top_decile_target_rate": 0.0,
+            "top_quartile_target_rate": 0.0,
+        }
+    target = scored[target_column].astype(int)
+    probability = finite_float_series(scored, prob_column).clip(0.0, 1.0)
+    auc = (
+        float(roc_auc_score(target, probability))
+        if target.nunique(dropna=True) >= 2
+        else 0.5
+    )
+    top_decile = max(1, int(np.ceil(0.1 * len(scored))))
+    top_quartile = max(1, int(np.ceil(0.25 * len(scored))))
+    ordered = scored.assign(_probability=probability, _target=target).sort_values(
+        "_probability",
+        ascending=False,
+    )
+    return {
+        "trade_count": int(len(scored)),
+        "target_rate": float(target.mean()),
+        "predicted_mean": float(probability.mean()),
+        "bias": float(probability.mean() - target.mean()),
+        "brier": float(brier_score_loss(target, probability)),
+        "auc": auc,
+        "top_decile_target_rate": float(ordered.head(top_decile)["_target"].mean()),
+        "top_quartile_target_rate": float(ordered.head(top_quartile)["_target"].mean()),
+    }
 
 
 def trade_overestimate_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
@@ -7761,6 +7994,204 @@ def oof_trade_overestimate_model(args: argparse.Namespace) -> int:
     return 0
 
 
+def oof_trade_overestimate_high_model(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF trade overestimate high model")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    validation_predictions = filter_months(
+        pd.read_parquet(args.validation_predictions),
+        validation_months,
+        "validation",
+    )
+    validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+    validation_trades = read_trade_frames(parse_csv_paths(args.validation_trades))
+    validation_enriched = enrich_trades_for_trade_quality(validation_trades, validation_predictions)
+    validation_enriched = validation_enriched[
+        validation_enriched["dataset_month"].isin(validation_months)
+    ].copy()
+    if validation_enriched.empty:
+        raise ValueError("validation selected-trade frame is empty after month filtering")
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    config = trade_quality_model_config_from_args(args)
+    threshold_quantile = args.threshold_quantile
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_trade_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    fold_plan = stateful_value_oof_fold_plan(
+        validation_months,
+        scheme=args.oof_scheme,
+        min_train_months=args.min_train_months,
+    )
+    for fold_index, fold in enumerate(fold_plan):
+        holdout_month = str(fold["holdout_month"])
+        fit_months = list(fold["fit_months"])
+        if fold["status"] != "profiled":
+            fold_metrics[holdout_month] = {
+                **fold,
+                "fit_trades": 0,
+                "holdout_trades": int(
+                    (validation_enriched["dataset_month"] == holdout_month).sum()
+                ),
+                "holdout_predictions": int(
+                    (validation_predictions["dataset_month"] == holdout_month).sum()
+                ),
+            }
+            continue
+        fit_trades = validation_enriched[
+            validation_enriched["dataset_month"].isin(fit_months)
+        ].copy()
+        holdout_trades = validation_enriched[validation_enriched["dataset_month"] == holdout_month].copy()
+        holdout_predictions = validation_predictions[
+            validation_predictions["dataset_month"] == holdout_month
+        ].copy()
+        if fit_trades.empty or holdout_predictions.empty:
+            raise ValueError(f"cannot build trade overestimate high OOF fold for {holdout_month}")
+        side_thresholds = trade_overestimate_high_side_thresholds(
+            fit_trades,
+            threshold_quantile,
+        )
+        fold_config = TradeQualityModelConfig(
+            **{
+                **asdict(config),
+                "random_seed": config.random_seed + 17 * fold_index,
+            }
+        )
+        fold_bundle = fit_trade_overestimate_high_model(
+            fit_trades,
+            fold_config,
+            threshold_quantile=threshold_quantile,
+            side_thresholds=side_thresholds,
+        )
+        holdout_prediction_output = add_trade_overestimate_high_model_columns(
+            holdout_predictions,
+            fold_bundle,
+        )
+        holdout_trade_output = add_trade_overestimate_high_model_values_to_enriched(
+            holdout_trades,
+            fold_bundle,
+        )
+        fold_prediction_outputs.append(holdout_prediction_output)
+        fold_trade_outputs.append(holdout_trade_output)
+        fold_metrics[holdout_month] = {
+            **fold,
+            "fit_trades": int(len(fit_trades)),
+            "holdout_trades": int(len(holdout_trades)),
+            "holdout_predictions": int(len(holdout_predictions)),
+            "side_thresholds": side_thresholds,
+            "holdout": trade_overestimate_high_scored_metrics(
+                holdout_trade_output,
+                threshold_quantile=threshold_quantile,
+            ),
+            "target_mean": fold_bundle.target_mean,
+            "feature_columns": fold_bundle.feature_columns,
+            "category_mappings": fold_bundle.category_mappings,
+        }
+
+    if not fold_prediction_outputs:
+        raise ValueError(
+            "no trade overestimate high OOF folds were profiled; lower --min-train-months "
+            "or provide more validation months"
+        )
+
+    validation_oof = pd.concat(fold_prediction_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof.columns:
+        validation_oof = validation_oof.sort_values("decision_timestamp")
+    validation_oof_trades = pd.concat(fold_trade_outputs, ignore_index=True)
+    if "entry_timestamp" in validation_oof_trades.columns:
+        validation_oof_trades = validation_oof_trades.sort_values("entry_timestamp")
+
+    final_thresholds = trade_overestimate_high_side_thresholds(
+        validation_enriched,
+        threshold_quantile,
+    )
+    final_bundle = fit_trade_overestimate_high_model(
+        validation_enriched,
+        config,
+        threshold_quantile=threshold_quantile,
+        side_thresholds=final_thresholds,
+    )
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_trade_overestimate_high_model_columns(apply_predictions, final_bundle)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof.to_parquet(
+        run_dir / "predictions_validation_oof_trade_overestimate_high_model.parquet",
+        index=False,
+    )
+    validation_oof_trades.to_csv(run_dir / "validation_oof_overestimate_high_enriched_trades.csv", index=False)
+    validation_enriched.to_csv(run_dir / "validation_fit_enriched_trades.csv", index=False)
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_trade_overestimate_high_model.parquet",
+            index=False,
+        )
+    joblib.dump(final_bundle, run_dir / "trade_overestimate_high_model.joblib")
+    metrics = {
+        "mode": "validation_oof_trade_overestimate_high_model",
+        "config": asdict(config),
+        "validation_trades": [str(path) for path in parse_csv_paths(args.validation_trades)],
+        "validation_predictions": str(args.validation_predictions),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "threshold_quantile": threshold_quantile,
+        "oof_scheme": args.oof_scheme,
+        "min_train_months": args.min_train_months,
+        "fold_plan": fold_plan,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "validation_predictions": int(len(validation_predictions)),
+            "validation_trades": int(len(validation_enriched)),
+            "validation_oof": int(len(validation_oof)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_predictions": month_counts(validation_predictions),
+            "validation_trades": month_counts(validation_enriched),
+            "validation_oof": month_counts(validation_oof),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "final_model": {
+            "target_mean": final_bundle.target_mean,
+            "threshold_quantile": final_bundle.threshold_quantile,
+            "side_thresholds": final_bundle.side_thresholds,
+            "feature_columns": final_bundle.feature_columns,
+            "category_mappings": final_bundle.category_mappings,
+        },
+        "folds": fold_metrics,
+        "validation_oof": trade_overestimate_high_scored_metrics(
+            validation_oof_trades,
+            threshold_quantile=threshold_quantile,
+        ),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def trade_failure_model_config_from_args(args: argparse.Namespace) -> TradeFailureModelConfig:
     target_names = tuple(parse_csv_strings(args.failure_targets) or list(TRADE_FAILURE_TARGET_NAMES))
     return TradeFailureModelConfig(
@@ -9444,6 +9875,51 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(trade_overestimate_model_parser)
     add_trade_quality_model_args(trade_overestimate_model_parser)
     trade_overestimate_model_parser.set_defaults(func=oof_trade_overestimate_model)
+
+    trade_overestimate_high_model_parser = subparsers.add_parser(
+        "oof-trade-overestimate-high-model",
+        help="build validation OOF selected-trade high EV-overestimate probability columns",
+    )
+    trade_overestimate_high_model_parser.add_argument(
+        "--validation-trades",
+        required=True,
+        help="comma-separated model-policy trades.csv files for validation months",
+    )
+    trade_overestimate_high_model_parser.add_argument("--validation-predictions", type=Path, required=True)
+    trade_overestimate_high_model_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation high-overestimate model",
+    )
+    trade_overestimate_high_model_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    trade_overestimate_high_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    trade_overestimate_high_model_parser.add_argument(
+        "--threshold-quantile",
+        type=float,
+        default=0.75,
+        help="side-specific selected-trade overestimate quantile used as the positive target threshold",
+    )
+    trade_overestimate_high_model_parser.add_argument(
+        "--oof-scheme",
+        choices=("leave_one_month", "expanding"),
+        default="leave_one_month",
+        help="month OOF scheme; expanding only trains on months before the holdout month",
+    )
+    trade_overestimate_high_model_parser.add_argument(
+        "--min-train-months",
+        type=int,
+        default=1,
+        help="minimum number of fit months required for an OOF fold",
+    )
+    trade_overestimate_high_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    trade_overestimate_high_model_parser.add_argument("--label", default="trade_overestimate_high_model")
+    add_trade_source_args(trade_overestimate_high_model_parser)
+    add_trade_quality_model_args(trade_overestimate_high_model_parser)
+    trade_overestimate_high_model_parser.set_defaults(func=oof_trade_overestimate_high_model)
 
     trade_overestimate_scale_parser = subparsers.add_parser(
         "trade-overestimate-scale-diagnostics",

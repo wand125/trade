@@ -47,6 +47,8 @@ from trade_data.meta_model import (
     add_trade_overestimate_model_values_to_enriched,
     add_trade_failure_probability_calibration_columns,
     add_trade_failure_probability_values_to_enriched,
+    add_trade_overestimate_high_model_columns,
+    add_trade_overestimate_high_model_values_to_enriched,
     add_trade_quality_model_columns,
     add_trade_quality_model_values_to_enriched,
     add_trade_quality_columns,
@@ -57,6 +59,7 @@ from trade_data.meta_model import (
     build_sample_weights,
     build_stateful_value_training_frame,
     build_stateful_risk_training_frame,
+    build_trade_overestimate_high_training_frame,
     build_trade_overestimate_training_frame,
     build_training_frame,
     calibrate_probabilities_to_mean,
@@ -84,6 +87,7 @@ from trade_data.meta_model import (
     fit_trade_failure_model,
     fit_trade_overestimate_model,
     fit_trade_failure_probability_calibrator,
+    fit_trade_overestimate_high_model,
     fit_trade_quality_calibrator,
     fit_trade_quality_model,
     filter_months,
@@ -107,6 +111,12 @@ from trade_data.meta_model import (
     trade_quality_features_from_enriched,
     trade_quality_features_from_predictions,
     trade_overestimate_prediction_activation_diagnostics,
+    trade_overestimate_high_prob_column,
+    trade_overestimate_high_risk_column,
+    trade_overestimate_high_scored_metrics,
+    trade_overestimate_high_side_thresholds,
+    trade_overestimate_high_taken_prob_column,
+    trade_overestimate_high_target_column,
     trade_overestimate_scale_fold_diagnostics,
     trade_overestimate_scale_summary,
     trade_overestimate_scored_metrics,
@@ -870,6 +880,99 @@ class MetaModelTests(unittest.TestCase):
         )
         self.assertIn(TRADE_OVERESTIMATE_TAKEN_COLUMN, scored.columns)
         self.assertAlmostEqual(metrics["target_mean"], 7.75)
+
+    def test_trade_overestimate_high_model_adds_probability_and_risk_columns(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions[TRADE_QUALITY_LONG_COLUMN] = 2.5
+        predictions[TRADE_QUALITY_SHORT_COLUMN] = -1.0
+        trades = pd.DataFrame(
+            {
+                "direction": ["long", "long", "short", "short"],
+                "direction_sign": [1, 1, -1, -1],
+                "adjusted_pnl": [1.0, 20.0, 9.0, -8.0],
+                "pred_taken_ev": [11.0, 13.0, 12.0, 10.0],
+                "pred_opposite_ev": [8.0, 9.0, 4.0, 5.0],
+                "pred_best_ev": [11.0, 13.0, 12.0, 10.0],
+                "pred_taken_best_holding_minutes": [10.0, 20.0, 30.0, 40.0],
+                "pred_taken_max_adverse_pnl": [-1.0, -2.0, -3.0, -4.0],
+                "pred_taken_wait_regret": [0.1, 0.2, 0.3, 0.4],
+                "pred_taken_entry_local_rank": [0.8, 0.7, 0.9, 0.6],
+                "pred_taken_profit_barrier_hit": [1.0, 1.0, 1.0, 0.0],
+                "entry_decision_timestamp": pd.date_range(
+                    "2025-01-01",
+                    periods=4,
+                    freq="h",
+                    tz="UTC",
+                ),
+                "dataset_month": ["2024-07", "2024-07", "2024-09", "2024-09"],
+                "session_regime": ["asia", "asia", "ny_late", "ny_late"],
+                "volatility_regime": ["low_vol", "low_vol", "normal_vol", "normal_vol"],
+            }
+        )
+        config = TradeQualityModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+        )
+
+        side_thresholds = trade_overestimate_high_side_thresholds(trades, 0.75)
+        frame = build_trade_overestimate_high_training_frame(
+            trades,
+            threshold_quantile=0.75,
+            side_thresholds=side_thresholds,
+        )
+        bundle = fit_trade_overestimate_high_model(
+            trades,
+            config,
+            threshold_quantile=0.75,
+            side_thresholds=side_thresholds,
+        )
+        output = add_trade_overestimate_high_model_columns(predictions, bundle)
+        scored = add_trade_overestimate_high_model_values_to_enriched(trades, bundle)
+        metrics = trade_overestimate_high_scored_metrics(scored, threshold_quantile=0.75)
+        long_prob = trade_overestimate_high_prob_column("long", 0.75)
+        short_prob = trade_overestimate_high_prob_column("short", 0.75)
+        long_risk = trade_overestimate_high_risk_column("long", 0.75)
+        short_risk = trade_overestimate_high_risk_column("short", 0.75)
+        target_column = trade_overestimate_high_target_column(0.75)
+        taken_prob = trade_overestimate_high_taken_prob_column(0.75)
+
+        self.assertAlmostEqual(side_thresholds["long"], 7.5)
+        self.assertAlmostEqual(side_thresholds["short"], 14.25)
+        self.assertEqual(frame["target"].tolist(), [1, 0, 0, 1])
+        self.assertIn(long_prob, output.columns)
+        self.assertIn(short_prob, output.columns)
+        self.assertIn(long_risk, output.columns)
+        self.assertIn(short_risk, output.columns)
+        self.assertTrue(output[long_prob].between(0.0, 1.0).all())
+        self.assertTrue(output[short_prob].between(0.0, 1.0).all())
+        self.assertEqual(output[long_risk].tolist(), (-output[long_prob]).tolist())
+        self.assertEqual(output[short_risk].tolist(), (-output[short_prob]).tolist())
+        self.assertEqual(scored[target_column].tolist(), [1, 0, 0, 1])
+        self.assertTrue(scored[taken_prob].between(0.0, 1.0).all())
+        self.assertEqual(metrics["trade_count"], 4)
+        self.assertIn("auc", metrics)
+        self.assertIn("brier", metrics)
 
     def test_trade_overestimate_scale_diagnostics_report_threshold_activation(self):
         fit_trades = pd.DataFrame(
