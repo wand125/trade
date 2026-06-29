@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 22:55 Side drift guard delta diagnostics
+
+- `00176` の no guard vs broad p5 / strict short-only p10 を `model-trade-delta` で分解した。
+- broad p5は total `-419.0574 -> -394.7214`, delta `+24.3360`。`only_base +241.7096` と `common +76.4102` を作ったが、`only_candidate -293.7838` でほぼ相殺された。
+- strict p10は total `-419.0574 -> -317.4998`, delta `+101.5576`。`only_base +531.6232` の悪いbase除外が強い一方、`only_candidate -502.3672` のreplacement損失が残った。
+- 方向別ではstrict p10の `only_base short +431.5526` に対して `only_candidate short -435.4884`。悪いshort文脈を検出して消す力はあるが、空いた時間に入る新規shortがまだ壊れる。
+- 最大replacement損失は2025-09 `short/range_low_vol -119.5560`、2025-12 `short/range_low_vol -74.2140`。最大removed lossは2025-09 `short/range_low_vol +128.0052`、2025-12 `short/range_low_vol +106.4744`。
+- 判断: side drift guard単独は標準policyにしない。次はguard後の代替tradeを `stateful_positive_cost_value` / `positive_replacement_regret` で審査し、margin不足ならstay flatまたはcooldownにする。
+- report: `docs/reports/00177_2026-06-29_side_drift_guard_delta.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: 既存 `docs/reports/*.md` は本文内 `日時` 順で問題0件。
+
 ### 22:47 Side drift guard walk-forward
 
 - `scripts/experiments/side_drift_guard_walkforward.py` を追加した。対象月より前だけを使い、prediction side biasとselected trade損失が揃うside/contextへ `side_ev_penalty_rules` を追加する。

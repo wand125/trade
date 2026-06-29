@@ -79,6 +79,7 @@
 - 決済タイミングの hazard model。
 - 取引単位の ranking target。
 - 一玉制約の機会費用を含む `stateful_entry_value` / `blocking_cost` target。
+- guardで抑制した後の代替tradeを評価する `stateful_positive_cost_value` / `positive_replacement_regret` target。
 
 ## Phase 3: 古典モデルと軽量モデル
 
@@ -144,6 +145,7 @@
 - PPO 系
 - ルールベース exit + learned entry
 - learned entry + learned exit
+- side/context guard 発火後に、代替tradeへ入るか stay flat/cooldown するかを決める admission policy。
 
 注意:
 

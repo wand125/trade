@@ -21,6 +21,7 @@
 - 期待値が高くても drawdown が大きい entry を除外。
 - exit model を survival/hazard として扱う。
 - entry と exit を分離して学習する。
+- side/context guard発火後の代替tradeを `positive_replacement_regret` で審査し、margin不足ならstay flatにする。
 
 ## モデル
 
