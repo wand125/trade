@@ -86,6 +86,9 @@ SWEEP_KEY_COLUMNS = [
     "extra_side_margin_rules",
     "side_extra_margin_rules",
     "side_block_rules",
+    "context_drawdown_guard_loss_threshold",
+    "context_drawdown_guard_context_columns",
+    "context_drawdown_guard_reset_monthly",
     "block_trend_regimes",
     "block_volatility_regimes",
     "block_session_regimes",
@@ -392,6 +395,9 @@ class ModelPolicyConfig:
     extra_side_margin_rules: tuple[str, ...] = ()
     side_extra_margin_rules: tuple[str, ...] = ()
     side_block_rules: tuple[str, ...] = ()
+    context_drawdown_guard_loss_threshold: float = float("inf")
+    context_drawdown_guard_context_columns: tuple[str, ...] = ("combined_regime", "session_regime")
+    context_drawdown_guard_reset_monthly: bool = True
     block_trend_regimes: tuple[str, ...] = ()
     block_volatility_regimes: tuple[str, ...] = ()
     block_session_regimes: tuple[str, ...] = ()
@@ -406,6 +412,7 @@ class Position:
     entry_price: float
     entry_decision_timestamp: pd.Timestamp
     max_exit_timestamp: pd.Timestamp
+    context_drawdown_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -678,6 +685,8 @@ def prediction_required_columns(config: ModelPolicyConfig) -> list[str]:
     required_columns.extend(extra_side_margin_rule_columns(config))
     required_columns.extend(side_rule_columns(config))
     required_columns.extend([column for column, _ in blocked_regime_columns(config)])
+    if context_drawdown_guard_enabled(config):
+        required_columns.extend(config.context_drawdown_guard_context_columns)
     return list(dict.fromkeys(required_columns))
 
 
@@ -1501,9 +1510,21 @@ def run_backtest(
     df: pd.DataFrame,
     desired_position: pd.Series,
     config: BacktestConfig,
+    *,
+    entry_context: pd.Series | None = None,
+    context_drawdown_guard_loss_threshold: float = float("inf"),
+    context_drawdown_guard_reset_monthly: bool = True,
 ) -> list[Trade]:
     if len(df) != len(desired_position):
         raise ValueError("df and desired_position must have the same length")
+    context_drawdown_guard_enabled = np.isfinite(context_drawdown_guard_loss_threshold)
+    if context_drawdown_guard_enabled:
+        if context_drawdown_guard_loss_threshold <= 0:
+            raise ValueError("context_drawdown_guard_loss_threshold must be positive or inf")
+        if entry_context is None:
+            raise ValueError("entry_context is required when context drawdown guard is enabled")
+        if len(df) != len(entry_context):
+            raise ValueError("df and entry_context must have the same length")
     if config.execution_delay_bars < 0:
         raise ValueError("execution_delay_bars must be non-negative")
     if len(df) < 2:
@@ -1514,9 +1535,26 @@ def run_backtest(
     timestamps = df["timestamp"].tolist()
     opens = df["open"].astype(float).tolist()
     signals = desired_position.fillna(0).astype("int8").tolist()
+    if entry_context is None:
+        context_values = [""] * len(df)
+    else:
+        context_values = entry_context.astype("string").fillna("__missing__").tolist()
 
     position: Position | None = None
     trades: list[Trade] = []
+    context_pnl: dict[str, float] = {}
+    blocked_contexts: set[str] = set()
+
+    def context_drawdown_key(
+        decision_timestamp: pd.Timestamp,
+        desired: int,
+        context_value: str,
+    ) -> str:
+        direction = DIRECTION_LABELS.get(desired, "flat")
+        if context_drawdown_guard_reset_monthly:
+            month = decision_timestamp.strftime("%Y-%m")
+            return f"{month}|{direction}|{context_value}"
+        return f"{direction}|{context_value}"
 
     for decision_idx in range(len(df) - 1 - config.execution_delay_bars):
         execution_idx = decision_idx + 1 + config.execution_delay_bars
@@ -1531,26 +1569,44 @@ def run_backtest(
             forced = execution_timestamp >= position.max_exit_timestamp
             signal_close = desired != position.direction
             if forced or signal_close:
-                trades.append(
-                    close_position(
-                        position=position,
-                        exit_timestamp=execution_timestamp,
-                        exit_price=apply_execution_cost(
-                            execution_open_price,
-                            position.direction,
-                            is_entry=False,
-                            config=config,
-                        ),
-                        exit_decision_timestamp=decision_timestamp,
-                        exit_reason="forced_exit" if forced else "signal_close",
+                trade = close_position(
+                    position=position,
+                    exit_timestamp=execution_timestamp,
+                    exit_price=apply_execution_cost(
+                        execution_open_price,
+                        position.direction,
+                        is_entry=False,
                         config=config,
-                    )
+                    ),
+                    exit_decision_timestamp=decision_timestamp,
+                    exit_reason="forced_exit" if forced else "signal_close",
+                    config=config,
                 )
+                trades.append(trade)
+                if context_drawdown_guard_enabled and position.context_drawdown_key:
+                    context_pnl[position.context_drawdown_key] = (
+                        context_pnl.get(position.context_drawdown_key, 0.0)
+                        + trade.adjusted_pnl
+                    )
+                    if (
+                        context_pnl[position.context_drawdown_key]
+                        <= -context_drawdown_guard_loss_threshold
+                    ):
+                        blocked_contexts.add(position.context_drawdown_key)
                 position = None
                 continue
 
         if position is None and config.evaluation_start <= execution_timestamp < config.evaluation_end:
             if desired in (-1, 1):
+                drawdown_key = ""
+                if context_drawdown_guard_enabled:
+                    drawdown_key = context_drawdown_key(
+                        decision_timestamp,
+                        desired,
+                        str(context_values[decision_idx]),
+                    )
+                    if drawdown_key in blocked_contexts:
+                        continue
                 position = Position(
                     direction=desired,
                     entry_timestamp=execution_timestamp,
@@ -1562,6 +1618,7 @@ def run_backtest(
                     ),
                     entry_decision_timestamp=decision_timestamp,
                     max_exit_timestamp=execution_timestamp + config.max_holding,
+                    context_drawdown_key=drawdown_key,
                 )
 
     if position is not None:
@@ -2400,6 +2457,38 @@ def side_rule_columns(config: ModelPolicyConfig) -> list[str]:
     return list(dict.fromkeys(columns))
 
 
+def context_drawdown_guard_enabled(config: ModelPolicyConfig) -> bool:
+    return np.isfinite(config.context_drawdown_guard_loss_threshold)
+
+
+def model_policy_entry_context(
+    df: pd.DataFrame,
+    predictions: pd.DataFrame,
+    config: ModelPolicyConfig,
+) -> pd.Series | None:
+    if not context_drawdown_guard_enabled(config):
+        return None
+    columns = list(config.context_drawdown_guard_context_columns)
+    if not columns:
+        return pd.Series("__all__", index=df.index, dtype="string")
+    prediction_index = predictions.set_index("decision_timestamp")
+    missing = sorted(set(columns) - set(prediction_index.columns))
+    if missing:
+        raise ValueError(
+            "context drawdown guard missing prediction columns: "
+            + ", ".join(missing)
+        )
+    aligned = prediction_index[columns].reindex(df["timestamp"]).reset_index(drop=True)
+    parts: list[pd.Series] = []
+    for column in columns:
+        values = aligned[column].astype("string").fillna("__missing__")
+        parts.append(column + "=" + values)
+    output = parts[0]
+    for part in parts[1:]:
+        output = output + "|" + part
+    return pd.Series(output.to_numpy(), index=df.index, dtype="string")
+
+
 def parse_optional_csv_strings(value: str | None) -> tuple[str, ...]:
     if value is None:
         return ()
@@ -2486,6 +2575,7 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "profit_barrier_threshold",
         "secondary_score_tie_margin",
         "side_ev_penalty_replacement_min_margin",
+        "context_drawdown_guard_loss_threshold",
     ]
     for column in numeric_columns:
         output[column] = pd.to_numeric(output[column], errors="raise")
@@ -2496,6 +2586,14 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         output["require_profit_barrier"] = output["require_profit_barrier"].astype(bool)
+    if output["context_drawdown_guard_reset_monthly"].dtype == object:
+        output["context_drawdown_guard_reset_monthly"] = output[
+            "context_drawdown_guard_reset_monthly"
+        ].map(lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"})
+    else:
+        output["context_drawdown_guard_reset_monthly"] = output[
+            "context_drawdown_guard_reset_monthly"
+        ].astype(bool)
 
     string_columns = [
         "policy",
@@ -2510,6 +2608,7 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "extra_side_margin_rules",
         "side_extra_margin_rules",
         "side_block_rules",
+        "context_drawdown_guard_context_columns",
         "block_trend_regimes",
         "block_volatility_regimes",
         "block_session_regimes",
@@ -3063,6 +3162,11 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
         side_extra_margin_rules=parse_optional_csv_strings(args.side_extra_margin_rules),
         side_block_rules=parse_optional_csv_strings(args.side_block_rules),
+        context_drawdown_guard_loss_threshold=args.context_drawdown_guard_loss_threshold,
+        context_drawdown_guard_context_columns=parse_csv_string_tuple(
+            args.context_drawdown_guard_context_columns
+        ),
+        context_drawdown_guard_reset_monthly=args.context_drawdown_guard_reset_monthly,
         **regime_blocks_from_args(args),
     )
 
@@ -3118,8 +3222,27 @@ def run_model_policy(
             prediction_required_columns(model_policy_config),
             model_policy_config.predictions,
         )
+    if (
+        context_drawdown_guard_enabled(model_policy_config)
+        and model_policy_config.context_drawdown_guard_loss_threshold <= 0
+    ):
+        raise ValueError("context_drawdown_guard_loss_threshold must be positive or inf")
     signal = model_signal_from_predictions(df, predictions, model_policy_config)
-    trades = trades_to_frame(run_backtest(df, signal, backtest_config))
+    entry_context = model_policy_entry_context(df, predictions, model_policy_config)
+    trades = trades_to_frame(
+        run_backtest(
+            df,
+            signal,
+            backtest_config,
+            entry_context=entry_context,
+            context_drawdown_guard_loss_threshold=(
+                model_policy_config.context_drawdown_guard_loss_threshold
+            ),
+            context_drawdown_guard_reset_monthly=(
+                model_policy_config.context_drawdown_guard_reset_monthly
+            ),
+        )
+    )
     strategy_name = f"model_{model_policy_config.policy}"
     metrics = summarize_trades(trades, backtest_config, strategy_name)
     metrics["prediction_rows"] = int(len(predictions))
@@ -3479,6 +3602,26 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
             "selected side and all conditions match"
         ),
     )
+    parser.add_argument(
+        "--context-drawdown-guard-loss-threshold",
+        type=float,
+        default=float("inf"),
+        help=(
+            "block later entries in the same direction/context once realized adjusted "
+            "PnL for that context is at or below -threshold; inf disables"
+        ),
+    )
+    parser.add_argument(
+        "--context-drawdown-guard-context-columns",
+        default="combined_regime,session_regime",
+        help="comma-separated prediction columns used with direction as the online drawdown context",
+    )
+    parser.add_argument(
+        "--context-drawdown-guard-reset-monthly",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="reset online context drawdown guard by entry decision month",
+    )
     add_regime_gate_args(parser)
 
 
@@ -3532,6 +3675,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     side_ev_penalty_replacement_min_margins = parse_csv_floats(
         args.side_ev_penalty_replacement_min_margins
     )
+    context_drawdown_guard_loss_thresholds = parse_csv_floats(
+        args.context_drawdown_guard_loss_thresholds
+    )
     regime_blocks = regime_blocks_from_args(args)
     side_ev_penalty_rule_sets = parse_optional_rule_sets(
         args.side_ev_penalty_rule_sets,
@@ -3559,6 +3705,11 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         ]
         finite_holding_shortening_thresholds = [
             value for value in holding_shortening_thresholds if np.isfinite(value)
+        ]
+        finite_context_drawdown_guard_loss_thresholds = [
+            value
+            for value in context_drawdown_guard_loss_thresholds
+            if np.isfinite(value)
         ]
         read_config = ModelPolicyConfig(
             predictions=args.predictions,
@@ -3653,6 +3804,15 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
             extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
             side_extra_margin_rules=flatten_rule_sets(side_extra_margin_rule_sets),
             side_block_rules=flatten_rule_sets(side_block_rule_sets),
+            context_drawdown_guard_loss_threshold=(
+                min(finite_context_drawdown_guard_loss_thresholds)
+                if finite_context_drawdown_guard_loss_thresholds
+                else float("inf")
+            ),
+            context_drawdown_guard_context_columns=parse_csv_string_tuple(
+                args.context_drawdown_guard_context_columns
+            ),
+            context_drawdown_guard_reset_monthly=args.context_drawdown_guard_reset_monthly,
             **regime_blocks,
         )
         preloaded_predictions = read_prediction_frame(
@@ -3692,6 +3852,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_ev_penalty_replacement_min_margins,
         side_extra_margin_rule_sets,
         side_block_rule_sets,
+        context_drawdown_guard_loss_thresholds,
     )
     for (
         policy,
@@ -3724,6 +3885,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_ev_penalty_replacement_min_margin,
         side_extra_margin_rules,
         side_block_rules,
+        context_drawdown_guard_loss_threshold,
     ) in base_grid:
         if max_predicted_hold_minutes < min_predicted_hold_minutes:
             raise SystemExit(
@@ -3737,6 +3899,12 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                 )
             if holding_shortening_cap_minutes <= 0:
                 raise SystemExit("holding_shortening_cap_minutes must be positive")
+        if np.isfinite(context_drawdown_guard_loss_threshold) and (
+            context_drawdown_guard_loss_threshold <= 0
+        ):
+            raise SystemExit(
+                "context_drawdown_guard_loss_thresholds must contain positive values or inf"
+            )
         policy_exit_thresholds = exit_thresholds if policy == "stateful_ev" else [0.0]
         active_profit_barrier_thresholds = (
             profit_barrier_thresholds if require_profit_barrier else [0.5]
@@ -3819,6 +3987,15 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     extra_side_margin_rules=parse_optional_csv_strings(args.extra_side_margin_rules),
                     side_extra_margin_rules=side_extra_margin_rules,
                     side_block_rules=side_block_rules,
+                    context_drawdown_guard_loss_threshold=(
+                        context_drawdown_guard_loss_threshold
+                    ),
+                    context_drawdown_guard_context_columns=parse_csv_string_tuple(
+                        args.context_drawdown_guard_context_columns
+                    ),
+                    context_drawdown_guard_reset_monthly=(
+                        args.context_drawdown_guard_reset_monthly
+                    ),
                     **regime_blocks,
                 )
                 metrics, _, _, _ = run_model_policy(
@@ -3891,6 +4068,15 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "side_block_rules": regime_values_to_string(
                         model_policy_config.side_block_rules
                     ),
+                    "context_drawdown_guard_loss_threshold": (
+                        context_drawdown_guard_loss_threshold
+                    ),
+                    "context_drawdown_guard_context_columns": regime_values_to_string(
+                        model_policy_config.context_drawdown_guard_context_columns
+                    ),
+                    "context_drawdown_guard_reset_monthly": (
+                        model_policy_config.context_drawdown_guard_reset_monthly
+                    ),
                     **regime_block_metric_columns(model_policy_config),
                     "forced_exit_rate": forced_exit_rate,
                     "eligible": bool(eligible),
@@ -3960,6 +4146,13 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "side_block_rule_sets": [
             regime_values_to_string(values) for values in side_block_rule_sets
         ],
+        "context_drawdown_guard_loss_thresholds": (
+            context_drawdown_guard_loss_thresholds
+        ),
+        "context_drawdown_guard_context_columns": parse_csv_string_tuple(
+            args.context_drawdown_guard_context_columns
+        ),
+        "context_drawdown_guard_reset_monthly": args.context_drawdown_guard_reset_monthly,
         **{field: list(values) for field, values in regime_blocks.items()},
         "min_trades": args.min_trades,
         "max_forced_exit_rate": args.max_forced_exit_rate,
@@ -4122,6 +4315,12 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     for field, _ in REGIME_BLOCK_FIELDS:
         if field not in output.columns:
             late_defaults[field] = ""
+    if "context_drawdown_guard_loss_threshold" not in output.columns:
+        late_defaults["context_drawdown_guard_loss_threshold"] = float("inf")
+    if "context_drawdown_guard_context_columns" not in output.columns:
+        late_defaults["context_drawdown_guard_context_columns"] = "combined_regime,session_regime"
+    if "context_drawdown_guard_reset_monthly" not in output.columns:
+        late_defaults["context_drawdown_guard_reset_monthly"] = True
     if "forced_exit_rate" not in output.columns:
         trade_count = output["trade_count"].replace(0, np.nan)
         late_defaults["forced_exit_rate"] = (
@@ -4159,6 +4358,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "risk_penalty",
         "secondary_score_tie_margin",
         "side_ev_penalty_replacement_min_margin",
+        "context_drawdown_guard_loss_threshold",
         "min_predicted_hold_minutes",
         "max_predicted_hold_minutes",
         "profit_barrier_miss_penalty",
@@ -4226,10 +4426,21 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         )
     else:
         output["require_profit_barrier"] = output["require_profit_barrier"].astype(bool)
+    if output["context_drawdown_guard_reset_monthly"].dtype == object:
+        output["context_drawdown_guard_reset_monthly"] = output[
+            "context_drawdown_guard_reset_monthly"
+        ].map(lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"})
+    else:
+        output["context_drawdown_guard_reset_monthly"] = output[
+            "context_drawdown_guard_reset_monthly"
+        ].astype(bool)
     output["extra_side_margin_rules"] = output["extra_side_margin_rules"].fillna("").astype(str)
     output["side_ev_penalty_rules"] = output["side_ev_penalty_rules"].fillna("").astype(str)
     output["side_extra_margin_rules"] = output["side_extra_margin_rules"].fillna("").astype(str)
     output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
+    output["context_drawdown_guard_context_columns"] = (
+        output["context_drawdown_guard_context_columns"].fillna("").astype(str)
+    )
     output["long_secondary_score_column"] = (
         output["long_secondary_score_column"].fillna("").astype(str)
     )
@@ -9805,6 +10016,25 @@ def build_parser() -> argparse.ArgumentParser:
             "semicolon-separated side-block rule sets; each set uses comma-separated "
             "side:column=value+... rules, with none/empty/- for no rules"
         ),
+    )
+    model_sweep.add_argument(
+        "--context-drawdown-guard-loss-thresholds",
+        default="inf",
+        help=(
+            "comma-separated positive realized loss thresholds that block later entries "
+            "in the same online direction/context; inf disables"
+        ),
+    )
+    model_sweep.add_argument(
+        "--context-drawdown-guard-context-columns",
+        default="combined_regime,session_regime",
+        help="comma-separated prediction columns used with direction as the online drawdown context",
+    )
+    model_sweep.add_argument(
+        "--context-drawdown-guard-reset-monthly",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="reset online context drawdown guard by entry decision month",
     )
     model_sweep.add_argument("--min-trades", type=int, default=0)
     model_sweep.add_argument("--max-forced-exit-rate", type=float, default=1.0)

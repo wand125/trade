@@ -15,6 +15,7 @@ from trade_data.backtest import (
     enrich_trades_with_predictions,
     fixed_horizon_scores,
     model_signal_from_predictions,
+    model_policy_entry_context,
     normalize_sweep_metrics,
     plateau_support_counts,
     parse_min_valid_predicted_hold_minutes_values,
@@ -261,6 +262,87 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(trades.iloc[0]["exit_timestamp"], df["timestamp"].iloc[2])
         self.assertEqual(trades.iloc[1]["direction"], "short")
         self.assertEqual(trades.iloc[1]["entry_timestamp"], df["timestamp"].iloc[3])
+
+    def test_context_drawdown_guard_blocks_later_same_context_entries(self):
+        df = frame_with_opens([100, 100, 105, 105, 105, 110, 110])
+        signal = pd.Series([-1, 0, 0, -1, 0, 0, 0])
+        entry_context = pd.Series(["range_low_vol|ny_overlap"] * len(df))
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        trades = trades_to_frame(
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_context=entry_context,
+                context_drawdown_guard_loss_threshold=4.0,
+            )
+        )
+
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades.iloc[0]["direction"], "short")
+        self.assertAlmostEqual(trades.iloc[0]["adjusted_pnl"], -6.0)
+
+    def test_context_drawdown_guard_allows_different_context_after_loss(self):
+        df = frame_with_opens([100, 100, 105, 105, 105, 110, 110])
+        signal = pd.Series([-1, 0, 0, -1, 0, 0, 0])
+        entry_context = pd.Series(
+            [
+                "range_low_vol|ny_overlap",
+                "range_low_vol|ny_overlap",
+                "range_low_vol|ny_overlap",
+                "range_low_vol|asia",
+                "range_low_vol|asia",
+                "range_low_vol|asia",
+                "range_low_vol|asia",
+            ]
+        )
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        trades = trades_to_frame(
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_context=entry_context,
+                context_drawdown_guard_loss_threshold=4.0,
+            )
+        )
+
+        self.assertEqual(len(trades), 2)
+        self.assertEqual(trades.iloc[1]["direction"], "short")
+        self.assertEqual(trades.iloc[1]["entry_timestamp"], df["timestamp"].iloc[4])
+
+    def test_model_policy_entry_context_combines_configured_prediction_columns(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "combined_regime": ["range_low_vol", "up_low_vol", "down_low_vol"],
+                "session_regime": ["asia", "london", "ny_overlap"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            context_drawdown_guard_loss_threshold=5.0,
+        )
+
+        context = model_policy_entry_context(df, predictions, config)
+
+        self.assertEqual(
+            context.tolist(),
+            [
+                "combined_regime=range_low_vol|session_regime=asia",
+                "combined_regime=up_low_vol|session_regime=london",
+                "combined_regime=down_low_vol|session_regime=ny_overlap",
+            ],
+        )
 
     def test_trade_summary_includes_direction_pnl(self):
         df = frame_with_opens([100, 101, 103, 104, 102, 97])

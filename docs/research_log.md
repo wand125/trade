@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 23:41 Online context drawdown guard
+
+- 決済済み実績だけを使う online drawdown guard を `run_backtest` / `model-policy` / `model-sweep` に追加した。`direction + context + entry month` の実現adjusted PnLが `-threshold` 以下になると、同月内の同side/context entryを以後ブロックする。
+- `p10 + margin10` baselineに適用した。元実験と同じ `warmup_days=7`, `post_days=4` で再評価し、`inf` baselineは `-90.1378`, trades `949`, worst month `-289.0056` で一致。
+- `combined_regime + session_regime` contextは小改善止まり。threshold `40` は total `-82.9380`, worst `-269.1576`。
+- `combined_regime` onlyは threshold `20` で total `-56.3298`, worst `-249.3830` まで改善したが、まだNoTrade未満。
+- side-month guardとして `context_columns=dataset_month` を使うと、threshold `60` が total `135.6350`, worst `-153.6646`, trades `841`、threshold `40` が total `100.5640`, worst `-138.4960`, trades `692`。
+- ただし疑似validation `2025-01..08` でtotal基準選択すると `inf` が選ばれ、future `2025-09..12` の大崩れを防げない。`40/60` は全12ヶ月を見た後知恵なので標準採用しない。
+- report: `docs/reports/00180_2026-06-29_online_context_drawdown_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/residual_trade_failure_diagnostics.py`: OK; `python3 -m unittest tests.test_backtest tests.test_residual_trade_failure_diagnostics tests.test_docs_reports`: OK, 92 tests
+
 ### 23:20 Side drift guard residual diagnostics
 
 - `p10 + admission margin10` の残存失敗を `model-trade-exposure-diagnostics` と新規 `scripts/experiments/residual_trade_failure_diagnostics.py` で分解した。
