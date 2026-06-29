@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 10:40 Model trade delta parent pairing
+
+- `model-trade-delta` を候補採用前の標準診断にしやすくするため、複数月の `model-policy` runが入った親ディレクトリを直接比較できるようにした。
+- 実装は親ディレクトリを展開し、各runの `config.json` 内 `backtest_config.evaluation_start` の月でbase/candidateをペアリングする。月の重複や不一致はfail-fastする。
+- READMEにも、親ディレクトリ比較ではディレクトリ名やmtimeではなくrun内部の評価月で対応付けることを追記した。
+- `00128` と同じ標準候補 vs validation top候補を親ディレクトリ指定だけで再実行し、validation base/high cost delta `+62.8970 / +86.4218`, apply base/high cost delta `-289.3090 / -290.4310` を再現した。
+- 判断: `model-trade-delta` の親ディレクトリ比較を、候補採用前のstateful delta診断フローに使う。今回の変更は診断基盤の改善であり、trade policy自体は変更しない。
+- report: `docs/reports/00129_2026-06-29_model_trade_delta_parent_pairing.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 10:33 Guard-fixed entry/side drift diagnostics
 
 - `00127` のvalidation top候補と現行標準候補を、validation/apply x base/high costで固定 `model-policy` 実行し、`model-trade-exposure` と `model-trade-delta` でtrade-level差分を確認した。

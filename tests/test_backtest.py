@@ -3095,6 +3095,85 @@ class BacktestTests(unittest.TestCase):
         ].iloc[0]
         self.assertAlmostEqual(positive_cost_only_candidate["target"], -11.8)
 
+    def test_model_trade_delta_pairs_parent_runs_by_config_month(self):
+        months = ["2025-01", "2025-02"]
+        decision_timestamps = [
+            pd.Timestamp(f"{month}-01 00:00:00+00:00")
+            for month in months
+        ]
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": decision_timestamps,
+                "dataset_month": months,
+                "combined_regime": ["up_low_vol", "range_low_vol"],
+                "long_best_adjusted_pnl": [3.0, 4.0],
+                "short_best_adjusted_pnl": [1.0, 2.0],
+                "pred_long_best_adjusted_pnl": [5.0, 6.0],
+                "pred_short_best_adjusted_pnl": [1.0, 2.0],
+            }
+        )
+
+        def trade_frame(decision_timestamp: pd.Timestamp, adjusted_pnl: float) -> pd.DataFrame:
+            return pd.DataFrame(
+                {
+                    "direction": ["long"],
+                    "entry_timestamp": [decision_timestamp + pd.Timedelta(minutes=1)],
+                    "exit_timestamp": [decision_timestamp + pd.Timedelta(minutes=2)],
+                    "entry_price": [100.0],
+                    "exit_price": [100.0 + adjusted_pnl],
+                    "raw_pnl": [adjusted_pnl],
+                    "adjusted_pnl": [adjusted_pnl],
+                    "holding_minutes": [1.0],
+                    "exit_reason": ["signal_close"],
+                    "entry_decision_timestamp": [decision_timestamp],
+                    "exit_decision_timestamp": [decision_timestamp + pd.Timedelta(minutes=2)],
+                }
+            )
+
+        def write_run(
+            parent: Path,
+            run_name: str,
+            month: str,
+            predictions_path: Path,
+            adjusted_pnl: float,
+        ) -> None:
+            run_dir = parent / run_name
+            run_dir.mkdir()
+            decision_timestamp = pd.Timestamp(f"{month}-01 00:00:00+00:00")
+            trade_frame(decision_timestamp, adjusted_pnl).to_csv(
+                run_dir / "trades.csv",
+                index=False,
+            )
+            config = {
+                "backtest_config": {"evaluation_start": f"{month}-01T00:00:00+00:00"},
+                "model_policy_config": {
+                    "predictions": str(predictions_path),
+                    "long_column": "pred_long_best_adjusted_pnl",
+                    "short_column": "pred_short_best_adjusted_pnl",
+                },
+            }
+            (run_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            predictions_path = root / "predictions.parquet"
+            predictions.to_parquet(predictions_path)
+            base_parent = root / "base_runs"
+            candidate_parent = root / "candidate_runs"
+            base_parent.mkdir()
+            candidate_parent.mkdir()
+            write_run(base_parent, "z_base_2025-02", "2025-02", predictions_path, 3.0)
+            write_run(base_parent, "a_base_2025-01", "2025-01", predictions_path, 1.0)
+            write_run(candidate_parent, "a_candidate_2025-01", "2025-01", predictions_path, 2.0)
+            write_run(candidate_parent, "z_candidate_2025-02", "2025-02", predictions_path, -1.0)
+
+            frames = read_model_trade_delta_frames([base_parent], [candidate_parent])
+
+        self.assertEqual([frame["month"].iloc[0] for frame in frames], months)
+        self.assertEqual([frame["delta_status"].iloc[0] for frame in frames], ["common", "common"])
+        self.assertAlmostEqual(frames[0]["pnl_delta"].sum(), 1.0)
+        self.assertAlmostEqual(frames[1]["pnl_delta"].sum(), -4.0)
+
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")
         predictions = pd.DataFrame(

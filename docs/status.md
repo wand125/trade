@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 10:33 JST
+最終更新: 2026-06-29 10:40 JST
 
 ## 現在の状態
 
@@ -63,6 +63,8 @@ MLP holding fail-close guardをCLI標準に反映済み。`model-policy` では 
 guard固定後のentry/side小gridを再評価済み。validationでは `entry=14`, short offset `4`, side margin `5`, `short down5/up10/range5` がbase/high cost min月を `154.4590 / 138.6648` まで上げ、現行標準の `138.0338 / 96.8776` を上回った。しかし同候補をapply 4ヶ月へ固定すると base sum/min `-42.4328 / -50.1562`, high cost sum/min `-157.7340 / -69.2394` で、現行標準guard候補の `246.8762 / -18.7168`, `132.6970 / -34.3748` を大きく下回った。したがってvalidation top候補は棄却し、entry threshold/short offset/side penaltyの追加最適化は本流にしない。詳細は `docs/reports/00127_2026-06-29_guard_fixed_entry_side_grid.md`。
 
 guard固定後entry/side候補のtrade-level drift診断を実施済み。validation topはvalidationで `only_candidate +359.4784` が `only_base +328.6498` の喪失を上回って勝ったが、applyでは標準専用trade `+261.9228` を捨て、top専用tradeは `+19.6058` に留まった。high cost applyではtop専用tradeも `-26.6700` へ悪化。stateful target meanもvalidationでは全月プラスだが、apply baseでは2025-02/03/04が `-1.7983 / -0.1697 / -2.1726` とマイナス化した。特に2025-02 `long:up_low_vol` は自身 `-42.9714` と標準側 `+101.6036` のblockingによりstateful net `-144.5750`。結論としてvalidation topは採用せず、entry/side grid拡張ではなくOOF calibration、stateful blocking / replacement regret target、より広いwalk-forwardへ戻る。詳細は `docs/reports/00128_2026-06-29_guard_fixed_entry_side_drift_diagnostics.md`。
+
+`model-trade-delta` は複数月run入りの親ディレクトリを直接比較できるようになった。親ディレクトリを展開し、各runの `config.json` 内 `backtest_config.evaluation_start` の月でbase/candidateを対応付ける。月の重複・不一致はfail-fastする。標準候補 vs validation top候補を親ディレクトリ指定だけで再診断し、`00128` と同じ validation delta `+62.8970 / +86.4218`, apply delta `-289.3090 / -290.4310` を再現した。今後は候補採用前にこのCLIで `only_base`, `only_candidate`, blocking group, `stateful_candidate_examples.csv` を確認する。詳細は `docs/reports/00129_2026-06-29_model_trade_delta_parent_pairing.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

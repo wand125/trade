@@ -511,6 +511,11 @@ python -m trade_data.backtest model-trade-delta \
   --label model_trade_delta
 ```
 
+When parent directories contain multiple `model-policy` runs, the command pairs
+base and candidate runs by the internal `backtest_config.evaluation_start`
+month in each `config.json`. Duplicate or mismatched months fail fast instead of
+silently comparing the wrong runs.
+
 This is especially important for one-position-at-a-time policies: a hard gate can
 change the trade path and block later opportunities, so evaluate `only_base` and
 `only_candidate` PnL rather than only counting removed trades.

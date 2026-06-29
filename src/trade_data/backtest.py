@@ -4868,6 +4868,48 @@ def read_model_trade_exposure_frames(
     ]
 
 
+def model_policy_run_month_label(path: Path) -> str:
+    run_dir, config, _ = read_model_policy_run_metadata(path)
+    return month_label_from_run_config(config, run_dir)
+
+
+def map_model_policy_runs_by_month(paths: list[Path], label: str) -> dict[str, Path]:
+    runs: dict[str, Path] = {}
+    for path in paths:
+        month = model_policy_run_month_label(path)
+        if month in runs:
+            raise ValueError(
+                f"{label} runs contain duplicate month {month}: {runs[month]} and {path}"
+            )
+        runs[month] = path
+    return runs
+
+
+def pair_model_trade_delta_run_paths(
+    base_paths: list[Path],
+    candidate_paths: list[Path],
+) -> list[tuple[Path, Path]]:
+    expanded_base_paths = expand_model_trade_exposure_run_paths(base_paths)
+    expanded_candidate_paths = expand_model_trade_exposure_run_paths(candidate_paths)
+    if len(expanded_base_paths) == 1 and len(expanded_candidate_paths) == 1:
+        return [(expanded_base_paths[0], expanded_candidate_paths[0])]
+
+    base_by_month = map_model_policy_runs_by_month(expanded_base_paths, "base")
+    candidate_by_month = map_model_policy_runs_by_month(expanded_candidate_paths, "candidate")
+    base_months = set(base_by_month)
+    candidate_months = set(candidate_by_month)
+    if base_months != candidate_months:
+        missing_candidate = sorted(base_months - candidate_months)
+        missing_base = sorted(candidate_months - base_months)
+        details: list[str] = []
+        if missing_candidate:
+            details.append(f"missing candidate months: {','.join(missing_candidate)}")
+        if missing_base:
+            details.append(f"missing base months: {','.join(missing_base)}")
+        raise ValueError(f"base and candidate run months differ; {'; '.join(details)}")
+    return [(base_by_month[month], candidate_by_month[month]) for month in sorted(base_months)]
+
+
 def resolve_single_model_policy_run_path(path: Path) -> Path:
     expanded = expand_model_trade_exposure_run_paths([path])
     if len(expanded) != 1:
@@ -5422,10 +5464,8 @@ def read_model_trade_delta_frames(
     gate_long_quality_column: str = "",
     gate_short_quality_column: str = "",
 ) -> list[pd.DataFrame]:
-    if len(base_paths) != len(candidate_paths):
-        raise ValueError("base and candidate run counts must match")
     frames: list[pd.DataFrame] = []
-    for base_path, candidate_path in zip(base_paths, candidate_paths):
+    for base_path, candidate_path in pair_model_trade_delta_run_paths(base_paths, candidate_paths):
         base_run_dir = resolve_single_model_policy_run_path(base_path)
         candidate_run_dir = resolve_single_model_policy_run_path(candidate_path)
         _, _, candidate_policy_config = read_model_policy_run_metadata(candidate_run_dir)
