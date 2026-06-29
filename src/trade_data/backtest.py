@@ -6469,6 +6469,284 @@ def handle_model_trade_delta(args: argparse.Namespace) -> int:
     return 0
 
 
+def expand_model_trade_delta_run_paths(paths: list[Path]) -> list[Path]:
+    expanded: list[Path] = []
+    for path in paths:
+        if path.is_dir() and not (path / "group_by_month.csv").exists():
+            children = [
+                child
+                for child in sorted(path.iterdir())
+                if child.is_dir()
+                and (child / "group_by_month.csv").exists()
+                and (child / "group_by_month_status.csv").exists()
+            ]
+            if children:
+                expanded.extend(children)
+                continue
+        expanded.append(path)
+    return expanded
+
+
+def numeric_column_sum(frame: pd.DataFrame, column: str) -> float:
+    if column not in frame.columns:
+        return 0.0
+    return float(pd.to_numeric(frame[column], errors="coerce").fillna(0.0).sum())
+
+
+def read_model_trade_delta_preflight_case(path: Path, split: str) -> dict[str, object]:
+    month_path = path / "group_by_month.csv"
+    status_path = path / "group_by_month_status.csv"
+    stateful_path = path / "stateful_candidate_examples.csv"
+    if not month_path.exists():
+        raise FileNotFoundError(f"group_by_month.csv not found: {month_path}")
+
+    month = pd.read_csv(month_path)
+    if month.empty:
+        raise ValueError(f"delta run has no monthly rows: {path}")
+
+    row: dict[str, object] = {
+        "split": split,
+        "case_label": path.name,
+        "delta_run": str(path),
+        "month_count": int(month["month"].nunique()) if "month" in month.columns else len(month),
+        "base_trade_count_sum": numeric_column_sum(month, "base_trade_count"),
+        "candidate_trade_count_sum": numeric_column_sum(month, "candidate_trade_count"),
+        "base_adjusted_pnl_sum": numeric_column_sum(month, "base_adjusted_pnl"),
+        "candidate_adjusted_pnl_sum": numeric_column_sum(month, "candidate_adjusted_pnl"),
+        "pnl_delta_sum": numeric_column_sum(month, "pnl_delta"),
+        "removed_positive_pnl_sum": numeric_column_sum(month, "removed_positive_pnl"),
+        "removed_negative_pnl_sum": numeric_column_sum(month, "removed_negative_pnl"),
+        "added_positive_pnl_sum": numeric_column_sum(month, "added_positive_pnl"),
+        "added_negative_pnl_sum": numeric_column_sum(month, "added_negative_pnl"),
+    }
+    pnl_delta = pd.to_numeric(month.get("pnl_delta", pd.Series(dtype=float)), errors="coerce")
+    if pnl_delta.empty:
+        row["pnl_delta_min_month"] = np.nan
+        row["pnl_delta_negative_month_count"] = 0
+    else:
+        row["pnl_delta_min_month"] = float(pnl_delta.min())
+        row["pnl_delta_negative_month_count"] = int((pnl_delta < 0).sum())
+
+    if status_path.exists():
+        status = pd.read_csv(status_path)
+        if "delta_status" in status.columns:
+            for delta_status in ["common", "only_base", "only_candidate"]:
+                subset = status.loc[status["delta_status"].astype(str).eq(delta_status)]
+                prefix = delta_status
+                row[f"{prefix}_pnl_delta_sum"] = numeric_column_sum(subset, "pnl_delta")
+                row[f"{prefix}_base_adjusted_pnl_sum"] = numeric_column_sum(
+                    subset,
+                    "base_adjusted_pnl",
+                )
+                row[f"{prefix}_candidate_adjusted_pnl_sum"] = numeric_column_sum(
+                    subset,
+                    "candidate_adjusted_pnl",
+                )
+                row[f"{prefix}_row_count_sum"] = numeric_column_sum(subset, "row_count")
+
+    if stateful_path.exists():
+        stateful = pd.read_csv(stateful_path)
+        if not stateful.empty and "target" in stateful.columns:
+            stateful["target"] = pd.to_numeric(stateful["target"], errors="coerce")
+            row["stateful_target_mean"] = float(stateful["target"].mean())
+            row["stateful_target_sum"] = float(stateful["target"].sum())
+            if "month" in stateful.columns:
+                stateful_by_month = stateful.groupby("month", dropna=False)["target"].mean()
+                row["stateful_target_mean_min_month"] = float(stateful_by_month.min())
+                row["stateful_target_negative_month_count"] = int((stateful_by_month < 0).sum())
+            else:
+                row["stateful_target_mean_min_month"] = row["stateful_target_mean"]
+                row["stateful_target_negative_month_count"] = int(row["stateful_target_mean"] < 0)
+        if not stateful.empty and "blocking_cost" in stateful.columns:
+            row["blocking_cost_sum"] = numeric_column_sum(stateful, "blocking_cost")
+        if not stateful.empty and "replacement_regret" in stateful.columns:
+            row["replacement_regret_mean"] = float(
+                pd.to_numeric(stateful["replacement_regret"], errors="coerce").mean()
+            )
+    return row
+
+
+def summarize_model_trade_delta_preflight(
+    validation_paths: list[Path],
+    holdout_paths: list[Path],
+    *,
+    min_validation_cases: int = 1,
+    min_holdout_cases: int = 1,
+    min_validation_pnl_delta: float = 0.0,
+    min_holdout_pnl_delta: float = 0.0,
+    min_validation_month_pnl_delta: float = -float("inf"),
+    min_holdout_month_pnl_delta: float = 0.0,
+    min_validation_stateful_target_mean: float = -float("inf"),
+    min_holdout_stateful_target_mean: float = 0.0,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    expanded_validation_paths = expand_model_trade_delta_run_paths(validation_paths)
+    expanded_holdout_paths = expand_model_trade_delta_run_paths(holdout_paths)
+    rows = [
+        read_model_trade_delta_preflight_case(path, "validation")
+        for path in expanded_validation_paths
+    ]
+    rows.extend(
+        read_model_trade_delta_preflight_case(path, "holdout")
+        for path in expanded_holdout_paths
+    )
+    cases = pd.DataFrame(rows)
+    if cases.empty:
+        raise ValueError("at least one delta run is required")
+
+    optional_metric_columns = [
+        "stateful_target_mean",
+        "stateful_target_sum",
+        "stateful_target_mean_min_month",
+        "stateful_target_negative_month_count",
+        "blocking_cost_sum",
+        "replacement_regret_mean",
+    ]
+    for column in optional_metric_columns:
+        if column not in cases.columns:
+            cases[column] = np.nan
+
+    def threshold_ok(value: object, threshold: float) -> bool:
+        if pd.isna(value):
+            return not np.isfinite(threshold)
+        return bool(float(value) >= threshold)
+
+    def case_pass(row: pd.Series) -> bool:
+        is_validation = str(row["split"]) == "validation"
+        min_pnl_delta = min_validation_pnl_delta if is_validation else min_holdout_pnl_delta
+        min_month_pnl_delta = (
+            min_validation_month_pnl_delta if is_validation else min_holdout_month_pnl_delta
+        )
+        min_stateful_target_mean = (
+            min_validation_stateful_target_mean
+            if is_validation
+            else min_holdout_stateful_target_mean
+        )
+        return bool(
+            threshold_ok(row["pnl_delta_sum"], min_pnl_delta)
+            and threshold_ok(row["pnl_delta_min_month"], min_month_pnl_delta)
+            and threshold_ok(
+                row["stateful_target_mean_min_month"],
+                min_stateful_target_mean,
+            )
+        )
+
+    cases["case_pass"] = cases.apply(case_pass, axis=1)
+    cases["pnl_delta_sum_ok"] = cases.apply(
+        lambda row: threshold_ok(
+            row["pnl_delta_sum"],
+            min_validation_pnl_delta
+            if row["split"] == "validation"
+            else min_holdout_pnl_delta,
+        ),
+        axis=1,
+    )
+    cases["pnl_delta_min_month_ok"] = cases.apply(
+        lambda row: threshold_ok(
+            row["pnl_delta_min_month"],
+            min_validation_month_pnl_delta
+            if row["split"] == "validation"
+            else min_holdout_month_pnl_delta,
+        ),
+        axis=1,
+    )
+    cases["stateful_target_mean_min_month_ok"] = cases.apply(
+        lambda row: threshold_ok(
+            row["stateful_target_mean_min_month"],
+            min_validation_stateful_target_mean
+            if row["split"] == "validation"
+            else min_holdout_stateful_target_mean,
+        ),
+        axis=1,
+    )
+
+    validation = cases.loc[cases["split"].eq("validation")]
+    holdout = cases.loc[cases["split"].eq("holdout")]
+    validation_case_count = int(len(validation))
+    holdout_case_count = int(len(holdout))
+    validation_case_pass_count = int(validation["case_pass"].sum())
+    holdout_case_pass_count = int(holdout["case_pass"].sum())
+    validation_all_pass = (
+        validation_case_count >= min_validation_cases
+        and validation_case_pass_count == validation_case_count
+    )
+    holdout_all_pass = (
+        holdout_case_count >= min_holdout_cases
+        and holdout_case_pass_count == holdout_case_count
+    )
+    summary = {
+        "validation_case_count": validation_case_count,
+        "validation_case_pass_count": validation_case_pass_count,
+        "holdout_case_count": holdout_case_count,
+        "holdout_case_pass_count": holdout_case_pass_count,
+        "validation_all_pass": validation_all_pass,
+        "holdout_all_pass": holdout_all_pass,
+        "preflight_pass": validation_all_pass and holdout_all_pass,
+        "min_validation_cases": min_validation_cases,
+        "min_holdout_cases": min_holdout_cases,
+        "min_validation_pnl_delta": min_validation_pnl_delta,
+        "min_holdout_pnl_delta": min_holdout_pnl_delta,
+        "min_validation_month_pnl_delta": min_validation_month_pnl_delta,
+        "min_holdout_month_pnl_delta": min_holdout_month_pnl_delta,
+        "min_validation_stateful_target_mean": min_validation_stateful_target_mean,
+        "min_holdout_stateful_target_mean": min_holdout_stateful_target_mean,
+    }
+    return cases.sort_values(["split", "case_pass", "pnl_delta_sum"]).reset_index(drop=True), summary
+
+
+def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
+    validation_paths = parse_csv_paths(args.validation_deltas)
+    holdout_paths = parse_csv_paths(args.holdout_deltas)
+    cases, summary = summarize_model_trade_delta_preflight(
+        validation_paths,
+        holdout_paths,
+        min_validation_cases=args.min_validation_cases,
+        min_holdout_cases=args.min_holdout_cases,
+        min_validation_pnl_delta=args.min_validation_pnl_delta,
+        min_holdout_pnl_delta=args.min_holdout_pnl_delta,
+        min_validation_month_pnl_delta=args.min_validation_month_pnl_delta,
+        min_holdout_month_pnl_delta=args.min_holdout_month_pnl_delta,
+        min_validation_stateful_target_mean=args.min_validation_stateful_target_mean,
+        min_holdout_stateful_target_mean=args.min_holdout_stateful_target_mean,
+    )
+    run_dir = make_run_dir(args.output_dir, args.label)
+    cases.to_csv(run_dir / "case_metrics.csv", index=False)
+    cases.loc[~cases["case_pass"]].to_csv(run_dir / "failed_cases.csv", index=False)
+    metadata = {
+        "validation_deltas": [str(path) for path in validation_paths],
+        "expanded_validation_deltas": [
+            str(path) for path in expand_model_trade_delta_run_paths(validation_paths)
+        ],
+        "holdout_deltas": [str(path) for path in holdout_paths],
+        "expanded_holdout_deltas": [
+            str(path) for path in expand_model_trade_delta_run_paths(holdout_paths)
+        ],
+        "summary": summary,
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2, default=json_default)
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=json_default)
+
+    print("preflight summary:")
+    for key, value in summary.items():
+        print(f"{key}: {value}")
+    display_columns = [
+        "split",
+        "case_label",
+        "case_pass",
+        "pnl_delta_sum",
+        "pnl_delta_min_month",
+        "stateful_target_mean_min_month",
+        "pnl_delta_negative_month_count",
+        "stateful_target_negative_month_count",
+    ]
+    existing_display_columns = [column for column in display_columns if column in cases.columns]
+    print("cases:")
+    print(cases.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def handle_analyze_trades(args: argparse.Namespace) -> int:
     trades = read_trades_csv(args.trades)
     predictions = read_analysis_predictions(args.predictions, args.long_column, args.short_column)
@@ -7236,6 +7514,53 @@ def build_parser() -> argparse.ArgumentParser:
     model_trade_delta.add_argument("--label", default="model_trade_delta")
     model_trade_delta.add_argument("--top-n", type=int, default=5)
     model_trade_delta.set_defaults(func=handle_model_trade_delta)
+
+    model_trade_delta_preflight = subparsers.add_parser(
+        "model-trade-delta-preflight",
+        help="audit validation and holdout model-trade-delta runs before adopting a candidate",
+    )
+    model_trade_delta_preflight.add_argument(
+        "--validation-deltas",
+        required=True,
+        help="comma-separated model-trade-delta run dirs or parent dirs for validation cases",
+    )
+    model_trade_delta_preflight.add_argument(
+        "--holdout-deltas",
+        required=True,
+        help="comma-separated model-trade-delta run dirs or parent dirs for holdout cases",
+    )
+    model_trade_delta_preflight.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_trade_delta_preflight.add_argument("--label", default="model_trade_delta_preflight")
+    model_trade_delta_preflight.add_argument("--top-n", type=int, default=20)
+    model_trade_delta_preflight.add_argument("--min-validation-cases", type=int, default=1)
+    model_trade_delta_preflight.add_argument("--min-holdout-cases", type=int, default=1)
+    model_trade_delta_preflight.add_argument("--min-validation-pnl-delta", type=float, default=0.0)
+    model_trade_delta_preflight.add_argument("--min-holdout-pnl-delta", type=float, default=0.0)
+    model_trade_delta_preflight.add_argument(
+        "--min-validation-month-pnl-delta",
+        type=float,
+        default=-float("inf"),
+    )
+    model_trade_delta_preflight.add_argument(
+        "--min-holdout-month-pnl-delta",
+        type=float,
+        default=0.0,
+    )
+    model_trade_delta_preflight.add_argument(
+        "--min-validation-stateful-target-mean",
+        type=float,
+        default=-float("inf"),
+    )
+    model_trade_delta_preflight.add_argument(
+        "--min-holdout-stateful-target-mean",
+        type=float,
+        default=0.0,
+    )
+    model_trade_delta_preflight.set_defaults(func=handle_model_trade_delta_preflight)
 
     analyze_trades = subparsers.add_parser(
         "analyze-trades",

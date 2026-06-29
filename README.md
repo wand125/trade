@@ -526,6 +526,22 @@ opportunities blocked while a candidate-policy trade was open.
 with `target`, `stateful_entry_value`, `stateful_positive_cost_value`,
 `blocking_cost`, and `replacement_regret` columns.
 
+Before adopting a candidate, combine validation and holdout/apply delta runs in
+a preflight audit:
+
+```bash
+python -m trade_data.backtest model-trade-delta-preflight \
+  --validation-deltas data/reports/backtests/<validation_delta_run_a>,data/reports/backtests/<validation_delta_run_b> \
+  --holdout-deltas data/reports/backtests/<holdout_delta_run_a>,data/reports/backtests/<holdout_delta_run_b> \
+  --label model_trade_delta_preflight
+```
+
+The command writes `case_metrics.csv`, `failed_cases.csv`, and `summary.json`.
+By default, every holdout case must have non-negative total PnL delta,
+non-negative worst-month PnL delta, and non-negative worst-month stateful target.
+Use this as a candidate rejection check; validation-only wins are not enough for
+promotion.
+
 Train a month-held-out stateful value model directly from those examples and
 optionally score validation/apply prediction parquet files:
 

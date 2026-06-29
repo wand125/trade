@@ -32,6 +32,7 @@ from trade_data.backtest import (
     summarize_holdout_audit,
     summarize_candidate_selection,
     summarize_candidate_selection_jackknife,
+    summarize_model_trade_delta_preflight,
     summarize_trades,
     summarize_sweep_frames,
     stateful_candidate_examples_from_delta,
@@ -3173,6 +3174,89 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual([frame["delta_status"].iloc[0] for frame in frames], ["common", "common"])
         self.assertAlmostEqual(frames[0]["pnl_delta"].sum(), 1.0)
         self.assertAlmostEqual(frames[1]["pnl_delta"].sum(), -4.0)
+
+    def test_model_trade_delta_preflight_flags_holdout_stateful_drift(self):
+        def write_delta_run(
+            path: Path,
+            months: list[str],
+            pnl_deltas: list[float],
+            stateful_targets: list[float],
+        ) -> None:
+            path.mkdir()
+            pd.DataFrame(
+                {
+                    "month": months,
+                    "base_trade_count": [10] * len(months),
+                    "candidate_trade_count": [9] * len(months),
+                    "base_adjusted_pnl": [20.0] * len(months),
+                    "candidate_adjusted_pnl": [
+                        20.0 + pnl_delta for pnl_delta in pnl_deltas
+                    ],
+                    "pnl_delta": pnl_deltas,
+                    "removed_positive_pnl": [1.0] * len(months),
+                    "removed_negative_pnl": [-0.5] * len(months),
+                    "added_positive_pnl": [2.0] * len(months),
+                    "added_negative_pnl": [-1.0] * len(months),
+                }
+            ).to_csv(path / "group_by_month.csv", index=False)
+            pd.DataFrame(
+                {
+                    "month": months * 3,
+                    "delta_status": ["common"] * len(months)
+                    + ["only_base"] * len(months)
+                    + ["only_candidate"] * len(months),
+                    "row_count": [3] * (len(months) * 3),
+                    "base_adjusted_pnl": [10.0] * (len(months) * 3),
+                    "candidate_adjusted_pnl": [9.0] * (len(months) * 3),
+                    "pnl_delta": pnl_deltas * 3,
+                }
+            ).to_csv(path / "group_by_month_status.csv", index=False)
+            pd.DataFrame(
+                {
+                    "month": months,
+                    "target": stateful_targets,
+                    "blocking_cost": [0.5] * len(months),
+                    "replacement_regret": [0.25] * len(months),
+                }
+            ).to_csv(path / "stateful_candidate_examples.csv", index=False)
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            validation_delta = root / "validation_delta"
+            holdout_delta = root / "holdout_delta"
+            write_delta_run(
+                validation_delta,
+                ["2025-01", "2025-02"],
+                [1.0, 2.0],
+                [0.5, 1.5],
+            )
+            write_delta_run(
+                holdout_delta,
+                ["2025-03", "2025-04"],
+                [-1.0, -2.0],
+                [-0.5, -1.5],
+            )
+
+            cases, summary = summarize_model_trade_delta_preflight(
+                [validation_delta],
+                [holdout_delta],
+            )
+
+        self.assertFalse(summary["preflight_pass"])
+        self.assertEqual(summary["validation_case_count"], 1)
+        self.assertEqual(summary["validation_case_pass_count"], 1)
+        self.assertEqual(summary["holdout_case_count"], 1)
+        self.assertEqual(summary["holdout_case_pass_count"], 0)
+
+        validation_case = cases[cases["split"] == "validation"].iloc[0]
+        holdout_case = cases[cases["split"] == "holdout"].iloc[0]
+        self.assertTrue(validation_case["case_pass"])
+        self.assertAlmostEqual(validation_case["pnl_delta_sum"], 3.0)
+        self.assertFalse(holdout_case["case_pass"])
+        self.assertAlmostEqual(holdout_case["pnl_delta_sum"], -3.0)
+        self.assertFalse(holdout_case["pnl_delta_sum_ok"])
+        self.assertFalse(holdout_case["pnl_delta_min_month_ok"])
+        self.assertFalse(holdout_case["stateful_target_mean_min_month_ok"])
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")

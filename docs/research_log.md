@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 10:48 Model trade delta preflight audit
+
+- `model-trade-delta-preflight` を追加した。複数の `model-trade-delta` runをvalidation/holdoutに分けて読み、case別に `pnl_delta_sum`, worst-month `pnl_delta`, worst-month `stateful_target` を集計する。
+- デフォルトではvalidationは合計PnL delta非負を要求し、holdoutは合計PnL delta、月別最悪PnL delta、月別最悪stateful targetがすべて非負であることを要求する。stateful例がない場合は、有限閾値ではfailする。
+- `00128` / `00129` の標準候補 vs validation top候補に適用したところ、validation 2件はpass、holdout/apply 2件はfail。preflight全体は `False` で、validation top候補を採用前に棄却できる。
+- 出力先: `data/reports/backtests/20260629_014830_guard_fixed_entry_side_preflight/`
+- 判断: 今後の候補採用前には、validation summaryだけでなく `model-trade-delta-preflight` のholdout passを確認する。これはpolicy変更ではなく、過適合候補を殺す検証フローの追加。
+- report: `docs/reports/00130_2026-06-29_model_trade_delta_preflight.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 10:40 Model trade delta parent pairing
 
 - `model-trade-delta` を候補採用前の標準診断にしやすくするため、複数月の `model-policy` runが入った親ディレクトリを直接比較できるようにした。
