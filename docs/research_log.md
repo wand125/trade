@@ -5075,3 +5075,50 @@ Policy結果:
 
 - `python3 -m trade_data.meta_model oof-trade-failure-model ... --failure-targets exit_shortening_high --oof-scheme expanding --min-train-months 2`: OK
 - `python3 -m trade_data.backtest model-policy ... --holding-shortening-threshold 0.30 --holding-shortening-cap-minutes 60`: OK, 5 months
+
+### 2026-06-29 21:34 JST Exit shortening fixed apply 2025-06..08
+
+作業:
+
+- `00170` の固定候補 `threshold=0.30`, `cap=60m` を2025-06..08へ再探索なしで適用した。
+- 2025-06/07/08のstateful risk apply predictionを結合し、validation 2024-11..2025-05でfitした `exit_shortening_high` final modelをapplyした。
+- default shrinkage modelと、scale診断用の `--prediction-shrinkage 1.0` modelを作った。
+- baseline、固定候補、近傍候補、post-hoc低閾値診断を backtest した。
+- baseline vs fixed `0.30/60m` と baseline vs diagnostic `0.24/60m` のtrade deltaを作成した。
+- report: `docs/reports/00171_2026-06-29_exit_shortening_fixed_apply_2025_06_08.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+確率スケール:
+
+| frame | side | p90 | p95 | max | rows >= 0.30 |
+|---|---|---:|---:|---:|---:|
+| validation OOF | long | `0.3000` | `0.3582` | `0.5314` | `21992` |
+| validation OOF | short | `0.3065` | `0.3491` | `0.5328` | `24766` |
+| apply default | long | `0.2382` | `0.2439` | `0.2478` | `0` |
+| apply default | short | `0.2427` | `0.2478` | `0.2478` | `0` |
+| apply no-shrink | long | `0.2471` | `0.2553` | `0.2608` | `0` |
+| apply no-shrink | short | `0.2536` | `0.2608` | `0.2608` | `0` |
+
+Policy結果:
+
+| variant | trades | total pnl | worst month | max DD |
+|---|---:|---:|---:|---:|
+| stateful_p5 baseline | `338` | `276.3928` | `56.0720` | `100.2362` |
+| fixed cap `0.30/60m` | `338` | `276.3928` | `56.0720` | `100.2362` |
+| fixed cap `0.28/60m` | `338` | `276.3928` | `56.0720` | `100.2362` |
+| fixed cap `0.30/90m` | `338` | `276.3928` | `56.0720` | `100.2362` |
+| diagnostic cap `0.24/60m` | `348` | `246.7446` | `70.3238` | `90.6066` |
+| diagnostic cap `0.22/60m` | `401` | `114.0804` | `-23.6882` | `84.5010` |
+
+判断:
+
+- `0.30/60m` はblind monthsで発火0。固定候補として反証された。
+- no-shrinkでも `0.30` に届かないため、単純なshrinkageだけが原因ではない。
+- post-hocでthresholdを下げると2025-06/08を壊し、2025-08は `0.22` で負になる。
+- raw probability thresholdはfinal apply scaleに弱い。`exit_shortening_high` は標準policyへ直結せず、cap value / holding-error magnitude / calibrated rank featureへ戻す。
+
+検証:
+
+- `python3 -m trade_data.meta_model oof-trade-failure-model ... --apply-months 2025-06,2025-07,2025-08`: OK
+- `python3 -m trade_data.backtest model-policy ...`: OK, 18 runs
+- `python3 -m trade_data.backtest model-trade-delta ...`: OK, 2 delta runs
