@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 11:01 JST
+最終更新: 2026-06-29 11:07 JST
 
 ## 現在の状態
 
@@ -71,6 +71,8 @@ guard固定後entry/side候補のtrade-level drift診断を実施済み。valida
 `model-trade-delta-preflight` はstatus/direction/combined_regime別のgroup driftも出力する。標準候補 vs validation top候補では、通常PnLのvalidation-positive/holdout-negative groupが10件、stateful groupも10件。`only_candidate long down_low_vol` は通常PnL `+84.3218 -> -93.4838`, stateful `+107.4676 -> -136.4816`、`only_candidate short down_normal_vol` は通常PnL `+25.4090 -> -91.0014`, stateful `+25.4090 -> -228.1214` に反転した。これを直接hard blockせず、追加walk-forwardで再現性を確認してからOOF/downside/stateful targetへ戻す。詳細は `docs/reports/00131_2026-06-29_model_trade_delta_preflight_group_drift.md`。
 
 `model-trade-delta-drift-stability` を追加済み。複数preflight runでvalidation-positive / holdout-negativeが繰り返すgroupを集計する。guard top比較とstack0比較の2つでは、通常PnLのcommon flipが3件、stateful netのcommon flipが6件。通常PnLでは `only_candidate long down_low_vol` が validation合計 `+223.8686` からholdout合計 `-159.6508`、`only_candidate short down_normal_vol` が `+52.0400 -> -101.0994`、`only_candidate short up_normal_vol` が `+49.9340 -> -36.5278` に反転した。これはhard blockではなく、regime drift / downside / stateful opportunity-cost特徴の候補として扱う。詳細は `docs/reports/00132_2026-06-29_model_trade_delta_drift_stability.md`。
+
+`model-trade-delta-drift-stability` は共通flip groupの月別supportも出力する。guard top / stack0の実行では通常PnL support 49行、stateful support 99行。`only_candidate long down_low_vol` はguard topでvalidation 4ヶ月/holdout 3ヶ月、stack0でvalidation 3ヶ月/holdout 2ヶ月に出ており単月偶然ではない。一方validation内にも負月が混じるため、hard blockにはしない。次は `direction + combined_regime + candidate-added文脈` をOOF downside/stateful targetへ戻す。詳細は `docs/reports/00133_2026-06-29_drift_stability_monthly_support.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

@@ -554,8 +554,8 @@ python -m trade_data.backtest model-trade-delta-drift-stability \
 ```
 
 This writes `flip_stability_pnl.csv`, `flip_stability_stateful.csv`, and
-`summary.json`. Treat repeated flips as drift/downside feature candidates first,
-not as immediate hard-block rules.
+their `*_monthly_support*.csv` files plus `summary.json`. Treat repeated flips
+as drift/downside feature candidates first, not as immediate hard-block rules.
 
 Train a month-held-out stateful value model directly from those examples and
 optionally score validation/apply prediction parquet files:

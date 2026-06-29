@@ -6925,6 +6925,108 @@ def summarize_model_trade_delta_drift_stability(
     return stability, summary
 
 
+def read_model_trade_delta_preflight_config_paths(path: Path) -> dict[str, list[Path]]:
+    config_path = path / "config.json"
+    if not config_path.exists():
+        raise FileNotFoundError(f"preflight config not found: {config_path}")
+    with config_path.open("r", encoding="utf-8") as handle:
+        config = json.load(handle)
+    validation = config.get("expanded_validation_deltas") or config.get("validation_deltas") or []
+    holdout = config.get("expanded_holdout_deltas") or config.get("holdout_deltas") or []
+    return {
+        "validation": [Path(value) for value in validation],
+        "holdout": [Path(value) for value in holdout],
+    }
+
+
+def summarize_model_trade_delta_drift_monthly_support(
+    preflight_paths: list[Path],
+    stability: pd.DataFrame,
+    *,
+    filename: str,
+    metric_column: str,
+    group_columns: list[str] | None = None,
+    only_all_comparisons_flip: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if group_columns is None:
+        group_columns = ["delta_status", "direction", "combined_regime"]
+    if stability.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    candidate_groups = stability.copy()
+    if only_all_comparisons_flip and "all_comparisons_flip" in candidate_groups.columns:
+        candidate_groups = candidate_groups.loc[candidate_groups["all_comparisons_flip"]]
+    if candidate_groups.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    group_keys = {
+        tuple(row[column] for column in group_columns)
+        for _, row in candidate_groups.loc[:, group_columns].iterrows()
+    }
+    rows: list[pd.DataFrame] = []
+    for preflight_path in preflight_paths:
+        paths_by_split = read_model_trade_delta_preflight_config_paths(preflight_path)
+        for split, delta_paths in paths_by_split.items():
+            for delta_path in delta_paths:
+                frame = read_model_trade_delta_preflight_group_frame(
+                    delta_path,
+                    split,
+                    filename,
+                )
+                if frame.empty:
+                    continue
+                missing_group_columns = [
+                    column for column in group_columns if column not in frame.columns
+                ]
+                if missing_group_columns or metric_column not in frame.columns:
+                    continue
+                mask = frame.loc[:, group_columns].apply(
+                    lambda row: tuple(row[column] for column in group_columns) in group_keys,
+                    axis=1,
+                )
+                subset = frame.loc[mask].copy()
+                if subset.empty:
+                    continue
+                subset["comparison"] = preflight_path.name
+                rows.append(subset)
+
+    if not rows:
+        return pd.DataFrame(), pd.DataFrame()
+
+    support = pd.concat(rows, ignore_index=True)
+    support[metric_column] = pd.to_numeric(support[metric_column], errors="coerce").fillna(0.0)
+    if "row_count" not in support.columns:
+        support["row_count"] = 1.0
+    support["row_count"] = pd.to_numeric(support["row_count"], errors="coerce").fillna(0.0)
+    if "month" not in support.columns:
+        support["month"] = ""
+
+    support = support.sort_values(
+        ["comparison", "split", *group_columns, "month"],
+    ).reset_index(drop=True)
+    summary = (
+        support.groupby(["comparison", "split", *group_columns], dropna=False)
+        .agg(
+            month_count=("month", "nunique"),
+            row_count_sum=("row_count", "sum"),
+            metric_sum=(metric_column, "sum"),
+            metric_min_month=(metric_column, "min"),
+            metric_negative_month_count=(
+                metric_column,
+                lambda series: int((pd.to_numeric(series, errors="coerce").fillna(0.0) < 0).sum()),
+            ),
+            metric_positive_month_count=(
+                metric_column,
+                lambda series: int((pd.to_numeric(series, errors="coerce").fillna(0.0) > 0).sum()),
+            ),
+        )
+        .reset_index()
+        .sort_values(["comparison", *group_columns, "split"])
+        .reset_index(drop=True)
+    )
+    return support, summary
+
+
 def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
     validation_paths = parse_csv_paths(args.validation_deltas)
     holdout_paths = parse_csv_paths(args.holdout_deltas)
@@ -7083,15 +7185,46 @@ def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
         filename="stateful_group_drift_status_direction_combined_regime.csv",
         metric_column="candidate_stateful_net_adjusted_pnl",
     )
+    pnl_support, pnl_support_summary = summarize_model_trade_delta_drift_monthly_support(
+        preflight_paths,
+        pnl_stability,
+        filename="group_by_month_status_direction_combined_regime.csv",
+        metric_column="pnl_delta",
+    )
+    stateful_support, stateful_support_summary = (
+        summarize_model_trade_delta_drift_monthly_support(
+            preflight_paths,
+            stateful_stability,
+            filename="group_by_blocking_candidate_month_status_direction_combined_regime.csv",
+            metric_column="candidate_stateful_net_adjusted_pnl",
+        )
+    )
     run_dir = make_run_dir(args.output_dir, args.label)
     if not pnl_stability.empty:
         pnl_stability.to_csv(run_dir / "flip_stability_pnl.csv", index=False)
     if not stateful_stability.empty:
         stateful_stability.to_csv(run_dir / "flip_stability_stateful.csv", index=False)
+    if not pnl_support.empty:
+        pnl_support.to_csv(run_dir / "flip_stability_pnl_monthly_support.csv", index=False)
+        pnl_support_summary.to_csv(
+            run_dir / "flip_stability_pnl_monthly_support_summary.csv",
+            index=False,
+        )
+    if not stateful_support.empty:
+        stateful_support.to_csv(
+            run_dir / "flip_stability_stateful_monthly_support.csv",
+            index=False,
+        )
+        stateful_support_summary.to_csv(
+            run_dir / "flip_stability_stateful_monthly_support_summary.csv",
+            index=False,
+        )
     summary = {
         "preflight_runs": [str(path) for path in preflight_paths],
         "pnl": pnl_summary,
         "stateful": stateful_summary,
+        "pnl_monthly_support_rows": int(len(pnl_support)),
+        "stateful_monthly_support_rows": int(len(stateful_support)),
     }
     with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, ensure_ascii=False, indent=2, default=json_default)
@@ -7099,6 +7232,8 @@ def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
     print("drift stability summary:")
     print(f"pnl common flip groups: {pnl_summary['common_flip_group_count']}")
     print(f"stateful common flip groups: {stateful_summary['common_flip_group_count']}")
+    print(f"pnl monthly support rows: {len(pnl_support)}")
+    print(f"stateful monthly support rows: {len(stateful_support)}")
     display_columns = [
         "delta_status",
         "direction",

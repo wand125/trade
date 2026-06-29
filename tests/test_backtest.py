@@ -33,6 +33,7 @@ from trade_data.backtest import (
     summarize_candidate_selection,
     summarize_candidate_selection_jackknife,
     summarize_model_trade_delta_drift_stability,
+    summarize_model_trade_delta_drift_monthly_support,
     summarize_model_trade_delta_preflight_group_drift,
     summarize_model_trade_delta_preflight,
     summarize_trades,
@@ -3350,6 +3351,40 @@ class BacktestTests(unittest.TestCase):
                 index=False,
             )
 
+        def write_delta_group(
+            path: Path,
+            month: str,
+            pnl_delta: float,
+            stateful_net: float,
+        ) -> None:
+            path.mkdir()
+            pd.DataFrame(
+                {
+                    "month": [month],
+                    "delta_status": ["only_candidate"],
+                    "direction": ["long"],
+                    "combined_regime": ["down_low_vol"],
+                    "row_count": [1.0],
+                    "pnl_delta": [pnl_delta],
+                }
+            ).to_csv(
+                path / "group_by_month_status_direction_combined_regime.csv",
+                index=False,
+            )
+            pd.DataFrame(
+                {
+                    "month": [month],
+                    "delta_status": ["only_candidate"],
+                    "direction": ["long"],
+                    "combined_regime": ["down_low_vol"],
+                    "candidate_trade_count": [1.0],
+                    "candidate_stateful_net_adjusted_pnl": [stateful_net],
+                }
+            ).to_csv(
+                path / "group_by_blocking_candidate_month_status_direction_combined_regime.csv",
+                index=False,
+            )
+
         repeated = {
             "delta_status": "only_candidate",
             "direction": "long",
@@ -3389,6 +3424,27 @@ class BacktestTests(unittest.TestCase):
                 "pnl_delta_holdout_minus_validation": -19.0,
             }
             write_preflight_run(run_b, [repeated_b, non_flip])
+            run_a_validation = root / "run_a_validation_delta"
+            run_a_holdout = root / "run_a_holdout_delta"
+            run_b_validation = root / "run_b_validation_delta"
+            run_b_holdout = root / "run_b_holdout_delta"
+            write_delta_group(run_a_validation, "2025-01", 10.0, 10.0)
+            write_delta_group(run_a_holdout, "2025-02", -5.0, -5.0)
+            write_delta_group(run_b_validation, "2025-03", 12.0, 12.0)
+            write_delta_group(run_b_holdout, "2025-04", -7.0, -7.0)
+            for run, validation, holdout in [
+                (run_a, run_a_validation, run_a_holdout),
+                (run_b, run_b_validation, run_b_holdout),
+            ]:
+                (run / "config.json").write_text(
+                    json.dumps(
+                        {
+                            "expanded_validation_deltas": [str(validation)],
+                            "expanded_holdout_deltas": [str(holdout)],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
 
             stability, summary = summarize_model_trade_delta_drift_stability(
                 [run_a, run_b],
@@ -3399,6 +3455,22 @@ class BacktestTests(unittest.TestCase):
                 summarize_model_trade_delta_drift_stability(
                     [run_a, run_b],
                     filename="stateful_group_drift_status_direction_combined_regime.csv",
+                    metric_column="candidate_stateful_net_adjusted_pnl",
+                )
+            )
+            support, support_summary = summarize_model_trade_delta_drift_monthly_support(
+                [run_a, run_b],
+                stability,
+                filename="group_by_month_status_direction_combined_regime.csv",
+                metric_column="pnl_delta",
+            )
+            stateful_support, stateful_support_summary = (
+                summarize_model_trade_delta_drift_monthly_support(
+                    [run_a, run_b],
+                    stateful_stability,
+                    filename=(
+                        "group_by_blocking_candidate_month_status_direction_combined_regime.csv"
+                    ),
                     metric_column="candidate_stateful_net_adjusted_pnl",
                 )
             )
@@ -3417,6 +3489,12 @@ class BacktestTests(unittest.TestCase):
         self.assertAlmostEqual(top["holdout_minus_validation_sum"], -34.0)
         self.assertEqual(stateful_summary["common_flip_group_count"], 1)
         self.assertAlmostEqual(stateful_stability.iloc[0]["holdout_sum_total"], -12.0)
+        self.assertEqual(len(support), 4)
+        self.assertEqual(set(support["split"]), {"validation", "holdout"})
+        self.assertEqual(set(support["month"]), {"2025-01", "2025-02", "2025-03", "2025-04"})
+        self.assertAlmostEqual(support_summary["metric_sum"].sum(), 10.0)
+        self.assertEqual(len(stateful_support), 4)
+        self.assertAlmostEqual(stateful_support_summary["metric_sum"].sum(), 10.0)
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")

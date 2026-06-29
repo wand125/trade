@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 11:07 Drift stability monthly support
+
+- `model-trade-delta-drift-stability` に、共通flip groupを元deltaの月別group CSVへ戻すsupport出力を追加した。
+- 出力は `flip_stability_pnl_monthly_support.csv`, `flip_stability_pnl_monthly_support_summary.csv`, `flip_stability_stateful_monthly_support.csv`, `flip_stability_stateful_monthly_support_summary.csv`。
+- guard top / stack0 の共通flipに対し、通常PnL supportは49行、stateful supportは99行。`only_candidate long down_low_vol` はguard topでvalidation 4ヶ月/holdout 3ヶ月、stack0でvalidation 3ヶ月/holdout 2ヶ月に出ており、単月だけの偶然ではない。
+- 一方、validation側にも負の月が混じる。たとえばguard topの `only_candidate long down_low_vol` はvalidation合計 `+84.3218` だが負月2、holdout合計 `-93.4838` で負月2。hard blockではなくsupport-aware downside / stateful risk特徴として扱う。
+- 判断: 共通flip groupは「候補が追加する取引の危険な文脈」として教師/特徴へ戻す。次は、予測時点で見える `direction + combined_regime + candidate_added_context` をOOF examplesへ結合し、hard ruleではなくdownside targetで評価する。
+- report: `docs/reports/00133_2026-06-29_drift_stability_monthly_support.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 11:01 Model trade delta drift stability
 
 - `model-trade-delta-drift-stability` を追加した。複数のpreflight runから、validation-positive / holdout-negativeになったgroupが何回繰り返したかを集計する。
