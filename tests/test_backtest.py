@@ -32,6 +32,7 @@ from trade_data.backtest import (
     summarize_holdout_audit,
     summarize_candidate_selection,
     summarize_candidate_selection_jackknife,
+    summarize_model_trade_delta_drift_stability,
     summarize_model_trade_delta_preflight_group_drift,
     summarize_model_trade_delta_preflight,
     summarize_trades,
@@ -3322,6 +3323,100 @@ class BacktestTests(unittest.TestCase):
             -2.0,
         )
         self.assertTrue(stateful_drift_row["validation_positive_holdout_negative"])
+
+    def test_model_trade_delta_drift_stability_finds_repeated_flip_groups(self):
+        def write_preflight_run(path: Path, rows: list[dict[str, object]]) -> None:
+            path.mkdir()
+            frame = pd.DataFrame(rows)
+            frame.to_csv(
+                path / "group_drift_status_direction_combined_regime.csv",
+                index=False,
+            )
+            stateful = frame.rename(
+                columns={
+                    "validation_pnl_delta_sum": (
+                        "validation_candidate_stateful_net_adjusted_pnl_sum"
+                    ),
+                    "holdout_pnl_delta_sum": (
+                        "holdout_candidate_stateful_net_adjusted_pnl_sum"
+                    ),
+                    "pnl_delta_holdout_minus_validation": (
+                        "candidate_stateful_net_adjusted_pnl_holdout_minus_validation"
+                    ),
+                }
+            )
+            stateful.to_csv(
+                path / "stateful_group_drift_status_direction_combined_regime.csv",
+                index=False,
+            )
+
+        repeated = {
+            "delta_status": "only_candidate",
+            "direction": "long",
+            "combined_regime": "down_low_vol",
+            "validation_pnl_delta_sum": 10.0,
+            "holdout_pnl_delta_sum": -5.0,
+            "pnl_delta_holdout_minus_validation": -15.0,
+            "validation_positive_holdout_negative": True,
+        }
+        one_off = {
+            "delta_status": "only_candidate",
+            "direction": "short",
+            "combined_regime": "up_normal_vol",
+            "validation_pnl_delta_sum": 8.0,
+            "holdout_pnl_delta_sum": -1.0,
+            "pnl_delta_holdout_minus_validation": -9.0,
+            "validation_positive_holdout_negative": True,
+        }
+        non_flip = {
+            "delta_status": "only_base",
+            "direction": "long",
+            "combined_regime": "range_low_vol",
+            "validation_pnl_delta_sum": -2.0,
+            "holdout_pnl_delta_sum": -4.0,
+            "pnl_delta_holdout_minus_validation": -2.0,
+            "validation_positive_holdout_negative": False,
+        }
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_a = root / "run_a"
+            run_b = root / "run_b"
+            write_preflight_run(run_a, [repeated, one_off, non_flip])
+            repeated_b = repeated | {
+                "validation_pnl_delta_sum": 12.0,
+                "holdout_pnl_delta_sum": -7.0,
+                "pnl_delta_holdout_minus_validation": -19.0,
+            }
+            write_preflight_run(run_b, [repeated_b, non_flip])
+
+            stability, summary = summarize_model_trade_delta_drift_stability(
+                [run_a, run_b],
+                filename="group_drift_status_direction_combined_regime.csv",
+                metric_column="pnl_delta",
+            )
+            stateful_stability, stateful_summary = (
+                summarize_model_trade_delta_drift_stability(
+                    [run_a, run_b],
+                    filename="stateful_group_drift_status_direction_combined_regime.csv",
+                    metric_column="candidate_stateful_net_adjusted_pnl",
+                )
+            )
+
+        self.assertEqual(summary["preflight_run_count"], 2)
+        self.assertEqual(summary["common_flip_group_count"], 1)
+        self.assertEqual(summary["flip_group_count"], 2)
+        top = stability.iloc[0]
+        self.assertEqual(top["delta_status"], "only_candidate")
+        self.assertEqual(top["direction"], "long")
+        self.assertEqual(top["combined_regime"], "down_low_vol")
+        self.assertEqual(top["flip_comparison_count"], 2)
+        self.assertTrue(top["all_comparisons_flip"])
+        self.assertAlmostEqual(top["validation_sum_total"], 22.0)
+        self.assertAlmostEqual(top["holdout_sum_total"], -12.0)
+        self.assertAlmostEqual(top["holdout_minus_validation_sum"], -34.0)
+        self.assertEqual(stateful_summary["common_flip_group_count"], 1)
+        self.assertAlmostEqual(stateful_stability.iloc[0]["holdout_sum_total"], -12.0)
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")

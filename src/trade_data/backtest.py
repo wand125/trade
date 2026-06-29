@@ -6819,6 +6819,112 @@ def summarize_model_trade_delta_preflight_group_drift(
     return split_metrics, drift
 
 
+def summarize_model_trade_delta_drift_stability(
+    preflight_paths: list[Path],
+    *,
+    filename: str,
+    metric_column: str,
+    group_columns: list[str] | None = None,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    if group_columns is None:
+        group_columns = ["delta_status", "direction", "combined_regime"]
+    if not preflight_paths:
+        raise ValueError("at least one preflight run is required")
+
+    frames: list[pd.DataFrame] = []
+    for path in preflight_paths:
+        drift_path = path / filename
+        if not drift_path.exists():
+            raise FileNotFoundError(f"drift file not found: {drift_path}")
+        frame = pd.read_csv(drift_path)
+        if frame.empty:
+            continue
+        missing_group_columns = [column for column in group_columns if column not in frame.columns]
+        required_columns = [
+            "validation_positive_holdout_negative",
+            f"validation_{metric_column}_sum",
+            f"holdout_{metric_column}_sum",
+            f"{metric_column}_holdout_minus_validation",
+        ]
+        missing_required_columns = [
+            column for column in required_columns if column not in frame.columns
+        ]
+        if missing_group_columns or missing_required_columns:
+            missing = [*missing_group_columns, *missing_required_columns]
+            raise ValueError(f"{drift_path} missing columns: {missing}")
+        frame = frame.copy()
+        frame["comparison"] = path.name
+        frames.append(frame)
+
+    if not frames:
+        summary = {
+            "preflight_run_count": len(preflight_paths),
+            "flip_group_count": 0,
+            "common_flip_group_count": 0,
+            "metric_column": metric_column,
+            "filename": filename,
+        }
+        return pd.DataFrame(), summary
+
+    rows = pd.concat(frames, ignore_index=True)
+    rows["validation_positive_holdout_negative"] = rows[
+        "validation_positive_holdout_negative"
+    ].astype(bool)
+    flip_rows = rows.loc[rows["validation_positive_holdout_negative"]].copy()
+    if flip_rows.empty:
+        summary = {
+            "preflight_run_count": len(preflight_paths),
+            "flip_group_count": 0,
+            "common_flip_group_count": 0,
+            "metric_column": metric_column,
+            "filename": filename,
+        }
+        return pd.DataFrame(), summary
+
+    validation_sum_column = f"validation_{metric_column}_sum"
+    holdout_sum_column = f"holdout_{metric_column}_sum"
+    delta_column = f"{metric_column}_holdout_minus_validation"
+    for column in [validation_sum_column, holdout_sum_column, delta_column]:
+        flip_rows[column] = pd.to_numeric(flip_rows[column], errors="coerce").fillna(0.0)
+
+    stability = (
+        flip_rows.groupby(group_columns, dropna=False)
+        .agg(
+            flip_comparison_count=("comparison", "nunique"),
+            validation_sum_total=(validation_sum_column, "sum"),
+            holdout_sum_total=(holdout_sum_column, "sum"),
+            holdout_minus_validation_sum=(delta_column, "sum"),
+            holdout_sum_min=(holdout_sum_column, "min"),
+            comparisons=("comparison", lambda series: ",".join(sorted(set(map(str, series))))),
+        )
+        .reset_index()
+    )
+    stability["preflight_run_count"] = len(preflight_paths)
+    stability["flip_comparison_share"] = (
+        stability["flip_comparison_count"] / len(preflight_paths)
+    )
+    stability["all_comparisons_flip"] = stability["flip_comparison_count"].eq(
+        len(preflight_paths)
+    )
+    stability = stability.sort_values(
+        [
+            "all_comparisons_flip",
+            "flip_comparison_count",
+            "holdout_minus_validation_sum",
+        ],
+        ascending=[False, False, True],
+    ).reset_index(drop=True)
+
+    summary = {
+        "preflight_run_count": len(preflight_paths),
+        "flip_group_count": int(len(stability)),
+        "common_flip_group_count": int(stability["all_comparisons_flip"].sum()),
+        "metric_column": metric_column,
+        "filename": filename,
+    }
+    return stability, summary
+
+
 def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
     validation_paths = parse_csv_paths(args.validation_deltas)
     holdout_paths = parse_csv_paths(args.holdout_deltas)
@@ -6961,6 +7067,59 @@ def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
             .head(args.top_n)
             .to_string(index=False)
         )
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
+    preflight_paths = parse_csv_paths(args.preflight_runs)
+    pnl_stability, pnl_summary = summarize_model_trade_delta_drift_stability(
+        preflight_paths,
+        filename="group_drift_status_direction_combined_regime.csv",
+        metric_column="pnl_delta",
+    )
+    stateful_stability, stateful_summary = summarize_model_trade_delta_drift_stability(
+        preflight_paths,
+        filename="stateful_group_drift_status_direction_combined_regime.csv",
+        metric_column="candidate_stateful_net_adjusted_pnl",
+    )
+    run_dir = make_run_dir(args.output_dir, args.label)
+    if not pnl_stability.empty:
+        pnl_stability.to_csv(run_dir / "flip_stability_pnl.csv", index=False)
+    if not stateful_stability.empty:
+        stateful_stability.to_csv(run_dir / "flip_stability_stateful.csv", index=False)
+    summary = {
+        "preflight_runs": [str(path) for path in preflight_paths],
+        "pnl": pnl_summary,
+        "stateful": stateful_summary,
+    }
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=json_default)
+
+    print("drift stability summary:")
+    print(f"pnl common flip groups: {pnl_summary['common_flip_group_count']}")
+    print(f"stateful common flip groups: {stateful_summary['common_flip_group_count']}")
+    display_columns = [
+        "delta_status",
+        "direction",
+        "combined_regime",
+        "flip_comparison_count",
+        "flip_comparison_share",
+        "validation_sum_total",
+        "holdout_sum_total",
+        "holdout_minus_validation_sum",
+        "comparisons",
+    ]
+    if not pnl_stability.empty:
+        print("pnl flip stability:")
+        existing_columns = [column for column in display_columns if column in pnl_stability.columns]
+        print(pnl_stability.loc[:, existing_columns].head(args.top_n).to_string(index=False))
+    if not stateful_stability.empty:
+        print("stateful flip stability:")
+        existing_columns = [
+            column for column in display_columns if column in stateful_stability.columns
+        ]
+        print(stateful_stability.loc[:, existing_columns].head(args.top_n).to_string(index=False))
     print(f"artifacts: {run_dir}")
     return 0
 
@@ -7779,6 +7938,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
     )
     model_trade_delta_preflight.set_defaults(func=handle_model_trade_delta_preflight)
+
+    model_trade_delta_drift_stability = subparsers.add_parser(
+        "model-trade-delta-drift-stability",
+        help="summarize repeated validation-positive holdout-negative drift groups",
+    )
+    model_trade_delta_drift_stability.add_argument(
+        "--preflight-runs",
+        required=True,
+        help="comma-separated model-trade-delta-preflight run dirs with group drift CSVs",
+    )
+    model_trade_delta_drift_stability.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_trade_delta_drift_stability.add_argument(
+        "--label",
+        default="model_trade_delta_drift_stability",
+    )
+    model_trade_delta_drift_stability.add_argument("--top-n", type=int, default=20)
+    model_trade_delta_drift_stability.set_defaults(
+        func=handle_model_trade_delta_drift_stability
+    )
 
     analyze_trades = subparsers.add_parser(
         "analyze-trades",

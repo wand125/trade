@@ -545,6 +545,18 @@ Use this as a candidate rejection check; validation-only wins are not enough for
 promotion. The group drift files show which status/direction/regime groups were
 positive in validation but negative in holdout.
 
+To compare repeated flip groups across multiple preflight audits, use:
+
+```bash
+python -m trade_data.backtest model-trade-delta-drift-stability \
+  --preflight-runs data/reports/backtests/<preflight_run_a>,data/reports/backtests/<preflight_run_b> \
+  --label model_trade_delta_drift_stability
+```
+
+This writes `flip_stability_pnl.csv`, `flip_stability_stateful.csv`, and
+`summary.json`. Treat repeated flips as drift/downside feature candidates first,
+not as immediate hard-block rules.
+
 Train a month-held-out stateful value model directly from those examples and
 optionally score validation/apply prediction parquet files:
 

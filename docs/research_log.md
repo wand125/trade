@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 11:01 Model trade delta drift stability
+
+- `model-trade-delta-drift-stability` を追加した。複数のpreflight runから、validation-positive / holdout-negativeになったgroupが何回繰り返したかを集計する。
+- guard top比較とstack0比較の2つを対象にした。通常PnLのcommon flip groupは3件、stateful netのcommon flip groupは6件。
+- 通常PnLで共通反転したのは `only_candidate long down_low_vol`, `only_candidate short down_normal_vol`, `only_candidate short up_normal_vol`。合計ではそれぞれ validation `+223.8686`, `+52.0400`, `+49.9340` に対し、holdout `-159.6508`, `-101.0994`, `-36.5278`。
+- statefulでは `only_candidate long down_low_vol`, `only_candidate long up_low_vol`, `only_candidate short down_normal_vol`, `only_candidate short up_normal_vol` など6件が共通反転した。
+- 判断: これらはhard block候補ではなく、regime drift / downside / stateful opportunity-cost特徴として扱う。次は共通flip groupを教師特徴へ戻す前に、月単位supportと予測時点で利用可能な情報だけで表現できるかを確認する。
+- report: `docs/reports/00132_2026-06-29_model_trade_delta_drift_stability.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 10:54 Model trade delta preflight group drift
 
 - `model-trade-delta-preflight` にstatus/direction/combined_regime別のdrift出力を追加した。
