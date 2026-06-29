@@ -36,6 +36,8 @@
 - `trading_ml_generalization_principles.md`
   過去成績への過適合を避け、未知regimeへ壊れにくくするための原則とチェックリスト。
 
+- stateful value / candidate quality系の採用判断では、月抜きOOFの結果だけでなく、対象月より前の月だけでfitするchronological OOFを確認する。`oof-stateful-value-model` では `--oof-scheme expanding --min-train-months 2` 以上を標準診断に使う。
+
 - `ideas.md`
   未検証アイデア、特徴量案、モデル案、リスク。
 

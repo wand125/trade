@@ -7084,6 +7084,37 @@ def stateful_value_model_config_from_args(args: argparse.Namespace) -> Candidate
     )
 
 
+def stateful_value_oof_fold_plan(
+    validation_months: list[str],
+    *,
+    scheme: str = "leave_one_month",
+    min_train_months: int = 1,
+) -> list[dict[str, object]]:
+    if min_train_months <= 0:
+        raise ValueError("min_train_months must be positive")
+    months = list(validation_months)
+    if scheme not in {"leave_one_month", "expanding"}:
+        raise ValueError(f"unsupported stateful value OOF scheme: {scheme}")
+    plan: list[dict[str, object]] = []
+    for index, holdout_month in enumerate(months):
+        if scheme == "leave_one_month":
+            fit_months = [month for month in months if month != holdout_month]
+        else:
+            fit_months = months[:index]
+        status = "profiled" if len(fit_months) >= min_train_months else "skipped"
+        skip_reason = "" if status == "profiled" else "insufficient_train_months"
+        plan.append(
+            {
+                "holdout_month": holdout_month,
+                "fit_months": fit_months,
+                "fit_month_count": len(fit_months),
+                "status": status,
+                "skip_reason": skip_reason,
+            }
+        )
+    return plan
+
+
 def stateful_risk_model_config_from_args(args: argparse.Namespace) -> StatefulRiskModelConfig:
     target_names = tuple(
         parse_csv_strings(args.risk_targets)
@@ -7328,12 +7359,30 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
     fold_prediction_outputs: list[pd.DataFrame] = []
     fold_example_outputs: list[pd.DataFrame] = []
     fold_metrics: dict[str, object] = {}
-    for fold_index, holdout_month in enumerate(validation_months):
-        fit_examples = validation_examples[
-            validation_examples["dataset_month"] != holdout_month
-        ].copy()
+    fold_plan = stateful_value_oof_fold_plan(
+        validation_months,
+        scheme=args.oof_scheme,
+        min_train_months=args.min_train_months,
+    )
+    for fold_index, fold in enumerate(fold_plan):
+        holdout_month = str(fold["holdout_month"])
+        fit_months = list(fold["fit_months"])
         holdout_examples = validation_examples[
             validation_examples["dataset_month"] == holdout_month
+        ].copy()
+        if fold["status"] != "profiled":
+            fold_metrics[holdout_month] = {
+                "status": fold["status"],
+                "skip_reason": fold["skip_reason"],
+                "fit_months": fit_months,
+                "fit_month_count": int(fold["fit_month_count"]),
+                "fit_examples": 0,
+                "holdout_examples": int(len(holdout_examples)),
+                "holdout_predictions": 0,
+            }
+            continue
+        fit_examples = validation_examples[
+            validation_examples["dataset_month"].isin(fit_months)
         ].copy()
         if fit_examples.empty or holdout_examples.empty:
             raise ValueError(f"cannot build stateful value OOF fold for {holdout_month}")
@@ -7363,6 +7412,10 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
             fold_prediction_outputs.append(holdout_prediction_output)
             holdout_prediction_count = int(len(holdout_predictions))
         fold_metrics[holdout_month] = {
+            "status": fold["status"],
+            "skip_reason": fold["skip_reason"],
+            "fit_months": fit_months,
+            "fit_month_count": int(fold["fit_month_count"]),
             "fit_examples": int(len(fit_examples)),
             "holdout_examples": int(len(holdout_examples)),
             "holdout_predictions": holdout_prediction_count,
@@ -7373,6 +7426,8 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
             "category_mappings": fold_bundle.category_mappings,
         }
 
+    if not fold_example_outputs:
+        raise ValueError("no stateful value OOF folds were profiled")
     validation_oof_examples = pd.concat(fold_example_outputs, ignore_index=True)
     if "decision_timestamp" in validation_oof_examples.columns:
         validation_oof_examples = validation_oof_examples.sort_values("decision_timestamp")
@@ -7412,6 +7467,9 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
         "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
         "validation_months": validation_months,
         "apply_months": apply_months,
+        "oof_scheme": args.oof_scheme,
+        "min_train_months": args.min_train_months,
+        "fold_plan": fold_plan,
         "source": {
             "source_mode": args.source_mode,
             "long_column": args.long_column,
@@ -8730,6 +8788,18 @@ def build_parser() -> argparse.ArgumentParser:
             "prefix for output prediction columns, producing "
             "pred_candidate_quality_<prefix>_<side>_* columns"
         ),
+    )
+    stateful_value_model_parser.add_argument(
+        "--oof-scheme",
+        choices=("leave_one_month", "expanding"),
+        default="leave_one_month",
+        help="month OOF scheme; expanding only trains on months before the holdout month",
+    )
+    stateful_value_model_parser.add_argument(
+        "--min-train-months",
+        type=int,
+        default=1,
+        help="minimum fit months required for a stateful value OOF fold",
     )
     add_trade_source_args(stateful_value_model_parser)
     add_trade_quality_model_args(stateful_value_model_parser)

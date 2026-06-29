@@ -88,6 +88,7 @@ from trade_data.meta_model import (
     stateful_risk_risk_column,
     stateful_risk_taken_prob_column,
     stateful_risk_target_column,
+    stateful_value_oof_fold_plan,
     trade_quality_calibration_metrics,
     trade_quality_features_from_predictions,
     side_target_means,
@@ -1140,6 +1141,33 @@ class MetaModelTests(unittest.TestCase):
         self.assertIn("pred_candidate_quality_stateful_entry_short_adjusted_pnl", output.columns)
         self.assertIn(CANDIDATE_QUALITY_TAKEN_COLUMN, scored.columns)
         self.assertFalse(scored[CANDIDATE_QUALITY_TAKEN_COLUMN].isna().any())
+
+    def test_stateful_value_oof_fold_plan_supports_expanding_scheme(self):
+        months = ["2024-07", "2024-09", "2024-11", "2024-12"]
+
+        expanding = stateful_value_oof_fold_plan(
+            months,
+            scheme="expanding",
+            min_train_months=2,
+        )
+        self.assertEqual(expanding[0]["status"], "skipped")
+        self.assertEqual(expanding[0]["holdout_month"], "2024-07")
+        self.assertEqual(expanding[0]["skip_reason"], "insufficient_train_months")
+        self.assertEqual(expanding[1]["fit_months"], ["2024-07"])
+        self.assertEqual(expanding[1]["holdout_month"], "2024-09")
+        self.assertEqual(expanding[1]["status"], "skipped")
+        self.assertEqual(expanding[2]["fit_months"], ["2024-07", "2024-09"])
+        self.assertEqual(expanding[2]["holdout_month"], "2024-11")
+        self.assertEqual(expanding[2]["status"], "profiled")
+        self.assertEqual(
+            expanding[3]["fit_months"],
+            ["2024-07", "2024-09", "2024-11"],
+        )
+        self.assertEqual(expanding[3]["holdout_month"], "2024-12")
+
+        leave_one = stateful_value_oof_fold_plan(months, scheme="leave_one_month")
+        self.assertEqual(leave_one[0]["fit_months"], ["2024-09", "2024-11", "2024-12"])
+        self.assertTrue(all(row["status"] == "profiled" for row in leave_one))
 
     def test_candidate_quality_component_columns_can_be_combined(self):
         predictions = add_trade_source_ev_columns(

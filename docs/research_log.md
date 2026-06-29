@@ -4,6 +4,15 @@
 
 ## 2026-06-29 JST
 
+### 11:56 Stateful value walk-forward target comparison
+
+- `oof-stateful-value-model` に `--oof-scheme leave_one_month|expanding` と `--min-train-months` を追加した。expandingでは対象月より前の月だけでfitし、学習月不足のfoldは `fold_plan` に `skipped` として残す。
+- `00137` のwalk-forward stress targetをstateful value modelの教師候補として比較した。leave-one-monthではbase targetだけR2 `+0.0052` だったが、chronologicalなexpandingではbase targetもR2 `-0.0113`、bias `+1.5287` へ悪化した。
+- available/session floor targetはMAE/RMSEを下げるが、targetを保守的に落とした効果が大きく、expandingではavailable floor R2 `-0.0945`, bias `+4.1365`、session floor R2 `-0.0498`, bias `+3.1195`。EV replacementには使えない。
+- 判断: walk-forward stress/floor targetは現時点でpolicyへ直接gate/EV置換しない。下方リスク分類、support-aware calibration、追加月でのchronological OOF診断に回す。
+- report: `docs/reports/00138_2026-06-29_stateful_value_walkforward_target_comparison.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 11:42 Stateful walk-forward stress target
 
 - `stateful-examples-walkforward-stress` を追加した。対象月より前の月だけを使い、直前月をpseudo holdout、それ以前をpseudo validationとしてcontext stress profileを作る。
