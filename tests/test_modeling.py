@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -36,6 +38,7 @@ from trade_data.modeling import (
     side_confidence_frame,
     side_confidence_group_metrics,
     validate_disjoint_splits,
+    write_report,
 )
 
 
@@ -829,6 +832,26 @@ class ModelingTests(unittest.TestCase):
 
         self.assertIn("long_profit_barrier_hit", metrics["classification"])
         self.assertNotIn("selection", metrics)
+
+    def test_write_report_allows_target_set_without_selection_metrics(self):
+        metrics = {
+            "months": {"train": ["2025-01"], "valid": ["2025-02"], "test": ["2025-03"]},
+            "feature_count": 2,
+            "rows": {"train": 10, "valid": 5, "test": 5},
+            "target_set": "holding_shortening",
+            "regression_targets": ["long_exit_event_adjusted_pnl"],
+            "classification_targets": ["long_fixed_60m_beats_exit_event"],
+            "valid": {"regression": {}, "classification": {}},
+            "test": {"regression": {}, "classification": {}},
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            write_report(run_dir, metrics)
+            report = (run_dir / "report.md").read_text(encoding="utf-8")
+
+        self.assertIn("target set: holding_shortening", report)
+        self.assertIn("Selection metrics are omitted", report)
 
     def test_apply_split_purging_removes_label_overlap(self):
         train = pd.DataFrame(

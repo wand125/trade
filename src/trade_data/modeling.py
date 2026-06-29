@@ -2326,23 +2326,27 @@ def train(args: argparse.Namespace) -> int:
             classification_targets,
         )
         pred_frame = prediction_frame(frame, predictions)
-        split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
+        if SELECTION_COLUMNS.issubset(pred_frame.columns):
+            split_metrics["selection"] = selection_metrics(pred_frame, args.entry_threshold)
         metrics_by_split[split_name] = split_metrics
         predictions_by_split[split_name] = pred_frame
 
-    calibrators = fit_ev_calibrators(predictions_by_split["valid"])
-    metrics["calibration"] = {target: asdict(calibrator) for target, calibrator in calibrators.items()}
-    for split_name, pred_frame in predictions_by_split.items():
-        pred_frame = add_calibrated_ev_columns(pred_frame, calibrators)
-        metrics_by_split[split_name]["selection_calibrated"] = selection_metrics(
-            pred_frame,
-            args.entry_threshold,
-            long_column="pred_calibrated_long_best_adjusted_pnl",
-            short_column="pred_calibrated_short_best_adjusted_pnl",
-        )
-        metrics_by_split[split_name]["regression_calibrated"] = calibrated_regression_metrics(pred_frame)
-        metrics[split_name] = metrics_by_split[split_name]
-        predictions_by_split[split_name] = pred_frame
+    if set(EV_TARGETS).issubset(regression_targets):
+        calibrators = fit_ev_calibrators(predictions_by_split["valid"])
+        metrics["calibration"] = {target: asdict(calibrator) for target, calibrator in calibrators.items()}
+        for split_name, pred_frame in predictions_by_split.items():
+            pred_frame = add_calibrated_ev_columns(pred_frame, calibrators)
+            metrics_by_split[split_name]["selection_calibrated"] = selection_metrics(
+                pred_frame,
+                args.entry_threshold,
+                long_column="pred_calibrated_long_best_adjusted_pnl",
+                short_column="pred_calibrated_short_best_adjusted_pnl",
+            )
+            metrics_by_split[split_name]["regression_calibrated"] = calibrated_regression_metrics(pred_frame)
+            predictions_by_split[split_name] = pred_frame
+
+    for split_name, split_metrics in metrics_by_split.items():
+        metrics[split_name] = split_metrics
 
     run_label = args.label or f"hgb_{args.target_set}_edge{args.min_adjusted_edge:g}"
     run_dir = make_run_dir(args.output_dir, run_label)
@@ -2734,10 +2738,6 @@ def oof_shared_mlp(args: argparse.Namespace) -> int:
 
 
 def write_report(run_dir: Path, metrics: dict[str, object]) -> None:
-    test_selection = metrics["test"]["selection"]
-    valid_selection = metrics["valid"]["selection"]
-    test_calibrated = metrics["test"]["selection_calibrated"]
-    valid_calibrated = metrics["valid"]["selection_calibrated"]
     lines = [
         "# HistGradientBoosting Multi-Task Model Report",
         "",
@@ -2748,42 +2748,69 @@ def write_report(run_dir: Path, metrics: dict[str, object]) -> None:
         f"- train rows: {metrics['rows']['train']}",
         f"- valid rows: {metrics['rows']['valid']}",
         f"- test rows: {metrics['rows']['test']}",
+        f"- target set: {metrics.get('target_set', '')}",
+        f"- regression targets: {', '.join(metrics.get('regression_targets', []))}",
+        f"- classification targets: {', '.join(metrics.get('classification_targets', []))}",
         "",
-        "## Selection Metrics",
-        "",
-        "| split | ev | trades | oracle-exit pnl | avg pnl | side acc | oracle upper bound |",
-        "|---|---|---:|---:|---:|---:|---:|",
-        (
-            f"| valid | raw | {valid_selection['selected_trade_count']} | "
-            f"{valid_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
-            f"{valid_selection['selected_avg_adjusted_pnl']:.4f} | "
-            f"{valid_selection['selected_side_accuracy']:.4f} | "
-            f"{valid_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
-        ),
-        (
-            f"| valid | calibrated | {valid_calibrated['selected_trade_count']} | "
-            f"{valid_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
-            f"{valid_calibrated['selected_avg_adjusted_pnl']:.4f} | "
-            f"{valid_calibrated['selected_side_accuracy']:.4f} | "
-            f"{valid_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
-        ),
-        (
-            f"| test | raw | {test_selection['selected_trade_count']} | "
-            f"{test_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
-            f"{test_selection['selected_avg_adjusted_pnl']:.4f} | "
-            f"{test_selection['selected_side_accuracy']:.4f} | "
-            f"{test_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
-        ),
-        (
-            f"| test | calibrated | {test_calibrated['selected_trade_count']} | "
-            f"{test_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
-            f"{test_calibrated['selected_avg_adjusted_pnl']:.4f} | "
-            f"{test_calibrated['selected_side_accuracy']:.4f} | "
-            f"{test_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
-        ),
-        "",
-        "This selection metric still uses oracle exits from the target data. It evaluates entry and side ranking only, not executable exit timing.",
     ]
+    if "selection" in metrics["valid"] and "selection" in metrics["test"]:
+        valid_selection = metrics["valid"]["selection"]
+        test_selection = metrics["test"]["selection"]
+        lines.extend(
+            [
+                "## Selection Metrics",
+                "",
+                "| split | ev | trades | oracle-exit pnl | avg pnl | side acc | oracle upper bound |",
+                "|---|---|---:|---:|---:|---:|---:|",
+                (
+                    f"| valid | raw | {valid_selection['selected_trade_count']} | "
+                    f"{valid_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{valid_selection['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{valid_selection['selected_side_accuracy']:.4f} | "
+                    f"{valid_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+                (
+                    f"| test | raw | {test_selection['selected_trade_count']} | "
+                    f"{test_selection['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                    f"{test_selection['selected_avg_adjusted_pnl']:.4f} | "
+                    f"{test_selection['selected_side_accuracy']:.4f} | "
+                    f"{test_selection['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                ),
+            ]
+        )
+        if "selection_calibrated" in metrics["valid"] and "selection_calibrated" in metrics["test"]:
+            valid_calibrated = metrics["valid"]["selection_calibrated"]
+            test_calibrated = metrics["test"]["selection_calibrated"]
+            lines.extend(
+                [
+                    (
+                        f"| valid | calibrated | {valid_calibrated['selected_trade_count']} | "
+                        f"{valid_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                        f"{valid_calibrated['selected_avg_adjusted_pnl']:.4f} | "
+                        f"{valid_calibrated['selected_side_accuracy']:.4f} | "
+                        f"{valid_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                    ),
+                    (
+                        f"| test | calibrated | {test_calibrated['selected_trade_count']} | "
+                        f"{test_calibrated['selected_oracle_exit_adjusted_pnl']:.4f} | "
+                        f"{test_calibrated['selected_avg_adjusted_pnl']:.4f} | "
+                        f"{test_calibrated['selected_side_accuracy']:.4f} | "
+                        f"{test_calibrated['oracle_exit_adjusted_pnl_upper_bound']:.4f} |"
+                    ),
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                "This selection metric still uses oracle exits from the target data. It evaluates entry and side ranking only, not executable exit timing.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "Selection metrics are omitted because this target set does not produce executable EV side columns.",
+            ]
+        )
     (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

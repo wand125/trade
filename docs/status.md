@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 19:32 JST
+最終更新: 2026-06-29 19:44 JST
 
 ## 現在の状態
 
@@ -17,6 +17,8 @@ dense holding-shortening targetをdataset schemaへ追加した。barrier/time e
 holding-shortening probabilityを `model-policy` / `model-sweep` の保有時間制御へ接続した。`pred_long/short_fixed_60m_beats_exit_event_prob_1` が閾値以上のとき、`timed_ev` / `fixed_horizon_ev` の予測保有時間を指定cap分へ丸める。2025-02 smokeでは disabled `-53.5244` に対し `threshold=0.70, cap=60` が `-47.0418`、小sweep最良 `threshold=0.65, cap=30` が `-44.8382` まで改善したが、絶対値はまだNoTrade未満。接続は採用ではなく、複数月walk-forward / cost stress / calibration診断へ進める。詳細は `docs/reports/00161_2026-06-29_holding_shortening_policy_hook.md`。
 
 holding-shortening hookを2025-02..2025-04の3ヶ月へ拡張検証した。disabled 3ヶ月合計 adjusted PnL `-172.4522` に対し、`holding_shortening_threshold=0.60`, `holding_shortening_cap_minutes=60` は `-53.9566`、min月 `-43.7620`、max DD `461.3556` で最良。2025-04の大負けを `-125.9826 -> -42.8014` へ縮めた。一方、探索対象月内で選んだ値なので標準採用せず、`0.60 / 60` を固定候補として未使用月に再探索なし確認する。`model-sweep-summary` の `sweep_source` 重複バグも修正済み。詳細は `docs/reports/00162_2026-06-29_holding_shortening_multimonth_validation.md`。
+
+holding-shortening固定候補を未使用月2025-05へchronological applyした。2023-01..2025-03でfit、2025-04 valid、2025-05 test。`0.60 / 60` は2025-05の実選択tradeでprob最大 `0.5959` となり発火0、disabledと同じ adjusted PnL `-179.2516`。2025-04 validでthresholdを再校正すると `0.50 / 60` が最良で、2025-05固定適用では `-79.7894` まで改善したがNoTrade未満。trade数が `56 -> 119` に増え、`short/up_normal_vol` と `long/range_normal_vol` の悪い追加tradeが残る。raw probability thresholdはfit方式でスケールが動くため、calibrated probabilityまたはvalidation quantile化が必要。詳細は `docs/reports/00163_2026-06-29_holding_shortening_fixed_2025_05.md`。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 

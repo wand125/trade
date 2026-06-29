@@ -4810,3 +4810,30 @@ Artifacts:
 - `0.60 / 60` は3ヶ月すべてでdisabledを上回り、特に2025-04の損失を大きく縮めた。
 - ただしこの3ヶ月内で探索した値なので標準採用しない。
 - 次は `0.60 / 60` を固定候補として、未使用月または新規apply predictionへ再探索なしで適用する。
+
+### 2026-06-29 19:44 JST Holding shortening fixed 2025-05
+
+作業:
+
+- `trade_data.modeling train --target-set holding_shortening` がEV selection列を前提に落ちる問題を修正した。
+- 2023-01..2025-03でholding-shortening HGBをfitし、2025-04 valid、2025-05 test predictionを生成した。
+- 2025-05 base EV/holding predictionへholding-shortening probabilityを結合した。
+- `0.60 / 60` を2025-05へ再探索なしで固定適用した。
+- 2025-04 validでthresholdを再校正し、valid最良 `0.50 / 60` を2025-05へ固定適用した。
+- `model-trade-delta` でdisabled vs `0.50 / 60` の差分を診断した。
+- report: `docs/reports/00163_2026-06-29_holding_shortening_fixed_2025_05.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| variant | adjusted pnl | trades | profit factor | max DD | avg holding min |
+|---|---:|---:|---:|---:|---:|
+| disabled | `-179.2516` | `56` | `0.7793` | `269.5060` | `539.1071` |
+| fixed `0.60 / 60` | `-179.2516` | `56` | `0.7793` | `269.5060` | `539.1071` |
+| valid-calibrated `0.50 / 60` | `-79.7894` | `119` | `0.8952` | `212.4794` | `231.5630` |
+
+判断:
+
+- `0.60 / 60` は2025-05の選択tradeで発火0。raw probability thresholdはfit方式が変わると移植できない。
+- `0.50 / 60` はvalid校正後に2025-05損失を大きく縮めたが、まだNoTrade未満でtrade数が増えすぎる。
+- 次はcalibrated probability / validation quantile化と、`short/up_normal_vol`, `long/range_normal_vol`, `short/range_low_vol` の悪い追加tradeを抑えるentry quality gateを組み合わせる。
