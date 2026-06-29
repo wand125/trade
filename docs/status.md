@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 07:32 JST
+最終更新: 2026-06-30 07:47 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+online context state診断を追加した。`p10 + margin10` の949 tradesでは、threshold `20` の `ever breached` tradesは total `+126.9766` だが、`active loss breach` tradesは `-63.6502` で、現在のprior context PnLは有効な状態量。一方、これを `context_drawdown_guard_recover_after_pnl_recovery` としてpolicyへ戻すと、all-window `20/20` は改善するが、prior-only min4/worst は total `15.2092`, worst `-153.6646` となり `00182` の hard block / high margin 案に負けた。recovery hookは標準採用せず、online context stateはmeta feature / selection featureへ戻す。詳細は `docs/reports/00184_2026-06-30_online_context_state_recovery.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 online context drawdown guard に cooldown 型を追加した。`context_drawdown_guard_cooldown_minutes=0` は従来通りhard block、正の有限値はbreachした同一side/contextを一定分数だけブロックする。2025-01..12 side-month contextのcooldown sweepでは、all-window topは引き続き cooldown `0` の `threshold=60, margin=20`, total `142.9750`。prior-only `worst` selectionは min4 total `38.8288`, min8 total `-209.1152` で、`00182` の cooldownなし margin-aware hard block案より悪化した。cooldownは2025-05..07の利益機会を戻す一方、2025-08以降のshort損失も戻すため標準採用しない。詳細は `docs/reports/00183_2026-06-30_context_drawdown_guard_cooldown_sweep.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

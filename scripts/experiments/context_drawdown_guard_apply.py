@@ -52,6 +52,20 @@ MODEL_POLICY_TUPLE_FIELDS = {
 }
 
 
+def parse_csv_bools(value: str) -> list[bool]:
+    values: list[bool] = []
+    for part in [part.strip().lower() for part in value.split(",") if part.strip()]:
+        if part in {"1", "true", "yes", "y"}:
+            values.append(True)
+        elif part in {"0", "false", "no", "n"}:
+            values.append(False)
+        else:
+            raise argparse.ArgumentTypeError("boolean values must be true/false")
+    if not values:
+        raise argparse.ArgumentTypeError("at least one boolean value is required")
+    return values
+
+
 def local_json_default(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
@@ -122,6 +136,7 @@ def apply_thresholds(
     thresholds: list[float],
     min_entry_margins: list[float],
     cooldown_minutes_values: list[float],
+    recover_after_pnl_recovery_values: list[bool],
     context_columns: tuple[str, ...],
     reset_monthly: bool,
     warmup_days: int,
@@ -147,58 +162,70 @@ def apply_thresholds(
         for threshold in thresholds:
             for min_entry_margin in min_entry_margins:
                 for cooldown_minutes in cooldown_minutes_values:
-                    policy_config = restore_model_policy_config(config["model_policy_config"])
-                    policy_config = ModelPolicyConfig(
-                        **{
-                            **base_policy_config.__dict__,
-                            "context_drawdown_guard_loss_threshold": threshold,
-                            "context_drawdown_guard_min_entry_margin": min_entry_margin,
-                            "context_drawdown_guard_cooldown_minutes": cooldown_minutes,
-                            "context_drawdown_guard_context_columns": context_columns,
-                            "context_drawdown_guard_reset_monthly": reset_monthly,
-                        }
-                    )
-                    metrics, trades, _, signal = run_model_policy(
-                        df,
-                        backtest_config,
-                        policy_config,
-                    )
-                    curve = equity_curve(trades, backtest_config.evaluation_start)
-                    run_dir = (
-                        root
-                        / f"threshold_{threshold_label(threshold)}"
-                        / f"min_margin_{threshold_label(min_entry_margin)}"
-                        / f"cooldown_{threshold_label(cooldown_minutes)}"
-                        / source_run.name
-                    )
-                    write_result(
-                        run_dir,
-                        metrics,
-                        trades,
-                        curve,
-                        None,
-                        backtest_config,
-                        policy_config,
-                    )
-                    pd.DataFrame(
-                        {"timestamp": df["timestamp"], "desired_position": signal}
-                    ).to_csv(
-                        run_dir / "desired_position.csv",
-                        index=False,
-                    )
-                    rows.append(
-                        {
-                            "source_run": str(source_run),
-                            "month": month,
-                            "context_drawdown_guard_loss_threshold": threshold,
-                            "context_drawdown_guard_min_entry_margin": min_entry_margin,
-                            "context_drawdown_guard_cooldown_minutes": cooldown_minutes,
-                            "context_drawdown_guard_context_columns": ",".join(context_columns),
-                            "context_drawdown_guard_reset_monthly": reset_monthly,
-                            **metrics,
-                            "run_dir": str(run_dir),
-                        }
-                    )
+                    for recover_after_pnl_recovery in recover_after_pnl_recovery_values:
+                        policy_config = restore_model_policy_config(
+                            config["model_policy_config"]
+                        )
+                        policy_config = ModelPolicyConfig(
+                            **{
+                                **base_policy_config.__dict__,
+                                "context_drawdown_guard_loss_threshold": threshold,
+                                "context_drawdown_guard_min_entry_margin": min_entry_margin,
+                                "context_drawdown_guard_cooldown_minutes": cooldown_minutes,
+                                "context_drawdown_guard_recover_after_pnl_recovery": (
+                                    recover_after_pnl_recovery
+                                ),
+                                "context_drawdown_guard_context_columns": context_columns,
+                                "context_drawdown_guard_reset_monthly": reset_monthly,
+                            }
+                        )
+                        metrics, trades, _, signal = run_model_policy(
+                            df,
+                            backtest_config,
+                            policy_config,
+                        )
+                        curve = equity_curve(trades, backtest_config.evaluation_start)
+                        run_dir = (
+                            root
+                            / f"threshold_{threshold_label(threshold)}"
+                            / f"min_margin_{threshold_label(min_entry_margin)}"
+                            / f"cooldown_{threshold_label(cooldown_minutes)}"
+                            / f"recover_{str(recover_after_pnl_recovery).lower()}"
+                            / source_run.name
+                        )
+                        write_result(
+                            run_dir,
+                            metrics,
+                            trades,
+                            curve,
+                            None,
+                            backtest_config,
+                            policy_config,
+                        )
+                        pd.DataFrame(
+                            {"timestamp": df["timestamp"], "desired_position": signal}
+                        ).to_csv(
+                            run_dir / "desired_position.csv",
+                            index=False,
+                        )
+                        rows.append(
+                            {
+                                "source_run": str(source_run),
+                                "month": month,
+                                "context_drawdown_guard_loss_threshold": threshold,
+                                "context_drawdown_guard_min_entry_margin": min_entry_margin,
+                                "context_drawdown_guard_cooldown_minutes": cooldown_minutes,
+                                "context_drawdown_guard_recover_after_pnl_recovery": (
+                                    recover_after_pnl_recovery
+                                ),
+                                "context_drawdown_guard_context_columns": ",".join(
+                                    context_columns
+                                ),
+                                "context_drawdown_guard_reset_monthly": reset_monthly,
+                                **metrics,
+                                "run_dir": str(run_dir),
+                            }
+                        )
 
     summary = pd.DataFrame(rows)
     if not summary.empty:
@@ -209,6 +236,7 @@ def apply_thresholds(
                     "context_drawdown_guard_loss_threshold",
                     "context_drawdown_guard_min_entry_margin",
                     "context_drawdown_guard_cooldown_minutes",
+                    "context_drawdown_guard_recover_after_pnl_recovery",
                     "context_drawdown_guard_context_columns",
                     "context_drawdown_guard_reset_monthly",
                 ],
@@ -236,6 +264,7 @@ def apply_thresholds(
         "thresholds": thresholds,
         "min_entry_margins": min_entry_margins,
         "cooldown_minutes_values": cooldown_minutes_values,
+        "recover_after_pnl_recovery_values": recover_after_pnl_recovery_values,
         "context_columns": context_columns,
         "reset_monthly": reset_monthly,
         "warmup_days": warmup_days,
@@ -273,6 +302,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated cooldown durations in minutes after a breach; 0 preserves hard blocking",
     )
     parser.add_argument(
+        "--recover-after-pnl-recovery-values",
+        default="false",
+        help="comma-separated booleans; true clears breached state after context PnL recovery",
+    )
+    parser.add_argument(
         "--context-columns",
         default="combined_regime,session_regime",
         help="comma-separated prediction columns used with direction as context",
@@ -298,6 +332,9 @@ def main(argv: list[str] | None = None) -> int:
         thresholds=parse_csv_floats(args.thresholds),
         min_entry_margins=parse_csv_floats(args.min_entry_margins),
         cooldown_minutes_values=parse_csv_floats(args.cooldown_minutes_values),
+        recover_after_pnl_recovery_values=parse_csv_bools(
+            args.recover_after_pnl_recovery_values
+        ),
         context_columns=parse_csv_string_tuple(args.context_columns),
         reset_monthly=args.reset_monthly,
         warmup_days=args.warmup_days,

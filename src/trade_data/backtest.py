@@ -89,6 +89,7 @@ SWEEP_KEY_COLUMNS = [
     "context_drawdown_guard_loss_threshold",
     "context_drawdown_guard_min_entry_margin",
     "context_drawdown_guard_cooldown_minutes",
+    "context_drawdown_guard_recover_after_pnl_recovery",
     "context_drawdown_guard_context_columns",
     "context_drawdown_guard_reset_monthly",
     "block_trend_regimes",
@@ -400,6 +401,7 @@ class ModelPolicyConfig:
     context_drawdown_guard_loss_threshold: float = float("inf")
     context_drawdown_guard_min_entry_margin: float = float("inf")
     context_drawdown_guard_cooldown_minutes: float = 0.0
+    context_drawdown_guard_recover_after_pnl_recovery: bool = False
     context_drawdown_guard_context_columns: tuple[str, ...] = ("combined_regime", "session_regime")
     context_drawdown_guard_reset_monthly: bool = True
     block_trend_regimes: tuple[str, ...] = ()
@@ -1520,6 +1522,7 @@ def run_backtest(
     context_drawdown_guard_loss_threshold: float = float("inf"),
     context_drawdown_guard_min_entry_margin: float = float("inf"),
     context_drawdown_guard_cooldown_minutes: float = 0.0,
+    context_drawdown_guard_recover_after_pnl_recovery: bool = False,
     context_drawdown_guard_reset_monthly: bool = True,
 ) -> list[Trade]:
     if len(df) != len(desired_position):
@@ -1647,7 +1650,16 @@ def run_backtest(
                     )
                     if drawdown_key in blocked_contexts:
                         blocked_until = blocked_contexts[drawdown_key]
-                        if blocked_until is not None and decision_timestamp >= blocked_until:
+                        recovered = (
+                            context_drawdown_guard_recover_after_pnl_recovery
+                            and context_pnl.get(drawdown_key, 0.0)
+                            > -context_drawdown_guard_loss_threshold
+                        )
+                        expired = (
+                            blocked_until is not None
+                            and decision_timestamp >= blocked_until
+                        )
+                        if recovered or expired:
                             del blocked_contexts[drawdown_key]
                         else:
                             if np.isposinf(context_drawdown_guard_min_entry_margin):
@@ -2826,6 +2838,14 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         output["context_drawdown_guard_reset_monthly"] = output[
             "context_drawdown_guard_reset_monthly"
         ].astype(bool)
+    if output["context_drawdown_guard_recover_after_pnl_recovery"].dtype == object:
+        output["context_drawdown_guard_recover_after_pnl_recovery"] = output[
+            "context_drawdown_guard_recover_after_pnl_recovery"
+        ].map(lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"})
+    else:
+        output["context_drawdown_guard_recover_after_pnl_recovery"] = output[
+            "context_drawdown_guard_recover_after_pnl_recovery"
+        ].astype(bool)
 
     string_columns = [
         "policy",
@@ -3397,6 +3417,9 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         context_drawdown_guard_loss_threshold=args.context_drawdown_guard_loss_threshold,
         context_drawdown_guard_min_entry_margin=args.context_drawdown_guard_min_entry_margin,
         context_drawdown_guard_cooldown_minutes=args.context_drawdown_guard_cooldown_minutes,
+        context_drawdown_guard_recover_after_pnl_recovery=(
+            args.context_drawdown_guard_recover_after_pnl_recovery
+        ),
         context_drawdown_guard_context_columns=parse_csv_string_tuple(
             args.context_drawdown_guard_context_columns
         ),
@@ -3486,6 +3509,9 @@ def run_model_policy(
             ),
             context_drawdown_guard_cooldown_minutes=(
                 model_policy_config.context_drawdown_guard_cooldown_minutes
+            ),
+            context_drawdown_guard_recover_after_pnl_recovery=(
+                model_policy_config.context_drawdown_guard_recover_after_pnl_recovery
             ),
             context_drawdown_guard_reset_monthly=(
                 model_policy_config.context_drawdown_guard_reset_monthly
@@ -3880,6 +3906,14 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--context-drawdown-guard-recover-after-pnl-recovery",
+        action="store_true",
+        help=(
+            "after a breached context is allowed to trade again, clear the breached "
+            "state once realized context PnL recovers above -threshold"
+        ),
+    )
+    parser.add_argument(
         "--context-drawdown-guard-context-columns",
         default="combined_regime,session_regime",
         help="comma-separated prediction columns used with direction as the online drawdown context",
@@ -3951,6 +3985,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     )
     context_drawdown_guard_cooldown_minutes_values = parse_csv_floats(
         args.context_drawdown_guard_cooldown_minutes_values
+    )
+    context_drawdown_guard_recover_after_pnl_recovery_values = parse_csv_bools(
+        args.context_drawdown_guard_recover_after_pnl_recovery_values
     )
     regime_blocks = regime_blocks_from_args(args)
     side_ev_penalty_rule_sets = parse_optional_rule_sets(
@@ -4089,6 +4126,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
             context_drawdown_guard_cooldown_minutes=max(
                 context_drawdown_guard_cooldown_minutes_values
             ),
+            context_drawdown_guard_recover_after_pnl_recovery=any(
+                context_drawdown_guard_recover_after_pnl_recovery_values
+            ),
             context_drawdown_guard_reset_monthly=args.context_drawdown_guard_reset_monthly,
             **regime_blocks,
         )
@@ -4132,6 +4172,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         context_drawdown_guard_loss_thresholds,
         context_drawdown_guard_min_entry_margins,
         context_drawdown_guard_cooldown_minutes_values,
+        context_drawdown_guard_recover_after_pnl_recovery_values,
     )
     for (
         policy,
@@ -4167,6 +4208,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         context_drawdown_guard_loss_threshold,
         context_drawdown_guard_min_entry_margin,
         context_drawdown_guard_cooldown_minutes,
+        context_drawdown_guard_recover_after_pnl_recovery,
     ) in base_grid:
         if max_predicted_hold_minutes < min_predicted_hold_minutes:
             raise SystemExit(
@@ -4288,6 +4330,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     context_drawdown_guard_cooldown_minutes=(
                         context_drawdown_guard_cooldown_minutes
                     ),
+                    context_drawdown_guard_recover_after_pnl_recovery=(
+                        context_drawdown_guard_recover_after_pnl_recovery
+                    ),
                     context_drawdown_guard_context_columns=parse_csv_string_tuple(
                         args.context_drawdown_guard_context_columns
                     ),
@@ -4375,6 +4420,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "context_drawdown_guard_cooldown_minutes": (
                         context_drawdown_guard_cooldown_minutes
                     ),
+                    "context_drawdown_guard_recover_after_pnl_recovery": (
+                        context_drawdown_guard_recover_after_pnl_recovery
+                    ),
                     "context_drawdown_guard_context_columns": regime_values_to_string(
                         model_policy_config.context_drawdown_guard_context_columns
                     ),
@@ -4458,6 +4506,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         ),
         "context_drawdown_guard_cooldown_minutes_values": (
             context_drawdown_guard_cooldown_minutes_values
+        ),
+        "context_drawdown_guard_recover_after_pnl_recovery_values": (
+            context_drawdown_guard_recover_after_pnl_recovery_values
         ),
         "context_drawdown_guard_context_columns": parse_csv_string_tuple(
             args.context_drawdown_guard_context_columns
@@ -4631,10 +4682,16 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         late_defaults["context_drawdown_guard_min_entry_margin"] = float("inf")
     if "context_drawdown_guard_cooldown_minutes" not in output.columns:
         late_defaults["context_drawdown_guard_cooldown_minutes"] = 0.0
+    if "context_drawdown_guard_recover_after_pnl_recovery" not in output.columns:
+        late_defaults["context_drawdown_guard_recover_after_pnl_recovery"] = False
     if "context_drawdown_guard_context_columns" not in output.columns:
         late_defaults["context_drawdown_guard_context_columns"] = "combined_regime,session_regime"
     if "context_drawdown_guard_reset_monthly" not in output.columns:
         late_defaults["context_drawdown_guard_reset_monthly"] = True
+    if "context_drawdown_guard_recover_after_pnl_recovery" in output.columns:
+        output["context_drawdown_guard_recover_after_pnl_recovery"] = output[
+            "context_drawdown_guard_recover_after_pnl_recovery"
+        ].map(lambda value: str(value).strip().lower() in {"1", "true", "yes", "y"})
     if "forced_exit_rate" not in output.columns:
         trade_count = output["trade_count"].replace(0, np.nan)
         late_defaults["forced_exit_rate"] = (
@@ -10355,6 +10412,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "comma-separated cooldown durations in minutes after a context drawdown "
             "breach; 0 preserves hard blocking"
+        ),
+    )
+    model_sweep.add_argument(
+        "--context-drawdown-guard-recover-after-pnl-recovery-values",
+        default="false",
+        help=(
+            "comma-separated booleans; true clears breached state once realized context "
+            "PnL recovers above -threshold"
         ),
     )
     model_sweep.add_argument(

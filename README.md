@@ -216,6 +216,16 @@ Online context drawdown guard options for `model-policy` / `model-sweep`:
 - `--context-drawdown-guard-loss-threshold`: enable realized-loss guard.
 - `--context-drawdown-guard-min-entry-margin`: require stronger entry margin after breach.
 - `--context-drawdown-guard-cooldown-minutes`: use a time-limited block after breach; `0` preserves hard block behavior.
+- `--context-drawdown-guard-recover-after-pnl-recovery`: clear breached state after realized context PnL recovers above `-threshold`.
+
+Diagnose online context state available before each executed trade:
+
+```bash
+python scripts/experiments/online_context_state_diagnostics.py \
+  --runs data/reports/backtests/<monthly_model_policy_runs> \
+  --context-columns dataset_month \
+  --thresholds 20,40,60
+```
 
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:

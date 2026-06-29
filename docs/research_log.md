@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 07:47 Online context state recovery
+
+- `scripts/experiments/online_context_state_diagnostics.py` を追加し、executed tradeごとにentry時点で既に見えていた同一side/contextの累積PnL、trade数、breach有無、breachからの経過分、entry marginを付与できるようにした。
+- `p10 + margin10` 949 tradesの診断では、threshold `20` の `ever breached` tradesは total `+126.9766` だが、`active loss breach` tradesは `-63.6502`。threshold `40/60` もactive loss側がより悪い。永久blockは良い回復後tradeも消す一方、現在のprior context PnLは有効な状態量。
+- 仮説をpolicyへ戻すため、`context_drawdown_guard_recover_after_pnl_recovery` を追加した。有限margin等で許可されたtradeにより累積context PnLが `-threshold` より上へ戻ったらbreach状態を解除する。
+- all-windowでは `20/20` が recovery false `-208.7024` から true `-123.7850` へ改善。ただし `60/20` は `142.9750 -> 134.0626` と悪化し、topにはならない。
+- prior-only selectionでは、min4/worst が total `15.2092`, worst `-153.6646` で `00182` の `69.9374 / -116.4516` より悪化。min8/worst は `-199.4438 / -116.4516` で `00182` と同等止まり。
+- 判断: recovery hookは残すが標準採用しない。online context stateは手書きguardを増やすより、meta feature / selection featureへ戻す。
+- report: `docs/reports/00184_2026-06-30_online_context_state_recovery.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/online_context_state_diagnostics.py`: OK; `python3 -m unittest tests.test_backtest tests.test_online_context_state_diagnostics`: OK, 97 tests
+
 ### 07:32 Context drawdown guard cooldown sweep
 
 - `context_drawdown_guard_cooldown_minutes` を追加した。既定値 `0` は従来通りhard block、正の有限値はbreachした同一side/contextを `close_timestamp + cooldown_minutes` までだけブロックする。

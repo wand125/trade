@@ -400,6 +400,56 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(len(trades), 1)
 
+    def test_context_drawdown_guard_recovery_clears_breached_state(self):
+        df = frame_with_opens([100, 100, 105, 105, 100, 90, 90, 90])
+        signal = pd.Series([-1, 0, 0, -1, 0, -1, 0, 0])
+        entry_context = pd.Series(["range_low_vol|ny_overlap"] * len(df))
+        entry_margin = pd.Series([5.0, 0.0, 0.0, 12.0, 0.0, 1.0, 0.0, 0.0])
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        trades = trades_to_frame(
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_context=entry_context,
+                entry_margin=entry_margin,
+                context_drawdown_guard_loss_threshold=4.0,
+                context_drawdown_guard_min_entry_margin=10.0,
+                context_drawdown_guard_recover_after_pnl_recovery=True,
+            )
+        )
+
+        self.assertEqual(len(trades), 3)
+        self.assertEqual(trades.iloc[2]["entry_timestamp"], df["timestamp"].iloc[6])
+
+    def test_context_drawdown_guard_without_recovery_keeps_margin_requirement(self):
+        df = frame_with_opens([100, 100, 105, 105, 100, 90, 90, 90])
+        signal = pd.Series([-1, 0, 0, -1, 0, -1, 0, 0])
+        entry_context = pd.Series(["range_low_vol|ny_overlap"] * len(df))
+        entry_margin = pd.Series([5.0, 0.0, 0.0, 12.0, 0.0, 1.0, 0.0, 0.0])
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        trades = trades_to_frame(
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_context=entry_context,
+                entry_margin=entry_margin,
+                context_drawdown_guard_loss_threshold=4.0,
+                context_drawdown_guard_min_entry_margin=10.0,
+            )
+        )
+
+        self.assertEqual(len(trades), 2)
+
     def test_context_drawdown_guard_min_entry_margin_requires_entry_margin(self):
         df = frame_with_opens([100, 100, 105])
         signal = pd.Series([-1, 0, 0])
