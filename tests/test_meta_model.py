@@ -106,6 +106,9 @@ from trade_data.meta_model import (
     trade_quality_calibration_metrics,
     trade_quality_features_from_enriched,
     trade_quality_features_from_predictions,
+    trade_overestimate_prediction_activation_diagnostics,
+    trade_overestimate_scale_fold_diagnostics,
+    trade_overestimate_scale_summary,
     trade_overestimate_scored_metrics,
     side_target_means,
     add_candidate_quality_model_columns,
@@ -867,6 +870,75 @@ class MetaModelTests(unittest.TestCase):
         )
         self.assertIn(TRADE_OVERESTIMATE_TAKEN_COLUMN, scored.columns)
         self.assertAlmostEqual(metrics["target_mean"], 7.75)
+
+    def test_trade_overestimate_scale_diagnostics_report_threshold_activation(self):
+        fit_trades = pd.DataFrame(
+            {
+                "dataset_month": ["2025-01", "2025-02", "2025-01", "2025-02"],
+                "direction": ["long", "long", "short", "short"],
+                "ev_overestimate_vs_realized": [0.0, 10.0, 0.0, 20.0],
+            }
+        )
+        oof_trades = pd.DataFrame(
+            {
+                "dataset_month": ["2025-03", "2025-03", "2025-03"],
+                "direction": ["long", "long", "short"],
+                "ev_overestimate_vs_realized": [15.0, 0.0, 25.0],
+                TRADE_OVERESTIMATE_TAKEN_COLUMN: [5.0, 6.0, 7.0],
+            }
+        )
+        fold_plan = [
+            {
+                "holdout_month": "2025-03",
+                "fit_months": ["2025-01", "2025-02"],
+                "status": "profiled",
+            }
+        ]
+        fold_metrics = trade_overestimate_scale_fold_diagnostics(
+            fit_trades,
+            oof_trades,
+            fold_plan,
+            quantiles=(0.9,),
+            fixed_long_threshold=12.0,
+            fixed_short_threshold=22.0,
+        )
+        long_row = fold_metrics[
+            (fold_metrics["side"] == "long") & (fold_metrics["holdout_month"] == "2025-03")
+        ].iloc[0]
+        short_row = fold_metrics[
+            (fold_metrics["side"] == "short") & (fold_metrics["holdout_month"] == "2025-03")
+        ].iloc[0]
+
+        self.assertAlmostEqual(long_row["fit_target_q90"], 9.0)
+        self.assertEqual(long_row["holdout_target_ge_fit_q90_count"], 1)
+        self.assertEqual(long_row["holdout_pred_gt_fit_q90_count"], 0)
+        self.assertEqual(short_row["holdout_target_ge_fixed_count"], 1)
+        self.assertEqual(short_row["holdout_pred_gt_fixed_count"], 0)
+
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2025-03", "2025-03"],
+                TRADE_OVERESTIMATE_LONG_COLUMN: [3.0, 8.0],
+                TRADE_OVERESTIMATE_SHORT_COLUMN: [9.0, 21.0],
+            }
+        )
+        activation = trade_overestimate_prediction_activation_diagnostics(
+            predictions,
+            fold_metrics,
+            quantile_label_name="q90",
+            fixed_long_threshold=12.0,
+            fixed_short_threshold=22.0,
+        )
+        summary = trade_overestimate_scale_summary(
+            fold_metrics,
+            activation,
+            quantile_label_name="q90",
+        )
+
+        self.assertEqual(summary["selected_target_high_vs_fit_threshold_count"], 2)
+        self.assertEqual(summary["selected_prediction_above_fit_threshold_count"], 0)
+        self.assertEqual(summary["side_prediction_above_fit_threshold_count"], 1)
+        self.assertEqual(summary["side_prediction_above_fixed_threshold_count"], 0)
 
     def test_trade_failure_model_adds_probability_and_risk_columns(self):
         predictions = add_trade_source_ev_columns(

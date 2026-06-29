@@ -2116,6 +2116,313 @@ def trade_overestimate_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
     }
 
 
+def trade_overestimate_target_amount(
+    frame: pd.DataFrame,
+    target_column: str = "trade_overestimate_target_amount",
+) -> pd.Series:
+    if target_column in frame.columns:
+        return finite_float_series(frame, target_column).clip(lower=0.0)
+    if "ev_overestimate_vs_realized" in frame.columns:
+        return finite_float_series(frame, "ev_overestimate_vs_realized").clip(lower=0.0)
+    if {"pred_taken_ev", "adjusted_pnl"}.issubset(frame.columns):
+        return (
+            finite_float_series(frame, "pred_taken_ev")
+            - finite_float_series(frame, "adjusted_pnl")
+        ).clip(lower=0.0)
+    raise ValueError(
+        f"cannot derive {target_column}; provide it, ev_overestimate_vs_realized, "
+        "or pred_taken_ev + adjusted_pnl"
+    )
+
+
+def quantile_label(value: float) -> str:
+    return f"q{int(round(100 * value)):02d}"
+
+
+def trade_overestimate_scale_fold_diagnostics(
+    fit_trades: pd.DataFrame,
+    oof_trades: pd.DataFrame,
+    fold_plan: list[dict[str, object]],
+    *,
+    quantiles: tuple[float, ...] = (0.75, 0.9, 0.95),
+    fixed_long_threshold: float | None = None,
+    fixed_short_threshold: float | None = None,
+    target_column: str = "trade_overestimate_target_amount",
+    prediction_column: str = TRADE_OVERESTIMATE_TAKEN_COLUMN,
+    month_column: str = "dataset_month",
+    side_column: str = "direction",
+) -> pd.DataFrame:
+    if prediction_column not in oof_trades.columns:
+        raise ValueError(f"missing prediction column: {prediction_column}")
+    fixed_thresholds = {
+        "long": fixed_long_threshold,
+        "short": fixed_short_threshold,
+    }
+    fit_work = fit_trades.copy()
+    oof_work = oof_trades.copy()
+    fit_work["_trade_overestimate_target_amount"] = trade_overestimate_target_amount(
+        fit_work,
+        target_column=target_column,
+    )
+    oof_work["_trade_overestimate_target_amount"] = trade_overestimate_target_amount(
+        oof_work,
+        target_column=target_column,
+    )
+    rows: list[dict[str, object]] = []
+    for fold in fold_plan:
+        if fold.get("status", "profiled") != "profiled":
+            continue
+        holdout_month = str(fold["holdout_month"])
+        fit_months = [str(month) for month in fold.get("fit_months", [])]
+        fold_fit = fit_work[fit_work[month_column].astype(str).isin(fit_months)].copy()
+        fold_holdout = oof_work[oof_work[month_column].astype(str) == holdout_month].copy()
+        if fold_fit.empty or fold_holdout.empty:
+            continue
+        for side_name in ["all", "long", "short"]:
+            if side_name == "all":
+                fit_side = fold_fit
+                holdout_side = fold_holdout
+                fixed_threshold = None
+            else:
+                fit_side = fold_fit[fold_fit[side_column].astype(str) == side_name]
+                holdout_side = fold_holdout[fold_holdout[side_column].astype(str) == side_name]
+                fixed_threshold = fixed_thresholds.get(side_name)
+            if fit_side.empty or holdout_side.empty:
+                continue
+            fit_target = fit_side["_trade_overestimate_target_amount"].astype(float)
+            holdout_target = holdout_side["_trade_overestimate_target_amount"].astype(float)
+            holdout_pred = finite_float_series(holdout_side, prediction_column).clip(lower=0.0)
+            row: dict[str, object] = {
+                "holdout_month": holdout_month,
+                "side": side_name,
+                "fit_months": ",".join(fit_months),
+                "fit_month_count": len(fit_months),
+                "fit_support": int(len(fit_side)),
+                "holdout_support": int(len(holdout_side)),
+                "fit_target_mean": float(fit_target.mean()),
+                "fit_target_max": float(fit_target.max()),
+                "holdout_target_mean": float(holdout_target.mean()),
+                "holdout_target_max": float(holdout_target.max()),
+                "holdout_pred_mean": float(holdout_pred.mean()),
+                "holdout_pred_max": float(holdout_pred.max()),
+                "pred_mean_to_fit_target_mean": float(
+                    holdout_pred.mean() / fit_target.mean()
+                )
+                if fit_target.mean() != 0
+                else np.nan,
+                "pred_mean_to_holdout_target_mean": float(
+                    holdout_pred.mean() / holdout_target.mean()
+                )
+                if holdout_target.mean() != 0
+                else np.nan,
+            }
+            for quantile in quantiles:
+                label = quantile_label(quantile)
+                fit_q = float(fit_target.quantile(quantile))
+                holdout_target_q = float(holdout_target.quantile(quantile))
+                holdout_pred_q = float(holdout_pred.quantile(quantile))
+                row[f"fit_target_{label}"] = fit_q
+                row[f"holdout_target_{label}"] = holdout_target_q
+                row[f"holdout_pred_{label}"] = holdout_pred_q
+                row[f"holdout_target_ge_fit_{label}_count"] = int((holdout_target >= fit_q).sum())
+                row[f"holdout_target_ge_fit_{label}_rate"] = float((holdout_target >= fit_q).mean())
+                row[f"holdout_pred_gt_fit_{label}_count"] = int((holdout_pred > fit_q).sum())
+                row[f"holdout_pred_gt_fit_{label}_rate"] = float((holdout_pred > fit_q).mean())
+                row[f"holdout_pred_max_to_fit_{label}"] = float(holdout_pred.max() / fit_q) if fit_q else np.nan
+            row["fixed_threshold"] = fixed_threshold if fixed_threshold is not None else np.nan
+            if fixed_threshold is not None and np.isfinite(float(fixed_threshold)):
+                row["holdout_target_ge_fixed_count"] = int((holdout_target >= fixed_threshold).sum())
+                row["holdout_target_ge_fixed_rate"] = float((holdout_target >= fixed_threshold).mean())
+                row["holdout_pred_gt_fixed_count"] = int((holdout_pred > fixed_threshold).sum())
+                row["holdout_pred_gt_fixed_rate"] = float((holdout_pred > fixed_threshold).mean())
+                row["holdout_pred_max_to_fixed"] = (
+                    float(holdout_pred.max() / fixed_threshold) if fixed_threshold else np.nan
+                )
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def trade_overestimate_prediction_activation_diagnostics(
+    predictions: pd.DataFrame,
+    fold_scale_metrics: pd.DataFrame,
+    *,
+    quantile_label_name: str = "q90",
+    fixed_long_threshold: float | None = None,
+    fixed_short_threshold: float | None = None,
+    month_column: str = "dataset_month",
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    fixed_thresholds = {
+        "long": fixed_long_threshold,
+        "short": fixed_short_threshold,
+    }
+    side_metrics = fold_scale_metrics[fold_scale_metrics["side"].isin(["long", "short"])]
+    for _, metric in side_metrics.iterrows():
+        month = str(metric["holdout_month"])
+        side_name = str(metric["side"])
+        amount_column = (
+            TRADE_OVERESTIMATE_LONG_COLUMN
+            if side_name == "long"
+            else TRADE_OVERESTIMATE_SHORT_COLUMN
+        )
+        if amount_column not in predictions.columns:
+            continue
+        month_predictions = predictions[predictions[month_column].astype(str) == month]
+        if month_predictions.empty:
+            continue
+        pred = finite_float_series(month_predictions, amount_column).clip(lower=0.0)
+        fit_threshold_column = f"fit_target_{quantile_label_name}"
+        fit_threshold = float(metric[fit_threshold_column]) if fit_threshold_column in metric else np.nan
+        fixed_threshold = fixed_thresholds[side_name]
+        row: dict[str, object] = {
+            "holdout_month": month,
+            "side": side_name,
+            "row_count": int(len(month_predictions)),
+            "prediction_mean": float(pred.mean()),
+            "prediction_max": float(pred.max()),
+            "prediction_q75": float(pred.quantile(0.75)),
+            "prediction_q90": float(pred.quantile(0.9)),
+            "prediction_q95": float(pred.quantile(0.95)),
+            "fit_threshold_column": fit_threshold_column,
+            "fit_threshold": fit_threshold,
+            "pred_gt_fit_threshold_count": int((pred > fit_threshold).sum())
+            if np.isfinite(fit_threshold)
+            else 0,
+            "pred_gt_fit_threshold_rate": float((pred > fit_threshold).mean())
+            if np.isfinite(fit_threshold)
+            else 0.0,
+            "prediction_max_to_fit_threshold": float(pred.max() / fit_threshold)
+            if np.isfinite(fit_threshold) and fit_threshold
+            else np.nan,
+            "fixed_threshold": fixed_threshold if fixed_threshold is not None else np.nan,
+        }
+        if fixed_threshold is not None and np.isfinite(float(fixed_threshold)):
+            row["pred_gt_fixed_threshold_count"] = int((pred > fixed_threshold).sum())
+            row["pred_gt_fixed_threshold_rate"] = float((pred > fixed_threshold).mean())
+            row["prediction_max_to_fixed_threshold"] = (
+                float(pred.max() / fixed_threshold) if fixed_threshold else np.nan
+            )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def trade_overestimate_scale_summary(
+    fold_scale_metrics: pd.DataFrame,
+    prediction_activation: pd.DataFrame,
+    *,
+    quantile_label_name: str = "q90",
+) -> dict[str, object]:
+    side_rows = fold_scale_metrics[fold_scale_metrics["side"].isin(["long", "short"])].copy()
+    fit_active_col = f"holdout_pred_gt_fit_{quantile_label_name}_count"
+    fit_high_col = f"holdout_target_ge_fit_{quantile_label_name}_count"
+    ratio_col = f"holdout_pred_max_to_fit_{quantile_label_name}"
+    summary: dict[str, object] = {
+        "profiled_side_fold_count": int(len(side_rows)),
+        "selected_trade_count": int(side_rows["holdout_support"].sum()) if not side_rows.empty else 0,
+        "selected_target_high_vs_fit_threshold_count": int(side_rows.get(fit_high_col, pd.Series(dtype=float)).sum()),
+        "selected_prediction_above_fit_threshold_count": int(
+            side_rows.get(fit_active_col, pd.Series(dtype=float)).sum()
+        ),
+        "selected_prediction_above_fixed_threshold_count": int(
+            side_rows.get("holdout_pred_gt_fixed_count", pd.Series(dtype=float)).sum()
+        ),
+        "median_selected_pred_max_to_fit_threshold": float(side_rows[ratio_col].median())
+        if ratio_col in side_rows and not side_rows.empty
+        else np.nan,
+    }
+    if not prediction_activation.empty:
+        summary.update(
+            {
+                "side_prediction_row_count": int(prediction_activation["row_count"].sum()),
+                "side_prediction_above_fit_threshold_count": int(
+                    prediction_activation["pred_gt_fit_threshold_count"].sum()
+                ),
+                "side_prediction_above_fixed_threshold_count": int(
+                    prediction_activation.get(
+                        "pred_gt_fixed_threshold_count",
+                        pd.Series(dtype=float),
+                    ).sum()
+                ),
+                "median_prediction_max_to_fit_threshold": float(
+                    prediction_activation["prediction_max_to_fit_threshold"].median()
+                ),
+            }
+        )
+    return summary
+
+
+def trade_overestimate_scale_diagnostics_cli(args: argparse.Namespace) -> int:
+    metrics_path = args.metrics or args.run_dir / "metrics.json"
+    fit_trades_path = args.fit_trades or args.run_dir / "validation_fit_enriched_trades.csv"
+    oof_trades_path = args.oof_trades or args.run_dir / "validation_oof_overestimate_enriched_trades.csv"
+    predictions_path = args.predictions or args.run_dir / "predictions_validation_oof_trade_overestimate_model.parquet"
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    validation_months = [str(month) for month in metrics.get("validation_months", [])]
+    fold_plan = metrics.get("fold_plan")
+    if not fold_plan:
+        fold_plan = []
+        for holdout_month in metrics.get("folds", {}).keys():
+            fold_plan.append(
+                {
+                    "holdout_month": str(holdout_month),
+                    "fit_months": [month for month in validation_months if month != str(holdout_month)],
+                    "status": "profiled",
+                    "skip_reason": "",
+                }
+            )
+    quantiles = tuple(parse_csv_floats(args.quantiles) or [0.75, 0.9, 0.95])
+    fold_scale = trade_overestimate_scale_fold_diagnostics(
+        pd.read_csv(fit_trades_path),
+        pd.read_csv(oof_trades_path),
+        list(fold_plan),
+        quantiles=quantiles,
+        fixed_long_threshold=args.fixed_long_threshold,
+        fixed_short_threshold=args.fixed_short_threshold,
+        target_column=args.target_column,
+        prediction_column=args.prediction_column,
+    )
+    predictions = pd.read_parquet(predictions_path) if predictions_path.exists() else pd.DataFrame()
+    prediction_activation = (
+        trade_overestimate_prediction_activation_diagnostics(
+            predictions,
+            fold_scale,
+            quantile_label_name=args.activation_quantile,
+            fixed_long_threshold=args.fixed_long_threshold,
+            fixed_short_threshold=args.fixed_short_threshold,
+        )
+        if not predictions.empty
+        else pd.DataFrame()
+    )
+    summary = {
+        "mode": "trade_overestimate_scale_diagnostics",
+        "run_dir": str(args.run_dir),
+        "inputs": {
+            "metrics": str(metrics_path),
+            "fit_trades": str(fit_trades_path),
+            "oof_trades": str(oof_trades_path),
+            "predictions": str(predictions_path) if predictions_path.exists() else None,
+        },
+        "quantiles": list(quantiles),
+        "activation_quantile": args.activation_quantile,
+        "fixed_thresholds": {
+            "long": args.fixed_long_threshold,
+            "short": args.fixed_short_threshold,
+        },
+        "summary": trade_overestimate_scale_summary(
+            fold_scale,
+            prediction_activation,
+            quantile_label_name=args.activation_quantile,
+        ),
+    }
+    run_dir = make_run_dir(args.output_dir, args.label)
+    fold_scale.to_csv(run_dir / "fold_scale_metrics.csv", index=False)
+    prediction_activation.to_csv(run_dir / "prediction_activation_metrics.csv", index=False)
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps({"summary": summary["summary"], "artifacts": str(run_dir)}, indent=2, default=str))
+    return 0
+
+
 def trade_failure_prob_column(target_name: str, side_name: str) -> str:
     return f"pred_trade_failure_{target_name}_{side_name}_prob"
 
@@ -9137,6 +9444,28 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(trade_overestimate_model_parser)
     add_trade_quality_model_args(trade_overestimate_model_parser)
     trade_overestimate_model_parser.set_defaults(func=oof_trade_overestimate_model)
+
+    trade_overestimate_scale_parser = subparsers.add_parser(
+        "trade-overestimate-scale-diagnostics",
+        help="diagnose chronological trade-overestimate prediction scale and threshold activation",
+    )
+    trade_overestimate_scale_parser.add_argument("--run-dir", type=Path, required=True)
+    trade_overestimate_scale_parser.add_argument("--metrics", type=Path)
+    trade_overestimate_scale_parser.add_argument("--fit-trades", type=Path)
+    trade_overestimate_scale_parser.add_argument("--oof-trades", type=Path)
+    trade_overestimate_scale_parser.add_argument("--predictions", type=Path)
+    trade_overestimate_scale_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    trade_overestimate_scale_parser.add_argument("--label", default="trade_overestimate_scale_diagnostics")
+    trade_overestimate_scale_parser.add_argument("--target-column", default="trade_overestimate_target_amount")
+    trade_overestimate_scale_parser.add_argument(
+        "--prediction-column",
+        default=TRADE_OVERESTIMATE_TAKEN_COLUMN,
+    )
+    trade_overestimate_scale_parser.add_argument("--quantiles", default="0.75,0.9,0.95")
+    trade_overestimate_scale_parser.add_argument("--activation-quantile", default="q90")
+    trade_overestimate_scale_parser.add_argument("--fixed-long-threshold", type=float, default=None)
+    trade_overestimate_scale_parser.add_argument("--fixed-short-threshold", type=float, default=None)
+    trade_overestimate_scale_parser.set_defaults(func=trade_overestimate_scale_diagnostics_cli)
 
     trade_failure_model_parser = subparsers.add_parser(
         "oof-trade-failure-model",

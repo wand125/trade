@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 16:19 Trade overestimate scale diagnostics
+
+- `trade-overestimate-scale-diagnostics` を追加し、chronological overestimate modelのfit側target分布、holdout selected trade予測、全prediction行のthreshold発火率を診断できるようにした。
+- q90診断では、selected targetがfit q90を超えるtradeは36件あるが、selected prediction > fit q90は0件、全side prediction行でも0件。median selected pred max / fit q90 は `0.4428`、median prediction max / fit q90 は `0.5491`。
+- q75診断では、selected target >= fit q75が79件、selected prediction > fit q75が12件、全side prediction行では13093件発火。q75なら発火するが捕捉は弱く、short側は全foldでselected prediction > fit q75が0件。
+- fold-local q75 threshold + lambda `2.0` をpolicy接続したが、2025-02..2025-04 totalは baseline `154.6374` に対して `135.9620`、delta `-18.6754`。2025-02で良いlongを落とし、悪いshortを追加した。
+- 判断: q90は発火せず、q75は発火するが悪化。thresholdを下げるだけでは解決しない。次はhigh-overestimate分類、side別calibration、stateful/context downside targetとの統合へ進む。
+- report: `docs/reports/00151_2026-06-29_trade_overestimate_scale_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 16:05 Trade overestimate chronological q90 check
 
 - `oof-trade-overestimate-model` に `--oof-scheme expanding` と `--min-train-months` を追加し、対象月より前だけでfitするchronological OOFを実行した。
