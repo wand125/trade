@@ -288,6 +288,19 @@ python scripts/experiments/side_context_interaction_guard_apply.py \
   --entry-budgets 1,2,3,5,10,inf
 ```
 
+Then audit whether the budget can be selected from prior months using
+short-focused metrics:
+
+```bash
+python scripts/experiments/short_budget_guard_selection.py \
+  --summary-by-run data/reports/backtests/<short_entry_budget_sweep>/summary_by_run.csv \
+  --output-dir data/reports/backtests \
+  --label short_budget_guard_selection \
+  --candidate-columns short_gap_threshold,context_entry_budget \
+  --min-train-months 4 \
+  --recent-month-count 3
+```
+
 Rows outside the side-drift guarded prediction context are assigned unique
 inactive contexts, so ordinary trades do not share drawdown state. This is a
 dynamic backtest diagnostic and should still be judged by worst month,

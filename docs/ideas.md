@@ -60,6 +60,7 @@
 - side drift context全体へのonline drawdown guardはtotalだけ少し改善してもshort driftを直せない。次は short限定で、prior side/context lossがactiveかつprediction short biasが高い場合にだけ追加entry marginまたはstay-flatへ寄せる。
 - raw short score gapによる `signal_short_raw_gap` はall-windowでtotalを改善できるが、prior-only selectionでは2025-09..12に崩れる。score gap閾値そのものを採用せず、対象月より前だけで見える prior side-drift profile、short active PnL、short exposure budget を組み合わせて評価する。
 - `context_entry_budget` はall-windowで強いが、total/worstだけのprior-only selectionではNoTrade超えに届かない。次は prior short active PnL、short losing-month count、late-regime short deteriorationを使って `gap0/budget1`, `gap0/budget2`, `gap5/budget1` のような防御候補を選ぶ。
+- short budget selectorではactive/short PnL最大化より `defensive_budget` が有効。次は固定 `gap0/budget1` を追加未使用月で確認し、budget=1でも残る初回short大損を fast stop、per-regime first-loss cap、または prior side-label inversion による budget0 で抑える。
 
 ## 外部データ候補
 

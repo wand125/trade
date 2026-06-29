@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 08:43 JST
+最終更新: 2026-06-30 08:53 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+short entry budget候補のprior-only selectorを追加した。`short_budget_guard_selection.py` は prior short PnL / active short PnL / losing-month count / recent active stability を見るが、active/short PnL最大化系はearly short成功へ寄ってlate regimeで悪化した。最良は単純な `defensive_budget` で、まず `context_entry_budget` を小さくし、その範囲で prior worst month を最大化するmandate。budget-only min4は total `-4.8828`, worst `-118.5098`, max DD `133.5398` まで改善し、`00188` の汎用worst `-15.9692` を小幅に上回った。min8は total `-226.5946` で未達。標準採用せず、次は固定 `gap0/budget1` mandateの追加未使用月評価と、budget=1でも残る初回short大損へのfast stop / budget0 regime drift検知を試す。詳細は `docs/reports/00189_2026-06-30_short_budget_selection.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 short exposure budgetのdynamic hookを追加した。`run_backtest` の `entry_budget_context` / `context_entry_budget` は、同一月・同一direction・同一contextの実entry回数を制限する。`signal_short_raw_gap` active short contextにbudgetをかけると、all-window best `short_gap=5, budget=1` は total `+369.3640`, short PnL `+25.1080`、risk寄り `short_gap=0, budget=1` は total `+281.8854`, worst `-118.5098`。prior-onlyでは min4/worst total `-15.9692`, worst `-132.1382` まで改善したが、NoTrade超えには未達。min8/worstは `-240.2230`。標準採用せず、次は prior short active PnL / losing-month count / side-deterioration profileでbudgetを選ぶ。詳細は `docs/reports/00188_2026-06-30_short_entry_budget_guard.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

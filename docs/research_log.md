@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 08:53 Short budget selection
+
+- `scripts/experiments/short_budget_guard_selection.py` を追加し、`00188` の entry budget候補を prior short PnL / active short PnL / losing month count / recent active stability で選ぶ診断を作った。
+- budget-only sweepで min4/min8 を評価した。`active_total`, `short_total`, `active_stability`, `short_stability`, `recent_active_stability`, `defensive_score` はいずれも既存worst基準より悪化した。
+- 最良は `defensive_budget`。これは `context_entry_budget` を小さい順に優先し、その範囲で prior worst month を最大化する防御mandate。
+- budget-only min4では `defensive_budget` が target 8ヶ月 total `-4.8828`, worst `-118.5098`, max DD `133.5398`, short PnL `-82.3722`。`00188` の汎用worst selector `-15.9692` より小幅改善し、NoTrade目前まで来た。
+- budget-only min8では target 4ヶ月 total `-226.5946`, worst `-118.5098`。`gap0/budget1` に固定されるが、2025-09..12のlate short regimeはまだ防ぎ切れない。
+- budget + drawdown候補でも `defensive_budget` は同じ aggregate で、drawdown threshold追加の価値は薄い。
+- 判断: `defensive_budget` はこのfamilyの現時点best selection ruleとして残す。ただし標準採用はしない。active/short PnL最大化は早期月のshort成功へ寄り、late regimeで崩れるためselectorとして使わない。
+- report: `docs/reports/00189_2026-06-30_short_budget_selection.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/short_budget_guard_selection.py tests/test_short_budget_guard_selection.py`: OK; `python3 -m unittest tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 115 tests; `git diff --check`: OK
+
 ### 08:43 Short entry budget guard
 
 - `run_backtest` に `entry_budget_context` / `context_entry_budget` を追加し、同一月・同一direction・同一contextのentry回数を制限できるようにした。entry countは実際にpositionを開いた時だけ増えるため、一玉制約・代替trade・約定遅延を保ったdynamic backtestになっている。
