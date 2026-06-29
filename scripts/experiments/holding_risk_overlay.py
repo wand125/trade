@@ -92,6 +92,30 @@ def parse_combined_session_pairs(value: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def read_month_context_pairs(
+    path: Path | None,
+    *,
+    selection_scope: str,
+    scope: str,
+) -> list[tuple[str, str, str]]:
+    if path is None:
+        return []
+    frame = pd.read_csv(path)
+    required = {"target_month", "combined_regime", "session_regime"}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(f"{path} is missing columns: {', '.join(missing)}")
+    if "selection_scope" in frame.columns:
+        frame = frame[frame["selection_scope"].astype(str).eq(selection_scope)].copy()
+    if "scope" in frame.columns:
+        frame = frame[frame["scope"].astype(str).eq(scope)].copy()
+    rows = frame[["target_month", "combined_regime", "session_regime"]].drop_duplicates()
+    return [
+        (str(row.target_month), str(row.combined_regime), str(row.session_regime))
+        for row in rows.itertuples(index=False)
+    ]
+
+
 def value_label(value: float) -> str:
     return f"{value:g}".replace(".", "p").replace("-", "m")
 
@@ -143,6 +167,7 @@ def add_holding_cap_columns(
     exclude_combined_regimes: list[str],
     include_combined_session_pairs: list[tuple[str, str]],
     exclude_combined_session_pairs: list[tuple[str, str]],
+    exclude_combined_session_pairs_by_month: list[tuple[str, str, str]],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     output = frame.copy()
     required = [
@@ -159,6 +184,8 @@ def add_holding_cap_columns(
         require_columns(output, ["combined_regime"])
     if include_combined_session_pairs or exclude_combined_session_pairs:
         require_columns(output, ["combined_regime", "session_regime"])
+    if exclude_combined_session_pairs_by_month:
+        require_columns(output, ["dataset_month", "combined_regime", "session_regime"])
     context_mask = pd.Series(True, index=output.index)
     if include_combined_regimes:
         context_mask &= output["combined_regime"].astype(str).isin(include_combined_regimes)
@@ -175,6 +202,12 @@ def add_holding_cap_columns(
         pair_mask = pd.Series(False, index=output.index)
         for combined, session in exclude_combined_session_pairs:
             pair_mask |= combined_values.eq(combined) & session_values.eq(session)
+        context_mask &= ~pair_mask
+    if exclude_combined_session_pairs_by_month:
+        month_values = output["dataset_month"].astype(str)
+        pair_mask = pd.Series(False, index=output.index)
+        for month, combined, session in exclude_combined_session_pairs_by_month:
+            pair_mask |= month_values.eq(month) & combined_values.eq(combined) & session_values.eq(session)
         context_mask &= ~pair_mask
 
     threshold_rows: list[dict[str, object]] = []
@@ -198,6 +231,10 @@ def add_holding_cap_columns(
                     ),
                     "exclude_combined_session_pairs": ",".join(
                         f"{combined}:{session}" for combined, session in exclude_combined_session_pairs
+                    ),
+                    "exclude_combined_session_pairs_by_month": ",".join(
+                        f"{month}:{combined}:{session}"
+                        for month, combined, session in exclude_combined_session_pairs_by_month
                     ),
                     "active_rows": int(high_risk.sum()),
                     "active_rate": float(high_risk.mean()),
@@ -506,6 +543,17 @@ def build_parser() -> argparse.ArgumentParser:
             "optional comma-separated combined_regime:session_regime pairs where holding caps must not trigger"
         ),
     )
+    parser.add_argument(
+        "--exclude-combined-session-pairs-by-month",
+        type=Path,
+        default=None,
+        help=(
+            "optional CSV from holding_cap_context_walkforward with target_month, combined_regime, "
+            "and session_regime columns"
+        ),
+    )
+    parser.add_argument("--exclude-month-context-selection-scope", default="pooled")
+    parser.add_argument("--exclude-month-context-scope", default="pooled")
     parser.add_argument("--data", type=Path, default=Path("data/processed/histdata/xauusd/xauusd_m1.parquet"))
     parser.add_argument("--label", default="holding_risk_overlay_2025_02_06")
     parser.add_argument("--modeling-output-dir", type=Path, default=Path("data/reports/modeling"))
@@ -519,6 +567,11 @@ def main(argv: list[str] | None = None) -> int:
     threshold_months = parse_csv_strings(args.threshold_months)
     threshold_quantiles = parse_csv_floats(args.threshold_quantiles)
     caps = parse_csv_floats(args.caps)
+    exclude_combined_session_pairs_by_month = read_month_context_pairs(
+        args.exclude_combined_session_pairs_by_month,
+        selection_scope=args.exclude_month_context_selection_scope,
+        scope=args.exclude_month_context_scope,
+    )
 
     modeling_dir = make_run_dir(args.modeling_output_dir, args.label)
     backtest_dir = make_run_dir(args.backtest_output_dir, args.label)
@@ -535,6 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         exclude_combined_regimes=args.exclude_combined_regimes,
         include_combined_session_pairs=args.include_combined_session_pairs,
         exclude_combined_session_pairs=args.exclude_combined_session_pairs,
+        exclude_combined_session_pairs_by_month=exclude_combined_session_pairs_by_month,
     )
     predictions_path = modeling_dir / "predictions_holding_overlay.parquet"
     scored.to_parquet(predictions_path, index=False)
@@ -574,6 +628,17 @@ def main(argv: list[str] | None = None) -> int:
         ],
         "exclude_combined_session_pairs": [
             f"{combined}:{session}" for combined, session in args.exclude_combined_session_pairs
+        ],
+        "exclude_combined_session_pairs_by_month_file": (
+            str(args.exclude_combined_session_pairs_by_month)
+            if args.exclude_combined_session_pairs_by_month is not None
+            else None
+        ),
+        "exclude_month_context_selection_scope": args.exclude_month_context_selection_scope,
+        "exclude_month_context_scope": args.exclude_month_context_scope,
+        "exclude_combined_session_pairs_by_month": [
+            f"{month}:{combined}:{session}"
+            for month, combined, session in exclude_combined_session_pairs_by_month
         ],
         "stateful_prefix": STATEFUL_PREFIX,
         "risk_source": "pred_trade_failure_pred_hit_actual_miss_prob * pred_trade_overestimate_high_q75_prob",

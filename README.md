@@ -568,6 +568,30 @@ opportunities blocked while a candidate-policy trade was open.
 with `target`, `stateful_entry_value`, `stateful_positive_cost_value`,
 `blocking_cost`, and `replacement_regret` columns.
 
+For holding-cap context diagnostics, build a prior-only context profile from
+no-context cap deltas before turning a session/regime observation into a rule:
+
+```bash
+python scripts/experiments/holding_cap_context_walkforward.py \
+  --delta-runs data/reports/backtests/<no_context_delta_risk0>,data/reports/backtests/<no_context_delta_risk5> \
+  --focus-side short \
+  --focus-regime range_low_vol \
+  --label holding_cap_context_wf
+```
+
+The script writes `direct_cap_target_examples.csv`,
+`walkforward_month_summary.csv`, `walkforward_selected_contexts.csv`, and
+`walkforward_aggregate.csv`. To apply the selected contexts to the holding
+overlay without using the target month's outcome, pass that CSV to
+`holding_risk_overlay.py`:
+
+```bash
+python scripts/experiments/holding_risk_overlay.py \
+  --exclude-combined-session-pairs-by-month data/reports/backtests/<context_wf_run>/walkforward_selected_contexts.csv \
+  --exclude-month-context-selection-scope pooled \
+  --exclude-month-context-scope pooled
+```
+
 Before adopting a candidate, combine validation and holdout/apply delta runs in
 a preflight audit:
 

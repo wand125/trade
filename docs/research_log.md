@@ -4952,3 +4952,52 @@ feature correlation:
 - holding-shortening featureは配線として残すが、quality / overestimate modelの本流featureには採用しない。
 - validationで薄く見えた相関が2025-05で反転しており、直接連続回帰featureに入れると安定しない。
 - 次はholding-shorteningを、context-aware holding-cap target、exit-regret、holding-errorの教師・診断へ回す。
+
+### 2026-06-29 20:41 JST Holding cap context walk-forward
+
+作業:
+
+- `docs/reports` の通し番号が、ファイル更新時刻や `更新日時` ではなく本文内 `日時` の昇順と一致しているか再監査した。
+- `scripts/experiments/holding_cap_context_walkforward.py` を追加した。
+- no-context holding capの `trade_delta_rows.csv` から、対象月より前のpriorだけでharmful contextを選ぶwalk-forward診断を作成した。
+- `scripts/experiments/holding_risk_overlay.py` に `--exclude-combined-session-pairs-by-month` を追加し、月別prior-selected contextを実policyへ接続した。
+- report: `docs/reports/00168_2026-06-29_holding_cap_context_walkforward.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| check | result |
+|---|---:|
+| reports audited after adding 00168 | `168` |
+| missing `日時` | `0` |
+| numbering problems by internal `日時` | `0` |
+
+| scope | base cap value | excluded cap value | kept cap value | exclusion delta |
+|---|---:|---:|---:|---:|
+| pooled | `16.2708` | `-10.6172` | `26.8880` | `+10.6172` |
+| risk0 | `6.5752` | `-6.6628` | `13.2380` | `+6.6628` |
+| risk5 | `9.6956` | `-3.9544` | `13.6500` | `+3.9544` |
+
+Policy result, 2025-02..08:
+
+| variant | total pnl | min month | max DD |
+|---|---:|---:|---:|
+| no-context cap risk0 | `378.8870` | `-52.3036` | `145.4232` |
+| context-WF cap risk0 | `376.6688` | `-52.1236` | `145.4232` |
+| no-context cap risk5 | `351.2370` | `-48.5396` | `146.3352` |
+| context-WF cap risk5 | `348.6384` | `-43.9880` | `146.3352` |
+| post-hoc static pair risk0 | `404.9366` | `-51.3760` | `145.4232` |
+| post-hoc static pair risk5 | `360.9802` | `-43.2404` | `146.3352` |
+
+判断:
+
+- prior-only context selectionはdirect targetでは一部効くが、full policy totalではno-context capを超えない。
+- risk5のmin month改善はあるが、標準採用するには利益を削りすぎる。
+- 2025-08の悪化は `asia` で、priorではcap有利だったため、session ruleだけではregime変化を拾えない。
+- context-WFはhard exclusionではなく、`holding_error_minutes`, `oracle_holding_gap_minutes`, `exit_regret`, `cap_value` のdense教師・診断featureへ回す。
+
+検証:
+
+- `python3 -m unittest tests.test_holding_cap_context_walkforward`: OK, 2 tests
+- `python3 -m unittest tests.test_holding_risk_overlay tests.test_holding_cap_context_walkforward`: OK, 3 tests
+- `python3 -m py_compile scripts/experiments/holding_risk_overlay.py scripts/experiments/holding_cap_context_walkforward.py`: OK
