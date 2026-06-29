@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 14:38 Selected trade exit/EV/confidence diagnostics
+
+- `model-trade-exposure-diagnostics` を追加した。selected tradesを、side gap、side confidence、予測保有時間、profit barrier predicted/actual、EV過大評価、exit regretのbucketで集計できる。
+- 2025-05 highcost risk5では、`long/down_low_vol/london` が3 tradesで `-87.6396`、`short/up_normal_vol/asia` が13 tradesで `-56.7420`、`short/up_normal_vol/london` が8 tradesで `-54.5500`。
+- `short/up_normal_vol/london` はside gap mean `14.6367`、side confidence mean `0.6674`、predicted profit-barrier hit rate `1.0000` だが actual hit rate `0.3750`。低confidenceではなく、profit-barrier / EV overestimate / exit timingの過大評価が主因。
+- side confidence hard screenでは `min_side_confidence=0.75` が7ヶ月highcost minを `-12.2140` に縮めるが、22 tradesしか残らない。`0.60` は2025-04を壊すため採用しない。
+- 判断: side confidenceはhard gateではなくinteraction featureに留める。次は `pred_hit_actual_miss`, `ev_overestimate_vs_realized`, `exit_regret`, `holding_ratio_actual_vs_pred` をchronological OOFのtarget/featureへ戻す。
+- report: `docs/reports/00144_2026-06-29_selected_trade_exit_ev_confidence_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 14:23 Prior context floor risk target
 
 - `oof-stateful-risk-model` に `walkforward_prior_floor_nonpositive` と `walkforward_prior_floor_lowered` を追加し、`target_walkforward_prior_context_mean_floor` を分類targetとして使えるようにした。

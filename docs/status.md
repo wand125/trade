@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 14:23 JST
+最終更新: 2026-06-29 14:38 JST
 
 ## 現在の状態
 
@@ -93,6 +93,8 @@ stateful downside riskにmean-match probability calibrationを追加済み。`se
 selected trade用の `model-trade-context-walkforward-stress` を追加済み。候補差分ではなく実際に選択されたtradeを対象に、対象月より前の月だけでcontext stressとall-prior context floorを作る。2025-05 risk=5の未解決損失では、広い文脈の `long:down_low_vol` と `short:up_normal_vol` は過去月だけのstressで捕捉できた。session分解では `long:down_low_vol:london` と `short:up_normal_vol:asia` が全過去平均でも負。一方 `short:up_normal_vol:london` は過去平均が正で、contextだけでは捕捉しにくい。これらはhard blockせず、`target_walkforward_context_stress_adjusted` と `target_walkforward_prior_context_mean_floor` をdownside分類・EV校正・ranking featureへ戻す。詳細は `docs/reports/00142_2026-06-29_selected_trade_walkforward_context.md`。
 
 `target_walkforward_prior_context_mean_floor` をstateful downside risk targetへ戻した。`walkforward_prior_floor_nonpositive` はAUC `0.6240`, bias `-0.0741` でsignalはあるが、単独risk penaltyでは広く削りすぎる。2024-11..2025-05の7ヶ月では `prior_lowered risk=5` がbase/highcost total `491.7438 / 278.3902` で、既存 `floor_lowered risk=5` の `567.7900 / 354.8408` に負けた。単独penaltyには採用せず、EV calibration / ranking feature候補に降格する。詳細は `docs/reports/00143_2026-06-29_prior_context_floor_risk_target.md`。
+
+selected tradeのexit/EV/confidence診断 `model-trade-exposure-diagnostics` を追加済み。2025-05 highcost risk5の残存損失は `long/down_low_vol/london` `-87.6396`, `short/up_normal_vol/asia` `-56.7420`, `short/up_normal_vol/london` `-54.5500` が中心。特に `short/up_normal_vol/london` はside gap mean `14.6367`, confidence mean `0.6674`, predicted profit-barrier hit rate `1.0000` に対しactual hit rate `0.3750` で、低confidenceではなくprofit-barrier/EV/exit timingの過大評価が主因。`min_side_confidence=0.75` は7ヶ月highcost minを `-12.2140` に縮めるが22 tradesしか残らないため標準採用しない。次は `pred_hit_actual_miss`, `ev_overestimate_vs_realized`, `exit_regret`, `holding_ratio_actual_vs_pred` をchronological OOF target/featureへ戻す。詳細は `docs/reports/00144_2026-06-29_selected_trade_exit_ev_confidence_diagnostics.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

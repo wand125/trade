@@ -23,6 +23,7 @@ from trade_data.backtest import (
     profit_barrier_calibration_diagnostics,
     profit_barrier_diagnostics,
     resolve_min_valid_predicted_hold_minutes,
+    add_trade_exposure_diagnostic_buckets,
     add_trade_delta_blocking_diagnostics,
     read_holdout_run_frame,
     read_model_trade_exposure_frame,
@@ -48,6 +49,7 @@ from trade_data.backtest import (
     trade_analysis_summary,
     trade_delta_blocking_group_summary,
     trade_delta_group_summary,
+    trade_exposure_diagnostic_summary,
     trade_exposure_group_summary,
     trade_failure_flags,
     trade_group_summary,
@@ -2978,6 +2980,52 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(short_row["combined_regime"], "down_low_vol")
         self.assertAlmostEqual(short_row["total_adjusted_pnl"], -2.4)
         self.assertAlmostEqual(short_row["trade_share"], 0.5)
+
+    def test_trade_exposure_diagnostics_buckets_profit_barrier_and_ev_overestimate(self):
+        trades = pd.DataFrame(
+            {
+                "month": ["2025-05", "2025-05", "2025-05"],
+                "direction": ["short", "short", "long"],
+                "combined_regime": ["up_normal_vol", "up_normal_vol", "down_low_vol"],
+                "session_regime": ["london", "london", "london"],
+                "adjusted_pnl": [-20.0, -10.0, 5.0],
+                "holding_minutes": [60.0, 40.0, 80.0],
+                "pred_taken_ev": [30.0, 24.0, 12.0],
+                "pred_opposite_ev": [12.0, 16.0, 10.0],
+                "pred_taken_best_holding_minutes": [720.0, 600.0, 120.0],
+                "pred_taken_wait_regret": [4.0, 3.0, 1.0],
+                "pred_taken_entry_local_rank": [0.55, 0.60, 0.40],
+                "pred_taken_profit_barrier_hit": [1, 1, 0],
+                "actual_taken_profit_barrier_hit": [0, 0, 1],
+                "exit_regret": [35.0, 20.0, 2.0],
+                "best_side_regret": [50.0, 30.0, 0.0],
+                "ev_overestimate_vs_realized": [50.0, 34.0, 7.0],
+                "direction_error": [True, True, False],
+                "predicted_side_error": [True, False, False],
+            }
+        )
+
+        bucketed = add_trade_exposure_diagnostic_buckets(trades)
+        summary = trade_exposure_diagnostic_summary(
+            bucketed,
+            [
+                "month",
+                "direction",
+                "combined_regime",
+                "session_regime",
+                "profit_barrier_outcome",
+                "ev_overestimate_bucket",
+            ],
+        )
+
+        worst = summary.iloc[0]
+        self.assertEqual(worst["direction"], "short")
+        self.assertEqual(worst["profit_barrier_outcome"], "pred_hit_actual_miss")
+        self.assertEqual(worst["ev_overestimate_bucket"], ">40")
+        self.assertEqual(worst["trade_count"], 1)
+        self.assertAlmostEqual(worst["total_adjusted_pnl"], -20.0)
+        self.assertAlmostEqual(worst["predicted_profit_barrier_hit_rate"], 1.0)
+        self.assertAlmostEqual(worst["actual_profit_barrier_hit_rate"], 0.0)
 
     def test_model_trade_delta_compares_added_and_removed_trades_with_gate_quality(self):
         timestamps = pd.date_range("2025-03-01 00:00:00+00:00", periods=10, freq="min")

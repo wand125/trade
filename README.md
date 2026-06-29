@@ -501,6 +501,19 @@ This writes `enriched_trades.csv` and `group_by_*` summaries. Use it for failure
 localization and robustness diagnostics; do not promote post-hoc session/regime
 blocks without a fresh pre-registered holdout.
 
+To inspect why selected trades failed across exit timing, EV overestimate, side
+gap, and profit-barrier interactions, run:
+
+```bash
+python -m trade_data.backtest model-trade-exposure-diagnostics \
+  --runs data/reports/backtests/<model_policy_runs_parent> \
+  --label model_trade_exposure_diagnostics
+```
+
+This writes `diagnostic_trades.csv` plus `group_by_context_*` and
+`group_by_diagnostic_combo.csv`. It is intended for failure localization and
+feature/target design, not for post-hoc hard blocking.
+
 To profile selected-trade context risk without using the target month itself,
 use the walk-forward selected-trade stress diagnostic:
 

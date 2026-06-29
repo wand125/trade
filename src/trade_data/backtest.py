@@ -126,6 +126,9 @@ ANALYSIS_PREDICTION_COLUMNS = [
     "pred_short_entry_local_rank",
     "pred_long_profit_barrier_hit",
     "pred_short_profit_barrier_hit",
+    "pred_best_side",
+    "pred_best_side_prob_1",
+    "pred_best_side_prob_-1",
 ]
 
 ANALYSIS_GROUP_COLUMNS = [
@@ -2609,6 +2612,15 @@ def enrich_trades_with_predictions(trades: pd.DataFrame, predictions: pd.DataFra
     output["pred_taken_profit_barrier_hit"] = side_values(
         output, direction, "pred_long_profit_barrier_hit", "pred_short_profit_barrier_hit"
     )
+    output["pred_taken_side_confidence"] = side_values(
+        output, direction, "pred_best_side_prob_1", "pred_best_side_prob_-1"
+    )
+    output["pred_opposite_side_confidence"] = opposite_side_values(
+        output, direction, "pred_best_side_prob_1", "pred_best_side_prob_-1"
+    )
+    output["pred_side_confidence_gap"] = (
+        output["pred_taken_side_confidence"] - output["pred_opposite_side_confidence"]
+    )
 
     output["direction_error"] = (
         output["actual_opposite_best_adjusted_pnl"] > output["actual_taken_best_adjusted_pnl"]
@@ -5008,6 +5020,9 @@ TRADE_DELTA_CONTEXT_COLUMNS = [
     "pred_taken_wait_regret",
     "pred_taken_entry_local_rank",
     "pred_taken_profit_barrier_hit",
+    "pred_taken_side_confidence",
+    "pred_opposite_side_confidence",
+    "pred_side_confidence_gap",
     "direction_error",
     "no_edge_entry",
     "predicted_side_error",
@@ -6347,6 +6362,177 @@ def trade_exposure_group_summary(
     return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
 
 
+def add_trade_exposure_diagnostic_buckets(frame: pd.DataFrame) -> pd.DataFrame:
+    output = frame.copy()
+
+    numeric_defaults = {
+        "pred_taken_ev": np.nan,
+        "pred_opposite_ev": np.nan,
+        "pred_taken_best_holding_minutes": np.nan,
+        "holding_minutes": np.nan,
+        "pred_taken_wait_regret": np.nan,
+        "pred_taken_entry_local_rank": np.nan,
+        "pred_taken_profit_barrier_hit": np.nan,
+        "actual_taken_profit_barrier_hit": np.nan,
+        "pred_taken_side_confidence": np.nan,
+        "pred_side_confidence_gap": np.nan,
+        "exit_regret": np.nan,
+        "best_side_regret": np.nan,
+        "ev_overestimate_vs_realized": np.nan,
+    }
+    for column, default in numeric_defaults.items():
+        if column not in output.columns:
+            output[column] = default
+        output[column] = pd.to_numeric(output[column], errors="coerce")
+
+    output["pred_side_gap"] = output["pred_taken_ev"] - output["pred_opposite_ev"]
+    output["holding_ratio_actual_vs_pred"] = output["holding_minutes"] / output[
+        "pred_taken_best_holding_minutes"
+    ].replace(0, np.nan)
+    output["pred_side_gap_bucket"] = bucket_series(
+        output["pred_side_gap"],
+        [-float("inf"), 0, 2, 5, 10, float("inf")],
+        ["<=0", "0-2", "2-5", "5-10", ">10"],
+    )
+    output["pred_holding_bucket"] = bucket_series(
+        output["pred_taken_best_holding_minutes"],
+        [-float("inf"), 120, 360, 720, 1440, float("inf")],
+        ["<=2h", "2-6h", "6-12h", "12-24h", ">24h"],
+    )
+    output["holding_ratio_bucket"] = bucket_series(
+        output["holding_ratio_actual_vs_pred"],
+        [-float("inf"), 0.1, 0.25, 0.5, 1.0, 2.0, float("inf")],
+        ["<=0.1", "0.1-0.25", "0.25-0.5", "0.5-1", "1-2", ">2"],
+    )
+    output["ev_overestimate_bucket"] = bucket_series(
+        output["ev_overestimate_vs_realized"],
+        [-float("inf"), 0, 10, 20, 40, float("inf")],
+        ["<=0", "0-10", "10-20", "20-40", ">40"],
+    )
+    output["exit_regret_bucket"] = bucket_series(
+        output["exit_regret"],
+        [-float("inf"), 0, 10, 20, 40, float("inf")],
+        ["<=0", "0-10", "10-20", "20-40", ">40"],
+    )
+    output["best_side_regret_bucket"] = bucket_series(
+        output["best_side_regret"],
+        [-float("inf"), 0, 10, 20, 40, float("inf")],
+        ["<=0", "0-10", "10-20", "20-40", ">40"],
+    )
+    output["pred_entry_rank_bucket"] = bucket_series(
+        output["pred_taken_entry_local_rank"],
+        [-float("inf"), 0.25, 0.5, 0.75, 1.0, float("inf")],
+        ["<=0.25", "0.25-0.5", "0.5-0.75", "0.75-1.0", ">1.0"],
+    )
+    output["pred_side_confidence_bucket"] = bucket_series(
+        output["pred_taken_side_confidence"],
+        [-float("inf"), 0.4, 0.55, 0.7, 0.85, 1.0, float("inf")],
+        ["<=0.4", "0.4-0.55", "0.55-0.7", "0.7-0.85", "0.85-1.0", ">1.0"],
+    )
+    output["pred_side_confidence_gap_bucket"] = bucket_series(
+        output["pred_side_confidence_gap"],
+        [-float("inf"), -0.2, 0, 0.2, 0.5, float("inf")],
+        ["<=-0.2", "-0.2-0", "0-0.2", "0.2-0.5", ">0.5"],
+    )
+
+    predicted_hit = output["pred_taken_profit_barrier_hit"].eq(1)
+    actual_hit = output["actual_taken_profit_barrier_hit"].eq(1)
+    output["profit_barrier_outcome"] = np.select(
+        [
+            predicted_hit & actual_hit,
+            predicted_hit & ~actual_hit,
+            ~predicted_hit & actual_hit,
+        ],
+        [
+            "pred_hit_actual_hit",
+            "pred_hit_actual_miss",
+            "pred_miss_actual_hit",
+        ],
+        default="pred_miss_actual_miss",
+    )
+    return output
+
+
+def trade_exposure_diagnostic_summary(
+    frame: pd.DataFrame,
+    group_columns: list[str],
+    *,
+    large_loss_threshold: float = -15.0,
+) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame(columns=group_columns)
+    missing = sorted(set(group_columns) - set(frame.columns))
+    if missing:
+        raise ValueError(f"trade exposure diagnostics missing columns: {', '.join(missing)}")
+
+    working = frame.copy()
+    working["adjusted_pnl"] = pd.to_numeric(working["adjusted_pnl"], errors="coerce")
+    working["_wins"] = numeric_indicator(working["adjusted_pnl"] > 0)
+    working["_losses"] = numeric_indicator(working["adjusted_pnl"] <= 0)
+    working["_large_losses"] = numeric_indicator(working["adjusted_pnl"] <= large_loss_threshold)
+    working["_direction_errors"] = numeric_indicator(
+        working.get("direction_error", pd.Series(False, index=working.index))
+    )
+    working["_pred_side_errors"] = numeric_indicator(
+        working.get("predicted_side_error", pd.Series(False, index=working.index))
+    )
+    working["_predicted_profit_barrier_hits"] = numeric_indicator(
+        working["pred_taken_profit_barrier_hit"].eq(1)
+    )
+    working["_actual_profit_barrier_hits"] = numeric_indicator(
+        working["actual_taken_profit_barrier_hit"].eq(1)
+    )
+    aggregations: dict[str, tuple[str, str]] = {
+        "trade_count": ("adjusted_pnl", "size"),
+        "total_adjusted_pnl": ("adjusted_pnl", "sum"),
+        "avg_adjusted_pnl": ("adjusted_pnl", "mean"),
+        "win_rate": ("_wins", "mean"),
+        "loss_rate": ("_losses", "mean"),
+        "large_loss_count": ("_large_losses", "sum"),
+        "large_loss_rate": ("_large_losses", "mean"),
+        "direction_error_rate": ("_direction_errors", "mean"),
+        "predicted_side_error_rate": ("_pred_side_errors", "mean"),
+        "predicted_profit_barrier_hit_rate": ("_predicted_profit_barrier_hits", "mean"),
+        "actual_profit_barrier_hit_rate": ("_actual_profit_barrier_hits", "mean"),
+        "pred_side_gap_mean": ("pred_side_gap", "mean"),
+        "pred_taken_ev_mean": ("pred_taken_ev", "mean"),
+        "pred_taken_holding_mean": ("pred_taken_best_holding_minutes", "mean"),
+        "holding_ratio_mean": ("holding_ratio_actual_vs_pred", "mean"),
+        "pred_taken_side_confidence_mean": ("pred_taken_side_confidence", "mean"),
+        "pred_side_confidence_gap_mean": ("pred_side_confidence_gap", "mean"),
+        "exit_regret_mean": ("exit_regret", "mean"),
+        "best_side_regret_mean": ("best_side_regret", "mean"),
+        "ev_overestimate_vs_realized_mean": ("ev_overestimate_vs_realized", "mean"),
+    }
+    summary = (
+        working.groupby(group_columns, dropna=False, observed=True)
+        .agg(**aggregations)
+        .reset_index()
+    )
+    if "month" in group_columns:
+        month_totals = (
+            working.groupby("month", dropna=False, observed=True)
+            .agg(
+                month_trade_count=("adjusted_pnl", "size"),
+                month_total_adjusted_pnl=("adjusted_pnl", "sum"),
+            )
+            .reset_index()
+        )
+        summary = summary.merge(month_totals, on="month", how="left")
+        summary["trade_share"] = summary["trade_count"] / summary[
+            "month_trade_count"
+        ].replace(0, np.nan)
+        summary["pnl_share"] = summary["total_adjusted_pnl"] / summary[
+            "month_total_adjusted_pnl"
+        ].replace(0, np.nan)
+    sort_columns = ["total_adjusted_pnl", "trade_count"]
+    ascending = [True, False]
+    if "month" in group_columns:
+        sort_columns = ["month", *sort_columns]
+        ascending = [True, *ascending]
+    return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
+
+
 def selected_trade_walkforward_context_outcomes(
     annotated: pd.DataFrame,
     *,
@@ -7239,6 +7425,224 @@ def handle_model_trade_exposure(args: argparse.Namespace) -> int:
         "trade_share",
     ]
     print(worst.loc[:, worst_columns].to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def handle_model_trade_exposure_diagnostics(args: argparse.Namespace) -> int:
+    run_paths = parse_csv_paths(args.runs) if args.runs else []
+    trade_paths = parse_csv_paths(args.trades) if args.trades else []
+    if not run_paths and not trade_paths:
+        raise ValueError("one of --runs or --trades is required")
+
+    frames: list[pd.DataFrame] = []
+    expanded_run_paths: list[Path] = []
+    if run_paths:
+        expanded_run_paths = expand_model_trade_exposure_run_paths(run_paths)
+        frames.extend(
+            read_model_trade_exposure_frames(
+                run_paths,
+                args.long_column,
+                args.short_column,
+            )
+        )
+    for path in trade_paths:
+        frame = pd.read_csv(path)
+        frames.append(frame)
+
+    trades = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    diagnostics = add_trade_exposure_diagnostic_buckets(trades)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    diagnostics.to_csv(run_dir / "diagnostic_trades.csv", index=False)
+
+    group_specs = {
+        "context": ["month", "direction", "combined_regime", "session_regime"],
+        "context_overall": ["direction", "combined_regime", "session_regime"],
+        "context_side_gap": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_side_gap_bucket",
+        ],
+        "context_side_confidence": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_side_confidence_bucket",
+        ],
+        "context_side_confidence_gap": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_side_confidence_gap_bucket",
+        ],
+        "context_pred_holding": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_holding_bucket",
+        ],
+        "context_holding_ratio": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "holding_ratio_bucket",
+        ],
+        "context_profit_barrier": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "profit_barrier_outcome",
+        ],
+        "context_ev_overestimate": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "ev_overestimate_bucket",
+        ],
+        "context_exit_regret": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "exit_regret_bucket",
+        ],
+        "diagnostic_combo": [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_side_gap_bucket",
+            "pred_side_confidence_bucket",
+            "pred_holding_bucket",
+            "profit_barrier_outcome",
+        ],
+        "diagnostic_combo_overall": [
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_side_gap_bucket",
+            "pred_side_confidence_bucket",
+            "pred_holding_bucket",
+            "profit_barrier_outcome",
+        ],
+    }
+    summaries: dict[str, pd.DataFrame] = {}
+    for name, group_columns in group_specs.items():
+        missing = [column for column in group_columns if column not in diagnostics.columns]
+        if missing:
+            continue
+        summary = trade_exposure_diagnostic_summary(
+            diagnostics,
+            group_columns,
+            large_loss_threshold=args.large_loss_threshold,
+        )
+        summaries[name] = summary
+        summary.to_csv(run_dir / f"group_by_{name}.csv", index=False)
+
+    metadata = {
+        "runs": [str(path) for path in run_paths],
+        "expanded_runs": [str(path) for path in expanded_run_paths],
+        "trades": [str(path) for path in trade_paths],
+        "long_column": args.long_column,
+        "short_column": args.short_column,
+        "label": args.label,
+        "large_loss_threshold": args.large_loss_threshold,
+        "top_n": args.top_n,
+        "row_count": int(len(diagnostics)),
+    }
+    with (run_dir / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2)
+
+    display_columns = [
+        "month",
+        "direction",
+        "combined_regime",
+        "session_regime",
+        "trade_count",
+        "total_adjusted_pnl",
+        "avg_adjusted_pnl",
+        "ev_overestimate_vs_realized_mean",
+        "exit_regret_mean",
+        "pred_side_gap_mean",
+        "pred_taken_side_confidence_mean",
+        "predicted_profit_barrier_hit_rate",
+        "actual_profit_barrier_hit_rate",
+    ]
+    if "context" in summaries:
+        print("worst monthly context diagnostics:")
+        existing_columns = [column for column in display_columns if column in summaries["context"].columns]
+        print(summaries["context"].loc[:, existing_columns].head(args.top_n).to_string(index=False))
+    if "context_overall" in summaries:
+        print("worst overall context diagnostics:")
+        existing_columns = [
+            column
+            for column in display_columns
+            if column != "month" and column in summaries["context_overall"].columns
+        ]
+        print(
+            summaries["context_overall"]
+            .loc[:, existing_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
+    if "diagnostic_combo" in summaries:
+        print("worst monthly diagnostic combos:")
+        combo_columns = [
+            "month",
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_side_gap_bucket",
+            "pred_side_confidence_bucket",
+            "pred_holding_bucket",
+            "profit_barrier_outcome",
+            "trade_count",
+            "total_adjusted_pnl",
+            "ev_overestimate_vs_realized_mean",
+        ]
+        existing_columns = [
+            column for column in combo_columns if column in summaries["diagnostic_combo"].columns
+        ]
+        print(
+            summaries["diagnostic_combo"]
+            .loc[:, existing_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
+    if "diagnostic_combo_overall" in summaries:
+        print("worst overall diagnostic combos:")
+        combo_columns = [
+            "direction",
+            "combined_regime",
+            "session_regime",
+            "pred_side_gap_bucket",
+            "pred_side_confidence_bucket",
+            "pred_holding_bucket",
+            "profit_barrier_outcome",
+            "trade_count",
+            "total_adjusted_pnl",
+            "ev_overestimate_vs_realized_mean",
+        ]
+        existing_columns = [
+            column
+            for column in combo_columns
+            if column in summaries["diagnostic_combo_overall"].columns
+        ]
+        print(
+            summaries["diagnostic_combo_overall"]
+            .loc[:, existing_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
     print(f"artifacts: {run_dir}")
     return 0
 
@@ -9541,6 +9945,49 @@ def build_parser() -> argparse.ArgumentParser:
     model_trade_exposure.add_argument("--label", default="model_trade_exposure")
     model_trade_exposure.add_argument("--top-n", type=int, default=3)
     model_trade_exposure.set_defaults(func=handle_model_trade_exposure)
+
+    model_trade_exposure_diagnostics = subparsers.add_parser(
+        "model-trade-exposure-diagnostics",
+        help="bucket selected trades by exit, EV overestimate, and profit-barrier diagnostics",
+    )
+    model_trade_exposure_diagnostics.add_argument(
+        "--runs",
+        default="",
+        help="optional comma-separated model-policy run dirs, trades.csv files, or parent dirs",
+    )
+    model_trade_exposure_diagnostics.add_argument(
+        "--trades",
+        default="",
+        help="optional comma-separated enriched trade CSVs such as walkforward_selected_trades.csv",
+    )
+    model_trade_exposure_diagnostics.add_argument(
+        "--long-column",
+        default="",
+        help="optional prediction column override when --runs is used",
+    )
+    model_trade_exposure_diagnostics.add_argument(
+        "--short-column",
+        default="",
+        help="optional prediction column override when --runs is used",
+    )
+    model_trade_exposure_diagnostics.add_argument(
+        "--large-loss-threshold",
+        type=float,
+        default=-15.0,
+    )
+    model_trade_exposure_diagnostics.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_trade_exposure_diagnostics.add_argument(
+        "--label",
+        default="model_trade_exposure_diagnostics",
+    )
+    model_trade_exposure_diagnostics.add_argument("--top-n", type=int, default=10)
+    model_trade_exposure_diagnostics.set_defaults(
+        func=handle_model_trade_exposure_diagnostics
+    )
 
     model_trade_context_walkforward_stress = subparsers.add_parser(
         "model-trade-context-walkforward-stress",
