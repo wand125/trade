@@ -694,6 +694,65 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(unshrunk_signal.tolist(), [1, 1, 1, 1, 1, 0])
         self.assertEqual(shrunk_signal.tolist(), [1, 1, 1, 0, 1, 1])
 
+    def test_timed_model_signal_caps_holding_time_with_shortening_probability(self):
+        df = frame_with_opens([100, 101, 102, 103, 104, 105], start="2025-01-01 00:00:00+00:00")
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20, 20, 20, 20, 20, 20],
+                "pred_short_best_adjusted_pnl": [1, 1, 1, 1, 1, 1],
+                "pred_long_best_holding_minutes": [4, 4, 4, 4, 4, 4],
+                "pred_short_best_holding_minutes": [4, 4, 4, 4, 4, 4],
+                "pred_long_fixed_60m_beats_exit_event_prob_1": [0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
+                "pred_short_fixed_60m_beats_exit_event_prob_1": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            }
+        )
+        common_config = {
+            "predictions": Path("unused"),
+            "policy": "timed_ev",
+            "entry_threshold": 10,
+            "exit_threshold": 0,
+        }
+
+        uncapped_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(**common_config),
+        )
+        capped_signal = model_signal_from_predictions(
+            df,
+            predictions,
+            ModelPolicyConfig(
+                **common_config,
+                holding_shortening_threshold=0.7,
+                holding_shortening_cap_minutes=2.0,
+            ),
+        )
+
+        self.assertEqual(uncapped_signal.tolist(), [1, 1, 1, 1, 1, 0])
+        self.assertEqual(capped_signal.tolist(), [1, 1, 1, 0, 1, 1])
+
+    def test_holding_shortening_threshold_requires_holding_policy(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20, 20, 20],
+                "pred_short_best_adjusted_pnl": [1, 1, 1],
+                "pred_long_fixed_60m_beats_exit_event_prob_1": [0.8, 0.8, 0.8],
+                "pred_short_fixed_60m_beats_exit_event_prob_1": [0.0, 0.0, 0.0],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            holding_shortening_threshold=0.7,
+        )
+
+        with self.assertRaisesRegex(ValueError, "requires timed_ev or fixed_horizon_ev"):
+            model_signal_from_predictions(df, predictions, config)
+
     def test_timed_model_signal_exits_on_dynamic_exit_event_probability(self):
         df = frame_with_opens([100, 101, 102, 103, 104, 105], start="2025-01-01 00:00:00+00:00")
         predictions = pd.DataFrame(
@@ -1059,6 +1118,8 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["loss_first_penalty"].tolist(), [0.0])
         self.assertEqual(normalized["time_exit_holding_shrink"].tolist(), [0.0])
         self.assertEqual(normalized["loss_first_holding_shrink"].tolist(), [0.0])
+        self.assertEqual(normalized["holding_shortening_threshold"].tolist(), [float("inf")])
+        self.assertEqual(normalized["holding_shortening_cap_minutes"].tolist(), [60.0])
         self.assertEqual(normalized["time_exit_exit_threshold"].tolist(), [float("inf")])
         self.assertEqual(normalized["loss_first_exit_threshold"].tolist(), [float("inf")])
         self.assertEqual(normalized["min_trade_quality"].tolist(), [-float("inf")])
@@ -1289,6 +1350,8 @@ class BacktestTests(unittest.TestCase):
                     "loss_first_penalty": 0,
                     "time_exit_holding_shrink": 0,
                     "loss_first_holding_shrink": 0,
+                    "holding_shortening_threshold": float("inf"),
+                    "holding_shortening_cap_minutes": 60,
                     "time_exit_exit_threshold": float("inf"),
                     "loss_first_exit_threshold": float("inf"),
                     "side_confidence_penalty": 0,

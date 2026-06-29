@@ -68,6 +68,8 @@ SWEEP_KEY_COLUMNS = [
     "loss_first_penalty",
     "time_exit_holding_shrink",
     "loss_first_holding_shrink",
+    "holding_shortening_threshold",
+    "holding_shortening_cap_minutes",
     "time_exit_exit_threshold",
     "loss_first_exit_threshold",
     "side_confidence_penalty",
@@ -372,6 +374,10 @@ class ModelPolicyConfig:
     loss_first_penalty: float = 0.0
     time_exit_holding_shrink: float = 0.0
     loss_first_holding_shrink: float = 0.0
+    long_holding_shortening_column: str = "pred_long_fixed_60m_beats_exit_event_prob_1"
+    short_holding_shortening_column: str = "pred_short_fixed_60m_beats_exit_event_prob_1"
+    holding_shortening_threshold: float = float("inf")
+    holding_shortening_cap_minutes: float = 60.0
     time_exit_exit_threshold: float = float("inf")
     loss_first_exit_threshold: float = float("inf")
     side_confidence_penalty: float = 0.0
@@ -644,6 +650,12 @@ def prediction_required_columns(config: ModelPolicyConfig) -> list[str]:
         or np.isfinite(config.loss_first_exit_threshold)
     ):
         required_columns.extend(loss_first_prediction_columns)
+    holding_shortening_prediction_columns = [
+        config.long_holding_shortening_column,
+        config.short_holding_shortening_column,
+    ]
+    if np.isfinite(config.holding_shortening_threshold):
+        required_columns.extend(holding_shortening_prediction_columns)
     side_confidence_prediction_columns = [
         config.long_side_confidence_column,
         config.short_side_confidence_column,
@@ -695,6 +707,14 @@ def prediction_optional_columns(path: Path, config: ModelPolicyConfig) -> list[s
         or np.isfinite(config.loss_first_exit_threshold)
     ):
         optional_columns.extend(optional_parquet_columns(path, loss_first_prediction_columns))
+    holding_shortening_prediction_columns = [
+        config.long_holding_shortening_column,
+        config.short_holding_shortening_column,
+    ]
+    if not np.isfinite(config.holding_shortening_threshold):
+        optional_columns.extend(
+            optional_parquet_columns(path, holding_shortening_prediction_columns)
+        )
     side_confidence_prediction_columns = [
         config.long_side_confidence_column,
         config.short_side_confidence_column,
@@ -871,6 +891,23 @@ def model_signal_from_predictions(
         raise ValueError("time_exit_holding_shrink must be between 0 and 1")
     if not 0 <= config.loss_first_holding_shrink <= 1:
         raise ValueError("loss_first_holding_shrink must be between 0 and 1")
+    holding_shortening_enabled = np.isfinite(config.holding_shortening_threshold)
+    if holding_shortening_enabled:
+        if not 0 <= config.holding_shortening_threshold <= 1:
+            raise ValueError("holding_shortening_threshold must be between 0 and 1 or inf")
+        if config.holding_shortening_cap_minutes <= 0:
+            raise ValueError("holding_shortening_cap_minutes must be positive")
+        if config.policy not in {"timed_ev", "fixed_horizon_ev"}:
+            raise ValueError(
+                "holding shortening requires timed_ev or fixed_horizon_ev policy"
+            )
+        if (
+            not config.long_holding_shortening_column
+            or not config.short_holding_shortening_column
+        ):
+            raise ValueError(
+                "holding shortening requires both long and short probability columns"
+            )
     if np.isfinite(config.time_exit_exit_threshold) and not 0 <= config.time_exit_exit_threshold <= 1:
         raise ValueError("time_exit_exit_threshold must be between 0 and 1 or inf")
     if np.isfinite(config.loss_first_exit_threshold) and not 0 <= config.loss_first_exit_threshold <= 1:
@@ -1107,6 +1144,47 @@ def model_signal_from_predictions(
             )
         long_holding = long_holding * long_holding_multiplier.clip(0.0, 1.0)
         short_holding = short_holding * short_holding_multiplier.clip(0.0, 1.0)
+    if (
+        holding_shortening_enabled
+        and config.policy in {"timed_ev", "fixed_horizon_ev"}
+        and long_holding is not None
+        and short_holding is not None
+    ):
+        shortening_aligned = prediction_index[
+            [
+                config.long_holding_shortening_column,
+                config.short_holding_shortening_column,
+            ]
+        ].reindex(df["timestamp"])
+        long_shortening_prob = (
+            shortening_aligned[config.long_holding_shortening_column]
+            .reset_index(drop=True)
+            .astype(float)
+            .clip(0.0, 1.0)
+        )
+        short_shortening_prob = (
+            shortening_aligned[config.short_holding_shortening_column]
+            .reset_index(drop=True)
+            .astype(float)
+            .clip(0.0, 1.0)
+        )
+        cap_minutes = config.holding_shortening_cap_minutes
+        long_shortening_mask = (
+            long_shortening_prob.notna()
+            & (long_shortening_prob >= config.holding_shortening_threshold)
+        )
+        short_shortening_mask = (
+            short_shortening_prob.notna()
+            & (short_shortening_prob >= config.holding_shortening_threshold)
+        )
+        long_holding = long_holding.where(
+            ~long_shortening_mask,
+            np.minimum(long_holding, cap_minutes),
+        )
+        short_holding = short_holding.where(
+            ~short_shortening_mask,
+            np.minimum(short_holding, cap_minutes),
+        )
     best_side = pd.Series(0, index=df.index, dtype="int8")
     best_score = pd.concat([long_ev, short_ev], axis=1).max(axis=1)
     side_gap = (long_ev - short_ev).abs()
@@ -2334,6 +2412,8 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "loss_first_penalty",
         "time_exit_holding_shrink",
         "loss_first_holding_shrink",
+        "holding_shortening_threshold",
+        "holding_shortening_cap_minutes",
         "time_exit_exit_threshold",
         "loss_first_exit_threshold",
         "side_confidence_penalty",
@@ -2879,6 +2959,10 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         loss_first_penalty=args.loss_first_penalty,
         time_exit_holding_shrink=args.time_exit_holding_shrink,
         loss_first_holding_shrink=args.loss_first_holding_shrink,
+        long_holding_shortening_column=args.long_holding_shortening_column,
+        short_holding_shortening_column=args.short_holding_shortening_column,
+        holding_shortening_threshold=args.holding_shortening_threshold,
+        holding_shortening_cap_minutes=args.holding_shortening_cap_minutes,
         time_exit_exit_threshold=args.time_exit_exit_threshold,
         loss_first_exit_threshold=args.loss_first_exit_threshold,
         side_confidence_penalty=args.side_confidence_penalty,
@@ -3207,6 +3291,28 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         help="fractional holding-time shrink multiplied by side loss-first exit-event probability",
     )
     parser.add_argument(
+        "--long-holding-shortening-column",
+        default="pred_long_fixed_60m_beats_exit_event_prob_1",
+        help="long-side probability that a shorter fixed hold beats the exit-event hold",
+    )
+    parser.add_argument(
+        "--short-holding-shortening-column",
+        default="pred_short_fixed_60m_beats_exit_event_prob_1",
+        help="short-side probability that a shorter fixed hold beats the exit-event hold",
+    )
+    parser.add_argument(
+        "--holding-shortening-threshold",
+        type=float,
+        default=float("inf"),
+        help="cap holding time when side shortening probability is at or above this value; inf disables",
+    )
+    parser.add_argument(
+        "--holding-shortening-cap-minutes",
+        type=float,
+        default=60.0,
+        help="maximum holding minutes used after holding-shortening threshold is met",
+    )
+    parser.add_argument(
         "--time-exit-exit-threshold",
         type=float,
         default=float("inf"),
@@ -3298,6 +3404,10 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     loss_first_penalties = parse_csv_floats(args.loss_first_penalties)
     time_exit_holding_shrinks = parse_csv_floats(args.time_exit_holding_shrinks)
     loss_first_holding_shrinks = parse_csv_floats(args.loss_first_holding_shrinks)
+    holding_shortening_thresholds = parse_csv_floats(args.holding_shortening_thresholds)
+    holding_shortening_cap_minutes_values = parse_csv_floats(
+        args.holding_shortening_cap_minutes
+    )
     time_exit_exit_thresholds = parse_csv_floats(args.time_exit_exit_thresholds)
     loss_first_exit_thresholds = parse_csv_floats(args.loss_first_exit_thresholds)
     side_confidence_penalties = parse_csv_floats(args.side_confidence_penalties)
@@ -3347,6 +3457,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         ]
         finite_loss_first_exit_thresholds = [
             value for value in loss_first_exit_thresholds if np.isfinite(value)
+        ]
+        finite_holding_shortening_thresholds = [
+            value for value in holding_shortening_thresholds if np.isfinite(value)
         ]
         read_config = ModelPolicyConfig(
             predictions=args.predictions,
@@ -3402,6 +3515,14 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
             loss_first_penalty=max(loss_first_penalties),
             time_exit_holding_shrink=max(time_exit_holding_shrinks),
             loss_first_holding_shrink=max(loss_first_holding_shrinks),
+            long_holding_shortening_column=args.long_holding_shortening_column,
+            short_holding_shortening_column=args.short_holding_shortening_column,
+            holding_shortening_threshold=(
+                min(finite_holding_shortening_thresholds)
+                if finite_holding_shortening_thresholds
+                else float("inf")
+            ),
+            holding_shortening_cap_minutes=max(holding_shortening_cap_minutes_values),
             time_exit_exit_threshold=(
                 min(finite_time_exit_exit_thresholds)
                 if finite_time_exit_exit_thresholds
@@ -3453,6 +3574,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         loss_first_penalties,
         time_exit_holding_shrinks,
         loss_first_holding_shrinks,
+        holding_shortening_thresholds,
+        holding_shortening_cap_minutes_values,
         time_exit_exit_thresholds,
         loss_first_exit_thresholds,
         side_confidence_penalties,
@@ -3482,6 +3605,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         loss_first_penalty,
         time_exit_holding_shrink,
         loss_first_holding_shrink,
+        holding_shortening_threshold,
+        holding_shortening_cap_minutes,
         time_exit_exit_threshold,
         loss_first_exit_threshold,
         side_confidence_penalty,
@@ -3496,6 +3621,13 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                 "max_predicted_hold_minutes must be greater than or equal to "
                 "min_predicted_hold_minutes"
             )
+        if np.isfinite(holding_shortening_threshold):
+            if not 0 <= holding_shortening_threshold <= 1:
+                raise SystemExit(
+                    "holding_shortening_thresholds must contain values between 0 and 1 or inf"
+                )
+            if holding_shortening_cap_minutes <= 0:
+                raise SystemExit("holding_shortening_cap_minutes must be positive")
         policy_exit_thresholds = exit_thresholds if policy == "stateful_ev" else [0.0]
         active_profit_barrier_thresholds = (
             profit_barrier_thresholds if require_profit_barrier else [0.5]
@@ -3555,6 +3687,10 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     loss_first_penalty=loss_first_penalty,
                     time_exit_holding_shrink=time_exit_holding_shrink,
                     loss_first_holding_shrink=loss_first_holding_shrink,
+                    long_holding_shortening_column=args.long_holding_shortening_column,
+                    short_holding_shortening_column=args.short_holding_shortening_column,
+                    holding_shortening_threshold=holding_shortening_threshold,
+                    holding_shortening_cap_minutes=holding_shortening_cap_minutes,
                     time_exit_exit_threshold=time_exit_exit_threshold,
                     loss_first_exit_threshold=loss_first_exit_threshold,
                     side_confidence_penalty=side_confidence_penalty,
@@ -3614,6 +3750,8 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "loss_first_penalty": loss_first_penalty,
                     "time_exit_holding_shrink": time_exit_holding_shrink,
                     "loss_first_holding_shrink": loss_first_holding_shrink,
+                    "holding_shortening_threshold": holding_shortening_threshold,
+                    "holding_shortening_cap_minutes": holding_shortening_cap_minutes,
                     "time_exit_exit_threshold": time_exit_exit_threshold,
                     "loss_first_exit_threshold": loss_first_exit_threshold,
                     "side_confidence_penalty": side_confidence_penalty,
@@ -3668,6 +3806,10 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "loss_first_penalties": loss_first_penalties,
         "time_exit_holding_shrinks": time_exit_holding_shrinks,
         "loss_first_holding_shrinks": loss_first_holding_shrinks,
+        "holding_shortening_thresholds": holding_shortening_thresholds,
+        "holding_shortening_cap_minutes": holding_shortening_cap_minutes_values,
+        "long_holding_shortening_column": args.long_holding_shortening_column,
+        "short_holding_shortening_column": args.short_holding_shortening_column,
         "time_exit_exit_thresholds": time_exit_exit_thresholds,
         "loss_first_exit_thresholds": loss_first_exit_thresholds,
         "side_confidence_penalties": side_confidence_penalties,
@@ -3751,6 +3893,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["time_exit_holding_shrink"] = 0.0
     if "loss_first_holding_shrink" not in output.columns:
         output["loss_first_holding_shrink"] = 0.0
+    if "holding_shortening_threshold" not in output.columns:
+        output["holding_shortening_threshold"] = float("inf")
+    if "holding_shortening_cap_minutes" not in output.columns:
+        output["holding_shortening_cap_minutes"] = 60.0
     if "time_exit_exit_threshold" not in output.columns:
         output["time_exit_exit_threshold"] = float("inf")
     if "loss_first_exit_threshold" not in output.columns:
@@ -9425,6 +9571,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated holding-time shrink factors multiplied by side loss-first exit-event probability",
     )
     model_sweep.add_argument(
+        "--holding-shortening-thresholds",
+        default="inf",
+        help=(
+            "comma-separated probability thresholds that cap holding time when a "
+            "short fixed hold is predicted to beat the exit-event hold; inf disables"
+        ),
+    )
+    model_sweep.add_argument(
+        "--holding-shortening-cap-minutes",
+        default="60",
+        help="comma-separated holding-time caps used after holding-shortening threshold is met",
+    )
+    model_sweep.add_argument(
         "--time-exit-exit-thresholds",
         default="inf",
         help="comma-separated thresholds that exit open positions on side time-exit probability",
@@ -9589,6 +9748,14 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--short-time-exit-column", default="pred_short_exit_event_prob_0")
     model_sweep.add_argument("--long-loss-first-column", default="pred_long_exit_event_prob_2")
     model_sweep.add_argument("--short-loss-first-column", default="pred_short_exit_event_prob_2")
+    model_sweep.add_argument(
+        "--long-holding-shortening-column",
+        default="pred_long_fixed_60m_beats_exit_event_prob_1",
+    )
+    model_sweep.add_argument(
+        "--short-holding-shortening-column",
+        default="pred_short_fixed_60m_beats_exit_event_prob_1",
+    )
     model_sweep.add_argument("--long-side-confidence-column", default="pred_best_side_prob_1")
     model_sweep.add_argument("--short-side-confidence-column", default="pred_best_side_prob_-1")
     model_sweep.add_argument("--long-trade-quality-column", default="pred_trade_quality_long_adjusted_pnl")

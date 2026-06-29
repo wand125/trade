@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 19:12 JST
+最終更新: 2026-06-29 19:24 JST
 
 ## 現在の状態
 
@@ -13,6 +13,8 @@
 特徴量・教師ラベル生成パイプラインは作成済み。
 
 dense holding-shortening targetをdataset schemaへ追加した。barrier/time exit時点の `long/short_exit_event_adjusted_pnl` と、固定horizon決済がexit-event決済より良いかを表す `long/short_fixed_60m/240m/720m_minus_exit_event_adjusted_pnl` / `*_beats_exit_event` を生成し、`policy` / `full` target-setで学習できるようにした。2023-01..2025-08の32ヶ月を `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined_dense_holding/` へ再生成し、899,408行で新target欠損0を確認。全policy OOFは重すぎたため `target-set holding_shortening` を追加し、2025-02..04の20% sample smokeではbeat分類balanced accuracy `0.5214..0.5430`、delta回帰R2は概ね `-0.026..0.015`。強いsignalではないがbeat probabilityは補助特徴として試す価値がある。詳細は `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+holding-shortening probabilityを `model-policy` / `model-sweep` の保有時間制御へ接続した。`pred_long/short_fixed_60m_beats_exit_event_prob_1` が閾値以上のとき、`timed_ev` / `fixed_horizon_ev` の予測保有時間を指定cap分へ丸める。2025-02 smokeでは disabled `-53.5244` に対し `threshold=0.70, cap=60` が `-47.0418`、小sweep最良 `threshold=0.65, cap=30` が `-44.8382` まで改善したが、絶対値はまだNoTrade未満。接続は採用ではなく、複数月walk-forward / cost stress / calibration診断へ進める。詳細は `docs/reports/00161_2026-06-29_holding_shortening_policy_hook.md`。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 

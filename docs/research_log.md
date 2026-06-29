@@ -4761,3 +4761,28 @@ Artifacts:
 - `range_low_vol:london/rollover` 除外は現診断セットでは最もバランスが良いが、post-hoc候補なので標準採用しない。
 - direct cap targetはsupportが少ない。深層学習の直接教師にするには、prediction全行に対するdenseなholding短縮targetを作る必要がある。
 - 次は未使用月への固定確認、またはdataset生成側に `cap60_vs_event_holding_delta` のようなdense targetを追加する。
+
+### 2026-06-29 19:24 JST Holding shortening policy hook
+
+作業:
+
+- `holding_shortening` target-setのbeat probabilityを `model-policy` / `model-sweep` へ接続した。
+- `holding_shortening_threshold` が有限のとき、`timed_ev` / `fixed_horizon_ev` のside別予測保有時間を `holding_shortening_cap_minutes` で上限化する。
+- デフォルトは `holding_shortening_threshold=inf` として既存挙動を維持した。
+- 2025-02の既存EV/holding predictionとshortening OOF probabilityを `decision_timestamp` で結合し、接続smokeを実施した。
+- report: `docs/reports/00161_2026-06-29_holding_shortening_policy_hook.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| variant | adjusted pnl | raw pnl | trades | profit factor | avg holding min |
+|---|---:|---:|---:|---:|---:|
+| disabled | `-53.5244` | `-11.1590` | `34` | `0.7894` | `600.0000` |
+| threshold `0.70`, cap `60` | `-47.0418` | `-3.5890` | `36` | `0.8196` | `568.9444` |
+| threshold `0.65`, cap `30` | `-44.8382` | `-0.1260` | `43` | `0.8329` | `449.5349` |
+
+判断:
+
+- policy hookは機能し、2025-02単月では保有短縮が損失を縮めた。
+- ただしNoTrade未満であり、単月smokeなので採用しない。
+- 次は複数月walk-forwardで、threshold/capをvalidation内探索、fixed holdoutでは再探索なしで確認する。
