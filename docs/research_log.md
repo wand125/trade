@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 09:48 Stateful blocking risk model
+
+- `trade_data.meta_model oof-stateful-risk-model` を追加した。`stateful_candidate_examples.csv` から `positive_blocking`, `positive_replacement_regret_high`, `stateful_nonpositive` を月抜きOOF分類し、prediction parquetへ `pred_stateful_risk_<prefix>_<target>_<side>_prob/risk` を出力する。
+- OOF metricsは `positive_blocking` AUC `0.4878`, `positive_replacement_regret_high` AUC `0.4869`, `stateful_nonpositive` AUC `0.4520`。probability平均のbiasは小さいが、rank能力は弱い。
+- validation policy sweepでは `positive_blocking risk=5` がbaseline sum/min/DD `622.6486 / 138.0338 / 85.0166` を `675.7414 / 157.0628 / 74.7688` に改善した。
+- `positive_replacement_regret_high risk=5` はsum `683.7320` だがmin month `91.4356` へ悪化し、`stateful_nonpositive` は取引を削りすぎた。
+- apply 3ヶ月では `positive_blocking risk=5` が2024-12を `-20.8252 -> -3.5260` に改善した一方、2025-02/2025-03を削り、sum `242.5008 -> 198.9860`, maxDD `122.9852 -> 128.1944` に悪化した。
+- 判断: stateful risk modelの実装は採用するが、標準policyのrisk penaltyにはまだ採用しない。`positive_blocking risk=5` は追加walk-forwardで固定評価する事前登録候補にする。
+- report: `docs/reports/00123_2026-06-29_stateful_blocking_risk_model.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 09:30 Stateful near-tie local diagnostics
 
 - `trade_data.meta_model stateful-near-tie-report` を追加した。`stateful_candidate_examples.csv` とside別secondary score入りprediction parquetをjoinし、primary EV near-tie内でsecondary scoreがtargetを順位付けできるかを診断する。

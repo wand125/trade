@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 09:30 JST
+最終更新: 2026-06-29 09:48 JST
 
 ## 現在の状態
 
@@ -51,6 +51,8 @@ stateful overestimate riskをraw EVの線形penaltyとして検証済み。`risk
 near-tie専用secondary scoreを `model-policy` / `model-sweep` に追加済み。primary raw EVのentry判定は維持し、`secondary_score_tie_margin` 内だけ `stateful_positive_cost_value` 系scoreでsideを選び直せる。validation 4ヶ月ではbaseline `sum=622.6486`, min `138.0338` に対し、margin `10` はsum `563.7984`, min `115.1392`、margin `20` はsum `582.2844`, min `120.2830` で悪化した。実装は探索軸として残すが、今回のtie-break設定は標準policyに採用しない。詳細は `docs/reports/00121_2026-06-29_stateful_secondary_tiebreak.md`。
 
 near-tie局所診断 `stateful-near-tie-report` を追加済み。validation examples 254件で `stateful_positive_cost_value` secondary scoreを調べると、biasはraw `14.7685` から `0.0853` へ縮むが、target Spearmanはmargin `20` で `-0.1327`。secondary top25 liftは一部正でもtop-bottom25 spreadは全marginで負、margin `20` の最高score bucketはtarget mean `-0.1244` と最悪だった。したがって同scoreをentry優先順位/risk budgetへも使わず、次は追加examplesと `blocking_cost` / `replacement_regret` の分類・下方リスクtargetへ進む。詳細は `docs/reports/00122_2026-06-29_stateful_near_tie_local_diagnostics.md`。
+
+stateful blocking risk modelを追加済み。`positive_blocking`, `positive_replacement_regret_high`, `stateful_nonpositive` を月抜きOOF分類し、side別 `prob/risk` 列をprediction parquetへ出力できる。OOF AUCは `positive_blocking=0.4878`, `positive_replacement_regret_high=0.4869`, `stateful_nonpositive=0.4520` とrank能力は弱い。validationでは `positive_blocking risk=5` がsum/min/DDを `622.6486 / 138.0338 / 85.0166` から `675.7414 / 157.0628 / 74.7688` へ改善したが、apply 3ヶ月ではsum `242.5008 -> 198.9860`, maxDD `122.9852 -> 128.1944` に悪化。実装は採用するが標準riskにはせず、追加walk-forwardで固定評価する事前登録候補として扱う。詳細は `docs/reports/00123_2026-06-29_stateful_blocking_risk_model.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

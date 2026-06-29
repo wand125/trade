@@ -19,6 +19,7 @@ from trade_data.meta_model import (
     GroupEVCalibrationConfig,
     MetaModelConfig,
     ResidualPenaltyConfig,
+    StatefulRiskModelConfig,
     TradeFailureModelConfig,
     TradeQualityModelConfig,
     add_candidate_failure_model_columns,
@@ -30,6 +31,8 @@ from trade_data.meta_model import (
     add_meta_predictions,
     add_residual_penalty_columns,
     add_side_outcome_calibration_columns,
+    add_stateful_risk_model_columns,
+    add_stateful_risk_model_values_to_examples,
     add_trade_failure_model_columns,
     add_trade_failure_model_values_to_enriched,
     add_trade_failure_probability_calibration_columns,
@@ -43,6 +46,7 @@ from trade_data.meta_model import (
     build_candidate_quality_training_frame,
     build_sample_weights,
     build_stateful_value_training_frame,
+    build_stateful_risk_training_frame,
     build_training_frame,
     candidate_quality_bucket_metrics,
     candidate_entry_side_masks,
@@ -64,6 +68,7 @@ from trade_data.meta_model import (
     fit_group_target_calibrator,
     fit_residual_penalty_calibrator,
     fit_side_outcome_calibrator,
+    fit_stateful_risk_model_from_frame,
     fit_trade_failure_model,
     fit_trade_failure_probability_calibrator,
     fit_trade_quality_calibrator,
@@ -79,6 +84,10 @@ from trade_data.meta_model import (
     residual_penalty_scored_metrics,
     side_outcome_columns_for_side,
     stateful_near_tie_margin_metrics,
+    stateful_risk_prob_column,
+    stateful_risk_risk_column,
+    stateful_risk_taken_prob_column,
+    stateful_risk_target_column,
     trade_quality_calibration_metrics,
     trade_quality_features_from_predictions,
     side_target_means,
@@ -234,6 +243,77 @@ class MetaModelTests(unittest.TestCase):
         margin_two = metrics[metrics["tie_margin"] == 2.0].iloc[0]
         self.assertAlmostEqual(margin_two["secondary_top_0p5_target_mean"], 9.0)
         self.assertAlmostEqual(margin_two["secondary_top_0p5_target_lift"], 7.0)
+
+    def test_stateful_risk_model_adds_probability_and_risk_columns(self):
+        examples = pd.DataFrame(
+            {
+                "dataset_month": ["2024-07", "2024-07", "2024-09", "2024-09", "2025-01", "2025-01"],
+                "candidate_side": ["long", "short", "long", "short", "long", "short"],
+                "stateful_entry_value": [-1.0, 2.0, -3.0, 4.0, 5.0, -6.0],
+                "stateful_positive_cost_value": [-2.0, 1.0, -4.0, 3.0, 6.0, -7.0],
+                "blocking_cost": [0.0, 6.0, 0.0, 8.0, 2.0, 0.0],
+                "positive_blocking_cost": [0.0, 6.0, 0.0, 8.0, 2.0, 0.0],
+                "replacement_regret": [6.0, -2.0, 7.0, -1.0, 0.0, 8.0],
+                "positive_replacement_regret": [7.0, -1.0, 8.0, 0.0, 1.0, 9.0],
+                "pred_taken_ev": [12.0, 13.0, 14.0, 15.0, 16.0, 17.0],
+                "pred_opposite_ev": [11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
+                "trend_regime": ["up", "down", "up", "down", "range", "range"],
+                "volatility_regime": ["low_vol", "low_vol", "normal_vol", "normal_vol", "low_vol", "normal_vol"],
+                "session_regime": ["asia", "london", "asia", "ny_late", "london", "rollover"],
+                "gap_regime": ["normal_gap"] * 6,
+                "combined_regime": ["up_low_vol", "down_low_vol", "up_normal_vol", "down_normal_vol", "range_low_vol", "range_normal_vol"],
+            }
+        )
+        config = StatefulRiskModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=3,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            target_names=(
+                "positive_blocking",
+                "positive_replacement_regret_high",
+                "stateful_nonpositive",
+            ),
+            blocking_cost_threshold=5.0,
+            replacement_regret_threshold=5.0,
+            prediction_prefix="stateful_test",
+        )
+
+        frame = build_stateful_risk_training_frame(examples, config)
+        bundle = fit_stateful_risk_model_from_frame(frame, config)
+        output = add_stateful_risk_model_columns(prediction_frame(), bundle)
+        scored = add_stateful_risk_model_values_to_examples(frame, bundle)
+
+        self.assertEqual(
+            frame[stateful_risk_target_column("positive_blocking")].tolist(),
+            [0, 1, 0, 1, 1, 0],
+        )
+        self.assertEqual(
+            frame[stateful_risk_target_column("positive_replacement_regret_high")].tolist(),
+            [1, 0, 1, 0, 0, 1],
+        )
+        for target_name in config.target_names:
+            long_prob = stateful_risk_prob_column(target_name, "long", "stateful_test")
+            short_prob = stateful_risk_prob_column(target_name, "short", "stateful_test")
+            long_risk = stateful_risk_risk_column(target_name, "long", "stateful_test")
+            taken_prob = stateful_risk_taken_prob_column(target_name, "stateful_test")
+            self.assertIn(long_prob, output.columns)
+            self.assertIn(short_prob, output.columns)
+            self.assertIn(long_risk, output.columns)
+            self.assertIn(taken_prob, scored.columns)
+            self.assertTrue(output[long_prob].between(0.0, 1.0).all())
+            self.assertTrue((output[long_risk] == -output[long_prob]).all())
+            self.assertFalse(scored[taken_prob].isna().any())
 
     def test_combine_fit_predictions_prepends_base_and_resets_index(self):
         primary = pd.DataFrame({"dataset_month": ["2024-07"], "value": [2]}, index=[10])

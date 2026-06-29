@@ -282,6 +282,47 @@ class CandidateFailureModelBundle:
     target_means: dict[str, float]
 
 
+STATEFUL_RISK_TARGET_NAMES = (
+    "stateful_nonpositive",
+    "positive_cost_nonpositive",
+    "positive_blocking",
+    "blocking_cost_high",
+    "replacement_regret_high",
+    "positive_replacement_regret_high",
+)
+
+
+@dataclass(frozen=True)
+class StatefulRiskModelConfig:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    max_depth: int | None
+    min_samples_leaf: int
+    l2_regularization: float
+    max_features: float
+    early_stopping: bool
+    validation_fraction: float
+    n_iter_no_change: int
+    tol: float
+    random_seed: int
+    sample_weighting: str
+    prediction_shrinkage: float
+    target_names: tuple[str, ...]
+    blocking_cost_threshold: float
+    replacement_regret_threshold: float
+    prediction_prefix: str = "stateful"
+
+
+@dataclass
+class StatefulRiskModelBundle:
+    config: StatefulRiskModelConfig
+    models: dict[str, HistGradientBoostingClassifier | None]
+    feature_columns: list[str]
+    category_mappings: dict[str, dict[str, int]]
+    target_means: dict[str, float]
+
+
 @dataclass(frozen=True)
 class CandidateQualityModelConfig:
     max_iter: int
@@ -2393,6 +2434,289 @@ def candidate_failure_scored_metrics(
     for target_name in target_names:
         target_column = candidate_failure_target_column(target_name)
         pred_column = candidate_failure_taken_prob_column(target_name)
+        y_true = scored[target_column].astype(int)
+        y_pred = scored[pred_column].astype(float).clip(0.0, 1.0)
+        if y_true.nunique(dropna=True) >= 2:
+            auc = float(roc_auc_score(y_true, y_pred))
+        else:
+            auc = 0.5
+        metrics[target_name] = {
+            "candidate_count": int(len(scored)),
+            "prevalence": float(y_true.mean()),
+            "predicted_mean": float(y_pred.mean()),
+            "bias": float(y_pred.mean() - y_true.mean()),
+            "brier": float(brier_score_loss(y_true, y_pred)),
+            "auc": auc,
+        }
+    return metrics
+
+
+def validate_stateful_risk_targets(target_names: tuple[str, ...]) -> None:
+    unknown = sorted(set(target_names) - set(STATEFUL_RISK_TARGET_NAMES))
+    if unknown:
+        raise ValueError(f"unknown stateful risk targets: {', '.join(unknown)}")
+
+
+def stateful_risk_target_column(target_name: str) -> str:
+    return f"stateful_risk_{target_name}"
+
+
+def stateful_risk_prediction_base(target_name: str, prediction_prefix: str) -> str:
+    prefix = validate_candidate_quality_prediction_prefix(prediction_prefix)
+    if prefix:
+        return f"pred_stateful_risk_{prefix}_{target_name}"
+    return f"pred_stateful_risk_{target_name}"
+
+
+def stateful_risk_prob_column(
+    target_name: str,
+    side_name: str,
+    prediction_prefix: str = "stateful",
+) -> str:
+    return f"{stateful_risk_prediction_base(target_name, prediction_prefix)}_{side_name}_prob"
+
+
+def stateful_risk_risk_column(
+    target_name: str,
+    side_name: str,
+    prediction_prefix: str = "stateful",
+) -> str:
+    return f"{stateful_risk_prediction_base(target_name, prediction_prefix)}_{side_name}_risk"
+
+
+def stateful_risk_taken_prob_column(
+    target_name: str,
+    prediction_prefix: str = "stateful",
+) -> str:
+    return f"{stateful_risk_prediction_base(target_name, prediction_prefix)}_taken_prob"
+
+
+def stateful_risk_targets_from_examples(
+    examples: pd.DataFrame,
+    config: StatefulRiskModelConfig,
+) -> pd.DataFrame:
+    validate_stateful_risk_targets(config.target_names)
+    if config.blocking_cost_threshold < 0:
+        raise ValueError("blocking_cost_threshold must be non-negative")
+    if config.replacement_regret_threshold < 0:
+        raise ValueError("replacement_regret_threshold must be non-negative")
+    required_by_target = {
+        "stateful_nonpositive": "stateful_entry_value",
+        "positive_cost_nonpositive": "stateful_positive_cost_value",
+        "positive_blocking": "positive_blocking_cost",
+        "blocking_cost_high": "blocking_cost",
+        "replacement_regret_high": "replacement_regret",
+        "positive_replacement_regret_high": "positive_replacement_regret",
+    }
+    missing = sorted(
+        {
+            required_by_target[target_name]
+            for target_name in config.target_names
+            if required_by_target[target_name] not in examples.columns
+        }
+    )
+    if missing:
+        raise ValueError(f"stateful examples missing risk target columns: {', '.join(missing)}")
+
+    targets = pd.DataFrame(index=examples.index)
+    if "stateful_nonpositive" in config.target_names:
+        stateful_value = finite_float_series(examples, "stateful_entry_value")
+        targets[stateful_risk_target_column("stateful_nonpositive")] = stateful_value <= 0.0
+    if "positive_cost_nonpositive" in config.target_names:
+        positive_cost_value = finite_float_series(examples, "stateful_positive_cost_value")
+        targets[stateful_risk_target_column("positive_cost_nonpositive")] = (
+            positive_cost_value <= 0.0
+        )
+    if "positive_blocking" in config.target_names:
+        positive_blocking = finite_float_series(examples, "positive_blocking_cost")
+        targets[stateful_risk_target_column("positive_blocking")] = positive_blocking > 0.0
+    if "blocking_cost_high" in config.target_names:
+        blocking_cost = finite_float_series(examples, "blocking_cost")
+        targets[stateful_risk_target_column("blocking_cost_high")] = (
+            blocking_cost >= config.blocking_cost_threshold
+        )
+    if "replacement_regret_high" in config.target_names:
+        replacement_regret = finite_float_series(examples, "replacement_regret")
+        targets[stateful_risk_target_column("replacement_regret_high")] = (
+            replacement_regret >= config.replacement_regret_threshold
+        )
+    if "positive_replacement_regret_high" in config.target_names:
+        positive_replacement_regret = finite_float_series(
+            examples,
+            "positive_replacement_regret",
+        )
+        targets[stateful_risk_target_column("positive_replacement_regret_high")] = (
+            positive_replacement_regret >= config.replacement_regret_threshold
+        )
+    return targets.astype(int)
+
+
+def build_stateful_risk_training_frame(
+    examples: pd.DataFrame,
+    config: StatefulRiskModelConfig,
+) -> pd.DataFrame:
+    output = examples.copy()
+    if "dataset_month" not in output.columns and "month" in output.columns:
+        output["dataset_month"] = output["month"].astype(str)
+    if "side" not in output.columns and "candidate_side" in output.columns:
+        side_name = normalize_candidate_side(output["candidate_side"])
+        output["side"] = np.select(
+            [side_name.eq("long"), side_name.eq("short")],
+            [1.0, -1.0],
+            default=0.0,
+        )
+    for column in TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS:
+        if column not in output.columns:
+            output[column] = "__missing__"
+        else:
+            output[column] = output[column].astype("string").fillna("__missing__")
+    targets = stateful_risk_targets_from_examples(output, config)
+    frame = pd.concat([output, targets], axis=1)
+    target_columns = [stateful_risk_target_column(target_name) for target_name in config.target_names]
+    return frame.replace([np.inf, -np.inf], np.nan).dropna(subset=target_columns)
+
+
+def fit_stateful_risk_model_from_frame(
+    frame: pd.DataFrame,
+    config: StatefulRiskModelConfig,
+) -> StatefulRiskModelBundle:
+    if not 0.0 <= config.prediction_shrinkage <= 1.0:
+        raise ValueError("prediction_shrinkage must be in [0, 1]")
+    validate_stateful_risk_targets(config.target_names)
+    validate_candidate_quality_prediction_prefix(config.prediction_prefix)
+    if frame.empty:
+        raise ValueError("stateful risk model training frame is empty")
+
+    mappings = category_mappings(frame, TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS)
+    encoded = encode_trade_quality_features(frame, mappings)
+    feature_columns = trade_quality_feature_columns(encoded)
+    models: dict[str, HistGradientBoostingClassifier | None] = {}
+    target_means: dict[str, float] = {}
+    for index, target_name in enumerate(config.target_names):
+        target_column = stateful_risk_target_column(target_name)
+        target = frame[target_column].astype(int)
+        target_means[target_name] = float(target.mean())
+        if target.nunique(dropna=True) < 2:
+            models[target_name] = None
+            continue
+        model = HistGradientBoostingClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            max_depth=config.max_depth,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            max_features=config.max_features,
+            early_stopping=config.early_stopping,
+            validation_fraction=config.validation_fraction,
+            n_iter_no_change=config.n_iter_no_change,
+            tol=config.tol,
+            random_state=config.random_seed + index,
+        )
+        weight_frame = frame.assign(target=target)
+        model.fit(
+            encoded[feature_columns].astype("float32").to_numpy(),
+            target.to_numpy(dtype="int8"),
+            sample_weight=trade_quality_sample_weights(weight_frame, config.sample_weighting),
+        )
+        models[target_name] = model
+    return StatefulRiskModelBundle(
+        config=config,
+        models=models,
+        feature_columns=feature_columns,
+        category_mappings=mappings,
+        target_means=target_means,
+    )
+
+
+def predict_stateful_risk_features(
+    raw_features: pd.DataFrame,
+    bundle: StatefulRiskModelBundle,
+    target_name: str,
+) -> np.ndarray:
+    if target_name not in bundle.target_means:
+        raise ValueError(f"unknown fitted stateful risk target: {target_name}")
+    model = bundle.models.get(target_name)
+    if model is None:
+        probabilities = np.full(len(raw_features), bundle.target_means[target_name], dtype="float64")
+    else:
+        encoded = encode_trade_quality_features(raw_features, bundle.category_mappings)
+        classes = list(model.classes_)
+        positive_index = classes.index(1) if 1 in classes else None
+        if positive_index is None:
+            probabilities = np.full(len(raw_features), bundle.target_means[target_name], dtype="float64")
+        else:
+            probabilities = model.predict_proba(
+                encoded[bundle.feature_columns].astype("float32").to_numpy()
+            )[:, positive_index]
+    if bundle.config.prediction_shrinkage < 1.0:
+        probabilities = (
+            bundle.config.prediction_shrinkage * probabilities
+            + (1.0 - bundle.config.prediction_shrinkage) * bundle.target_means[target_name]
+        )
+    return np.clip(probabilities, 0.0, 1.0)
+
+
+def add_stateful_risk_model_columns(
+    predictions: pd.DataFrame,
+    bundle: StatefulRiskModelBundle,
+) -> pd.DataFrame:
+    output = predictions.copy()
+    for side_name in ("long", "short"):
+        features = trade_quality_features_from_predictions(output, side_name)
+        for target_name in bundle.config.target_names:
+            probability = predict_stateful_risk_features(features, bundle, target_name)
+            prob_column = stateful_risk_prob_column(
+                target_name,
+                side_name,
+                bundle.config.prediction_prefix,
+            )
+            output[prob_column] = probability
+            risk_column = stateful_risk_risk_column(
+                target_name,
+                side_name,
+                bundle.config.prediction_prefix,
+            )
+            output[risk_column] = -output[prob_column]
+    return output
+
+
+def add_stateful_risk_model_values_to_examples(
+    examples: pd.DataFrame,
+    bundle: StatefulRiskModelBundle,
+) -> pd.DataFrame:
+    output = examples.copy()
+    targets = stateful_risk_targets_from_examples(output, bundle.config)
+    for target_name in bundle.config.target_names:
+        target_column = stateful_risk_target_column(target_name)
+        output[target_column] = targets[target_column].astype(int)
+        output[
+            stateful_risk_taken_prob_column(target_name, bundle.config.prediction_prefix)
+        ] = predict_stateful_risk_features(output, bundle, target_name)
+    return output
+
+
+def stateful_risk_scored_metrics(
+    scored: pd.DataFrame,
+    target_names: tuple[str, ...],
+    prediction_prefix: str = "stateful",
+) -> dict[str, object]:
+    if scored.empty:
+        return {
+            target_name: {
+                "candidate_count": 0,
+                "prevalence": 0.0,
+                "predicted_mean": 0.0,
+                "bias": 0.0,
+                "brier": 0.0,
+                "auc": 0.5,
+            }
+            for target_name in target_names
+        }
+    metrics: dict[str, object] = {}
+    for target_name in target_names:
+        target_column = stateful_risk_target_column(target_name)
+        pred_column = stateful_risk_taken_prob_column(target_name, prediction_prefix)
         y_true = scored[target_column].astype(int)
         y_pred = scored[pred_column].astype(float).clip(0.0, 1.0)
         if y_true.nunique(dropna=True) >= 2:
@@ -6760,6 +7084,37 @@ def stateful_value_model_config_from_args(args: argparse.Namespace) -> Candidate
     )
 
 
+def stateful_risk_model_config_from_args(args: argparse.Namespace) -> StatefulRiskModelConfig:
+    target_names = tuple(
+        parse_csv_strings(args.risk_targets)
+        or [
+            "positive_blocking",
+            "positive_replacement_regret_high",
+            "stateful_nonpositive",
+        ]
+    )
+    return StatefulRiskModelConfig(
+        max_iter=args.max_iter,
+        learning_rate=args.learning_rate,
+        max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
+        min_samples_leaf=args.min_samples_leaf,
+        l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
+        random_seed=args.random_seed,
+        sample_weighting=args.sample_weighting,
+        prediction_shrinkage=args.prediction_shrinkage,
+        target_names=target_names,
+        blocking_cost_threshold=args.blocking_cost_threshold,
+        replacement_regret_threshold=args.replacement_regret_threshold,
+        prediction_prefix=validate_candidate_quality_prediction_prefix(args.prediction_prefix),
+    )
+
+
 def oof_candidate_failure_model(args: argparse.Namespace) -> int:
     validation_months = parse_csv_months(args.validation_months)
     apply_months = parse_csv_months(args.apply_months)
@@ -7102,6 +7457,185 @@ def oof_stateful_value_model(args: argparse.Namespace) -> int:
         },
         "folds": fold_metrics,
         "validation_oof": candidate_quality_scored_metrics(validation_oof_examples),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def oof_stateful_risk_model(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF stateful risk model")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    examples = pd.read_csv(args.examples)
+    config = stateful_risk_model_config_from_args(args)
+    validate_stateful_risk_targets(config.target_names)
+    validation_examples = build_stateful_risk_training_frame(examples, config)
+    validation_examples = filter_months(validation_examples, validation_months, "stateful examples")
+    if validation_examples.empty:
+        raise ValueError("validation stateful risk examples frame is empty")
+
+    validation_predictions = None
+    if args.validation_predictions is not None:
+        validation_predictions = filter_months(
+            pd.read_parquet(args.validation_predictions),
+            validation_months,
+            "validation",
+        )
+        validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_example_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for fold_index, holdout_month in enumerate(validation_months):
+        fit_examples = validation_examples[
+            validation_examples["dataset_month"] != holdout_month
+        ].copy()
+        holdout_examples = validation_examples[
+            validation_examples["dataset_month"] == holdout_month
+        ].copy()
+        if fit_examples.empty or holdout_examples.empty:
+            raise ValueError(f"cannot build stateful risk OOF fold for {holdout_month}")
+        fold_config = StatefulRiskModelConfig(
+            **{
+                **asdict(config),
+                "random_seed": config.random_seed + 29 * fold_index,
+            }
+        )
+        fold_bundle = fit_stateful_risk_model_from_frame(fit_examples, fold_config)
+        holdout_example_output = add_stateful_risk_model_values_to_examples(
+            holdout_examples,
+            fold_bundle,
+        )
+        fold_example_outputs.append(holdout_example_output)
+        holdout_prediction_count = 0
+        if validation_predictions is not None:
+            holdout_predictions = validation_predictions[
+                validation_predictions["dataset_month"] == holdout_month
+            ].copy()
+            if holdout_predictions.empty:
+                raise ValueError(f"validation predictions missing holdout month: {holdout_month}")
+            holdout_prediction_output = add_stateful_risk_model_columns(
+                holdout_predictions,
+                fold_bundle,
+            )
+            fold_prediction_outputs.append(holdout_prediction_output)
+            holdout_prediction_count = int(len(holdout_predictions))
+        fold_metrics[holdout_month] = {
+            "fit_examples": int(len(fit_examples)),
+            "holdout_examples": int(len(holdout_examples)),
+            "holdout_predictions": holdout_prediction_count,
+            "holdout": stateful_risk_scored_metrics(
+                holdout_example_output,
+                config.target_names,
+                config.prediction_prefix,
+            ),
+            "target_means": fold_bundle.target_means,
+            "feature_columns": fold_bundle.feature_columns,
+            "category_mappings": fold_bundle.category_mappings,
+        }
+
+    validation_oof_examples = pd.concat(fold_example_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof_examples.columns:
+        validation_oof_examples = validation_oof_examples.sort_values("decision_timestamp")
+    validation_oof_predictions = None
+    if fold_prediction_outputs:
+        validation_oof_predictions = pd.concat(fold_prediction_outputs, ignore_index=True)
+        if "decision_timestamp" in validation_oof_predictions.columns:
+            validation_oof_predictions = validation_oof_predictions.sort_values("decision_timestamp")
+
+    final_bundle = fit_stateful_risk_model_from_frame(validation_examples, config)
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_stateful_risk_model_columns(apply_predictions, final_bundle)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof_examples.to_csv(run_dir / "validation_oof_stateful_risk_examples.csv", index=False)
+    validation_examples.to_csv(run_dir / "validation_fit_stateful_risk_examples.csv", index=False)
+    if validation_oof_predictions is not None:
+        validation_oof_predictions.to_parquet(
+            run_dir / "predictions_validation_oof_stateful_risk_model.parquet",
+            index=False,
+        )
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_stateful_risk_model.parquet",
+            index=False,
+        )
+    joblib.dump(final_bundle, run_dir / "stateful_risk_model.joblib")
+    metrics = {
+        "mode": "validation_oof_stateful_risk_model",
+        "config": asdict(config),
+        "examples": str(args.examples),
+        "validation_predictions": (
+            None if args.validation_predictions is None else str(args.validation_predictions)
+        ),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "input_examples": int(len(examples)),
+            "validation_examples": int(len(validation_examples)),
+            "validation_oof_examples": int(len(validation_oof_examples)),
+            "validation_predictions": 0
+            if validation_predictions is None
+            else int(len(validation_predictions)),
+            "validation_oof_predictions": 0
+            if validation_oof_predictions is None
+            else int(len(validation_oof_predictions)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_examples": month_counts(validation_examples),
+            "validation_oof_examples": month_counts(validation_oof_examples),
+            "validation_predictions": {}
+            if validation_predictions is None
+            else month_counts(validation_predictions),
+            "validation_oof_predictions": {}
+            if validation_oof_predictions is None
+            else month_counts(validation_oof_predictions),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "candidate_side_counts": {
+            str(side): int(count)
+            for side, count in validation_examples["candidate_side"].value_counts().items()
+        }
+        if "candidate_side" in validation_examples.columns
+        else {},
+        "final_model": {
+            "target_means": final_bundle.target_means,
+            "feature_columns": final_bundle.feature_columns,
+            "category_mappings": final_bundle.category_mappings,
+        },
+        "folds": fold_metrics,
+        "validation_oof": stateful_risk_scored_metrics(
+            validation_oof_examples,
+            config.target_names,
+            config.prediction_prefix,
+        ),
     }
     with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
@@ -8200,6 +8734,52 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_source_args(stateful_value_model_parser)
     add_trade_quality_model_args(stateful_value_model_parser)
     stateful_value_model_parser.set_defaults(func=oof_stateful_value_model)
+
+    stateful_risk_model_parser = subparsers.add_parser(
+        "oof-stateful-risk-model",
+        help="build validation OOF risk probability columns from stateful_candidate_examples.csv",
+    )
+    stateful_risk_model_parser.add_argument("--examples", type=Path, required=True)
+    stateful_risk_model_parser.add_argument(
+        "--validation-predictions",
+        type=Path,
+        help="optional validation prediction frame to score with fold-fitted OOF models",
+    )
+    stateful_risk_model_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation stateful-risk model",
+    )
+    stateful_risk_model_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    stateful_risk_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    stateful_risk_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    stateful_risk_model_parser.add_argument("--label", default="stateful_risk_model")
+    stateful_risk_model_parser.add_argument(
+        "--risk-targets",
+        default="positive_blocking,positive_replacement_regret_high,stateful_nonpositive",
+        help=(
+            "comma-separated stateful risk targets: stateful_nonpositive,"
+            "positive_cost_nonpositive,positive_blocking,blocking_cost_high,"
+            "replacement_regret_high,positive_replacement_regret_high"
+        ),
+    )
+    stateful_risk_model_parser.add_argument("--blocking-cost-threshold", type=float, default=5.0)
+    stateful_risk_model_parser.add_argument("--replacement-regret-threshold", type=float, default=5.0)
+    stateful_risk_model_parser.add_argument(
+        "--prediction-prefix",
+        default="stateful_blocking",
+        help=(
+            "prefix for output columns, producing "
+            "pred_stateful_risk_<prefix>_<target>_<side>_prob/risk"
+        ),
+    )
+    add_trade_source_args(stateful_risk_model_parser)
+    add_trade_quality_model_args(stateful_risk_model_parser, include_target_clip_quantile=False)
+    stateful_risk_model_parser.set_defaults(func=oof_stateful_risk_model)
 
     stateful_near_tie_report_parser = subparsers.add_parser(
         "stateful-near-tie-report",
