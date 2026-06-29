@@ -429,6 +429,27 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(regression_targets, [])
         self.assertEqual(classification_targets, ["long_profit_barrier_hit", "short_profit_barrier_hit"])
 
+    def test_holding_shortening_target_set_keeps_exit_delta_targets(self):
+        regression_targets, classification_targets = resolve_target_names("holding_shortening")
+
+        self.assertEqual(
+            regression_targets,
+            [
+                "long_exit_event_adjusted_pnl",
+                "short_exit_event_adjusted_pnl",
+                "long_fixed_60m_minus_exit_event_adjusted_pnl",
+                "short_fixed_60m_minus_exit_event_adjusted_pnl",
+                "long_fixed_240m_minus_exit_event_adjusted_pnl",
+                "short_fixed_240m_minus_exit_event_adjusted_pnl",
+                "long_fixed_720m_minus_exit_event_adjusted_pnl",
+                "short_fixed_720m_minus_exit_event_adjusted_pnl",
+            ],
+        )
+        self.assertIn("long_fixed_60m_beats_exit_event", classification_targets)
+        self.assertIn("short_fixed_720m_beats_exit_event", classification_targets)
+        self.assertNotIn("long_best_adjusted_pnl", regression_targets)
+        self.assertNotIn("long_profit_barrier_hit", classification_targets)
+
     def test_filter_available_target_names_drops_missing_research_targets(self):
         frame = pd.DataFrame(
             {

@@ -144,6 +144,10 @@ TARGET_SETS = {
     "policy": (POLICY_REGRESSION_TARGETS, POLICY_CLASSIFICATION_TARGETS),
     "side_confidence": (EV_TARGETS, ["best_side"]),
     "profit_barrier": ([], ["long_profit_barrier_hit", "short_profit_barrier_hit"]),
+    "holding_shortening": (
+        [*EXIT_EVENT_PNL_TARGETS, *EXIT_FIXED_HORIZON_DELTA_TARGETS],
+        list(EXIT_FIXED_HORIZON_BEAT_TARGETS),
+    ),
 }
 
 SAMPLE_WEIGHTING_CHOICES = ["none", "month", "label", "month_label", "target", "month_target"]

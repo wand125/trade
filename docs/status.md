@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 18:45 JST
+最終更新: 2026-06-29 19:12 JST
 
 ## 現在の状態
 
@@ -12,7 +12,7 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-dense holding-shortening targetをdataset schemaへ追加した。barrier/time exit時点の `long/short_exit_event_adjusted_pnl` と、固定horizon決済がexit-event決済より良いかを表す `long/short_fixed_60m/240m/720m_minus_exit_event_adjusted_pnl` / `*_beats_exit_event` を生成し、`policy` / `full` target-setで学習できるようにした。2025-08 smoke datasetでは全 `28,971` 行で新targetが非欠損、60分beat rateはlong `0.5032` / short `0.5530`。これは実装とdataset smokeであり、policy改善確認はまだ。次は主dataset再生成とchronological OOF評価へ進む。詳細は `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+dense holding-shortening targetをdataset schemaへ追加した。barrier/time exit時点の `long/short_exit_event_adjusted_pnl` と、固定horizon決済がexit-event決済より良いかを表す `long/short_fixed_60m/240m/720m_minus_exit_event_adjusted_pnl` / `*_beats_exit_event` を生成し、`policy` / `full` target-setで学習できるようにした。2023-01..2025-08の32ヶ月を `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined_dense_holding/` へ再生成し、899,408行で新target欠損0を確認。全policy OOFは重すぎたため `target-set holding_shortening` を追加し、2025-02..04の20% sample smokeではbeat分類balanced accuracy `0.5214..0.5430`、delta回帰R2は概ね `-0.026..0.015`。強いsignalではないがbeat probabilityは補助特徴として試す価値がある。詳細は `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
@@ -319,7 +319,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-直近更新: dense holding-shortening targetを追加した。次は主datasetを新schemaで再生成し、chronological OOFで exit-event PnL / fixed-vs-event delta / beat probability がholding短縮判断に効くかを評価する。
+直近更新: dense holding-shortening targetを追加し、別dirで32ヶ月dataset再生成と3ヶ月OOF smokeまで完了した。次は `pred_*_fixed_*_beats_exit_event_prob_1` をholding短縮の補助特徴としてpolicyへ接続し、連続deltaは直接使わずcalibration/bucket化から試す。
 
 - 新targetを使う実験では、旧datasetを `--skip-existing` で流用しない。旧parquetでは新列が欠けるため、policy改善確認には再生成が必須。
 

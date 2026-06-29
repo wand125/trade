@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 19:12 Dense holding OOF smoke
+
+- `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined_dense_holding/` に2023-01..2025-08の32ヶ月datasetを新schemaで生成した。
+- 全32ヶ月でrows `899,408`、新target列の欠損は0。60分beat rateはlong `0.4786`, short `0.5536`。
+- 全 `policy` target-setで2024-11..2025-04のHGB OOFを試したが、fold 0だけで多数targetを順にfitし7分超になったため中断。新target診断には重すぎる。
+- `target-set holding_shortening` を追加し、exit-event adjusted PnL、fixed-vs-event delta、fixed-vs-event beat labelだけを学習できるようにした。
+- 2025-02..2025-04、`sample-frac=0.2`, `max_iter=40` のOOF smokeでは、delta回帰R2は概ね `-0.026..0.015`、beat分類balanced accuracyは `0.5214..0.5430`。
+- 判断: 連続deltaを直接policyへ使うには弱い。beat probability、bucket化、regime別calibration、candidate/ranking特徴として試す。
+- report updated: `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 18:45 Dense holding shortening targets
 
 - `00159` の直接cap診断を、全decision rowで学べるdense targetへ拡張した。
