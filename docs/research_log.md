@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 14:58 Pred-hit actual-miss failure target
+
+- `oof-trade-failure-model` に `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加し、side confidence系の特徴量 `pred_taken_side_confidence`, `pred_opposite_side_confidence`, `pred_side_confidence_gap` をselected trade failure modelへ入れた。
+- 2024-11..2025-04のselected trades 502件で、`pred_hit_actual_miss` は prevalence `0.0717`, predicted mean `0.0687`, AUC `0.9626`。ただしtarget定義がprofit-barrier予測列を条件にするため、AUCは過大評価しない。
+- 2025-05 highcostでは `failure only risk10` が adjusted PnL `-52.9764 -> -7.1330` へ改善したが、max DDは `137.4392 -> 147.1096` へ悪化した。
+- OOF validation 2024-11..2025-04へ戻すと、baseline stateful risk5 は PnL `407.8172`、`failure only risk10` は `325.8466`、`stateful + predhit w1` は `240.9596`。単月改善は採用条件を満たさない。
+- 判断: `pred_hit_actual_miss` 実装は残すが、今回のrisk penaltyを標準policyへ採用しない。次はrisk hard penaltyではなく、exit timing / EV calibration / ranking featureとして使う。
+- report: `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 14:38 Selected trade exit/EV/confidence diagnostics
 
 - `model-trade-exposure-diagnostics` を追加した。selected tradesを、side gap、side confidence、予測保有時間、profit barrier predicted/actual、EV過大評価、exit regretのbucketで集計できる。

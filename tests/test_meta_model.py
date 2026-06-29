@@ -826,7 +826,16 @@ class MetaModelTests(unittest.TestCase):
             prediction_shrinkage=1.0,
             large_loss_threshold=5.0,
             exit_regret_threshold=5.0,
-            target_names=("large_loss", "wrong_side", "profit_barrier_miss", "exit_regret_high", "any_failure"),
+            ev_overestimate_threshold=20.0,
+            target_names=(
+                "large_loss",
+                "wrong_side",
+                "profit_barrier_miss",
+                "pred_hit_actual_miss",
+                "exit_regret_high",
+                "ev_overestimate_high",
+                "any_failure",
+            ),
         )
 
         bundle = fit_trade_failure_model(trades, config)
@@ -846,6 +855,9 @@ class MetaModelTests(unittest.TestCase):
             self.assertEqual(output[short_risk].tolist(), (-output[short_prob]).tolist())
             self.assertIn(f"pred_trade_failure_{target_name}_taken_prob", scored.columns)
             self.assertIn(f"trade_failure_{target_name}", scored.columns)
+        self.assertEqual(scored["trade_failure_pred_hit_actual_miss"].tolist(), [0, 1, 0, 0])
+        self.assertEqual(scored["trade_failure_ev_overestimate_high"].tolist(), [0, 0, 0, 0])
+        self.assertEqual(scored["trade_failure_any_failure"].tolist(), [0, 1, 0, 1])
 
     def test_candidate_failure_model_adds_probability_and_risk_columns(self):
         predictions = add_trade_source_ev_columns(
@@ -1521,6 +1533,8 @@ class MetaModelTests(unittest.TestCase):
             {
                 "pred_trade_source_long_ev": [12.0],
                 "pred_trade_source_short_ev": [7.0],
+                "pred_best_side_prob_1": [0.65],
+                "pred_best_side_prob_-1": [0.35],
                 "pred_side_outcome_evdist_long_wrong_side_prob": [0.25],
                 "pred_side_outcome_evdist_short_wrong_side_prob": [0.60],
                 "pred_candidate_quality_component_fixed_weighted_long_adjusted_pnl": [4.0],
@@ -1543,6 +1557,9 @@ class MetaModelTests(unittest.TestCase):
             long_features["pred_side_outcome_wrong_side_prob_gap"].iloc[0],
             -0.35,
         )
+        self.assertAlmostEqual(long_features["pred_taken_side_confidence"].iloc[0], 0.65)
+        self.assertAlmostEqual(long_features["pred_opposite_side_confidence"].iloc[0], 0.35)
+        self.assertAlmostEqual(long_features["pred_side_confidence_gap"].iloc[0], 0.30)
         self.assertAlmostEqual(
             short_features["pred_taken_side_outcome_wrong_side_prob"].iloc[0],
             0.60,
@@ -1551,6 +1568,9 @@ class MetaModelTests(unittest.TestCase):
             short_features["pred_opposite_side_outcome_wrong_side_prob"].iloc[0],
             0.25,
         )
+        self.assertAlmostEqual(short_features["pred_taken_side_confidence"].iloc[0], 0.35)
+        self.assertAlmostEqual(short_features["pred_opposite_side_confidence"].iloc[0], 0.65)
+        self.assertAlmostEqual(short_features["pred_side_confidence_gap"].iloc[0], -0.30)
         self.assertAlmostEqual(
             short_features["pred_taken_component_fixed_weighted_quality"].iloc[0],
             -2.0,

@@ -233,6 +233,7 @@ class TradeFailureModelConfig:
     prediction_shrinkage: float
     large_loss_threshold: float
     exit_regret_threshold: float
+    ev_overestimate_threshold: float
     target_names: tuple[str, ...]
 
 
@@ -441,7 +442,9 @@ TRADE_FAILURE_TARGET_NAMES = (
     "large_loss",
     "wrong_side",
     "profit_barrier_miss",
+    "pred_hit_actual_miss",
     "exit_regret_high",
+    "ev_overestimate_high",
     "any_failure",
 )
 CANDIDATE_FAILURE_TARGET_NAMES = (
@@ -567,6 +570,9 @@ TRADE_QUALITY_NUMERIC_FEATURE_COLUMNS = [
     "pred_taken_wait_regret",
     "pred_taken_entry_local_rank",
     "pred_taken_profit_barrier_hit",
+    "pred_taken_side_confidence",
+    "pred_opposite_side_confidence",
+    "pred_side_confidence_gap",
     "trend_score_240",
     "volatility_score_60",
     "decision_hour_sin",
@@ -1670,6 +1676,21 @@ def trade_quality_features_from_enriched(enriched: pd.DataFrame) -> pd.DataFrame
         "volatility_score_60",
     ]:
         output[column] = finite_float_series(enriched, column)
+    output["pred_taken_side_confidence"] = finite_float_series(
+        enriched,
+        "pred_taken_side_confidence",
+        default=0.5,
+    ).clip(0.0, 1.0)
+    output["pred_opposite_side_confidence"] = finite_float_series(
+        enriched,
+        "pred_opposite_side_confidence",
+        default=0.5,
+    ).clip(0.0, 1.0)
+    output["pred_side_confidence_gap"] = finite_float_series(
+        enriched,
+        "pred_side_confidence_gap",
+        default=0.0,
+    )
     output["decision_hour_sin"], output["decision_hour_cos"] = timestamp_hour_features(
         enriched,
         "entry_decision_timestamp",
@@ -1703,6 +1724,11 @@ def side_profit_barrier_series(predictions: pd.DataFrame, side_name: str) -> pd.
         if column in predictions.columns:
             return finite_float_series(predictions, column)
     return pd.Series(0.0, index=predictions.index)
+
+
+def side_confidence_series(predictions: pd.DataFrame, side_name: str) -> pd.Series:
+    column = "pred_best_side_prob_1" if side_name == "long" else "pred_best_side_prob_-1"
+    return finite_float_series(predictions, column, default=0.5).clip(0.0, 1.0)
 
 
 def opposite_side_name(side_name: str) -> str:
@@ -1763,6 +1789,11 @@ def trade_quality_features_from_predictions(
         "entry_local_rank",
     )
     output["pred_taken_profit_barrier_hit"] = side_profit_barrier_series(predictions, side_name)
+    taken_confidence = side_confidence_series(predictions, side_name)
+    opposite_confidence = side_confidence_series(predictions, opposite_side_name(side_name))
+    output["pred_taken_side_confidence"] = taken_confidence
+    output["pred_opposite_side_confidence"] = opposite_confidence
+    output["pred_side_confidence_gap"] = taken_confidence - opposite_confidence
     output["trend_score_240"] = finite_float_series(predictions, "trend_score_240")
     output["volatility_score_60"] = finite_float_series(predictions, "volatility_score_60")
     output["decision_hour_sin"], output["decision_hour_cos"] = timestamp_hour_features(
@@ -1937,17 +1968,36 @@ def trade_failure_targets_from_enriched(
     validate_trade_failure_targets(config.target_names)
     adjusted = finite_float_series(enriched, "adjusted_pnl")
     exit_regret = finite_float_series(enriched, "exit_regret")
+    predicted_barrier_hit = finite_float_series(
+        enriched,
+        "pred_taken_profit_barrier_hit",
+        default=0.0,
+    ) >= 0.5
+    actual_barrier_miss = (
+        finite_float_series(
+            enriched,
+            "actual_taken_profit_barrier_hit",
+            default=0.0,
+        )
+        < 0.5
+    )
+    ev_overestimate = finite_float_series(enriched, "pred_taken_ev") - adjusted
     targets = pd.DataFrame(index=enriched.index)
     targets["large_loss"] = adjusted <= -config.large_loss_threshold
     targets["wrong_side"] = enriched["direction_error"].fillna(False).astype(bool)
-    targets["profit_barrier_miss"] = finite_float_series(
-        enriched,
-        "actual_taken_profit_barrier_hit",
-        default=0.0,
-    ) < 0.5
+    targets["profit_barrier_miss"] = actual_barrier_miss
+    targets["pred_hit_actual_miss"] = predicted_barrier_hit & actual_barrier_miss
     targets["exit_regret_high"] = exit_regret >= config.exit_regret_threshold
+    targets["ev_overestimate_high"] = ev_overestimate >= config.ev_overestimate_threshold
     targets["any_failure"] = targets[
-        ["large_loss", "wrong_side", "profit_barrier_miss", "exit_regret_high"]
+        [
+            "large_loss",
+            "wrong_side",
+            "profit_barrier_miss",
+            "pred_hit_actual_miss",
+            "exit_regret_high",
+            "ev_overestimate_high",
+        ]
     ].any(axis=1)
     return targets.loc[:, list(config.target_names)].astype(int)
 
@@ -1972,6 +2022,8 @@ def fit_trade_failure_model(
         raise ValueError("large_loss_threshold must be non-negative")
     if config.exit_regret_threshold < 0:
         raise ValueError("exit_regret_threshold must be non-negative")
+    if config.ev_overestimate_threshold < 0:
+        raise ValueError("ev_overestimate_threshold must be non-negative")
     validate_trade_failure_targets(config.target_names)
     frame = build_trade_failure_training_frame(enriched, config)
     if frame.empty:
@@ -7082,6 +7134,7 @@ def trade_failure_model_config_from_args(args: argparse.Namespace) -> TradeFailu
         prediction_shrinkage=args.prediction_shrinkage,
         large_loss_threshold=args.large_loss_threshold,
         exit_regret_threshold=args.exit_regret_threshold,
+        ev_overestimate_threshold=args.ev_overestimate_threshold,
         target_names=target_names,
     )
 
@@ -8733,10 +8786,14 @@ def build_parser() -> argparse.ArgumentParser:
     trade_failure_model_parser.add_argument(
         "--failure-targets",
         default=",".join(TRADE_FAILURE_TARGET_NAMES),
-        help="comma-separated failure targets: large_loss,wrong_side,profit_barrier_miss,exit_regret_high,any_failure",
+        help=(
+            "comma-separated failure targets: large_loss,wrong_side,profit_barrier_miss,"
+            "pred_hit_actual_miss,exit_regret_high,ev_overestimate_high,any_failure"
+        ),
     )
     trade_failure_model_parser.add_argument("--large-loss-threshold", type=float, default=10.0)
     trade_failure_model_parser.add_argument("--exit-regret-threshold", type=float, default=10.0)
+    trade_failure_model_parser.add_argument("--ev-overestimate-threshold", type=float, default=20.0)
     add_trade_source_args(trade_failure_model_parser)
     add_trade_quality_model_args(trade_failure_model_parser, include_target_clip_quantile=False)
     trade_failure_model_parser.set_defaults(func=oof_trade_failure_model)

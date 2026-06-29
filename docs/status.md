@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 14:38 JST
+最終更新: 2026-06-29 14:58 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
@@ -287,6 +289,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
+直近更新: `pred_hit_actual_miss` は単独risk penaltyとして2025-05を改善したが、OOF validationを悪化させたため標準採用しない。次は同targetをhard penaltyではなく、exit timing / EV calibration / ranking featureとして接続する。`ev_overestimate_high` と `exit_regret_high` は現状の閾値分類ではrank能力が弱いため、連続過大評価量、分位loss、holding ratio、profit-first失敗とのjoint targetへ作り替える。
+
 1. MLP holdingを使う `timed_ev` 実験ではCLI defaultのauto guardにより `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約にする。従来のclip-only挙動を再現する場合だけ明示的に `--min-valid-predicted-hold-minutes -inf` を渡す。
 2. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
 3. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
@@ -351,6 +355,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 14:58 JST 更新: `pred_hit_actual_miss` / `ev_overestimate_high` をselected trade failure targetへ追加した。`pred_hit_actual_miss` はOOF AUC `0.9626` だが、profit-barrier予測列を条件にするためAUCは過大評価しない。2025-05 highcostでは `failure only risk10` が `-52.9764 -> -7.1330` に改善した一方、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化し、`stateful + predhit w1` も `240.9596` に悪化した。標準policyには採用せず、exit timing / EV calibration / ranking featureとして使う。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 12:36 JST 更新: `mean_match + session_floor_lowered risk=5` を2025-05へ固定適用した。baseは `13.9990 -> 25.3104`、highcostは `-66.1420 -> -52.9764` に改善し、防御signalとしては一部再現した。ただしhighcostはNoTrade未満で、事前のcost min基準 `>= -20` を満たさない。trade-deltaでは改善が少数の入れ替えに依存し、common `long:down_low_vol` / `short:up_normal_vol` 損失が残る。標準採用せず、diagnostic/ranking featureへ降格寄りに扱う。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
