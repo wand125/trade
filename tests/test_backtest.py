@@ -542,6 +542,51 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [-1, 1, -1])
 
+    def test_model_signal_can_require_extra_margin_for_side_penalty_replacement(self):
+        df = frame_with_opens([100, 101, 102, 103])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 30.0, 20.0],
+                "pred_short_best_adjusted_pnl": [17.0, 17.0, 17.0, 1.0],
+                "session_regime": ["ny_late", "ny_late", "ny_late", "ny_late"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            side_margin=0,
+            side_ev_penalty_rules=("long:session_regime=ny_late:5",),
+            side_ev_penalty_replacement_min_margin=8.0,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0, 0, 1, 0])
+
+    def test_model_signal_replacement_margin_is_disabled_by_default(self):
+        df = frame_with_opens([100, 101])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [17.0, 17.0],
+                "session_regime": ["ny_late", "ny_late"],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            side_margin=0,
+            side_ev_penalty_rules=("long:session_regime=ny_late:5",),
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [-1, -1])
+
     def test_model_signal_can_apply_side_specific_entry_offsets(self):
         df = frame_with_opens([100, 101, 102])
         predictions = pd.DataFrame(

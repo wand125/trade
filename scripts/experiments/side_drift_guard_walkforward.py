@@ -284,19 +284,28 @@ def build_policy_config(
     predictions_path: Path,
     max_predicted_hold_minutes: float,
     side_ev_penalty_rules: tuple[str, ...],
+    side_ev_penalty_replacement_min_margin: float,
 ) -> ModelPolicyConfig:
     config = dict(base_config)
     config["predictions"] = predictions_path
     config["max_predicted_hold_minutes"] = max_predicted_hold_minutes
     config["side_ev_penalty_rules"] = tuple(config.get("side_ev_penalty_rules", ())) + side_ev_penalty_rules
+    config["side_ev_penalty_replacement_min_margin"] = side_ev_penalty_replacement_min_margin
     return ModelPolicyConfig(**config)
 
 
 def aggregate_policy_summary(metrics: pd.DataFrame) -> pd.DataFrame:
     if metrics.empty:
         return pd.DataFrame()
+    working = metrics.copy()
+    if "replacement_min_margin" not in working.columns:
+        working["replacement_min_margin"] = -float("inf")
     return (
-        metrics.groupby(["cost_case", "variant", "penalty"], dropna=False, observed=True)
+        working.groupby(
+            ["cost_case", "variant", "penalty", "replacement_min_margin"],
+            dropna=False,
+            observed=True,
+        )
         .agg(
             months=("month", "nunique"),
             trades=("trade_count", "sum"),
@@ -312,6 +321,14 @@ def aggregate_policy_summary(metrics: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def replacement_margin_label(value: float) -> str:
+    if np.isneginf(value):
+        return ""
+    if np.isposinf(value):
+        return "_replm_block"
+    return f"_replm{value:g}".replace(".", "p")
+
+
 def run_walkforward_guard(
     *,
     base_config: dict[str, Any],
@@ -322,6 +339,7 @@ def run_walkforward_guard(
     context_columns: list[str],
     sides: list[str],
     penalties: list[float],
+    replacement_min_margins: list[float],
     cost_cases: list[tuple[str, float, float, int]],
     data_path: Path,
     output_dir: Path,
@@ -398,43 +416,56 @@ def run_walkforward_guard(
                 execution_delay_bars=delay,
             )
             for penalty in penalties:
-                if penalty <= 0:
-                    rule_strings: tuple[str, ...] = ()
-                    variant = f"{cost_label}_no_guard"
-                else:
-                    rule_strings = tuple(
-                        context_rule(row, context_columns, penalty)
-                        for _, row in selected_rules.iterrows()
+                active_margins = replacement_min_margins
+                for replacement_min_margin in active_margins:
+                    if penalty <= 0:
+                        rule_strings: tuple[str, ...] = ()
+                        variant = (
+                            f"{cost_label}_no_guard"
+                            f"{replacement_margin_label(replacement_min_margin)}"
+                        ).replace(".", "p")
+                    else:
+                        rule_strings = tuple(
+                            context_rule(row, context_columns, penalty)
+                            for _, row in selected_rules.iterrows()
+                        )
+                        variant = (
+                            f"{cost_label}_side_guard_p{penalty:g}"
+                            f"{replacement_margin_label(replacement_min_margin)}"
+                        ).replace(".", "p")
+                    policy_config = build_policy_config(
+                        base_config,
+                        predictions_path=predictions_path,
+                        max_predicted_hold_minutes=max_predicted_hold_minutes,
+                        side_ev_penalty_rules=rule_strings,
+                        side_ev_penalty_replacement_min_margin=replacement_min_margin,
                     )
-                    variant = f"{cost_label}_side_guard_p{penalty:g}".replace(".", "p")
-                policy_config = build_policy_config(
-                    base_config,
-                    predictions_path=predictions_path,
-                    max_predicted_hold_minutes=max_predicted_hold_minutes,
-                    side_ev_penalty_rules=rule_strings,
-                )
-                run_dir = make_run_dir(backtest_dir / variant, f"model_{policy_config.policy}_{month}")
-                metrics, trades, curve, _ = run_model_policy(
-                    data,
-                    backtest_config,
-                    policy_config,
-                    predictions=prediction_window,
-                )
-                write_result(run_dir, metrics, trades, curve, None, backtest_config, policy_config)
-                row = dict(metrics)
-                row.update(
-                    {
-                        "cost_case": cost_label,
-                        "variant": variant,
-                        "penalty": float(penalty),
-                        "month": month,
-                        "run_dir": str(run_dir),
-                        "guard_rule_count": int(len(rule_strings)),
-                        "guard_rules": ";".join(rule_strings),
-                        "prior_month_count": int(len(prior_months)),
-                    }
-                )
-                metrics_rows.append(row)
+                    run_dir = make_run_dir(
+                        backtest_dir / variant,
+                        f"model_{policy_config.policy}_{month}",
+                    )
+                    metrics, trades, curve, _ = run_model_policy(
+                        data,
+                        backtest_config,
+                        policy_config,
+                        predictions=prediction_window,
+                    )
+                    write_result(run_dir, metrics, trades, curve, None, backtest_config, policy_config)
+                    row = dict(metrics)
+                    row.update(
+                        {
+                            "cost_case": cost_label,
+                            "variant": variant,
+                            "penalty": float(penalty),
+                            "replacement_min_margin": float(replacement_min_margin),
+                            "month": month,
+                            "run_dir": str(run_dir),
+                            "guard_rule_count": int(len(rule_strings)),
+                            "guard_rules": ";".join(rule_strings),
+                            "prior_month_count": int(len(prior_months)),
+                        }
+                    )
+                    metrics_rows.append(row)
     non_empty_prediction_rows = [frame for frame in prediction_rows if not frame.empty]
     selected_by_month = (
         pd.concat(non_empty_prediction_rows, ignore_index=True, sort=False)
@@ -456,6 +487,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--context-columns", type=parse_csv_strings, default=["combined_regime", "session_regime"])
     parser.add_argument("--sides", type=parse_csv_strings, default=["short", "long"])
     parser.add_argument("--penalties", type=parse_csv_floats, default=[0.0, 5.0, 10.0])
+    parser.add_argument(
+        "--side-ev-penalty-replacement-min-margins",
+        type=parse_csv_floats,
+        default=[-float("inf")],
+    )
     parser.add_argument("--cost-cases", type=parse_cost_cases, default=[("coststress", 0.2, 0.1, 1)])
     parser.add_argument("--data", type=Path, default=Path("data/processed/xauusd_m1.parquet"))
     parser.add_argument("--max-predicted-hold-minutes", type=float, default=260.0)
@@ -513,6 +549,7 @@ def main(argv: list[str] | None = None) -> int:
         context_columns=args.context_columns,
         sides=args.sides,
         penalties=args.penalties,
+        replacement_min_margins=args.side_ev_penalty_replacement_min_margins,
         cost_cases=args.cost_cases,
         data_path=args.data,
         output_dir=modeling_dir,
@@ -551,6 +588,9 @@ def main(argv: list[str] | None = None) -> int:
         "context_columns": args.context_columns,
         "sides": args.sides,
         "penalties": args.penalties,
+        "side_ev_penalty_replacement_min_margins": (
+            args.side_ev_penalty_replacement_min_margins
+        ),
         "cost_cases": [
             {
                 "label": label,

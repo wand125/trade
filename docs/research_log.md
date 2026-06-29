@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 23:10 Side drift guard admission margin
+
+- `ModelPolicyConfig` / `model-policy` / `model-sweep` に `side_ev_penalty_replacement_min_margin` を追加した。side-EV penaltyが選択sideにかかる、またはpenaltyで選択sideが変わるentryだけ、通常entry thresholdに追加score marginを要求する。
+- strict short-only p10 guardで 2025-01..12 coststress `260m` を再評価した。no guard `-419.0574`, p10単体 `-317.4998` に対し、p10 + margin10 は `-90.1378`, trades `949`, worst month `-289.0056`, max DD `289.0056`。
+- no guard側にも同じadmission marginを出して分離した。no guard replm10 は `-290.8978` なので、既存side penaltyへのadmission marginだけでも改善するが、p10 + margin10 はさらに `+200.7600` 上乗せする。
+- delta vs no-guard replm10では、`only_base short +409.1420`, `only_candidate short -278.4984`, common short `+75.9150`。まだadded shortが主なdrag。
+- 残存 worst added contextは2025-09 `short/range_low_vol -138.6240`, 2025-11 `short/range_low_vol -62.9580`, 2025-09 `short/range_normal_vol -42.7320`, 2025-12 `short/range_low_vol -35.0640`。
+- 判断: 大幅改善だがNoTrade未満なので標準採用しない。`p10 + margin10` を次の残存失敗診断baselineにし、2025-08/09/11/12と `short/range_low_vol` をsession/time/side-gap/qualityで分解する。
+- report: `docs/reports/00178_2026-06-29_side_drift_guard_admission_margin.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/side_drift_guard_walkforward.py`: OK; `python3 -m unittest tests.test_backtest tests.test_side_drift_guard_walkforward`: OK, 88 tests
+
 ### 22:55 Side drift guard delta diagnostics
 
 - `00176` の no guard vs broad p5 / strict short-only p10 を `model-trade-delta` で分解した。
