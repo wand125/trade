@@ -1519,6 +1519,9 @@ def run_backtest(
     *,
     entry_context: pd.Series | None = None,
     entry_margin: pd.Series | None = None,
+    entry_budget_context: pd.Series | None = None,
+    context_entry_budget: float = float("inf"),
+    context_entry_budget_reset_monthly: bool = True,
     context_drawdown_guard_loss_threshold: float = float("inf"),
     context_drawdown_guard_min_entry_margin: float = float("inf"),
     context_drawdown_guard_cooldown_minutes: float = 0.0,
@@ -1528,6 +1531,7 @@ def run_backtest(
     if len(df) != len(desired_position):
         raise ValueError("df and desired_position must have the same length")
     context_drawdown_guard_enabled = np.isfinite(context_drawdown_guard_loss_threshold)
+    context_entry_budget_enabled = np.isfinite(context_entry_budget)
     if context_drawdown_guard_enabled:
         if context_drawdown_guard_loss_threshold <= 0:
             raise ValueError("context_drawdown_guard_loss_threshold must be positive or inf")
@@ -1553,6 +1557,17 @@ def run_backtest(
             raise ValueError("df and entry_margin must have the same length")
         if context_drawdown_guard_cooldown_minutes < 0:
             raise ValueError("context_drawdown_guard_cooldown_minutes must be non-negative")
+    if context_entry_budget_enabled:
+        if context_entry_budget <= 0:
+            raise ValueError("context_entry_budget must be positive or inf")
+        if not float(context_entry_budget).is_integer():
+            raise ValueError("context_entry_budget must be an integer count or inf")
+        if entry_budget_context is None:
+            entry_budget_context = entry_context
+        if entry_budget_context is None:
+            raise ValueError("entry_budget_context is required when context entry budget is finite")
+        if len(df) != len(entry_budget_context):
+            raise ValueError("df and entry_budget_context must have the same length")
     if config.execution_delay_bars < 0:
         raise ValueError("execution_delay_bars must be non-negative")
     if len(df) < 2:
@@ -1567,15 +1582,23 @@ def run_backtest(
         context_values = [""] * len(df)
     else:
         context_values = entry_context.astype("string").fillna("__missing__").tolist()
+    if entry_budget_context is None:
+        budget_context_values = [""] * len(df)
+    else:
+        budget_context_values = (
+            entry_budget_context.astype("string").fillna("__missing__").tolist()
+        )
     if entry_margin is None:
         entry_margin_values = [float("nan")] * len(df)
     else:
         entry_margin_values = entry_margin.astype(float).tolist()
 
+    context_entry_budget_limit = int(context_entry_budget) if context_entry_budget_enabled else 0
     position: Position | None = None
     trades: list[Trade] = []
     context_pnl: dict[str, float] = {}
     blocked_contexts: dict[str, pd.Timestamp | None] = {}
+    context_entry_counts: dict[str, int] = {}
 
     def context_drawdown_key(
         decision_timestamp: pd.Timestamp,
@@ -1584,6 +1607,17 @@ def run_backtest(
     ) -> str:
         direction = DIRECTION_LABELS.get(desired, "flat")
         if context_drawdown_guard_reset_monthly:
+            month = decision_timestamp.strftime("%Y-%m")
+            return f"{month}|{direction}|{context_value}"
+        return f"{direction}|{context_value}"
+
+    def context_budget_key(
+        decision_timestamp: pd.Timestamp,
+        desired: int,
+        context_value: str,
+    ) -> str:
+        direction = DIRECTION_LABELS.get(desired, "flat")
+        if context_entry_budget_reset_monthly:
             month = decision_timestamp.strftime("%Y-%m")
             return f"{month}|{direction}|{context_value}"
         return f"{direction}|{context_value}"
@@ -1642,6 +1676,15 @@ def run_backtest(
         if position is None and config.evaluation_start <= execution_timestamp < config.evaluation_end:
             if desired in (-1, 1):
                 drawdown_key = ""
+                budget_key = ""
+                if context_entry_budget_enabled:
+                    budget_key = context_budget_key(
+                        decision_timestamp,
+                        desired,
+                        str(budget_context_values[decision_idx]),
+                    )
+                    if context_entry_counts.get(budget_key, 0) >= context_entry_budget_limit:
+                        continue
                 if context_drawdown_guard_enabled:
                     drawdown_key = context_drawdown_key(
                         decision_timestamp,
@@ -1684,6 +1727,8 @@ def run_backtest(
                     max_exit_timestamp=execution_timestamp + config.max_holding,
                     context_drawdown_key=drawdown_key,
                 )
+                if context_entry_budget_enabled:
+                    context_entry_counts[budget_key] = context_entry_counts.get(budget_key, 0) + 1
 
     if position is not None:
         trades.append(

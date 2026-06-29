@@ -271,6 +271,7 @@ def aggregate_summary(summary: pd.DataFrame) -> pd.DataFrame:
                 "context_drawdown_guard_recover_after_pnl_recovery",
                 "interaction_context_columns",
                 "short_gap_threshold",
+                "context_entry_budget",
             ],
             dropna=False,
         )
@@ -306,6 +307,7 @@ def apply_interaction_guard(
     context_columns: tuple[str, ...],
     match_modes: list[str],
     short_gap_thresholds: list[float],
+    entry_budgets: list[float],
     warmup_days: int,
     post_days: int,
 ) -> Path:
@@ -353,71 +355,106 @@ def apply_interaction_guard(
                 for threshold in thresholds:
                     for min_entry_margin in min_entry_margins:
                         for recover_after_pnl_recovery in recover_after_pnl_recovery_values:
-                            trades = trades_to_frame(
-                                run_backtest(
-                                    df,
-                                    signal,
-                                    backtest_config,
-                                    entry_context=entry_context,
-                                    entry_margin=entry_margin,
-                                    context_drawdown_guard_loss_threshold=threshold,
-                                    context_drawdown_guard_min_entry_margin=min_entry_margin,
-                                    context_drawdown_guard_recover_after_pnl_recovery=(
-                                        recover_after_pnl_recovery
-                                    ),
-                                    context_drawdown_guard_reset_monthly=True,
-                                )
-                            )
-                            active_by_decision_timestamp = pd.Series(
-                                active_mask.to_numpy(),
-                                index=pd.to_datetime(df["timestamp"], utc=True),
-                            )
-                            if trades.empty:
-                                active_trade_mask = pd.Series(False, index=trades.index)
-                            else:
-                                active_trade_mask = (
-                                    pd.to_datetime(
-                                        trades["entry_decision_timestamp"],
-                                        utc=True,
+                            for entry_budget in entry_budgets:
+                                trades = trades_to_frame(
+                                    run_backtest(
+                                        df,
+                                        signal,
+                                        backtest_config,
+                                        entry_context=entry_context,
+                                        entry_margin=entry_margin,
+                                        entry_budget_context=entry_context,
+                                        context_entry_budget=entry_budget,
+                                        context_entry_budget_reset_monthly=True,
+                                        context_drawdown_guard_loss_threshold=threshold,
+                                        context_drawdown_guard_min_entry_margin=min_entry_margin,
+                                        context_drawdown_guard_recover_after_pnl_recovery=(
+                                            recover_after_pnl_recovery
+                                        ),
+                                        context_drawdown_guard_reset_monthly=True,
                                     )
-                                    .map(active_by_decision_timestamp)
-                                    .fillna(False)
-                                    .astype(bool)
                                 )
-                            metrics = summarize_trades(
-                                trades,
-                                backtest_config,
-                                f"model_{base_policy_config.policy}",
-                            )
-                            metrics["prediction_rows"] = int(len(predictions))
-                            metrics["signal_long_count"] = int((signal == 1).sum())
-                            metrics["signal_short_count"] = int((signal == -1).sum())
-                            metrics["signal_flat_count"] = int((signal == 0).sum())
-                            curve = equity_curve(trades, backtest_config.evaluation_start)
-                            gap_label = (
-                                "na"
-                                if pd.isna(short_gap_threshold)
-                                else threshold_label(short_gap_threshold)
-                            )
-                            run_dir = (
-                                root
-                                / f"match_{match_mode}"
-                                / f"short_gap_{gap_label}"
-                                / f"threshold_{threshold_label(threshold)}"
-                                / f"min_margin_{threshold_label(min_entry_margin)}"
-                                / f"recover_{str(recover_after_pnl_recovery).lower()}"
-                                / source_run.name
-                            )
-                            write_result(
-                                run_dir,
-                                metrics,
-                                trades,
-                                curve,
-                                None,
-                                backtest_config,
-                                ModelPolicyConfig(
-                                    **{
-                                        **base_policy_config.__dict__,
+                                active_by_decision_timestamp = pd.Series(
+                                    active_mask.to_numpy(),
+                                    index=pd.to_datetime(df["timestamp"], utc=True),
+                                )
+                                if trades.empty:
+                                    active_trade_mask = pd.Series(False, index=trades.index)
+                                else:
+                                    active_trade_mask = (
+                                        pd.to_datetime(
+                                            trades["entry_decision_timestamp"],
+                                            utc=True,
+                                        )
+                                        .map(active_by_decision_timestamp)
+                                        .fillna(False)
+                                        .astype(bool)
+                                    )
+                                metrics = summarize_trades(
+                                    trades,
+                                    backtest_config,
+                                    f"model_{base_policy_config.policy}",
+                                )
+                                metrics["prediction_rows"] = int(len(predictions))
+                                metrics["signal_long_count"] = int((signal == 1).sum())
+                                metrics["signal_short_count"] = int((signal == -1).sum())
+                                metrics["signal_flat_count"] = int((signal == 0).sum())
+                                curve = equity_curve(trades, backtest_config.evaluation_start)
+                                gap_label = (
+                                    "na"
+                                    if pd.isna(short_gap_threshold)
+                                    else threshold_label(short_gap_threshold)
+                                )
+                                run_dir = (
+                                    root
+                                    / f"match_{match_mode}"
+                                    / f"short_gap_{gap_label}"
+                                    / f"threshold_{threshold_label(threshold)}"
+                                    / f"min_margin_{threshold_label(min_entry_margin)}"
+                                    / f"recover_{str(recover_after_pnl_recovery).lower()}"
+                                    / f"entry_budget_{threshold_label(entry_budget)}"
+                                    / source_run.name
+                                )
+                                write_result(
+                                    run_dir,
+                                    metrics,
+                                    trades,
+                                    curve,
+                                    None,
+                                    backtest_config,
+                                    ModelPolicyConfig(
+                                        **{
+                                            **base_policy_config.__dict__,
+                                            "context_drawdown_guard_loss_threshold": threshold,
+                                            "context_drawdown_guard_min_entry_margin": (
+                                                min_entry_margin
+                                            ),
+                                            "context_drawdown_guard_recover_after_pnl_recovery": (
+                                                recover_after_pnl_recovery
+                                            ),
+                                            "context_drawdown_guard_context_columns": context_columns,
+                                            "context_drawdown_guard_reset_monthly": True,
+                                        }
+                                    ),
+                                )
+                                pd.DataFrame(
+                                    {
+                                        "timestamp": df["timestamp"],
+                                        "desired_position": signal,
+                                        "side_rule_active": active_mask,
+                                        "entry_context": entry_context,
+                                        "entry_margin": entry_margin,
+                                    }
+                                ).to_csv(
+                                    run_dir / "interaction_signal_context.csv",
+                                    index=False,
+                                )
+                                rows.append(
+                                    {
+                                        "source_run": str(source_run),
+                                        "month": month,
+                                        "match_mode": match_mode,
+                                        "short_gap_threshold": short_gap_threshold,
                                         "context_drawdown_guard_loss_threshold": threshold,
                                         "context_drawdown_guard_min_entry_margin": (
                                             min_entry_margin
@@ -425,62 +462,33 @@ def apply_interaction_guard(
                                         "context_drawdown_guard_recover_after_pnl_recovery": (
                                             recover_after_pnl_recovery
                                         ),
-                                        "context_drawdown_guard_context_columns": context_columns,
-                                        "context_drawdown_guard_reset_monthly": True,
+                                        "context_entry_budget": entry_budget,
+                                        "interaction_context_columns": ",".join(
+                                            context_columns
+                                        ),
+                                        "active_signal_count": active_signal_count,
+                                        "active_trade_count": int(active_trade_mask.sum()),
+                                        "active_trade_pnl": float(
+                                            trades.loc[
+                                                active_trade_mask,
+                                                "adjusted_pnl",
+                                            ].sum()
+                                        )
+                                        if not trades.empty
+                                        else 0.0,
+                                        "inactive_trade_pnl": float(
+                                            trades.loc[
+                                                ~active_trade_mask,
+                                                "adjusted_pnl",
+                                            ].sum()
+                                        )
+                                        if not trades.empty
+                                        else 0.0,
+                                        "guard_rule_count": guard_rule_count,
+                                        **metrics,
+                                        "run_dir": str(run_dir),
                                     }
-                                ),
-                            )
-                            pd.DataFrame(
-                                {
-                                    "timestamp": df["timestamp"],
-                                    "desired_position": signal,
-                                    "side_rule_active": active_mask,
-                                    "entry_context": entry_context,
-                                    "entry_margin": entry_margin,
-                                }
-                            ).to_csv(
-                                run_dir / "interaction_signal_context.csv",
-                                index=False,
-                            )
-                            rows.append(
-                                {
-                                    "source_run": str(source_run),
-                                    "month": month,
-                                    "match_mode": match_mode,
-                                    "short_gap_threshold": short_gap_threshold,
-                                    "context_drawdown_guard_loss_threshold": threshold,
-                                    "context_drawdown_guard_min_entry_margin": (
-                                        min_entry_margin
-                                    ),
-                                    "context_drawdown_guard_recover_after_pnl_recovery": (
-                                        recover_after_pnl_recovery
-                                    ),
-                                    "interaction_context_columns": ",".join(
-                                        context_columns
-                                    ),
-                                    "active_signal_count": active_signal_count,
-                                    "active_trade_count": int(active_trade_mask.sum()),
-                                    "active_trade_pnl": float(
-                                        trades.loc[
-                                            active_trade_mask,
-                                            "adjusted_pnl",
-                                        ].sum()
-                                    )
-                                    if not trades.empty
-                                    else 0.0,
-                                    "inactive_trade_pnl": float(
-                                        trades.loc[
-                                            ~active_trade_mask,
-                                            "adjusted_pnl",
-                                        ].sum()
-                                    )
-                                    if not trades.empty
-                                    else 0.0,
-                                    "guard_rule_count": guard_rule_count,
-                                    **metrics,
-                                    "run_dir": str(run_dir),
-                                }
-                            )
+                                )
 
     summary = pd.DataFrame(rows)
     summary.to_csv(root / "summary_by_run.csv", index=False)
@@ -497,6 +505,7 @@ def apply_interaction_guard(
         "context_columns": context_columns,
         "match_modes": match_modes,
         "short_gap_thresholds": short_gap_thresholds,
+        "entry_budgets": entry_budgets,
         "warmup_days": warmup_days,
         "post_days": post_days,
         "rows": int(len(summary)),
@@ -534,6 +543,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=["any_rule", "selected_side_rule"],
     )
     parser.add_argument("--short-gap-thresholds", type=parse_csv_floats, default=[0.0])
+    parser.add_argument("--entry-budgets", type=parse_csv_floats, default=[float("inf")])
     parser.add_argument("--warmup-days", type=int, default=7)
     parser.add_argument("--post-days", type=int, default=4)
     return parser
@@ -552,6 +562,7 @@ def main(argv: list[str] | None = None) -> int:
         context_columns=args.context_columns,
         match_modes=args.match_modes,
         short_gap_thresholds=args.short_gap_thresholds,
+        entry_budgets=args.entry_budgets,
         warmup_days=args.warmup_days,
         post_days=args.post_days,
     )

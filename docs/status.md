@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 08:29 JST
+最終更新: 2026-06-30 08:43 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+short exposure budgetのdynamic hookを追加した。`run_backtest` の `entry_budget_context` / `context_entry_budget` は、同一月・同一direction・同一contextの実entry回数を制限する。`signal_short_raw_gap` active short contextにbudgetをかけると、all-window best `short_gap=5, budget=1` は total `+369.3640`, short PnL `+25.1080`、risk寄り `short_gap=0, budget=1` は total `+281.8854`, worst `-118.5098`。prior-onlyでは min4/worst total `-15.9692`, worst `-132.1382` まで改善したが、NoTrade超えには未達。min8/worstは `-240.2230`。標準採用せず、次は prior short active PnL / losing-month count / side-deterioration profileでbudgetを選ぶ。詳細は `docs/reports/00188_2026-06-30_short_entry_budget_guard.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 short raw score gapでshort側だけをactiveにするdynamic context guard診断を追加した。`signal_short_raw_gap` は最終signalがshort、かつ `raw_short_score - raw_long_score >= short_gap_threshold` のrowだけを `guarded|dataset_month|combined_regime` contextへ入れる。全12ヶ月bestは `short_gap=5, threshold=20, min_entry_margin=20` で total `+18.5106`、short PnL `-434.3938 -> -325.7454` と初めてNoTradeを上回ったが、prior-only selectionでは min4/worst total `-274.9360`、min8/worst `-527.8212` と2025-09..12に崩れた。`signal_short_raw_gap` は診断軸として残すが標準採用しない。次は target-month-independent な prior side-drift profile と short exposure budget を評価する。詳細は `docs/reports/00187_2026-06-30_short_raw_gap_context_guard.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

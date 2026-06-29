@@ -350,6 +350,45 @@ class BacktestTests(unittest.TestCase):
                 context_drawdown_guard_cooldown_minutes=-1.0,
             )
 
+    def test_context_entry_budget_limits_same_direction_context_entries(self):
+        df = frame_with_opens([100, 101, 102, 103, 104, 105, 106, 107])
+        signal = pd.Series([-1, 0, -1, 0, -1, 0, 0, 0])
+        entry_budget_context = pd.Series(["short_budget"] * len(df), index=df.index)
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        trades = trades_to_frame(
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_budget_context=entry_budget_context,
+                context_entry_budget=1,
+            )
+        )
+
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades.iloc[0]["direction"], "short")
+
+    def test_context_entry_budget_rejects_fractional_budget(self):
+        df = frame_with_opens([100, 101, 102])
+        signal = pd.Series([1, 0, 0])
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        with self.assertRaisesRegex(ValueError, "integer count"):
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_budget_context=pd.Series(["ctx"] * len(df), index=df.index),
+                context_entry_budget=1.5,
+            )
+
     def test_context_drawdown_guard_min_entry_margin_allows_strong_later_entry(self):
         df = frame_with_opens([100, 100, 105, 105, 105, 110, 110])
         signal = pd.Series([-1, 0, 0, -1, 0, 0, 0])

@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 08:43 Short entry budget guard
+
+- `run_backtest` に `entry_budget_context` / `context_entry_budget` を追加し、同一月・同一direction・同一contextのentry回数を制限できるようにした。entry countは実際にpositionを開いた時だけ増えるため、一玉制約・代替trade・約定遅延を保ったdynamic backtestになっている。
+- `side_context_interaction_guard_apply.py` に `--entry-budgets` を追加し、`signal_short_raw_gap` のactive short contextだけに月次/regime別entry budgetをかけた。
+- budget-only all-windowでは `short_gap=5, budget=1` が total `+369.3640`, worst `-202.8332`, short PnL `+25.1080`, trades `783`。baseline `-90.1378`, short PnL `-434.3938` から大きく改善した。
+- risk寄りでは `short_gap=0, budget=1` が total `+281.8854`, worst `-118.5098`, max DD `128.6044`。return topとは別の安定候補帯が見えた。
+- prior-onlyでは min4/worst が total `-15.9692`, worst `-132.1382`, short PnL `-93.4586` まで改善。`00187` の short raw gap prior-only min4/worst `-274.9360` より大幅改善だが、NoTradeはまだ上回らない。min8/worstは total `-240.2230`。
+- budget + drawdown hard guardも試したが、strict budget候補ではdrawdown threshold `20/40/60/inf` が同一結果になり、prior-only改善はなかった。
+- 判断: `context_entry_budget` は有望な実験hookとして残すが標準採用しない。次は total/worst集計だけではなく、prior short active PnL、short losing month count、short-side deterioration profileでbudgetを選ぶ。
+- report: `docs/reports/00188_2026-06-30_short_entry_budget_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/side_context_interaction_guard_apply.py tests/test_backtest.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 111 tests; `git diff --check`: OK
+
 ### 08:29 Short raw gap context guard
 
 - `scripts/experiments/side_context_interaction_guard_apply.py` に `signal_short_raw_gap` modeを追加した。active条件は `final desired signal == short` かつ `raw_short_score - raw_long_score >= short_gap_threshold`。

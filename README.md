@@ -271,6 +271,23 @@ python scripts/experiments/side_context_interaction_guard_apply.py \
   --min-entry-margins inf,20
 ```
 
+To test a monthly/regime entry-count budget on those active contexts, set
+`--entry-budgets`. A finite budget constrains only repeated entries sharing the
+guarded context; inactive rows are assigned unique contexts and remain
+effectively unconstrained:
+
+```bash
+python scripts/experiments/side_context_interaction_guard_apply.py \
+  --runs data/reports/backtests/<side_drift_guard_runs> \
+  --data data/processed/histdata/xauusd/xauusd_m1.parquet \
+  --context-columns dataset_month,combined_regime \
+  --match-modes signal_short_raw_gap \
+  --short-gap-thresholds 0,5,10 \
+  --thresholds inf \
+  --min-entry-margins inf \
+  --entry-budgets 1,2,3,5,10,inf
+```
+
 Rows outside the side-drift guarded prediction context are assigned unique
 inactive contexts, so ordinary trades do not share drawdown state. This is a
 dynamic backtest diagnostic and should still be judged by worst month,
