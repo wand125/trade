@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 09:53 Stateful blocking risk 2025-04 fixed check
+
+- `00123` の事前登録候補 `positive_blocking risk=5` を、追加walk-forward月として 2025-04 に固定適用した。
+- `oof-stateful-risk-model` を同じvalidation examples / 同じ設定で再実行し、`predictions_hgb_entry_mlp_exit_2025_04_forced.parquet` にstateful risk列を付与した。
+- 2025-04結果は baseline `-503.8224`, risk `5` `-509.6742`, risk `10` `-494.0544`, risk `20` `-486.2782`。risk `5` は改善せず、risk `20` でもNoTradeには遠い。
+- apply 4ヶ月合計では baseline sum/min/DD `-261.3216 / -503.8224 / 718.7252` に対し、risk `5` は `-310.6882 / -509.6742 / 729.0912`。
+- 判断: `positive_blocking risk=5` は標準policyにも事前登録候補にも昇格しない。2025-04の主因はstateful entry riskではなく、MLP holding外挿による異常高回転なので、先にholding guard/fallbackを標準候補として再評価する。
+- report: `docs/reports/00124_2026-06-29_stateful_blocking_risk_2025_04_fixed_check.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 09:48 Stateful blocking risk model
 
 - `trade_data.meta_model oof-stateful-risk-model` を追加した。`stateful_candidate_examples.csv` から `positive_blocking`, `positive_replacement_regret_high`, `stateful_nonpositive` を月抜きOOF分類し、prediction parquetへ `pred_stateful_risk_<prefix>_<target>_<side>_prob/risk` を出力する。
