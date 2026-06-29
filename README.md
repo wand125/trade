@@ -588,6 +588,26 @@ opportunities blocked while a candidate-policy trade was open.
 with `target`, `stateful_entry_value`, `stateful_positive_cost_value`,
 `blocking_cost`, and `replacement_regret` columns.
 
+To grid fixed `max_predicted_hold_minutes` values across one or more prediction
+parquet files while keeping post-month predictions available for legal 24h exits,
+use:
+
+```bash
+python scripts/experiments/holding_max_grid.py \
+  --base-config data/reports/backtests/<baseline_run>/config.json \
+  --prediction-paths data/reports/modeling/<validation_run>/predictions_validation_oof.parquet,data/reports/modeling/<apply_run>/predictions_apply.parquet \
+  --months 2025-01,2025-02,2025-03 \
+  --max-holds 240,260,480 \
+  --label holding_max_grid
+```
+
+The script writes `policy_summary.csv`, `policy_summary_by_variant.csv`,
+`prediction_coverage.csv`, and `manifest.json` to both modeling and backtest
+artifact directories. Duplicate `decision_timestamp` values fail fast. Inspect
+`prediction_coverage.csv` before interpreting monthly comparisons, and use
+`--require-post-coverage` for fresh apply windows where positions can exit after
+`evaluation_end`.
+
 For holding-cap context diagnostics, build a prior-only context profile from
 no-context cap deltas before turning a session/regime observation into a rule:
 

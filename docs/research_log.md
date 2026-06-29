@@ -4,6 +4,19 @@
 
 ## 2026-06-29 JST
 
+### 22:06 Holding max grid 2025-01..08
+
+- `scripts/experiments/holding_max_grid.py` を追加し、複数prediction parquetを結合して `max_predicted_hold_minutes` の固定gridを実行できるようにした。
+- full merged prediction frameを月別backtestへ渡し、月末後24h以内の決済で prediction を月内だけに切る事故を避ける設計にした。
+- `prediction_coverage.csv`、duplicate `decision_timestamp` 検査、`--require-post-coverage` を追加した。
+- 2025-01..08で coarse grid と `230..270m` fine gridを実行し、`260m` vs `480m` のtrade deltaをno-cost/cost-stressで確認した。
+- fine gridでは no-cost `240m` total `803.6572` が最高だが、`260m` は `798.2040` と僅差でworst month `57.5406`、max DD `215.8250` が良い。cost stressでは `260m` total `458.9738` が `240m` `436.4600` と `480m` `403.4864` を上回った。
+- 判断: `240m` を単独候補にするのは早い。次のprimary fixed candidateは `260m`、defensive sensitivityは `250m`。`720m` はcost-stress totalが高いが、forced exitsとworst month/max DDが悪いためpromoteしない。
+- stitched predictionでは2025-01/02/08のpost-exit coverageが不完全なので、この8ヶ月結果は同一入力比較として読む。fresh applyではfull prediction frameと `--require-post-coverage` を使う。
+- report: `docs/reports/00173_2026-06-29_holding_max_grid_2025_01_08.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m unittest tests.test_holding_max_grid`: OK, 3 tests; `python3 -m py_compile scripts/experiments/holding_max_grid.py`: OK
+
 ### 21:53 Holding max cap full-pred apply 2025-06..08
 
 - `00171` の raw `exit_shortening_high` cap失敗を受け、2025-06..08の `stateful_p5` baselineをholding errorで再分解した。baselineでは `exit_shortening_target` が56 trades, total `-399.9896` と悪く、`hold_extension_target` は242 trades, total `+453.3604` と利益も多く含んだ。
