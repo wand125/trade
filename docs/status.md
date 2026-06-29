@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 22:06 JST
+最終更新: 2026-06-29 22:26 JST
 
 ## 現在の状態
 
@@ -39,6 +39,8 @@ holding error / exit regretをdense教師候補として分解した。`scripts/
 `exit_shortening_high` 固定適用の失敗を受け、2025-06..08の強い `stateful_p5` baselineでholding errorとmax predicted hold capを再評価した。月別評価ではポジションが月末後24h以内に決済され得るため、prediction frameを `dataset_month == target_month` で切らず、full apply predictionsを渡すことを明記した。`max_predicted_hold_minutes=240` はno-costで baseline `480m` の total adjusted PnL `276.3928` を `339.5826` へ改善し、cost stressでも `170.9710 -> 215.3210`。fine gridでは no-cost/cost stress とも `240m` が最良で、`200m/260m` 周辺も多くはbaselineを上回った。一方で2025-08は no-cost `-24.7742`, cost stress `-35.8810` のdelta悪化があり、追加 `long/down_low_vol` など残存失敗がある。`240m` は次の固定候補として広いchronological windowで再探索なし検証へ進めるが、標準採用はまだしない。詳細は `docs/reports/00172_2026-06-29_holding_max_cap_fullpred_apply_2025_06_08.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 `holding_max_grid.py` を追加し、`max_predicted_hold_minutes` を2025-01..08の広いchronological windowで再評価した。結果は「`240m` 単独」ではなく `250..260m` 帯として扱うべきだった。fine gridでは no-cost `240m` total `803.6572` が最高だが、`260m` は `798.2040` と僅差でworst month `57.5406`、max DD `215.8250` が良い。cost stressでは `260m` total `458.9738` が `240m` `436.4600` と `480m` `403.4864` を上回った。`250m` はcost-stress worst month `-0.4550` の防御候補。`720m` はcost-stress total `465.9028` で高いが、worst month `-50.7592`、max DD `256.4396`、forced exits `10` のため標準候補にしない。広域artifactは stitched prediction のため2025-01/02/08でpost-exit prediction coverageが不完全であり、同一入力比較として読む。fresh applyではfull prediction frameと `--require-post-coverage` を使う。詳細は `docs/reports/00173_2026-06-29_holding_max_grid_2025_01_08.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`250..260m` のfresh chronological確認として、2025-09..12 datasetをprofit `1.0` / loss `1.20` で生成し、HGB/MLP/hybrid/stateful riskを同じsplitで作り直して `max_predicted_hold_minutes=250/260/480` を評価した。2025-09..12では全候補が大幅マイナスで、cost stressは `260m` `-839.2544`, `480m` `-847.6138`, `250m` `-864.4160`。2025-09..11だけでも `250m` `-484.3794`, `260m` `-489.6290`, `480m` `-533.2928` とNoTrade未満。主因はholding capではなくside driftで、実ラベルはlong share `0.541..0.635` なのに予測EVはshort share `0.743..0.838`、selected tradeのdirection errorは `0.55..0.72` に達した。`250..260m` は相対的には`480m`よりましだが、標準採用しない。次の本流はside calibration / side prior drift control。詳細は `docs/reports/00174_2026-06-29_holding_max_fresh_2025_09_12.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 

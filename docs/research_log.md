@@ -4,6 +4,20 @@
 
 ## 2026-06-29 JST
 
+### 22:26 Holding max fresh 2025-09..12
+
+- 2025-09..12の `policy_combined` datasetをprofit `1.0` / loss `1.20` で追加生成し、2025-08と同じHGB/MLP splitでfresh predictionを作った。
+- HGB: `experiments/20260629_132030_policy_combined_side_exit_test_2025_09_12/`。MLP: `experiments/20260629_132057_shared_mlp_hgb_split_test_2025_09_12/`。
+- MLP exit timingはfresh testで大きく崩れ、`long_exit_event_minutes` R2 `-1.7634`, `short_exit_event_minutes` R2 `-1.4699`。
+- hybrid predictionへMLP exit columnsを結合し、既存 `wf_exp_session_mm` stateful riskを2025-09..12へapplyした。stateful OOF AUCは `0.6382`。
+- `max_predicted_hold_minutes=250/260/480` を2025-09..12で再探索なし評価した。cost stress totalは `260m -839.2544`, `480m -847.6138`, `250m -864.4160`。no-costも全て大幅マイナス。
+- 2025-12 endpoint caveatを外すため2025-09..11だけでも確認したが、cost stressは `250m -484.3794`, `260m -489.6290`, `480m -533.2928` でNoTrade未満。
+- `--require-post-coverage` は2025-10で失敗した。2025-11-01..2025-11-02 UTCが週末でXAUUSD rowsがないためで、trading-calendar-aware coverage判定が必要。
+- 重要診断: actual labelはlong優勢だが、予測EVはshort偏重。2025-09..12のactual long shareは `0.541..0.635`、predicted short EV shareは `0.743..0.838`、predicted label short shareは `0.737..0.805`。
+- 判断: `250..260m` は`480m`より相対的にましな場面があるが、fresh windowでは採用根拠にならない。holding cap探索ではなくside calibration / side prior drift controlを次の本流にする。
+- report: `docs/reports/00174_2026-06-29_holding_max_fresh_2025_09_12.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 22:06 Holding max grid 2025-01..08
 
 - `scripts/experiments/holding_max_grid.py` を追加し、複数prediction parquetを結合して `max_predicted_hold_minutes` の固定gridを実行できるようにした。
