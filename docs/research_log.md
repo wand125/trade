@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 21:53 Holding max cap full-pred apply 2025-06..08
+
+- `00171` の raw `exit_shortening_high` cap失敗を受け、2025-06..08の `stateful_p5` baselineをholding errorで再分解した。baselineでは `exit_shortening_target` が56 trades, total `-399.9896` と悪く、`hold_extension_target` は242 trades, total `+453.3604` と利益も多く含んだ。
+- 月末付近の取引は24h以内なら翌月にexitできるため、monthly backtestへは full apply prediction frame を渡す必要がある。`dataset_month == target_month` に絞るとpost-month signalが欠け、月末決済になって既存baselineと一致しない。
+- full predictionsで `max_predicted_hold_minutes` を粗く振ると、no-cost 2025-06..08は `480m` baseline `276.3928` に対し `240m` が `339.5826` で最良。cost stressでも `480m` `170.9710` に対し `240m` `215.3210` で最良。
+- fine gridでも `240m` が no-cost `339.5826`, cost stress `215.3210` で最良。`200m/260m` 周辺も多くはbaselineを上回るが、完全な台地ではない。
+- deltaでは no-cost `240m` は2025-06 `+78.8592`, 2025-07 `+9.1048`, 2025-08 `-24.7742`。cost stressでは2025-08が `-35.8810` まで悪化する。追加 `long/down_low_vol` など残存失敗を次に診断する。
+- 判断: `max_predicted_hold_minutes=240` は次の固定候補に昇格。ただし2025-08悪化があるため標準採用せず、より広いchronological windowで再探索なし検証する。
+- report: `docs/reports/00172_2026-06-29_holding_max_cap_fullpred_apply_2025_06_08.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 19:12 Dense holding OOF smoke
 
 - `data/processed/datasets/xauusd_m1_p1_l1p2_policy_combined_dense_holding/` に2023-01..2025-08の32ヶ月datasetを新schemaで生成した。

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 21:34 JST
+最終更新: 2026-06-29 21:53 JST
 
 ## 現在の状態
 
@@ -35,6 +35,8 @@ holding error / exit regretをdense教師候補として分解した。`scripts/
 `exit_shortening_high` をselected trade failure modelへ追加し、chronological expanding OOFとpolicy接続を確認した。target定義は `oracle_holding_gap_minutes <= -30 and exit_regret >= 5`。2025-01..05のOOFはAUC `0.5269`, prevalence `0.1987`, pred mean `0.2461` と薄く、probability bin上のPnL単調性も弱い。entry riskとしては単独/既存stateful riskへの上乗せがすべて悪化した。一方、既存 `stateful_p5` に exit timingとして接続し、`pred_trade_failure_exit_shortening_high_*_prob >= 0.30` のとき予測保有を `60m` capにすると、2025-01..05 total adjusted PnLは baseline `405.3160` から `457.3926` へ改善、worst month `8.6094`, max DD `210.6890`。`0.28/60m` と `0.30/90m` も近く、0.28..0.30付近に候補帯がある。まだ同期間内でのpolicy選択なので標準採用せず、次は `0.30/60m` を固定して2025-06..08へ再探索なしで適用する。詳細は `docs/reports/00170_2026-06-29_exit_shortening_failure_policy.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 `exit_shortening_high` の固定候補 `0.30/60m` を2025-06..08へ再探索なし適用した。final apply modelの確率最大が default shrinkageで `0.2478`、no-shrink診断でも `0.2608` に留まり、固定閾値 `0.30` は発火0。baseline `stateful_p5` と `0.30/60m`, `0.28/60m`, `0.30/90m` は完全同一で total adjusted PnL `276.3928`, worst month `56.0720`, max DD `100.2362`。post-hoc診断で閾値を `0.24/60m` まで下げると total `246.7446`、`0.22/60m` は `114.0804` まで悪化。2025-06/08では良い保有短縮・良いbaseline trade除外が主因。raw probability thresholdはvalidation OOFとfinal applyのスケール差に弱いため標準採用しない。次はbinary probability直結ではなく、cap value / holding-error magnitude / calibrated rank featureへ戻す。詳細は `docs/reports/00171_2026-06-29_exit_shortening_fixed_apply_2025_06_08.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`exit_shortening_high` 固定適用の失敗を受け、2025-06..08の強い `stateful_p5` baselineでholding errorとmax predicted hold capを再評価した。月別評価ではポジションが月末後24h以内に決済され得るため、prediction frameを `dataset_month == target_month` で切らず、full apply predictionsを渡すことを明記した。`max_predicted_hold_minutes=240` はno-costで baseline `480m` の total adjusted PnL `276.3928` を `339.5826` へ改善し、cost stressでも `170.9710 -> 215.3210`。fine gridでは no-cost/cost stress とも `240m` が最良で、`200m/260m` 周辺も多くはbaselineを上回った。一方で2025-08は no-cost `-24.7742`, cost stress `-35.8810` のdelta悪化があり、追加 `long/down_low_vol` など残存失敗がある。`240m` は次の固定候補として広いchronological windowで再探索なし検証へ進めるが、標準採用はまだしない。詳細は `docs/reports/00172_2026-06-29_holding_max_cap_fullpred_apply_2025_06_08.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
