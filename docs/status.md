@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 19:44 JST
+最終更新: 2026-06-29 19:58 JST
 
 ## 現在の状態
 
@@ -19,6 +19,8 @@ holding-shortening probabilityを `model-policy` / `model-sweep` の保有時間
 holding-shortening hookを2025-02..2025-04の3ヶ月へ拡張検証した。disabled 3ヶ月合計 adjusted PnL `-172.4522` に対し、`holding_shortening_threshold=0.60`, `holding_shortening_cap_minutes=60` は `-53.9566`、min月 `-43.7620`、max DD `461.3556` で最良。2025-04の大負けを `-125.9826 -> -42.8014` へ縮めた。一方、探索対象月内で選んだ値なので標準採用せず、`0.60 / 60` を固定候補として未使用月に再探索なし確認する。`model-sweep-summary` の `sweep_source` 重複バグも修正済み。詳細は `docs/reports/00162_2026-06-29_holding_shortening_multimonth_validation.md`。
 
 holding-shortening固定候補を未使用月2025-05へchronological applyした。2023-01..2025-03でfit、2025-04 valid、2025-05 test。`0.60 / 60` は2025-05の実選択tradeでprob最大 `0.5959` となり発火0、disabledと同じ adjusted PnL `-179.2516`。2025-04 validでthresholdを再校正すると `0.50 / 60` が最良で、2025-05固定適用では `-79.7894` まで改善したがNoTrade未満。trade数が `56 -> 119` に増え、`short/up_normal_vol` と `long/range_normal_vol` の悪い追加tradeが残る。raw probability thresholdはfit方式でスケールが動くため、calibrated probabilityまたはvalidation quantile化が必要。詳細は `docs/reports/00163_2026-06-29_holding_shortening_fixed_2025_05.md`。
+
+holding-shortening probabilityのvalidation quantile化を追加した。2025-04 validの経験CDFから `pred_long/short_fixed_60m_beats_exit_event_valid_quantile` を作り、既存hookのholding-shortening columnとして使う。valid最良は quantile `0.25 / cap60` で disabled `-156.1574 -> -43.7680`。2025-05固定適用では disabled `-179.2516 -> -89.7428` と改善したが、raw valid-calibrated `0.50 / cap60` の `-79.7894` より少し悪い。`short/up_normal_vol` blockは2025-05を `-77.1744` へ改善するが、2025-04 validのPnLを悪化させる。visible-bad blockはvalidを `+45.2330` へ良化させる一方testを `-115.9068` へ壊し、regime block過学習の典型。quantile実装は残すが、単月validからblock ruleを増やす方向は本流にしない。詳細は `docs/reports/00164_2026-06-29_holding_shortening_quantile_calibration.md`。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 

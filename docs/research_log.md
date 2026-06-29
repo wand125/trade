@@ -4837,3 +4837,31 @@ Artifacts:
 - `0.60 / 60` は2025-05の選択tradeで発火0。raw probability thresholdはfit方式が変わると移植できない。
 - `0.50 / 60` はvalid校正後に2025-05損失を大きく縮めたが、まだNoTrade未満でtrade数が増えすぎる。
 - 次はcalibrated probability / validation quantile化と、`short/up_normal_vol`, `long/range_normal_vol`, `short/range_low_vol` の悪い追加tradeを抑えるentry quality gateを組み合わせる。
+
+### 2026-06-29 19:58 JST Holding shortening quantile calibration
+
+作業:
+
+- `src/trade_data/quantile_calibration.py` を追加し、fit分布の経験CDFでapply predictionへquantile列を付与できるようにした。
+- `scripts/experiments/holding_shortening_quantile_calibration.py` を追加し、holding-shortening probabilityをvalidation分布上の相対順位へ変換した。
+- 2025-04 validでquantile thresholdを選び、2025-05へ再探索なしで固定適用した。
+- q0.25のdelta診断と、validで見えるbad group blockの小診断を実施した。
+- report: `docs/reports/00164_2026-06-29_holding_shortening_quantile_calibration.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| variant | valid adjusted pnl | test adjusted pnl | test trades | test max DD |
+|---|---:|---:|---:|---:|
+| disabled | `-156.1574` | `-179.2516` | `56` | `269.5060` |
+| raw valid-calibrated `0.50 / 60` | `-43.7680` | `-79.7894` | `119` | `212.4794` |
+| quantile `0.25 / 60` | `-43.7680` | `-89.7428` | `127` | `222.6048` |
+| quantile `0.25 / 60` + block `short/up_normal_vol` | `-60.0166` | `-77.1744` | `119` | `200.0362` |
+| quantile `0.25 / 60` + visible-bad block | `45.2330` | `-115.9068` | `118` | `217.7606` |
+
+判断:
+
+- quantile化はraw probability scale差を扱う実装として残すが、今回の単月valid/testではraw校正を超えない。
+- `short/up_normal_vol` blockはtestだけ見ると改善するが、valid PnL最大化では選ばれない。
+- visible-bad blockはvalidだけ大幅に良く、testで悪化した。少数月deltaからregime blockを増やすのは過学習しやすい。
+- 次は単月block rule追加ではなく、複数月walk-forwardでquantile thresholdを選ぶか、holding-shortening probabilityをentry quality/risk modelのfeatureへ戻す。
