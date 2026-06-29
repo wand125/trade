@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 13:16 JST
+最終更新: 2026-06-29 14:23 JST
 
 ## 現在の状態
 
@@ -91,6 +91,8 @@ stateful downside riskにmean-match probability calibrationを追加済み。`se
 `mean_match + session_floor_lowered risk=5` を2025-05へ固定適用済み。baseは `13.9990 -> 25.3104`、highcostは `-66.1420 -> -52.9764` へ改善し、防御方向の効果は残った。ただしhighcostはNoTrade未満で、`00140` のcost min基準 `>= -20` を満たさない。trade-deltaでは改善が少数の入れ替えに依存し、common tradeに `long:down_low_vol` と `short:up_normal_vol` の大きな損失が残った。標準採用せず、candidate ranking / diagnostic featureへ降格寄りに扱う。詳細は `docs/reports/00141_2026-06-29_stateful_downside_mean_match_2025_05_fixed.md`。
 
 selected trade用の `model-trade-context-walkforward-stress` を追加済み。候補差分ではなく実際に選択されたtradeを対象に、対象月より前の月だけでcontext stressとall-prior context floorを作る。2025-05 risk=5の未解決損失では、広い文脈の `long:down_low_vol` と `short:up_normal_vol` は過去月だけのstressで捕捉できた。session分解では `long:down_low_vol:london` と `short:up_normal_vol:asia` が全過去平均でも負。一方 `short:up_normal_vol:london` は過去平均が正で、contextだけでは捕捉しにくい。これらはhard blockせず、`target_walkforward_context_stress_adjusted` と `target_walkforward_prior_context_mean_floor` をdownside分類・EV校正・ranking featureへ戻す。詳細は `docs/reports/00142_2026-06-29_selected_trade_walkforward_context.md`。
+
+`target_walkforward_prior_context_mean_floor` をstateful downside risk targetへ戻した。`walkforward_prior_floor_nonpositive` はAUC `0.6240`, bias `-0.0741` でsignalはあるが、単独risk penaltyでは広く削りすぎる。2024-11..2025-05の7ヶ月では `prior_lowered risk=5` がbase/highcost total `491.7438 / 278.3902` で、既存 `floor_lowered risk=5` の `567.7900 / 354.8408` に負けた。単独penaltyには採用せず、EV calibration / ranking feature候補に降格する。詳細は `docs/reports/00143_2026-06-29_prior_context_floor_risk_target.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

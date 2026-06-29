@@ -283,6 +283,14 @@ class MetaModelTests(unittest.TestCase):
                     -6.0,
                     1.0,
                 ],
+                "target_walkforward_prior_context_mean_floor": [
+                    0.75,
+                    -1.0,
+                    2.0,
+                    5.0,
+                    -7.0,
+                    4.0,
+                ],
                 "pred_taken_ev": [12.0, 13.0, 14.0, 15.0, 16.0, 17.0],
                 "pred_opposite_ev": [11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
                 "trend_regime": ["up", "down", "up", "down", "range", "range"],
@@ -316,6 +324,8 @@ class MetaModelTests(unittest.TestCase):
                 "walkforward_stress_adjusted_nonpositive",
                 "walkforward_floor_nonpositive",
                 "walkforward_floor_lowered",
+                "walkforward_prior_floor_nonpositive",
+                "walkforward_prior_floor_lowered",
             ),
             blocking_cost_threshold=5.0,
             replacement_regret_threshold=5.0,
@@ -350,6 +360,14 @@ class MetaModelTests(unittest.TestCase):
         self.assertEqual(
             frame[stateful_risk_target_column("walkforward_floor_lowered")].tolist(),
             [1, 1, 0, 1, 1, 1],
+        )
+        self.assertEqual(
+            frame[stateful_risk_target_column("walkforward_prior_floor_nonpositive")].tolist(),
+            [0, 1, 0, 0, 1, 0],
+        )
+        self.assertEqual(
+            frame[stateful_risk_target_column("walkforward_prior_floor_lowered")].tolist(),
+            [1, 0, 1, 0, 1, 1],
         )
         for target_name in config.target_names:
             long_prob = stateful_risk_prob_column(target_name, "long", "stateful_test")

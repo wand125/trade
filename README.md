@@ -661,6 +661,13 @@ python -m trade_data.meta_model oof-stateful-risk-model \
   --probability-calibration mean_match
 ```
 
+Use `walkforward_prior_floor_lowered` or
+`walkforward_prior_floor_nonpositive` to train on
+`target_walkforward_prior_context_mean_floor` instead of the immediate
+validation/holdout floor. The prior-floor targets are intended for contexts
+that are weak across all earlier months, while `walkforward_floor_lowered`
+remains the sharper validation-to-holdout degradation target.
+
 `--probability-calibration mean_match` shifts the predicted logits so each
 scored fold's mean probability matches the fitted target prevalence. It
 preserves ranking within the fold, but it does not use future holdout

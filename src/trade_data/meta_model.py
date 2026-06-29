@@ -293,6 +293,8 @@ STATEFUL_RISK_TARGET_NAMES = (
     "walkforward_stress_adjusted_nonpositive",
     "walkforward_floor_nonpositive",
     "walkforward_floor_lowered",
+    "walkforward_prior_floor_nonpositive",
+    "walkforward_prior_floor_lowered",
 )
 
 
@@ -2561,6 +2563,8 @@ def stateful_risk_targets_from_examples(
         ),
         "walkforward_floor_nonpositive": "target_walkforward_context_holdout_mean_floor",
         "walkforward_floor_lowered": "target_walkforward_context_holdout_mean_floor",
+        "walkforward_prior_floor_nonpositive": "target_walkforward_prior_context_mean_floor",
+        "walkforward_prior_floor_lowered": "target_walkforward_prior_context_mean_floor",
     }
     missing = sorted(
         {
@@ -2570,6 +2574,8 @@ def stateful_risk_targets_from_examples(
         }
     )
     if "walkforward_floor_lowered" in config.target_names and "target" not in examples.columns:
+        missing.append("target")
+    if "walkforward_prior_floor_lowered" in config.target_names and "target" not in examples.columns:
         missing.append("target")
     if missing:
         raise ValueError(f"stateful examples missing risk target columns: {', '.join(missing)}")
@@ -2624,6 +2630,15 @@ def stateful_risk_targets_from_examples(
         target = finite_float_series(examples, "target")
         floor = finite_float_series(examples, "target_walkforward_context_holdout_mean_floor")
         targets[stateful_risk_target_column("walkforward_floor_lowered")] = floor < target
+    if "walkforward_prior_floor_nonpositive" in config.target_names:
+        floor = finite_float_series(examples, "target_walkforward_prior_context_mean_floor")
+        targets[stateful_risk_target_column("walkforward_prior_floor_nonpositive")] = (
+            floor <= 0.0
+        )
+    if "walkforward_prior_floor_lowered" in config.target_names:
+        target = finite_float_series(examples, "target")
+        floor = finite_float_series(examples, "target_walkforward_prior_context_mean_floor")
+        targets[stateful_risk_target_column("walkforward_prior_floor_lowered")] = floor < target
     return targets.astype(int)
 
 
@@ -8947,7 +8962,8 @@ def build_parser() -> argparse.ArgumentParser:
             "positive_cost_nonpositive,positive_blocking,blocking_cost_high,"
             "replacement_regret_high,positive_replacement_regret_high,"
             "walkforward_stress_flag,walkforward_stress_adjusted_nonpositive,"
-            "walkforward_floor_nonpositive,walkforward_floor_lowered"
+            "walkforward_floor_nonpositive,walkforward_floor_lowered,"
+            "walkforward_prior_floor_nonpositive,walkforward_prior_floor_lowered"
         ),
     )
     stateful_risk_model_parser.add_argument("--blocking-cost-threshold", type=float, default=5.0)

@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 14:23 Prior context floor risk target
+
+- `oof-stateful-risk-model` に `walkforward_prior_floor_nonpositive` と `walkforward_prior_floor_lowered` を追加し、`target_walkforward_prior_context_mean_floor` を分類targetとして使えるようにした。
+- prior floor列入りのstateful examplesを再生成した。session contextでは1544例中322件がall-prior loss flagで、`target_walkforward_prior_context_mean_floor` meanは `-2.1393`。
+- `00140` と同じHGB/expanding/mean_match設定では、`walkforward_floor_lowered` AUC `0.6371`、`walkforward_prior_floor_lowered` AUC `0.6063`、`walkforward_prior_floor_nonpositive` AUC `0.6240`。prior targetはbiasが小さいが、rankでは既存floorを上回らない。
+- 2025-05 quick screenでは、base/highcostとも既存 `floor_lowered risk=5` が最良。`prior_nonpositive risk=5` はbase `-109.5876`、highcost `-171.5662` と悪化した。
+- 2024-11..2025-05の7ヶ月でも、`prior_lowered risk=5` はbase total `491.7438`、highcost total `278.3902` で、既存 `floor_lowered risk=5` のbase `567.7900`、highcost `354.8408` に負けた。
+- 判断: prior floorは単独risk penaltyには採用しない。`prior_floor_nonpositive` はEV calibration / ranking feature候補として残し、残存損失はexit timing / EV overestimate / side-confidence interactionへ戻す。
+- report: `docs/reports/00143_2026-06-29_prior_context_floor_risk_target.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 13:16 Selected trade walk-forward context
 
 - `model-trade-context-walkforward-stress` を追加した。model-policyのselected tradesを対象に、対象月より前の月だけでcontext stressとall-prior context floorを作る。
