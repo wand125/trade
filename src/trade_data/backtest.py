@@ -75,6 +75,9 @@ SWEEP_KEY_COLUMNS = [
     "min_side_confidence",
     "require_profit_barrier",
     "profit_barrier_threshold",
+    "secondary_score_tie_margin",
+    "long_secondary_score_column",
+    "short_secondary_score_column",
     "side_ev_penalty_rules",
     "extra_side_margin_rules",
     "side_extra_margin_rules",
@@ -308,6 +311,9 @@ class ModelPolicyConfig:
     long_risk_column: str = "pred_long_max_adverse_pnl"
     short_risk_column: str = "pred_short_max_adverse_pnl"
     risk_penalty: float = 0.0
+    long_secondary_score_column: str = ""
+    short_secondary_score_column: str = ""
+    secondary_score_tie_margin: float = -float("inf")
     long_holding_column: str = "pred_long_best_holding_minutes"
     short_holding_column: str = "pred_short_best_holding_minutes"
     min_predicted_hold_minutes: float = 1.0
@@ -569,6 +575,10 @@ def prediction_required_columns(config: ModelPolicyConfig) -> list[str]:
     if config.policy == "fixed_horizon_ev":
         validate_fixed_horizon_config(config)
     required_columns = ["decision_timestamp", config.long_column, config.short_column]
+    if secondary_score_tie_break_enabled(config):
+        required_columns.extend(
+            [config.long_secondary_score_column, config.short_secondary_score_column]
+        )
     if config.risk_penalty > 0:
         required_columns.extend([config.long_risk_column, config.short_risk_column])
     if config.policy == "timed_ev":
@@ -790,6 +800,15 @@ def side_rule_condition_mask(
     return mask
 
 
+def secondary_score_tie_break_enabled(config: ModelPolicyConfig) -> bool:
+    return (
+        np.isfinite(config.secondary_score_tie_margin)
+        and config.secondary_score_tie_margin >= 0
+        and bool(config.long_secondary_score_column)
+        and bool(config.short_secondary_score_column)
+    )
+
+
 def model_signal_from_predictions(
     df: pd.DataFrame,
     predictions: pd.DataFrame,
@@ -801,6 +820,22 @@ def model_signal_from_predictions(
         raise ValueError("side_margin must be non-negative")
     if config.risk_penalty < 0:
         raise ValueError("risk_penalty must be non-negative")
+    if (
+        np.isfinite(config.secondary_score_tie_margin)
+        and config.secondary_score_tie_margin < 0
+    ):
+        raise ValueError("secondary_score_tie_margin must be non-negative or -inf")
+    if (
+        np.isfinite(config.secondary_score_tie_margin)
+        and config.secondary_score_tie_margin >= 0
+        and (
+            not config.long_secondary_score_column
+            or not config.short_secondary_score_column
+        )
+    ):
+        raise ValueError(
+            "secondary score tie-break requires both long and short secondary score columns"
+        )
     if config.profit_barrier_miss_penalty < 0:
         raise ValueError("profit_barrier_miss_penalty must be non-negative")
     if config.time_exit_penalty < 0:
@@ -1053,10 +1088,40 @@ def model_signal_from_predictions(
     valid_prediction = long_ev.notna() & short_ev.notna()
     best_side.iloc[(valid_prediction & (long_ev >= short_ev)).to_numpy()] = 1
     best_side.iloc[(valid_prediction & (long_ev < short_ev)).to_numpy()] = -1
+    selected_side = best_side.copy()
+    selected_score = best_score.copy()
+    if secondary_score_tie_break_enabled(config):
+        secondary_aligned = prediction_index[
+            [config.long_secondary_score_column, config.short_secondary_score_column]
+        ].reindex(df["timestamp"])
+        long_secondary_score = (
+            secondary_aligned[config.long_secondary_score_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        short_secondary_score = (
+            secondary_aligned[config.short_secondary_score_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        secondary_valid = long_secondary_score.notna() & short_secondary_score.notna()
+        secondary_valid &= np.isfinite(long_secondary_score) & np.isfinite(
+            short_secondary_score
+        )
+        near_tie = valid_prediction & secondary_valid & (
+            side_gap <= config.secondary_score_tie_margin
+        )
+        secondary_prefers_long = long_secondary_score >= short_secondary_score
+        selected_side.iloc[(near_tie & secondary_prefers_long).to_numpy()] = 1
+        selected_side.iloc[(near_tie & ~secondary_prefers_long).to_numpy()] = -1
+        selected_score = pd.Series(
+            np.where(selected_side == 1, long_ev, short_ev),
+            index=df.index,
+        )
     long_entry_threshold = config.entry_threshold + config.long_entry_threshold_offset
     short_entry_threshold = config.entry_threshold + config.short_entry_threshold_offset
     required_entry_threshold = pd.Series(
-        np.where(best_side == 1, long_entry_threshold, short_entry_threshold),
+        np.where(selected_side == 1, long_entry_threshold, short_entry_threshold),
         index=df.index,
     )
     quality_ok = pd.Series(True, index=df.index)
@@ -1067,7 +1132,7 @@ def model_signal_from_predictions(
         ].reindex(df["timestamp"])
         long_wait = wait_aligned[config.long_wait_regret_column].reset_index(drop=True).astype(float)
         short_wait = wait_aligned[config.short_wait_regret_column].reset_index(drop=True).astype(float)
-        side_wait = pd.Series(np.where(best_side == 1, long_wait, short_wait), index=df.index)
+        side_wait = pd.Series(np.where(selected_side == 1, long_wait, short_wait), index=df.index)
         quality_ok &= side_wait.notna() & (side_wait <= config.max_wait_regret)
     if config.min_entry_rank > 0:
         rank_aligned = prediction_index[
@@ -1075,7 +1140,7 @@ def model_signal_from_predictions(
         ].reindex(df["timestamp"])
         long_rank = rank_aligned[config.long_entry_rank_column].reset_index(drop=True).astype(float)
         short_rank = rank_aligned[config.short_entry_rank_column].reset_index(drop=True).astype(float)
-        side_rank = pd.Series(np.where(best_side == 1, long_rank, short_rank), index=df.index)
+        side_rank = pd.Series(np.where(selected_side == 1, long_rank, short_rank), index=df.index)
         quality_ok &= side_rank.notna() & (side_rank >= config.min_entry_rank)
     if np.isfinite(config.min_trade_quality):
         trade_quality_aligned = prediction_index[
@@ -1088,7 +1153,7 @@ def model_signal_from_predictions(
             trade_quality_aligned[config.short_trade_quality_column].reset_index(drop=True).astype(float)
         )
         side_trade_quality = pd.Series(
-            np.where(best_side == 1, long_trade_quality, short_trade_quality),
+            np.where(selected_side == 1, long_trade_quality, short_trade_quality),
             index=df.index,
         )
         quality_ok &= side_trade_quality.notna() & (side_trade_quality >= config.min_trade_quality)
@@ -1108,7 +1173,7 @@ def model_signal_from_predictions(
                 .astype(float)
             )
         side_confidence = pd.Series(
-            np.where(best_side == 1, long_side_confidence, short_side_confidence),
+            np.where(selected_side == 1, long_side_confidence, short_side_confidence),
             index=df.index,
         )
         quality_ok &= side_confidence.notna() & (side_confidence >= config.min_side_confidence)
@@ -1118,11 +1183,14 @@ def model_signal_from_predictions(
         ].reindex(df["timestamp"])
         long_barrier = barrier_aligned[config.long_profit_barrier_column].reset_index(drop=True).astype(float)
         short_barrier = barrier_aligned[config.short_profit_barrier_column].reset_index(drop=True).astype(float)
-        side_barrier = pd.Series(np.where(best_side == 1, long_barrier, short_barrier), index=df.index)
+        side_barrier = pd.Series(
+            np.where(selected_side == 1, long_barrier, short_barrier),
+            index=df.index,
+        )
         quality_ok &= side_barrier.notna() & (side_barrier >= config.profit_barrier_threshold)
     if long_holding_entry_ok is not None and short_holding_entry_ok is not None:
         side_holding_entry_ok = pd.Series(
-            np.where(best_side == 1, long_holding_entry_ok, short_holding_entry_ok),
+            np.where(selected_side == 1, long_holding_entry_ok, short_holding_entry_ok),
             index=df.index,
         )
         quality_ok &= side_holding_entry_ok.astype(bool)
@@ -1135,7 +1203,7 @@ def model_signal_from_predictions(
         quality_ok &= regime_values.notna() & ~regime_values.isin(set(blocked_values))
     for side, conditions in parsed_side_block_rules(config):
         condition_mask = side_rule_condition_mask(prediction_index, df["timestamp"], df.index, conditions)
-        quality_ok &= ~((best_side == side) & condition_mask)
+        quality_ok &= ~((selected_side == side) & condition_mask)
     for column, value, margin in parsed_extra_side_margin_rules(config):
         rule_aligned = prediction_index[[column]].reindex(df["timestamp"])
         rule_values = pd.Series(
@@ -1145,18 +1213,18 @@ def model_signal_from_predictions(
         extra_side_margin += np.where((rule_values == value).fillna(False).to_numpy(), margin, 0.0)
     for side, conditions, margin in parsed_side_extra_margin_rules(config):
         condition_mask = side_rule_condition_mask(prediction_index, df["timestamp"], df.index, conditions)
-        extra_side_margin += np.where(((best_side == side) & condition_mask).to_numpy(), margin, 0.0)
+        extra_side_margin += np.where(((selected_side == side) & condition_mask).to_numpy(), margin, 0.0)
     required_side_margin = config.side_margin + extra_side_margin
 
     if config.policy == "stateless_ev":
         enter = (
             valid_prediction
             & quality_ok
-            & (best_score > required_entry_threshold)
+            & (selected_score > required_entry_threshold)
             & (side_gap >= required_side_margin)
         )
         signal = pd.Series(0, index=df.index, dtype="int8")
-        signal.iloc[enter.to_numpy()] = best_side.iloc[enter.to_numpy()]
+        signal.iloc[enter.to_numpy()] = selected_side.iloc[enter.to_numpy()]
         return signal
 
     current = 0
@@ -1164,6 +1232,8 @@ def model_signal_from_predictions(
     values: list[int] = []
     long_values = long_ev.tolist()
     short_values = short_ev.tolist()
+    selected_side_values = selected_side.tolist()
+    selected_score_values = selected_score.tolist()
     timestamps = df["timestamp"].reset_index(drop=True).tolist()
     long_holding_values = [] if long_holding is None else long_holding.tolist()
     short_holding_values = [] if short_holding is None else short_holding.tolist()
@@ -1214,14 +1284,9 @@ def model_signal_from_predictions(
 
         long_value = float(long_values[idx])
         short_value = float(short_values[idx])
-        if long_value >= short_value:
-            candidate_side = 1
-            candidate_score = long_value
-            candidate_gap = long_value - short_value
-        else:
-            candidate_side = -1
-            candidate_score = short_value
-            candidate_gap = short_value - long_value
+        candidate_side = int(selected_side_values[idx])
+        candidate_score = float(selected_score_values[idx])
+        candidate_gap = abs(long_value - short_value)
         candidate_entry_threshold = required_entry_threshold_values[idx]
 
         if current == 0:
@@ -1253,7 +1318,8 @@ def model_signal_from_predictions(
             )
             should_exit = current_score < config.exit_threshold
             should_flip = (
-                opposite_score > opposite_entry_threshold
+                int(selected_side_values[idx]) == -current
+                and float(selected_score_values[idx]) > opposite_entry_threshold
                 and opposite_score > current_score + required_side_margin_values[idx]
             )
             if should_exit or should_flip:
@@ -2210,6 +2276,7 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "side_confidence_penalty",
         "min_side_confidence",
         "profit_barrier_threshold",
+        "secondary_score_tie_margin",
     ]
     for column in numeric_columns:
         output[column] = pd.to_numeric(output[column], errors="raise")
@@ -2226,6 +2293,8 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "fixed_horizon_score_mode",
         "long_holding_fallback_column",
         "short_holding_fallback_column",
+        "long_secondary_score_column",
+        "short_secondary_score_column",
         "side_confidence_penalty_rules",
         "side_confidence_overfit_penalty_rules",
         "side_ev_penalty_rules",
@@ -2698,6 +2767,9 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         long_risk_column=args.long_risk_column,
         short_risk_column=args.short_risk_column,
         risk_penalty=args.risk_penalty,
+        long_secondary_score_column=args.long_secondary_score_column,
+        short_secondary_score_column=args.short_secondary_score_column,
+        secondary_score_tie_margin=args.secondary_score_tie_margin,
         long_holding_column=args.long_holding_column,
         short_holding_column=args.short_holding_column,
         min_predicted_hold_minutes=args.min_predicted_hold_minutes,
@@ -2950,6 +3022,25 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--long-risk-column", default="pred_long_max_adverse_pnl")
     parser.add_argument("--short-risk-column", default="pred_short_max_adverse_pnl")
     parser.add_argument("--risk-penalty", type=float, default=0.0)
+    parser.add_argument(
+        "--long-secondary-score-column",
+        default="",
+        help="optional long-side secondary score used only for near-tie side selection",
+    )
+    parser.add_argument(
+        "--short-secondary-score-column",
+        default="",
+        help="optional short-side secondary score used only for near-tie side selection",
+    )
+    parser.add_argument(
+        "--secondary-score-tie-margin",
+        type=float,
+        default=-float("inf"),
+        help=(
+            "primary EV side-gap at or below which secondary score columns may choose "
+            "the side; use -inf to disable"
+        ),
+    )
     parser.add_argument("--long-holding-column", default="pred_long_best_holding_minutes")
     parser.add_argument("--short-holding-column", default="pred_short_best_holding_minutes")
     parser.add_argument("--min-predicted-hold-minutes", type=float, default=1.0)
@@ -3124,6 +3215,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     exit_thresholds = parse_csv_floats(args.exit_thresholds)
     side_margins = parse_csv_floats(args.side_margins)
     risk_penalties = parse_csv_floats(args.risk_penalties)
+    secondary_score_tie_margins = parse_csv_floats(args.secondary_score_tie_margins)
     profit_barrier_miss_penalties = parse_csv_floats(args.profit_barrier_miss_penalties)
     time_exit_penalties = parse_csv_floats(args.time_exit_penalties)
     loss_first_penalties = parse_csv_floats(args.loss_first_penalties)
@@ -3185,6 +3277,12 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
             long_risk_column=args.long_risk_column,
             short_risk_column=args.short_risk_column,
             risk_penalty=max(risk_penalties),
+            long_secondary_score_column=args.long_secondary_score_column,
+            short_secondary_score_column=args.short_secondary_score_column,
+            secondary_score_tie_margin=max(
+                [value for value in secondary_score_tie_margins if np.isfinite(value)],
+                default=-float("inf"),
+            ),
             long_holding_column=args.long_holding_column,
             short_holding_column=args.short_holding_column,
             min_valid_predicted_hold_minutes=(
@@ -3263,6 +3361,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         short_entry_threshold_offsets,
         side_margins,
         risk_penalties,
+        secondary_score_tie_margins,
         fixed_horizon_score_modes,
         min_predicted_hold_minutes_values,
         max_predicted_hold_minutes_values,
@@ -3291,6 +3390,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         short_entry_threshold_offset,
         side_margin,
         risk_penalty,
+        secondary_score_tie_margin,
         fixed_horizon_score_mode,
         min_predicted_hold_minutes,
         max_predicted_hold_minutes,
@@ -3336,6 +3436,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     long_risk_column=args.long_risk_column,
                     short_risk_column=args.short_risk_column,
                     risk_penalty=risk_penalty,
+                    long_secondary_score_column=args.long_secondary_score_column,
+                    short_secondary_score_column=args.short_secondary_score_column,
+                    secondary_score_tie_margin=secondary_score_tie_margin,
                     long_holding_column=args.long_holding_column,
                     short_holding_column=args.short_holding_column,
                     min_predicted_hold_minutes=min_predicted_hold_minutes,
@@ -3415,6 +3518,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "exit_threshold": exit_threshold,
                     "side_margin": side_margin,
                     "risk_penalty": risk_penalty,
+                    "secondary_score_tie_margin": secondary_score_tie_margin,
+                    "long_secondary_score_column": args.long_secondary_score_column,
+                    "short_secondary_score_column": args.short_secondary_score_column,
                     "fixed_horizon_score_mode": fixed_horizon_score_mode,
                     "min_predicted_hold_minutes": min_predicted_hold_minutes,
                     "max_predicted_hold_minutes": max_predicted_hold_minutes,
@@ -3475,6 +3581,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         "exit_thresholds": exit_thresholds,
         "side_margins": side_margins,
         "risk_penalties": risk_penalties,
+        "secondary_score_tie_margins": secondary_score_tie_margins,
+        "long_secondary_score_column": args.long_secondary_score_column,
+        "short_secondary_score_column": args.short_secondary_score_column,
         "profit_barrier_miss_penalties": profit_barrier_miss_penalties,
         "time_exit_penalties": time_exit_penalties,
         "loss_first_penalties": loss_first_penalties,
@@ -3591,6 +3700,12 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["long_entry_threshold_offset"] = 0.0
     if "short_entry_threshold_offset" not in output.columns:
         output["short_entry_threshold_offset"] = 0.0
+    if "secondary_score_tie_margin" not in output.columns:
+        output["secondary_score_tie_margin"] = -float("inf")
+    if "long_secondary_score_column" not in output.columns:
+        output["long_secondary_score_column"] = ""
+    if "short_secondary_score_column" not in output.columns:
+        output["short_secondary_score_column"] = ""
     if "max_wait_regret" not in output.columns:
         output["max_wait_regret"] = float("inf")
     if "min_entry_rank" not in output.columns:
@@ -3686,6 +3801,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "exit_threshold",
         "side_margin",
         "risk_penalty",
+        "secondary_score_tie_margin",
         "min_predicted_hold_minutes",
         "max_predicted_hold_minutes",
         "profit_barrier_miss_penalty",
@@ -3757,6 +3873,12 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
     output["side_ev_penalty_rules"] = output["side_ev_penalty_rules"].fillna("").astype(str)
     output["side_extra_margin_rules"] = output["side_extra_margin_rules"].fillna("").astype(str)
     output["side_block_rules"] = output["side_block_rules"].fillna("").astype(str)
+    output["long_secondary_score_column"] = (
+        output["long_secondary_score_column"].fillna("").astype(str)
+    )
+    output["short_secondary_score_column"] = (
+        output["short_secondary_score_column"].fillna("").astype(str)
+    )
     output["side_confidence_penalty_rules"] = (
         output["side_confidence_penalty_rules"].fillna("").astype(str)
     )
@@ -6544,6 +6666,24 @@ def build_parser() -> argparse.ArgumentParser:
     model_sweep.add_argument("--short-column", default="pred_short_best_adjusted_pnl")
     model_sweep.add_argument("--long-risk-column", default="pred_long_max_adverse_pnl")
     model_sweep.add_argument("--short-risk-column", default="pred_short_max_adverse_pnl")
+    model_sweep.add_argument(
+        "--long-secondary-score-column",
+        default="",
+        help="optional long-side secondary score used only for near-tie side selection",
+    )
+    model_sweep.add_argument(
+        "--short-secondary-score-column",
+        default="",
+        help="optional short-side secondary score used only for near-tie side selection",
+    )
+    model_sweep.add_argument(
+        "--secondary-score-tie-margins",
+        default="-inf",
+        help=(
+            "comma-separated primary EV side gaps at or below which secondary score "
+            "columns may choose the side; -inf disables"
+        ),
+    )
     model_sweep.add_argument("--long-holding-column", default="pred_long_best_holding_minutes")
     model_sweep.add_argument("--short-holding-column", default="pred_short_best_holding_minutes")
     model_sweep.add_argument("--min-predicted-hold-minutes", default="1")

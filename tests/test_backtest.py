@@ -264,6 +264,55 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [-1, -1, -1])
 
+    def test_model_signal_uses_secondary_score_only_for_near_ties(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [18.0, 12.0, 18.0],
+                "stateful_long_score": [1.0, 1.0, 10.0],
+                "stateful_short_score": [5.0, 5.0, 2.0],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            long_secondary_score_column="stateful_long_score",
+            short_secondary_score_column="stateful_short_score",
+            secondary_score_tie_margin=3.0,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [-1, 1, 1])
+
+    def test_model_signal_secondary_side_still_uses_primary_side_threshold(self):
+        df = frame_with_opens([100])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0],
+                "pred_short_best_adjusted_pnl": [18.0],
+                "stateful_long_score": [1.0],
+                "stateful_short_score": [5.0],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            short_entry_threshold_offset=10.0,
+            long_secondary_score_column="stateful_long_score",
+            short_secondary_score_column="stateful_short_score",
+            secondary_score_tie_margin=3.0,
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [0])
+
     def test_model_signal_can_filter_low_quality_entries(self):
         df = frame_with_opens([100, 101, 102])
         predictions = pd.DataFrame(

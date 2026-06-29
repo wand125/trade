@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 09:22 Stateful secondary tie-break
+
+- `model-policy` / `model-sweep` に `long_secondary_score_column`, `short_secondary_score_column`, `secondary_score_tie_margin(s)` を追加した。
+- secondary scoreはprimary EV side gapが指定margin以下のときだけside選択に使う。entry thresholdとside marginはprimary EVのまま維持する。
+- `stateful_positive_cost_value` meanをsecondaryにしたvalidation 4ヶ月では、baseline `sum=622.6486`, min `138.0338`, trades `275`。margin `5` は完全一致、`10` はsum `563.7984`, min `115.1392`、`15` はsum `582.0794`, min `120.2830`、`20` はsum `582.2844`, min `120.2830`。
+- 判断: secondary tie-break機構は探索軸として採用するが、今回のstateful positive-cost tie-break設定は標準policyに採用しない。validationで棄却されたためapply holdoutは実行しない。
+- 次はside反転ではなく、entry優先順位、risk budget、near-tie局所OOF診断、追加月examplesへ進む。
+- report: `docs/reports/00121_2026-06-29_stateful_secondary_tiebreak.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 09:10 Stateful positive cost value
 
 - `oof-stateful-value-model --target-column stateful_positive_cost_value --prediction-prefix stateful_positive_cost` を実行した。
