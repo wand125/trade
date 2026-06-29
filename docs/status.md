@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 15:17 JST
+最終更新: 2026-06-29 15:39 JST
 
 ## 現在の状態
 
@@ -17,6 +17,8 @@ selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high
 failure probabilityをtrade quality modelのoptional side featureへ接続済み。OOF quality指標ではfailure-prob feature入りがbaselineよりbias/overestimate/MAEをわずかに改善したが、RMSE/R2は改善しない。2025-05の `min_trade_quality` hard filterはbaseline quality `-92.2498`、failure-prob quality `-101.9736` と悪化したため採用しない。配線は残し、near-tie ranking / EV overestimate residual / 連続targetへ回す。詳細は `docs/reports/00146_2026-06-29_failure_probability_quality_feature.md`。
 
 failure-prob qualityをnear-tie secondary scoreに使う検証も完了。margin 5はbaseline同一、margin 10はvalidation total `407.8172 -> 154.2024`、margin 20は `-84.8690` に悪化した。2025-04だけは改善するが2025-03/2024-11を壊すため採用しない。2025-05固定適用も行わず、次は同一side内rankingまたはEV overestimate residualの連続/分位targetへ進む。詳細は `docs/reports/00147_2026-06-29_quality_secondary_tiebreak_validation.md`。
+
+EV overestimate residualの連続targetを実装済み。`trade_overestimate_target_amount = max(pred_taken_ev - adjusted_pnl, 0)` を月抜きOOFで学習し、2024-11..2025-04 highcost risk5 selected tradesでは R2 `0.1273`, high-overestimate AUC `0.6814`。amount全体を直接penaltyする方式はvalidationを悪化させたが、prediction分布q90超過分だけをpenaltyする `q90 w2.0` はvalidation total `407.8172 -> 460.6640`, min month `-16.9006 -> -2.3046`, max DD `224.7524 -> 204.8324` に改善。2025-05 fixed applyでも `-52.9764 -> +25.5248` に改善した。max DDは2025-05で `137.4392 -> 151.0632` と悪化するため、標準policyへ即採用せず固定候補として未使用月・trade delta診断へ進める。詳細は `docs/reports/00148_2026-06-29_trade_overestimate_amount_model.md`。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
@@ -293,62 +295,65 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-直近更新: failure-prob qualityのhard filterとnear-tie side tiebreakはどちらも採用しない。次はquality/failure/exit特徴をside反転ではなく、同一side内rankingや `pred_taken_ev - adjusted_pnl` の連続・分位 overestimate targetへ使う。
+直近更新: EV overestimate residualの連続targetは有効なrank signalを持つ。amount全体の直接penaltyは不採用だが、validation OOF prediction分布のq90超過分だけをpenaltyする `q90 w2.0` はvalidationと2025-05 applyの両方で改善した。次はこの候補を固定し、未使用月・chronological validation・trade deltaで過適合を確認する。
 
-1. MLP holdingを使う `timed_ev` 実験ではCLI defaultのauto guardにより `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約にする。従来のclip-only挙動を再現する場合だけ明示的に `--min-valid-predicted-hold-minutes -inf` を渡す。
-2. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
-3. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
-4. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。
-5. exit-event datasetとlog exit minutes targetを複数foldへ拡張し、候補固定後に複数blind月へ適用する。
-6. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。profit barrierは全体平均ではなくside別・bucket別actual hit rateとsupportを必ず確認する。
-7. exit-event probability penalty、holding shrink単独、両者の小grid、dynamic / hazard-like exit threshold、side-confidence hard/min gateはいずれも標準採用しない。探索軸として残す。
-8. exit timingの複数fold比較では `bin_expected cap=480` がvalidation暫定最上位だったが、固定holdout stressで2025-04が大きく崩れたため標準昇格しない。normal-vol / rollover / ny_late risk ruleのvalidationでは、normal-vol short直接減点は台地なし、`time5` と `long_range5` は診断候補止まり。session/regime別の選択失敗targetもvalidation小改善後にholdoutで悪化したため、分類probability直結は採用しない。candidate quality drift診断ではfixed componentが最も現実的だが、月別・bucket別の過大評価が強い。entry timing calibrationも単独soft penaltyではvalidationを改善しなかったため、次はこれらをglobal hard gateではなくstacking/ranking特徴として統合する。log-derived比較用にはdataset/train artifactを再生成する。
-9. `target-set side_confidence` との同一月比較は完了。専用化だけでは改善せず、`month_target` もvalidationを壊したため、side-confidence hard/min gate探索は止めてOOF calibration/diagnosticへ戻す。
-10. side-confidence penalty tuningは、calibration改善後にviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。shared representationを持つMLP/TCNを試す場合は、HGBのtarget独立fitでは得られない表現共有が本当に効くかを検証点にする。
-11. diagnostic gate、group-loss penalty、diagnostic soft penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。diagnostic soft penaltyの今回topは2024-12で悪化したため、標準policyへ昇格しない。
-12. profit-barrier probability単独のhard gate/global linear penalty探索は打ち切る。今後はdirection/sessionやcombined regimeのrisk penaltyと同時に扱う場合だけ再評価する。
-13. 次はside/entry calibrationとprofit-barrier missの同時制御へ戻る。exit timingだけで負け月を救う方向には寄せすぎない。
-14. `oof-shared-mlp` の代表validation 4foldは完了。exit timing signalはあるが、EV/side予測が弱く、strict横断候補は0件だったため標準policyへ昇格しない。
-15. HGB entry/side + MLP exit timing hybridは、validationでは小幅改善したが2024-12でNoTradeに負けたため標準採用しない。
-16. group-loss hard gate / soft penaltyは、2024-12の `long:ny_late` failureを事前に止められなかったため標準採用しない。
-17. `long:range_low_vol` hard block / extra marginは2024-12で大きく悪化したため棄却する。
-18. near-top risk rankingは実装済み。複合riskでは `long:ny_late` を採用せず、drawdown-only採用は脆いため標準基準にしない。
-19. `long:ny_late:15` side EV penalty risk topは2024-12を防御し、2025-02でも非破綻だったが、2025-02ではbaselineを上回らない。標準採用は保留する。
-20. `short:up_low_vol` の直接side EV penaltyはvalidation最悪月と2024-12固定testを壊すため採用しない。short偏重riskはpost-hocなgroup減点ではなく、support-aware target、side/regime別calibrated EV、複数holdout同時rankingで扱う。
-21. `model-holdout-audit` による2ヶ月同時監査では現候補が全滅した。次はside EV penalty探索を広げず、entry/side EV calibrationとsupport-aware realized-PnL targetへ戻る。
-22. support-aware lower EVは、OOF selected-side品質を改善しても executable validationを壊した。次はEV全体を一律に下げず、side/regime別calibration residual targetやregime-conditioned side confidenceで「壊れる方向」を学習する。
-23. row-level residual penaltyはvalidation OOFのselected avgを上げても、fixed holdoutで2024-12を大きく悪化させた。次は全rowの教師ではなく、entry条件通過候補または実行tradeに限定した residual/failure target を作る。
-24. candidate-entry residual penaltyは2024-12を一部改善したが、validation robustnessが弱く標準採用しない。次は候補行のgroup平均ではなく、1玉制約で実際に選ばれたtradeの realized residual / side failure / exit regret をOOFまたはwalk-forwardで学習する。
-25. selected-trade qualityのgroup平均下限gateは、過大評価の平均補正には効くが、未来月で良いtradeも落とす。hard gateは採用しない。
-26. selected-trade qualityの校正済み値をentry EVへ全面置換すると、validationとfixed holdoutの両方を壊した。次は全面置換ではなく、`pred_taken_ev - calibrated_quality` の過大評価soft penalty、またはtrade failure分類targetとして使う。
-27. selected-trade qualityの過大評価soft penaltyはvalidation上だけ改善し、fixed 2024-12で既存baselineより悪化した。過大評価幅の回帰的penaltyはいったん止め、`large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high` などの実行trade failure分類targetへ進む。
-28. trade failure classifierでは `large_loss` だけが薄く有効。validation min pnlと2024-12固定testは改善したが、NoTradeを超えず、2025-02を少し削る。標準採用は保留し、次は `large_loss` threshold、side/regime別校正、candidate-entry集合への拡張を試す。
-29. `large_loss` threshold比較では `10` がOOF/validation/2ヶ月合計で最も筋がよいが、2024-12はまだNoTrade未満。thresholdだけの最適化は止め、`threshold=10` のprobabilityをside/regime別に校正するか、candidate-entry集合へ学習対象を広げる。
-30. side/regime別failure probability校正は、OOF AUCを少し改善しても実行policyを改善しなかった。実行trade 106件のgroup校正は不安定なので、次はcandidate-entry集合へfailure targetを広げて学習量を増やす。
-31. candidate-entry qualityの平均/下方分位は、直接EV置換でもsoft riskでもvalidationを改善しなかった。
-32. barrier event targetはraw EV過大評価の診断には有効だが、mean/lower/risk policyはいずれも標準採用できない。
-33. forced PnL列はprediction artifactへ残せるようになった。forced target単独のriskは標準採用しない。
-34. joint exit targetはOOF回帰指標を改善したが、単一scalar risk penaltyとしては実行policyを改善しない。
-35. joint成分をtimed barrier、fixed horizon、clipped bestへ分解しても、scalar risk penaltyではvalidation baselineを超えない。次はcomponentを潰さず、exit class、time-to-event、fixed horizon成分、side/regime別residualを別々の特徴またはmulti-output診断として扱う。
-36. component meanを単独quality gateとして使ってもbaselineを超えない。prefix付きcomponent列は残し、今後はhard gateではなく、diagnostic/tie-break/multi-feature stackingの入力として扱う。
-37. deterministic component ensembleでは `component_fixed_weighted quality>=0` だけがbaselineを小幅改善した。ただしfold最低PnLは同じで、fixed holdout未確認。標準採用せず、tie-break候補として複数holdoutへ進める。
-38. `component_fixed_weighted quality>=0` はfixed holdoutで取引を落とさずbaseline同一。`quality>=2` は2024-12/2025-02を改善するがvalidationを悪化させ、2025-03追加holdoutでも `-48.6826 -> -55.7516` に悪化したため採用しない。
-39. 2025-03ではHGB entry/sideが崩れ、short偏重と `short:asia` 損失集中が出ている。次はquality hard gateを深掘りせず、side/entry calibration、short exposure concentration、direction/session別risk検知、またはcandidate quality componentをmulti-feature stackingで扱う。
-40. side-confidence hard/soft gateは標準採用しない。short low-vol side EV comboはzero-costでは有望だが、cost stressで脆いため標準採用しない。
-41. 次はzero-costだけでなくmoderate costのvalidation min pnlを同時に満たす選定基準を使う。entry thresholdを単純に上げる方向はholdoutで悪化したため、本流から外す。
-42. cost-aware validation selection topも固定holdout cost stressで未達。次はrule set数を増やすのではなく、stress-aware drawdownと月別下振れを候補rankingへ組み込む。
-43. high-stress validation selectionでも固定holdout stressへ外挿できなかった。holdout結果を直接最適化せず、validation fold内で cost scenario合計、drawdown max、group損失、EV overestimateを含むstress-aware rankingを定義し、未使用holdout月で確認する。
-44. `stress_score` rankingは実装済みだが、既存holdout stressでは全候補に負けcaseが残る。既存holdoutに合わせたweight調整はpost-hocになるため、次は2025-04以降の `xauusd_m1_p1_l1p2_policy_combined` datasetと同一HGB+MLP+component predictionを生成して未使用holdoutで確認する。
-45. 2025-04未使用holdoutでは、MLP exit minutesが負方向へ外挿破綻して高回転化した。HGB holding fallbackでもNoTradeに負けるため、exit timing targetとentry/side EVの両方に月外汎化問題がある。
-46. `timed_ev` holding guard、log exit minutes target、time-bin由来holding列は実装済み。既存4foldでは `bin_expected cap=480` がbase/high costで最上位だったが、固定holdoutでは `raw_event cap=480` より悪く、2025-04でNoTradeに大きく負けた。log-derivedは未比較なので、log対応artifact再生成は別途行う。
-47. `model-candidate-selection` のplateau supportは、数値列だけでなくカテゴリrule set列にも対応済み。文字列plateauは同一カテゴリのeligible supportを数える。現時点では `side_ev_penalty_rules` のカテゴリplateauを採用条件には使わず、候補比較の互換修正として扱う。
-48. candidate-entry failure targetは `large_adverse` 以外にも拡張済み。ただし `normal_vol_selected_failure` riskはholdoutで悪化し、`wrong_side` / `time_session_selected_failure` はOOFで逆相関寄り。分類targetをentry scoreへ直接penalty接続する方向は標準採用せず、診断特徴として残す。
-49. candidate quality drift診断では、fixed componentがtimed/clippedよりdownside targetとして現実的。ただし上位prediction bucketほど過大評価が強く、2024-11/2025-01でdownside prevalenceが上がる。quality scoreは単調rankではなく、support-aware calibrated downside featureとして扱う。
-50. guard固定後のentry/side小gridでも、validation top (`entry=14`, short offset `4`, `range_low_vol` 追加penalty) はapplyへ外挿せず現行標準を大きく下回った。今後はentry threshold/side penaltyのパラメータ探索を増やさず、OOF校正・downside feature・regime drift診断へ戻る。
-51. stateful value target比較は、leave-one-monthではなくchronologicalな `--oof-scheme expanding` を標準診断にする。floor targetは直接EV回帰として使わず、下方リスク分類やsupport-aware calibrationへ変換して試す。
-52. walk-forward floor分類targetのうち `session_floor_lowered` は防御signalとして有望だが、単独risk penaltyは合計PnLを削りすぎる。標準policyに固定せず、drawdown-aware candidate rankingかcalibrated risk budgetへ回す。
-53. `mean_match + session_floor_lowered risk=5` は6ヶ月診断ではbase/high costの最悪月とdrawdownを改善したが、同じ期間で選抜した候補である。これ以上この6ヶ月で細かく調整せず、未使用月へ固定適用して反証する。
-54. 2025-05固定では `risk=5` がbase/highcostを改善したが、highcostはNoTrade未満で事前基準に届かない。直接policy採用は止め、残ったcommon trade損失をwalk-forward downside/context targetへ戻す。
+1. `q90 w2.0` を固定候補として、未使用月または対象月より前だけでfitするchronological foldへ適用する。q90 thresholdとlambdaは追加月を見て再調整しない。
+2. baseline stateful risk5 vs `q90 w2.0` を `model-trade-delta` で比較し、only_candidate / only_base / blocking / regime別の改善源を確認する。
+3. q90 thresholdをvalidation OOF prediction分布で固定する方式と、fit側selected-trade target分位で固定する方式を比較する。apply月の分布を見てthresholdを決めない。
+4. MLP holdingを使う `timed_ev` 実験ではCLI defaultのauto guardにより `min_valid_predicted_hold_minutes=30` の fail-close skipを標準安全制約にする。従来のclip-only挙動を再現する場合だけ明示的に `--min-valid-predicted-hold-minutes -inf` を渡す。
+5. selected-trade qualityのgroup平均gateと小型HGB gateは標準採用しない。診断基盤として残す。
+6. holding cap付きexit-event candidateは、2024-12 holdout失敗を反証として扱い、現状では標準評価へ昇格しない。
+7. combined regime gateはhard採用ではなく、candidate tie-break / failure analysisとして使う。
+8. exit-event datasetとlog exit minutes targetを複数foldへ拡張し、候補固定後に複数blind月へ適用する。
+9. side/entry calibrationを直接扱う。`best_side`, profit barrier miss, EV overestimateを教師信号またはcalibration targetにする。profit barrierは全体平均ではなくside別・bucket別actual hit rateとsupportを必ず確認する。
+10. exit-event probability penalty、holding shrink単独、両者の小grid、dynamic / hazard-like exit threshold、side-confidence hard/min gateはいずれも標準採用しない。探索軸として残す。
+11. exit timingの複数fold比較では `bin_expected cap=480` がvalidation暫定最上位だったが、固定holdout stressで2025-04が大きく崩れたため標準昇格しない。normal-vol / rollover / ny_late risk ruleのvalidationでは、normal-vol short直接減点は台地なし、`time5` と `long_range5` は診断候補止まり。session/regime別の選択失敗targetもvalidation小改善後にholdoutで悪化したため、分類probability直結は採用しない。candidate quality drift診断ではfixed componentが最も現実的だが、月別・bucket別の過大評価が強い。entry timing calibrationも単独soft penaltyではvalidationを改善しなかったため、次はこれらをglobal hard gateではなくstacking/ranking特徴として統合する。log-derived比較用にはdataset/train artifactを再生成する。
+12. `target-set side_confidence` との同一月比較は完了。専用化だけでは改善せず、`month_target` もvalidationを壊したため、side-confidence hard/min gate探索は止めてOOF calibration/diagnosticへ戻す。
+13. side-confidence penalty tuningは、calibration改善後にviable candidate上で試す。NoTradeに大きく負ける候補をside confidenceだけで救う方向には寄せない。shared representationを持つMLP/TCNを試す場合は、HGBのtarget独立fitでは得られない表現共有が本当に効くかを検証点にする。
+14. diagnostic gate、group-loss penalty、diagnostic soft penaltyは、validation候補を全滅させない範囲でtie-breakとして使う。2025-07 smoke-likeの厳しい閾値や単月post-hocのpenalty採用は使わない。diagnostic soft penaltyの今回topは2024-12で悪化したため、標準policyへ昇格しない。
+15. profit-barrier probability単独のhard gate/global linear penalty探索は打ち切る。今後はdirection/sessionやcombined regimeのrisk penaltyと同時に扱う場合だけ再評価する。
+16. 次はside/entry calibrationとprofit-barrier missの同時制御へ戻る。exit timingだけで負け月を救う方向には寄せすぎない。
+17. `oof-shared-mlp` の代表validation 4foldは完了。exit timing signalはあるが、EV/side予測が弱く、strict横断候補は0件だったため標準policyへ昇格しない。
+18. HGB entry/side + MLP exit timing hybridは、validationでは小幅改善したが2024-12でNoTradeに負けたため標準採用しない。
+19. group-loss hard gate / soft penaltyは、2024-12の `long:ny_late` failureを事前に止められなかったため標準採用しない。
+20. `long:range_low_vol` hard block / extra marginは2024-12で大きく悪化したため棄却する。
+21. near-top risk rankingは実装済み。複合riskでは `long:ny_late` を採用せず、drawdown-only採用は脆いため標準基準にしない。
+22. `long:ny_late:15` side EV penalty risk topは2024-12を防御し、2025-02でも非破綻だったが、2025-02ではbaselineを上回らない。標準採用は保留する。
+23. `short:up_low_vol` の直接side EV penaltyはvalidation最悪月と2024-12固定testを壊すため採用しない。short偏重riskはpost-hocなgroup減点ではなく、support-aware target、side/regime別calibrated EV、複数holdout同時rankingで扱う。
+24. `model-holdout-audit` による2ヶ月同時監査では現候補が全滅した。次はside EV penalty探索を広げず、entry/side EV calibrationとsupport-aware realized-PnL targetへ戻る。
+25. support-aware lower EVは、OOF selected-side品質を改善しても executable validationを壊した。次はEV全体を一律に下げず、side/regime別calibration residual targetやregime-conditioned side confidenceで「壊れる方向」を学習する。
+26. row-level residual penaltyはvalidation OOFのselected avgを上げても、fixed holdoutで2024-12を大きく悪化させた。次は全rowの教師ではなく、entry条件通過候補または実行tradeに限定した residual/failure target を作る。
+27. candidate-entry residual penaltyは2024-12を一部改善したが、validation robustnessが弱く標準採用しない。次は候補行のgroup平均ではなく、1玉制約で実際に選ばれたtradeの realized residual / side failure / exit regret をOOFまたはwalk-forwardで学習する。
+28. selected-trade qualityのgroup平均下限gateは、過大評価の平均補正には効くが、未来月で良いtradeも落とす。hard gateは採用しない。
+29. selected-trade qualityの校正済み値をentry EVへ全面置換すると、validationとfixed holdoutの両方を壊した。次は全面置換ではなく、`pred_taken_ev - calibrated_quality` の過大評価soft penalty、またはtrade failure分類targetとして使う。
+30. selected-trade qualityの過大評価soft penaltyはvalidation上だけ改善し、fixed 2024-12で既存baselineより悪化した。過大評価幅の回帰的penaltyはいったん止め、`large_loss`, `wrong_side`, `profit_barrier_miss`, `exit_regret_high` などの実行trade failure分類targetへ進む。
+31. trade failure classifierでは `large_loss` だけが薄く有効。validation min pnlと2024-12固定testは改善したが、NoTradeを超えず、2025-02を少し削る。標準採用は保留し、次は `large_loss` threshold、side/regime別校正、candidate-entry集合への拡張を試す。
+32. `large_loss` threshold比較では `10` がOOF/validation/2ヶ月合計で最も筋がよいが、2024-12はまだNoTrade未満。thresholdだけの最適化は止め、`threshold=10` のprobabilityをside/regime別に校正するか、candidate-entry集合へ学習対象を広げる。
+33. side/regime別failure probability校正は、OOF AUCを少し改善しても実行policyを改善しなかった。実行trade 106件のgroup校正は不安定なので、次はcandidate-entry集合へfailure targetを広げて学習量を増やす。
+34. candidate-entry qualityの平均/下方分位は、直接EV置換でもsoft riskでもvalidationを改善しなかった。
+35. barrier event targetはraw EV過大評価の診断には有効だが、mean/lower/risk policyはいずれも標準採用できない。
+36. forced PnL列はprediction artifactへ残せるようになった。forced target単独のriskは標準採用しない。
+37. joint exit targetはOOF回帰指標を改善したが、単一scalar risk penaltyとしては実行policyを改善しない。
+38. joint成分をtimed barrier、fixed horizon、clipped bestへ分解しても、scalar risk penaltyではvalidation baselineを超えない。次はcomponentを潰さず、exit class、time-to-event、fixed horizon成分、side/regime別residualを別々の特徴またはmulti-output診断として扱う。
+39. component meanを単独quality gateとして使ってもbaselineを超えない。prefix付きcomponent列は残し、今後はhard gateではなく、diagnostic/tie-break/multi-feature stackingの入力として扱う。
+40. deterministic component ensembleでは `component_fixed_weighted quality>=0` だけがbaselineを小幅改善した。ただしfold最低PnLは同じで、fixed holdout未確認。標準採用せず、tie-break候補として複数holdoutへ進める。
+41. `component_fixed_weighted quality>=0` はfixed holdoutで取引を落とさずbaseline同一。`quality>=2` は2024-12/2025-02を改善するがvalidationを悪化させ、2025-03追加holdoutでも `-48.6826 -> -55.7516` に悪化したため採用しない。
+42. 2025-03ではHGB entry/sideが崩れ、short偏重と `short:asia` 損失集中が出ている。次はquality hard gateを深掘りせず、side/entry calibration、short exposure concentration、direction/session別risk検知、またはcandidate quality componentをmulti-feature stackingで扱う。
+43. side-confidence hard/soft gateは標準採用しない。short low-vol side EV comboはzero-costでは有望だが、cost stressで脆いため標準採用しない。
+44. 次はzero-costだけでなくmoderate costのvalidation min pnlを同時に満たす選定基準を使う。entry thresholdを単純に上げる方向はholdoutで悪化したため、本流から外す。
+45. cost-aware validation selection topも固定holdout cost stressで未達。次はrule set数を増やすのではなく、stress-aware drawdownと月別下振れを候補rankingへ組み込む。
+46. high-stress validation selectionでも固定holdout stressへ外挿できなかった。holdout結果を直接最適化せず、validation fold内で cost scenario合計、drawdown max、group損失、EV overestimateを含むstress-aware rankingを定義し、未使用holdout月で確認する。
+47. `stress_score` rankingは実装済みだが、既存holdout stressでは全候補に負けcaseが残る。既存holdoutに合わせたweight調整はpost-hocになるため、次は2025-04以降の `xauusd_m1_p1_l1p2_policy_combined` datasetと同一HGB+MLP+component predictionを生成して未使用holdoutで確認する。
+48. 2025-04未使用holdoutでは、MLP exit minutesが負方向へ外挿破綻して高回転化した。HGB holding fallbackでもNoTradeに負けるため、exit timing targetとentry/side EVの両方に月外汎化問題がある。
+49. `timed_ev` holding guard、log exit minutes target、time-bin由来holding列は実装済み。既存4foldでは `bin_expected cap=480` がbase/high costで最上位だったが、固定holdoutでは `raw_event cap=480` より悪く、2025-04でNoTradeに大きく負けた。log-derivedは未比較なので、log対応artifact再生成は別途行う。
+50. `model-candidate-selection` のplateau supportは、数値列だけでなくカテゴリrule set列にも対応済み。文字列plateauは同一カテゴリのeligible supportを数える。現時点では `side_ev_penalty_rules` のカテゴリplateauを採用条件には使わず、候補比較の互換修正として扱う。
+51. candidate-entry failure targetは `large_adverse` 以外にも拡張済み。ただし `normal_vol_selected_failure` riskはholdoutで悪化し、`wrong_side` / `time_session_selected_failure` はOOFで逆相関寄り。分類targetをentry scoreへ直接penalty接続する方向は標準採用せず、診断特徴として残す。
+52. candidate quality drift診断では、fixed componentがtimed/clippedよりdownside targetとして現実的。ただし上位prediction bucketほど過大評価が強く、2024-11/2025-01でdownside prevalenceが上がる。quality scoreは単調rankではなく、support-aware calibrated downside featureとして扱う。
+53. guard固定後のentry/side小gridでも、validation top (`entry=14`, short offset `4`, `range_low_vol` 追加penalty) はapplyへ外挿せず現行標準を大きく下回った。今後はentry threshold/side penaltyのパラメータ探索を増やさず、OOF校正・downside feature・regime drift診断へ戻る。
+54. stateful value target比較は、leave-one-monthではなくchronologicalな `--oof-scheme expanding` を標準診断にする。floor targetは直接EV回帰として使わず、下方リスク分類やsupport-aware calibrationへ変換して試す。
+55. walk-forward floor分類targetのうち `session_floor_lowered` は防御signalとして有望だが、単独risk penaltyは合計PnLを削りすぎる。標準policyに固定せず、drawdown-aware candidate rankingかcalibrated risk budgetへ回す。
+56. `mean_match + session_floor_lowered risk=5` は6ヶ月診断ではbase/high costの最悪月とdrawdownを改善したが、同じ期間で選抜した候補である。これ以上この6ヶ月で細かく調整せず、未使用月へ固定適用して反証する。
+57. 2025-05固定では `risk=5` がbase/highcostを改善したが、highcostはNoTrade未満で事前基準に届かない。直接policy採用は止め、残ったcommon trade損失をwalk-forward downside/context targetへ戻す。
 
 ## 未決定事項
 
@@ -359,6 +364,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 15:39 JST 更新: `trade_overestimate_target_amount = max(pred_taken_ev - adjusted_pnl, 0)` のOOFモデルを追加した。highcost risk5 2024-11..2025-04では R2 `0.1273`, high-overestimate AUC `0.6814`。amount全体の直接penaltyはvalidationを悪化させたが、validation OOF prediction分布のq90超過分だけを使う `q90 w2.0` はvalidation total `407.8172 -> 460.6640`, min month `-16.9006 -> -2.3046`, max DD `224.7524 -> 204.8324` に改善し、2025-05 fixed applyも `-52.9764 -> +25.5248` に改善した。max DDは2025-05で悪化するため即標準採用ではなく、固定候補として未使用月・chronological validation・trade delta診断へ進める。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 15:17 JST 更新: failure-prob quality scoreをnear-tie secondary scoreへ使った。margin 5はbaseline同一、margin 10はvalidation total `407.8172 -> 154.2024`、margin 20は `-84.8690` に悪化。margin 10は2025-04を改善するが2025-03を `27.1660 -> -156.0008` へ壊し、margin 20は2024-11を `129.9968 -> -212.8968` へ壊した。採用せず、2025-05固定適用もしない。次はEV overestimate residualの連続/分位targetへ進む。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

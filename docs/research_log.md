@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 15:39 Trade overestimate amount model
+
+- `pred_taken_ev - adjusted_pnl` の正の部分を `trade_overestimate_target_amount` とする `oof-trade-overestimate-model` を追加した。
+- highcost risk5 2024-11..2025-04 selected trades 502件のOOFでは、target mean `18.2772`, predicted mean `17.7814`, MAE `8.3937`, RMSE `11.6532`, R2 `0.1273`, high-overestimate AUC `0.6814`。selected-trade quality回帰よりrank signalが強い。
+- amount全体を直接penaltyする方式はbaseline `407.8172` を下回った。lambda `0.005` でも `385.1526`、`0.05` は `314.3812`。平均水準を引いて良いtradeも落とすため不採用。
+- validation OOF prediction分布のq90超過分だけをpenaltyする方式は改善した。`q90 w2.0` はvalidation合計 `460.6640`, trades `529`, min month `-2.3046`, max DD `204.8324` でbaseline `407.8172 / 502 / -16.9006 / 224.7524` を上回った。
+- 2025-05固定適用では、baseline stateful risk5 `-52.9764` に対して `q90 w2.0` が `+25.5248`, 106 trades, profit factor `1.0531`。max DDは `151.0632` でbaselineより悪化するため、即標準化ではなく固定候補として次月・delta診断へ進める。
+- report: `docs/reports/00148_2026-06-29_trade_overestimate_amount_model.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 15:17 Quality secondary tiebreak validation
 
 - failure-prob quality scoreを `secondary_score_tie_margin` でnear-tie side選択だけに使った。raw EV、entry threshold、stateful risk5、MLP holding guardは固定。
