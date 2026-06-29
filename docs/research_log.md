@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 15:49 Trade overestimate q90 delta diagnostics
+
+- `q90 w2.0` とbaseline stateful risk5を `model-trade-delta` で比較した。
+- validation 2024-11..2025-04では base `407.8172`, candidate `460.6640`, delta `+52.8468`。2025-03だけ `-0.9926` と小幅悪化し、他5ヶ月は改善。
+- 2025-05では base `-52.9764`, candidate `25.5248`, delta `+78.5012`。ただし改善の主因は only_base の悪いtrade除外 `+158.6046` で、only_candidateは `-92.9324` と大きく悪化。
+- group driftでは、validationで良かった `only_candidate short/up_normal_vol` が `+109.0090 -> -93.7270` に反転。statefulでも `common long/down_low_vol` が `+33.7666 -> -106.9060` に反転した。
+- `model-trade-delta-preflight` はPnL条件ではpassしたが、group drift validation-positive/holdout-negativeが3件、stateful group driftが2件。q90 w2.0は固定候補に残すが、標準policyへ即採用しない。
+- report: `docs/reports/00149_2026-06-29_trade_overestimate_q90_delta_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 15:39 Trade overestimate amount model
 
 - `pred_taken_ev - adjusted_pnl` の正の部分を `trade_overestimate_target_amount` とする `oof-trade-overestimate-model` を追加した。
