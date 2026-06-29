@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 09:05 JST
+最終更新: 2026-06-29 09:10 JST
 
 ## 現在の状態
 
@@ -45,6 +45,8 @@ raw vs stack gateの取引差分診断 `model-trade-delta` を追加済み。`en
 `oof-stateful-value-model` を追加済み。`stateful_entry_value` のvalidation OOFではraw bias `14.0151` がmean bias `0.0753` まで縮み、raw overestimate meanも `15.0311 -> 4.2816` に下がった。ただしR2は `-0.0141` で順位付け能力は弱い。stateful meanのdirect EV replacementはvalidation threshold `3.5` でsum `148.5810`, min `-0.4126` だが2024-09が0 trade、apply 3ヶ月も全月0 trade。標準policyには採用せず、raw EVとの混合・tie-break・追加examplesへ進む。詳細は `docs/reports/00118_2026-06-29_stateful_value_model.md`。
 
 stateful overestimate riskをraw EVの線形penaltyとして検証済み。`risk_penalty=0.10/0.25/0.50/0.75` はvalidation 4ヶ月でbaseline `0` を超えず、`0.10` でもsum `622.6486 -> 571.1410`, min month `138.0338 -> 70.0596` に悪化した。apply 3ヶ月でも `0.10` は2024-12を `-20.8252 -> -10.1916` に改善する一方、2025-03を `84.0776 -> -25.6206` へ壊した。標準policyには採用せず、次は `stateful_positive_cost_value`、tie-break利用、追加examplesへ進む。詳細は `docs/reports/00119_2026-06-29_stateful_ev_blend_risk.md`。
+
+`stateful_positive_cost_value` modelを作成済み。OOFではraw bias `14.7685` がmean bias `0.0853` へ縮むが、R2は `-0.0085`。direct replacementはvalidation bestでもsum `270.3750`, min `-64.5430` とbaseline未満。positive-cost overestimate riskもvalidation `risk=0.10` がsum `606.7320`, min `73.5066`、apply `risk=0.10` がsum `14.1920`, min `-38.4826` でbaselineを下回る。scalar penaltyには採用せず、次はprimary raw EVを維持したnear-tie専用secondary scoreを実装する。詳細は `docs/reports/00120_2026-06-29_stateful_positive_cost_value.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

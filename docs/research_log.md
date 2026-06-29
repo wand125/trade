@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 09:10 Stateful positive cost value
+
+- `oof-stateful-value-model --target-column stateful_positive_cost_value --prediction-prefix stateful_positive_cost` を実行した。
+- OOFでは target mean `1.6588`, raw bias `14.7685`, mean bias `0.0853`, raw overestimate mean `15.6463`, mean overestimate mean `4.2896`, mean R2 `-0.0085`。
+- direct replacement validationはbestでも threshold `2.0`, side margin `0.0`, sum `270.3750`, min `-64.5430`, trades `1349` でbaselineを下回る。閾値を上げると一部月が0 tradeになる。
+- positive-cost overestimate risk validationはbaseline `sum=622.6486`, `min=138.0338` に対し、`risk=0.10` がsum `606.7320`, min `73.5066`。applyでもbaseline `sum=242.5008`, min `-20.8252` に対し、`risk=0.10` がsum `14.1920`, min `-38.4826`。
+- 判断: `stateful_positive_cost_value` は校正信号として残すが、direct replacement / scalar penaltyは標準policyに採用しない。現行policyでは補正後EVがentry集合まで変えてしまうため、次はnear-tie専用secondary scoreを実装する。
+- report: `docs/reports/00120_2026-06-29_stateful_positive_cost_value.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 09:05 Stateful EV blend risk
 
 - `stateful_entry_value` meanをentry EVへ直接置換せず、`raw_ev - alpha * max(raw_ev - stateful_mean, 0)` の形でraw EVの過大評価penaltyとして検証した。
