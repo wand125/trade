@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 08:59 Stateful value model
+
+- `trade_data.meta_model oof-stateful-value-model` を追加した。`stateful_candidate_examples.csv` を直接読み、`stateful_entry_value` など任意target列を月抜きOOFで学習する。
+- 出力は `validation_oof_stateful_value_examples.csv`, `predictions_validation_oof_stateful_value_model.parquet`, `predictions_apply_stateful_value_model.parquet`, `stateful_value_model.joblib`。
+- validation OOFでは raw bias `14.0151` が mean bias `0.0753`、raw overestimate mean `15.0311` が `4.2816` まで縮んだ。一方で mean R2 は `-0.0141`。
+- stateful mean direct replacementのvalidation sweepは threshold `3.5` がsum `148.5810`, min `-0.4126` だが2024-09が0 trade。apply 3ヶ月では同じthresholdが全月0 trade。
+- 判断: model列は校正・診断として採用するが、direct EV replacementは標準policyに採用しない。次は raw EVとの混合、near-tie ranking、または `stateful_positive_cost_value` targetを試す。
+- report: `docs/reports/00118_2026-06-29_stateful_value_model.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 08:49 Validation stateful candidate examples
 
 - 代表validation 4ヶ月 (`2024-07`, `2024-09`, `2024-11`, `2025-01`) で、raw policy と `min_trade_quality=0` stack0 policy の `model-policy` runを生成した。

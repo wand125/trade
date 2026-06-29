@@ -2984,6 +2984,25 @@ def add_candidate_quality_model_values_to_examples(
     return output
 
 
+def build_stateful_value_training_frame(
+    examples: pd.DataFrame,
+    *,
+    target_column: str = "stateful_entry_value",
+) -> pd.DataFrame:
+    if target_column not in examples.columns:
+        raise ValueError(f"stateful examples missing target column: {target_column}")
+    output = examples.copy()
+    if "dataset_month" not in output.columns and "month" in output.columns:
+        output["dataset_month"] = output["month"].astype(str)
+    for column in TRADE_QUALITY_CATEGORY_FEATURE_COLUMNS:
+        if column not in output.columns:
+            output[column] = "__missing__"
+        else:
+            output[column] = output[column].astype("string").fillna("__missing__")
+    output["target"] = pd.to_numeric(output[target_column], errors="coerce")
+    return output.replace([np.inf, -np.inf], np.nan).dropna(subset=["target"])
+
+
 def candidate_quality_scored_metrics(scored: pd.DataFrame) -> dict[str, float]:
     if scored.empty:
         return {
@@ -6316,6 +6335,34 @@ def candidate_quality_model_config_from_args(args: argparse.Namespace) -> Candid
     )
 
 
+def stateful_value_model_config_from_args(args: argparse.Namespace) -> CandidateQualityModelConfig:
+    return CandidateQualityModelConfig(
+        max_iter=args.max_iter,
+        learning_rate=args.learning_rate,
+        max_leaf_nodes=args.max_leaf_nodes,
+        max_depth=None if args.max_depth <= 0 else args.max_depth,
+        min_samples_leaf=args.min_samples_leaf,
+        l2_regularization=args.l2_regularization,
+        max_features=args.max_features,
+        early_stopping=args.early_stopping,
+        validation_fraction=args.validation_fraction,
+        n_iter_no_change=args.n_iter_no_change,
+        tol=args.tol,
+        random_seed=args.random_seed,
+        target_clip_quantile=args.target_clip_quantile,
+        sample_weighting=args.sample_weighting,
+        prediction_shrinkage=args.prediction_shrinkage,
+        lower_quantile=args.lower_quantile,
+        entry_threshold=0.0,
+        long_entry_threshold_offset=0.0,
+        short_entry_threshold_offset=0.0,
+        side_margin=0.0,
+        min_entry_rank=0.0,
+        target_mode="best_adjusted_pnl",
+        prediction_prefix=validate_candidate_quality_prediction_prefix(args.prediction_prefix),
+    )
+
+
 def oof_candidate_failure_model(args: argparse.Namespace) -> int:
     validation_months = parse_csv_months(args.validation_months)
     apply_months = parse_csv_months(args.apply_months)
@@ -6482,6 +6529,182 @@ def oof_candidate_failure_model(args: argparse.Namespace) -> int:
             validation_oof_candidates,
             config.target_names,
         ),
+    }
+    with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
+    print(json.dumps(metrics["validation_oof"], indent=2))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
+def oof_stateful_value_model(args: argparse.Namespace) -> int:
+    validation_months = parse_csv_months(args.validation_months)
+    apply_months = parse_csv_months(args.apply_months)
+    if validation_months is None or len(validation_months) < 2:
+        raise ValueError("at least two validation months are required for OOF stateful value model")
+    if args.apply_predictions is None and apply_months is not None:
+        raise ValueError("--apply-months requires --apply-predictions")
+
+    examples = pd.read_csv(args.examples)
+    validation_examples = build_stateful_value_training_frame(
+        examples,
+        target_column=args.target_column,
+    )
+    validation_examples = filter_months(validation_examples, validation_months, "stateful examples")
+    if validation_examples.empty:
+        raise ValueError("validation stateful examples frame is empty")
+
+    validation_predictions = None
+    if args.validation_predictions is not None:
+        validation_predictions = filter_months(
+            pd.read_parquet(args.validation_predictions),
+            validation_months,
+            "validation",
+        )
+        validation_predictions = prepare_trade_quality_prediction_frame(validation_predictions, args)
+
+    apply_predictions = None
+    if args.apply_predictions is not None:
+        apply_predictions = filter_months(
+            pd.read_parquet(args.apply_predictions),
+            apply_months,
+            "apply",
+        )
+        apply_predictions = prepare_trade_quality_prediction_frame(apply_predictions, args)
+
+    config = stateful_value_model_config_from_args(args)
+    fold_prediction_outputs: list[pd.DataFrame] = []
+    fold_example_outputs: list[pd.DataFrame] = []
+    fold_metrics: dict[str, object] = {}
+    for fold_index, holdout_month in enumerate(validation_months):
+        fit_examples = validation_examples[
+            validation_examples["dataset_month"] != holdout_month
+        ].copy()
+        holdout_examples = validation_examples[
+            validation_examples["dataset_month"] == holdout_month
+        ].copy()
+        if fit_examples.empty or holdout_examples.empty:
+            raise ValueError(f"cannot build stateful value OOF fold for {holdout_month}")
+        fold_config = CandidateQualityModelConfig(
+            **{
+                **asdict(config),
+                "random_seed": config.random_seed + 23 * fold_index,
+            }
+        )
+        fold_bundle = fit_candidate_quality_model_from_frame(fit_examples, fold_config)
+        holdout_example_output = add_candidate_quality_model_values_to_examples(
+            holdout_examples,
+            fold_bundle,
+        )
+        fold_example_outputs.append(holdout_example_output)
+        holdout_prediction_count = 0
+        if validation_predictions is not None:
+            holdout_predictions = validation_predictions[
+                validation_predictions["dataset_month"] == holdout_month
+            ].copy()
+            if holdout_predictions.empty:
+                raise ValueError(f"validation predictions missing holdout month: {holdout_month}")
+            holdout_prediction_output = add_candidate_quality_model_columns(
+                holdout_predictions,
+                fold_bundle,
+            )
+            fold_prediction_outputs.append(holdout_prediction_output)
+            holdout_prediction_count = int(len(holdout_predictions))
+        fold_metrics[holdout_month] = {
+            "fit_examples": int(len(fit_examples)),
+            "holdout_examples": int(len(holdout_examples)),
+            "holdout_predictions": holdout_prediction_count,
+            "holdout": candidate_quality_scored_metrics(holdout_example_output),
+            "target_mean": fold_bundle.target_mean,
+            "lower_target_mean": fold_bundle.lower_target_mean,
+            "feature_columns": fold_bundle.feature_columns,
+            "category_mappings": fold_bundle.category_mappings,
+        }
+
+    validation_oof_examples = pd.concat(fold_example_outputs, ignore_index=True)
+    if "decision_timestamp" in validation_oof_examples.columns:
+        validation_oof_examples = validation_oof_examples.sort_values("decision_timestamp")
+    validation_oof_predictions = None
+    if fold_prediction_outputs:
+        validation_oof_predictions = pd.concat(fold_prediction_outputs, ignore_index=True)
+        if "decision_timestamp" in validation_oof_predictions.columns:
+            validation_oof_predictions = validation_oof_predictions.sort_values("decision_timestamp")
+
+    final_bundle = fit_candidate_quality_model_from_frame(validation_examples, config)
+    apply_output = None
+    if apply_predictions is not None:
+        apply_output = add_candidate_quality_model_columns(apply_predictions, final_bundle)
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    validation_oof_examples.to_csv(run_dir / "validation_oof_stateful_value_examples.csv", index=False)
+    validation_examples.to_csv(run_dir / "validation_fit_stateful_value_examples.csv", index=False)
+    if validation_oof_predictions is not None:
+        validation_oof_predictions.to_parquet(
+            run_dir / "predictions_validation_oof_stateful_value_model.parquet",
+            index=False,
+        )
+    if apply_output is not None:
+        apply_output.to_parquet(
+            run_dir / "predictions_apply_stateful_value_model.parquet",
+            index=False,
+        )
+    joblib.dump(final_bundle, run_dir / "stateful_value_model.joblib")
+    metrics = {
+        "mode": "validation_oof_stateful_value_model",
+        "config": asdict(config),
+        "examples": str(args.examples),
+        "target_column": args.target_column,
+        "validation_predictions": (
+            None if args.validation_predictions is None else str(args.validation_predictions)
+        ),
+        "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
+        "validation_months": validation_months,
+        "apply_months": apply_months,
+        "source": {
+            "source_mode": args.source_mode,
+            "long_column": args.long_column,
+            "short_column": args.short_column,
+            "long_fixed_horizon_columns": parse_csv_strings(args.long_fixed_horizon_columns),
+            "short_fixed_horizon_columns": parse_csv_strings(args.short_fixed_horizon_columns),
+            "fixed_horizon_score_mode": args.fixed_horizon_score_mode,
+        },
+        "rows": {
+            "input_examples": int(len(examples)),
+            "validation_examples": int(len(validation_examples)),
+            "validation_oof_examples": int(len(validation_oof_examples)),
+            "validation_predictions": 0
+            if validation_predictions is None
+            else int(len(validation_predictions)),
+            "validation_oof_predictions": 0
+            if validation_oof_predictions is None
+            else int(len(validation_oof_predictions)),
+            "apply": 0 if apply_predictions is None else int(len(apply_predictions)),
+        },
+        "month_rows": {
+            "validation_examples": month_counts(validation_examples),
+            "validation_oof_examples": month_counts(validation_oof_examples),
+            "validation_predictions": {}
+            if validation_predictions is None
+            else month_counts(validation_predictions),
+            "validation_oof_predictions": {}
+            if validation_oof_predictions is None
+            else month_counts(validation_oof_predictions),
+            "apply": {} if apply_predictions is None else month_counts(apply_predictions),
+        },
+        "candidate_side_counts": {
+            str(side): int(count)
+            for side, count in validation_examples["candidate_side"].value_counts().items()
+        }
+        if "candidate_side" in validation_examples.columns
+        else {},
+        "final_model": {
+            "target_mean": final_bundle.target_mean,
+            "lower_target_mean": final_bundle.lower_target_mean,
+            "feature_columns": final_bundle.feature_columns,
+            "category_mappings": final_bundle.category_mappings,
+        },
+        "folds": fold_metrics,
+        "validation_oof": candidate_quality_scored_metrics(validation_oof_examples),
     }
     with (run_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, ensure_ascii=False, indent=2, default=str)
@@ -7534,6 +7757,52 @@ def build_parser() -> argparse.ArgumentParser:
     add_trade_quality_model_args(candidate_quality_model_parser)
     add_candidate_entry_filter_args(candidate_quality_model_parser)
     candidate_quality_model_parser.set_defaults(func=oof_candidate_quality_model)
+
+    stateful_value_model_parser = subparsers.add_parser(
+        "oof-stateful-value-model",
+        help="build validation OOF model columns from stateful_candidate_examples.csv",
+    )
+    stateful_value_model_parser.add_argument("--examples", type=Path, required=True)
+    stateful_value_model_parser.add_argument(
+        "--validation-predictions",
+        type=Path,
+        help="optional validation prediction frame to score with fold-fitted OOF models",
+    )
+    stateful_value_model_parser.add_argument(
+        "--apply-predictions",
+        type=Path,
+        help="optional prediction frame to score with the final validation stateful-value model",
+    )
+    stateful_value_model_parser.add_argument(
+        "--validation-months",
+        required=True,
+        help="comma-separated validation dataset months for OOF folds",
+    )
+    stateful_value_model_parser.add_argument("--apply-months", help="comma-separated apply months")
+    stateful_value_model_parser.add_argument("--output-dir", type=Path, default=Path("experiments"))
+    stateful_value_model_parser.add_argument("--label", default="stateful_value_model")
+    stateful_value_model_parser.add_argument(
+        "--target-column",
+        default="stateful_entry_value",
+        help="target column in stateful_candidate_examples.csv",
+    )
+    stateful_value_model_parser.add_argument(
+        "--lower-quantile",
+        type=float,
+        default=0.25,
+        help="lower-tail quantile target for conservative stateful value estimates",
+    )
+    stateful_value_model_parser.add_argument(
+        "--prediction-prefix",
+        default="stateful_entry",
+        help=(
+            "prefix for output prediction columns, producing "
+            "pred_candidate_quality_<prefix>_<side>_* columns"
+        ),
+    )
+    add_trade_source_args(stateful_value_model_parser)
+    add_trade_quality_model_args(stateful_value_model_parser)
+    stateful_value_model_parser.set_defaults(func=oof_stateful_value_model)
 
     combine_candidate_quality_parser = subparsers.add_parser(
         "combine-candidate-quality-components",

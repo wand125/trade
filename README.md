@@ -514,6 +514,21 @@ opportunities blocked while a candidate-policy trade was open.
 with `target`, `stateful_entry_value`, `stateful_positive_cost_value`,
 `blocking_cost`, and `replacement_regret` columns.
 
+Train a month-held-out stateful value model directly from those examples and
+optionally score validation/apply prediction parquet files:
+
+```bash
+python -m trade_data.meta_model oof-stateful-value-model \
+  --examples data/reports/backtests/<delta_run>/stateful_candidate_examples.csv \
+  --validation-predictions data/reports/modeling/<run>/predictions_validation_oof_candidate_quality_model.parquet \
+  --validation-months 2024-07,2024-09,2024-11,2025-01 \
+  --target-column stateful_entry_value \
+  --prediction-prefix stateful_entry \
+  --source-mode columns \
+  --long-column pred_long_best_adjusted_pnl \
+  --short-column pred_short_best_adjusted_pnl
+```
+
 ## Rebuild Generated Artifacts
 
 From a fresh clone, the normal regeneration flow is:

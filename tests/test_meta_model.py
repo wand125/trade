@@ -42,6 +42,7 @@ from trade_data.meta_model import (
     build_candidate_failure_training_frame,
     build_candidate_quality_training_frame,
     build_sample_weights,
+    build_stateful_value_training_frame,
     build_training_frame,
     candidate_quality_bucket_metrics,
     candidate_entry_side_masks,
@@ -934,6 +935,62 @@ class MetaModelTests(unittest.TestCase):
             self.assertIn(column, output.columns)
             self.assertFalse(output[column].isna().any())
         self.assertNotIn(CANDIDATE_QUALITY_LONG_COLUMN, output.columns)
+
+    def test_stateful_value_training_frame_uses_external_target(self):
+        predictions = add_trade_source_ev_columns(
+            prediction_frame(),
+            source_mode="columns",
+            long_column="pred_long_best_adjusted_pnl",
+            short_column="pred_short_best_adjusted_pnl",
+            long_fixed_horizon_columns=(),
+            short_fixed_horizon_columns=(),
+            fixed_horizon_score_mode="max",
+        )
+        predictions["dataset_month"] = ["2024-07", "2024-07", "2024-09"]
+        base_config = CandidateQualityModelConfig(
+            max_iter=2,
+            learning_rate=0.1,
+            max_leaf_nodes=3,
+            max_depth=None,
+            min_samples_leaf=1,
+            l2_regularization=0.0,
+            max_features=1.0,
+            early_stopping=False,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            tol=1e-7,
+            random_seed=1,
+            target_clip_quantile=1.0,
+            sample_weighting="none",
+            prediction_shrinkage=1.0,
+            lower_quantile=0.25,
+            entry_threshold=7.0,
+            long_entry_threshold_offset=0.0,
+            short_entry_threshold_offset=0.0,
+            side_margin=1.0,
+            min_entry_rank=0.0,
+            prediction_prefix="stateful_entry",
+        )
+        examples = build_candidate_quality_training_frame(
+            predictions,
+            base_config,
+            long_column="pred_trade_source_long_ev",
+            short_column="pred_trade_source_short_ev",
+        )
+        examples["stateful_entry_value"] = [3.0, -4.0, 8.0]
+        examples = examples.rename(columns={"dataset_month": "month"})
+
+        stateful_frame = build_stateful_value_training_frame(examples)
+        bundle = fit_candidate_quality_model_from_frame(stateful_frame, base_config)
+        output = add_candidate_quality_model_columns(predictions, bundle)
+        scored = add_candidate_quality_model_values_to_examples(stateful_frame, bundle)
+
+        self.assertEqual(stateful_frame["target"].tolist(), [3.0, -4.0, 8.0])
+        self.assertEqual(stateful_frame["dataset_month"].tolist(), ["2024-07", "2024-07", "2024-09"])
+        self.assertIn("pred_candidate_quality_stateful_entry_long_adjusted_pnl", output.columns)
+        self.assertIn("pred_candidate_quality_stateful_entry_short_adjusted_pnl", output.columns)
+        self.assertIn(CANDIDATE_QUALITY_TAKEN_COLUMN, scored.columns)
+        self.assertFalse(scored[CANDIDATE_QUALITY_TAKEN_COLUMN].isna().any())
 
     def test_candidate_quality_component_columns_can_be_combined(self):
         predictions = add_trade_source_ev_columns(

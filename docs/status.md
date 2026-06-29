@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 08:49 JST
+最終更新: 2026-06-29 08:59 JST
 
 ## 現在の状態
 
@@ -41,6 +41,8 @@ raw vs stack gateの取引差分診断 `model-trade-delta` を追加済み。`en
 `model-trade-delta` は `stateful_candidate_examples.csv` も出力する。候補例は `target`, `stateful_entry_value`, `stateful_positive_cost_value`, `blocking_cost`, `replacement_regret`, `side`, `decision_timestamp` などを持ち、candidate-quality-styleの学習入力として使える。2024-12/2025-03 smokeでは220例、target mean `-0.0655`、raw EV mean `18.4353`、raw bias `18.5008`。2025-03 `only_candidate long` はtarget sum `-69.9094`、blocking cost `75.3170`。次は代表validation月で同じexamplesを作り、月抜きOOFでstateful value modelを学習する。詳細は `docs/reports/00116_2026-06-29_stateful_candidate_examples.md`。
 
 代表validation 4ヶ月でも `stateful_candidate_examples.csv` を作成済み。254例、target mean `2.4123`、raw EV mean `16.4274`、raw bias `14.0151`、`target<=0` 率 `0.3976`。stack0 policyは4ヶ月合計ではrawを上回るが、raw EVはstateful targetをまだ大きく過大評価している。次は月抜きOOFで `stateful_entry_value` modelを作り、hard gateではなくEV補正/ranking tie-breakとして検証する。詳細は `docs/reports/00117_2026-06-29_validation_stateful_candidate_examples.md`。
+
+`oof-stateful-value-model` を追加済み。`stateful_entry_value` のvalidation OOFではraw bias `14.0151` がmean bias `0.0753` まで縮み、raw overestimate meanも `15.0311 -> 4.2816` に下がった。ただしR2は `-0.0141` で順位付け能力は弱い。stateful meanのdirect EV replacementはvalidation threshold `3.5` でsum `148.5810`, min `-0.4126` だが2024-09が0 trade、apply 3ヶ月も全月0 trade。標準policyには採用せず、raw EVとの混合・tie-break・追加examplesへ進む。詳細は `docs/reports/00118_2026-06-29_stateful_value_model.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
