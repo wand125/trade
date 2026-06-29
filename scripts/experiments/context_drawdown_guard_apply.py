@@ -120,6 +120,7 @@ def apply_thresholds(
     output_dir: Path,
     label: str,
     thresholds: list[float],
+    min_entry_margins: list[float],
     context_columns: tuple[str, ...],
     reset_monthly: bool,
     warmup_days: int,
@@ -143,38 +144,46 @@ def apply_thresholds(
         )
         month = backtest_config.evaluation_start.strftime("%Y-%m")
         for threshold in thresholds:
-            policy_config = restore_model_policy_config(config["model_policy_config"])
-            policy_config = ModelPolicyConfig(
-                **{
-                    **base_policy_config.__dict__,
-                    "context_drawdown_guard_loss_threshold": threshold,
-                    "context_drawdown_guard_context_columns": context_columns,
-                    "context_drawdown_guard_reset_monthly": reset_monthly,
-                }
-            )
-            metrics, trades, _, signal = run_model_policy(
-                df,
-                backtest_config,
-                policy_config,
-            )
-            curve = equity_curve(trades, backtest_config.evaluation_start)
-            run_dir = root / f"threshold_{threshold_label(threshold)}" / source_run.name
-            write_result(run_dir, metrics, trades, curve, None, backtest_config, policy_config)
-            pd.DataFrame({"timestamp": df["timestamp"], "desired_position": signal}).to_csv(
-                run_dir / "desired_position.csv",
-                index=False,
-            )
-            rows.append(
-                {
-                    "source_run": str(source_run),
-                    "month": month,
-                    "context_drawdown_guard_loss_threshold": threshold,
-                    "context_drawdown_guard_context_columns": ",".join(context_columns),
-                    "context_drawdown_guard_reset_monthly": reset_monthly,
-                    **metrics,
-                    "run_dir": str(run_dir),
-                }
-            )
+            for min_entry_margin in min_entry_margins:
+                policy_config = restore_model_policy_config(config["model_policy_config"])
+                policy_config = ModelPolicyConfig(
+                    **{
+                        **base_policy_config.__dict__,
+                        "context_drawdown_guard_loss_threshold": threshold,
+                        "context_drawdown_guard_min_entry_margin": min_entry_margin,
+                        "context_drawdown_guard_context_columns": context_columns,
+                        "context_drawdown_guard_reset_monthly": reset_monthly,
+                    }
+                )
+                metrics, trades, _, signal = run_model_policy(
+                    df,
+                    backtest_config,
+                    policy_config,
+                )
+                curve = equity_curve(trades, backtest_config.evaluation_start)
+                run_dir = (
+                    root
+                    / f"threshold_{threshold_label(threshold)}"
+                    / f"min_margin_{threshold_label(min_entry_margin)}"
+                    / source_run.name
+                )
+                write_result(run_dir, metrics, trades, curve, None, backtest_config, policy_config)
+                pd.DataFrame({"timestamp": df["timestamp"], "desired_position": signal}).to_csv(
+                    run_dir / "desired_position.csv",
+                    index=False,
+                )
+                rows.append(
+                    {
+                        "source_run": str(source_run),
+                        "month": month,
+                        "context_drawdown_guard_loss_threshold": threshold,
+                        "context_drawdown_guard_min_entry_margin": min_entry_margin,
+                        "context_drawdown_guard_context_columns": ",".join(context_columns),
+                        "context_drawdown_guard_reset_monthly": reset_monthly,
+                        **metrics,
+                        "run_dir": str(run_dir),
+                    }
+                )
 
     summary = pd.DataFrame(rows)
     if not summary.empty:
@@ -183,6 +192,7 @@ def apply_thresholds(
             summary.groupby(
                 [
                     "context_drawdown_guard_loss_threshold",
+                    "context_drawdown_guard_min_entry_margin",
                     "context_drawdown_guard_context_columns",
                     "context_drawdown_guard_reset_monthly",
                 ],
@@ -208,6 +218,7 @@ def apply_thresholds(
         "runs": [str(path) for path in run_paths],
         "data": data_path,
         "thresholds": thresholds,
+        "min_entry_margins": min_entry_margins,
         "context_columns": context_columns,
         "reset_monthly": reset_monthly,
         "warmup_days": warmup_days,
@@ -235,6 +246,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--label", default="context_drawdown_guard_apply")
     parser.add_argument("--thresholds", default="inf,20,40,60,80")
     parser.add_argument(
+        "--min-entry-margins",
+        default="inf",
+        help="comma-separated selected-score margins required after a context drawdown breach",
+    )
+    parser.add_argument(
         "--context-columns",
         default="combined_regime,session_regime",
         help="comma-separated prediction columns used with direction as context",
@@ -258,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=args.output_dir,
         label=args.label,
         thresholds=parse_csv_floats(args.thresholds),
+        min_entry_margins=parse_csv_floats(args.min_entry_margins),
         context_columns=parse_csv_string_tuple(args.context_columns),
         reset_monthly=args.reset_monthly,
         warmup_days=args.warmup_days,

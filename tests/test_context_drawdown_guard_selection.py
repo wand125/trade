@@ -150,6 +150,34 @@ class ContextDrawdownGuardSelectionTests(unittest.TestCase):
 
         self.assertFalse(bool(selected["eligible"]))
 
+    def test_walkforward_selection_can_use_multiple_candidate_columns(self):
+        examples = selection_examples()
+        expanded = []
+        for _, row in examples.iterrows():
+            for margin, adjustment in [(float("inf"), 0.0), (20.0, 2.0)]:
+                candidate = row.copy()
+                candidate["context_drawdown_guard_min_entry_margin"] = margin
+                candidate["total_adjusted_pnl"] = float(candidate["total_adjusted_pnl"]) + adjustment
+                expanded.append(candidate)
+        frame = pd.DataFrame(expanded)
+
+        selected = context_drawdown_guard_selection.walkforward_selection(
+            frame,
+            objectives=["total"],
+            min_train_months=2,
+            candidate_columns=(
+                "context_drawdown_guard_loss_threshold",
+                "context_drawdown_guard_min_entry_margin",
+            ),
+        )
+
+        target = selected[selected["target_month"] == "2025-03"].iloc[0]
+
+        self.assertIn("selected_context_drawdown_guard_min_entry_margin", selected.columns)
+        self.assertEqual(target["selected_threshold"], float("inf"))
+        self.assertEqual(target["selected_context_drawdown_guard_min_entry_margin"], 20.0)
+        self.assertIn("context_drawdown_guard_min_entry_margin=20", target["selected_candidate"])
+
 
 if __name__ == "__main__":
     unittest.main()

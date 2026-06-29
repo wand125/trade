@@ -13,6 +13,7 @@ import pandas as pd
 
 
 SELECTION_OBJECTIVES = ("total", "worst", "risk_adjusted", "risk_budget")
+DEFAULT_CANDIDATE_COLUMNS = ("context_drawdown_guard_loss_threshold",)
 
 
 def parse_csv_floats(value: str) -> list[float]:
@@ -41,14 +42,17 @@ def local_json_default(value: Any) -> Any:
     raise TypeError(f"cannot serialize {type(value).__name__}")
 
 
-def normalize_summary(frame: pd.DataFrame) -> pd.DataFrame:
+def normalize_summary(
+    frame: pd.DataFrame,
+    candidate_columns: tuple[str, ...] = DEFAULT_CANDIDATE_COLUMNS,
+) -> pd.DataFrame:
     required = {
         "month",
-        "context_drawdown_guard_loss_threshold",
         "trade_count",
         "total_adjusted_pnl",
         "max_drawdown",
         "forced_exit_count",
+        *candidate_columns,
     }
     missing = sorted(required - set(frame.columns))
     if missing:
@@ -56,11 +60,11 @@ def normalize_summary(frame: pd.DataFrame) -> pd.DataFrame:
     output = frame.copy()
     output["month"] = output["month"].astype(str)
     for column in [
-        "context_drawdown_guard_loss_threshold",
         "trade_count",
         "total_adjusted_pnl",
         "max_drawdown",
         "forced_exit_count",
+        *candidate_columns,
     ]:
         output[column] = pd.to_numeric(output[column], errors="raise")
     if "short_adjusted_pnl" not in output.columns:
@@ -69,14 +73,17 @@ def normalize_summary(frame: pd.DataFrame) -> pd.DataFrame:
         output["long_adjusted_pnl"] = np.nan
     output["short_adjusted_pnl"] = pd.to_numeric(output["short_adjusted_pnl"], errors="coerce")
     output["long_adjusted_pnl"] = pd.to_numeric(output["long_adjusted_pnl"], errors="coerce")
-    return output.sort_values(["month", "context_drawdown_guard_loss_threshold"]).reset_index(drop=True)
+    return output.sort_values(["month", *candidate_columns]).reset_index(drop=True)
 
 
-def aggregate_by_threshold(frame: pd.DataFrame) -> pd.DataFrame:
+def aggregate_by_candidate(
+    frame: pd.DataFrame,
+    candidate_columns: tuple[str, ...] = DEFAULT_CANDIDATE_COLUMNS,
+) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame()
     return (
-        frame.groupby("context_drawdown_guard_loss_threshold", dropna=False)
+        frame.groupby(list(candidate_columns), dropna=False)
         .agg(
             validation_months=("month", "nunique"),
             validation_trades=("trade_count", "sum"),
@@ -91,6 +98,24 @@ def aggregate_by_threshold(frame: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def aggregate_by_threshold(frame: pd.DataFrame) -> pd.DataFrame:
+    return aggregate_by_candidate(frame, DEFAULT_CANDIDATE_COLUMNS)
+
+
+def candidate_match(frame: pd.DataFrame, selected: pd.Series, candidate_columns: tuple[str, ...]) -> pd.Series:
+    mask = pd.Series(True, index=frame.index)
+    for column in candidate_columns:
+        mask &= frame[column] == selected[column]
+    return mask
+
+
+def format_candidate(selected: pd.Series, candidate_columns: tuple[str, ...]) -> str:
+    parts = []
+    for column in candidate_columns:
+        parts.append(f"{column}={format_float_label(float(selected[column]))}")
+    return "|".join(parts)
+
+
 def select_threshold(
     prior: pd.DataFrame,
     *,
@@ -99,12 +124,13 @@ def select_threshold(
     drawdown_weight: float = 0.0,
     min_validation_worst_month_pnl: float = -float("inf"),
     max_validation_drawdown: float = float("inf"),
+    candidate_columns: tuple[str, ...] = DEFAULT_CANDIDATE_COLUMNS,
 ) -> pd.Series:
     if objective not in SELECTION_OBJECTIVES:
         raise ValueError(f"unknown objective: {objective}")
-    candidates = aggregate_by_threshold(prior)
+    candidates = aggregate_by_candidate(prior, candidate_columns)
     if candidates.empty:
-        raise ValueError("cannot select threshold from empty prior frame")
+        raise ValueError("cannot select candidate from empty prior frame")
 
     candidates["eligible"] = (
         (candidates["validation_worst_month_pnl"] >= min_validation_worst_month_pnl)
@@ -150,6 +176,7 @@ def walkforward_selection(
     objectives: list[str],
     min_train_months: int,
     train_window_months: int = 0,
+    candidate_columns: tuple[str, ...] = DEFAULT_CANDIDATE_COLUMNS,
     worst_weights: list[float] | None = None,
     drawdown_weights: list[float] | None = None,
     min_validation_worst_month_pnls: list[float] | None = None,
@@ -160,7 +187,7 @@ def walkforward_selection(
     if train_window_months < 0:
         raise ValueError("train_window_months must be non-negative")
 
-    data = normalize_summary(frame)
+    data = normalize_summary(frame, candidate_columns)
     months = sorted(data["month"].unique())
     worst_weights = worst_weights or [1.0]
     drawdown_weights = drawdown_weights or [0.0]
@@ -206,14 +233,22 @@ def walkforward_selection(
                     drawdown_weight=drawdown_weight,
                     min_validation_worst_month_pnl=min_worst,
                     max_validation_drawdown=max_drawdown,
+                    candidate_columns=candidate_columns,
                 )
-                threshold = selected["context_drawdown_guard_loss_threshold"]
-                target = target_rows[
-                    target_rows["context_drawdown_guard_loss_threshold"] == threshold
-                ]
+                target = target_rows[candidate_match(target_rows, selected, candidate_columns)]
                 if target.empty:
                     continue
                 target_row = target.iloc[0]
+                selected_candidate_values = {
+                    f"selected_{column}": selected[column]
+                    for column in candidate_columns
+                }
+                if "context_drawdown_guard_loss_threshold" in candidate_columns:
+                    selected_threshold = selected[
+                        "context_drawdown_guard_loss_threshold"
+                    ]
+                else:
+                    selected_threshold = np.nan
                 rows.append(
                     {
                         "selection_name": selection_name(
@@ -228,7 +263,9 @@ def walkforward_selection(
                         "prior_months": len(prior_months),
                         "prior_start_month": prior_months[0],
                         "prior_end_month": prior_months[-1],
-                        "selected_threshold": threshold,
+                        "selected_candidate": format_candidate(selected, candidate_columns),
+                        "selected_threshold": selected_threshold,
+                        **selected_candidate_values,
                         "selected_eligible": bool(selected.get("eligible", True)),
                         "validation_total_pnl": selected["validation_total_pnl"],
                         "validation_worst_month_pnl": selected[
@@ -288,9 +325,21 @@ def format_threshold_set(values: pd.Series) -> str:
     return ",".join(format_float_label(value) for value in thresholds)
 
 
+def format_string_set(values: pd.Series) -> str:
+    return ";".join(sorted({str(value) for value in values}))
+
+
 def summarize_walkforward(selection: pd.DataFrame) -> pd.DataFrame:
     if selection.empty:
         return pd.DataFrame()
+    selection = selection.copy()
+    if "selected_candidate" not in selection.columns:
+        selection["selected_candidate"] = selection["selected_threshold"].map(
+            lambda value: (
+                "context_drawdown_guard_loss_threshold="
+                + format_float_label(float(value))
+            )
+        )
     return (
         selection.groupby("selection_name", dropna=False)
         .agg(
@@ -307,6 +356,10 @@ def summarize_walkforward(selection: pd.DataFrame) -> pd.DataFrame:
                 "selected_threshold",
                 format_threshold_set,
             ),
+            selected_candidates=(
+                "selected_candidate",
+                format_string_set,
+            ),
         )
         .reset_index()
         .sort_values(["total_pnl", "worst_month_pnl"], ascending=[False, False])
@@ -314,7 +367,8 @@ def summarize_walkforward(selection: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_selection(args: argparse.Namespace) -> Path:
-    source = normalize_summary(pd.read_csv(args.summary_by_run))
+    candidate_columns = tuple(parse_csv_strings(args.candidate_columns))
+    source = normalize_summary(pd.read_csv(args.summary_by_run), candidate_columns)
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     run_dir = output_dir / args.label
@@ -329,6 +383,7 @@ def run_selection(args: argparse.Namespace) -> Path:
         objectives=parse_csv_strings(args.objectives),
         min_train_months=args.min_train_months,
         train_window_months=args.train_window_months,
+        candidate_columns=candidate_columns,
         worst_weights=parse_csv_floats(args.worst_weights),
         drawdown_weights=parse_csv_floats(args.drawdown_weights),
         min_validation_worst_month_pnls=parse_csv_floats(args.min_validation_worst_month_pnls),
@@ -341,6 +396,7 @@ def run_selection(args: argparse.Namespace) -> Path:
     metadata = {
         "summary_by_run": args.summary_by_run,
         "objectives": parse_csv_strings(args.objectives),
+        "candidate_columns": candidate_columns,
         "min_train_months": args.min_train_months,
         "train_window_months": args.train_window_months,
         "worst_weights": parse_csv_floats(args.worst_weights),
@@ -369,6 +425,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--summary-by-run", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     parser.add_argument("--label", default="context_drawdown_guard_selection")
+    parser.add_argument(
+        "--candidate-columns",
+        default="context_drawdown_guard_loss_threshold",
+        help="comma-separated numeric columns that define a selectable candidate",
+    )
     parser.add_argument("--objectives", default="total,worst,risk_adjusted,risk_budget")
     parser.add_argument("--min-train-months", type=int, default=8)
     parser.add_argument(

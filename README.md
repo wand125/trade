@@ -781,6 +781,7 @@ python scripts/experiments/context_drawdown_guard_selection.py \
   --summary-by-run data/reports/backtests/<context_drawdown_apply>/summary_by_run.csv \
   --output-dir data/reports/backtests \
   --label context_drawdown_guard_selection \
+  --candidate-columns context_drawdown_guard_loss_threshold \
   --min-train-months 8 \
   --objectives total,worst,risk_adjusted,risk_budget \
   --worst-weights 1,2,4 \
@@ -791,6 +792,15 @@ python scripts/experiments/context_drawdown_guard_selection.py \
 Use the `worst` objective only as a pre-registered risk-control mandate, not as
 a profit-maximizing selector. Report ordering in `docs/reports/` is based on
 the internal `日時:` line, not filesystem mtime or `更新日時:`.
+
+For a two-dimensional candidate such as drawdown threshold plus post-breach
+entry margin, include both numeric columns:
+
+```bash
+python scripts/experiments/context_drawdown_guard_selection.py \
+  --summary-by-run data/reports/backtests/<context_drawdown_apply>/summary_by_run.csv \
+  --candidate-columns context_drawdown_guard_loss_threshold,context_drawdown_guard_min_entry_margin
+```
 
 ## Rebuild Generated Artifacts
 

@@ -2,6 +2,20 @@
 
 時系列の作業記録。判断、実験、失敗、次の行動を追記する。
 
+## 2026-06-30 JST
+
+### 07:05 Context drawdown guard margin sweep
+
+- online context drawdown guard に `context_drawdown_guard_min_entry_margin` を追加した。既定値 `inf` は従来通りhard block、有限値はbreach済みcontextでも `selected_score - normal_entry_threshold` が指定値以上ならentryを許可する。
+- `context_drawdown_guard_apply.py` をthreshold x min-entry-margin grid対応にし、`context_drawdown_guard_selection.py` を `--candidate-columns` 対応にした。
+- all-window shape checkでは `threshold=60, margin=20` が total `142.9750`, worst `-153.6646`, trades `842` で、hard block `60/inf` の total `135.6350` を少し上回った。ただしこれは全12ヶ月を見た後知恵。
+- prior-only selectionでは、`min_train_months=4` の `worst` が total `69.9374`, worst `-116.4516`, trades `450`。`00181` の threshold-only `worst` total `63.3054` から小幅改善。
+- `min_train_months=8` の `worst` は total `-199.4438`, worst `-116.4516`, trades `56`。`00181` の threshold-only `-206.0758` から小幅改善。
+- total基準はmargin込みでも `20/0` や `60/15` を選び、2025-09の大崩れを防げない。結論は変わらず、これは利益最大化ではなくtail-risk mandate。
+- report: `docs/reports/00182_2026-06-30_context_drawdown_guard_margin_sweep.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/context_drawdown_guard_selection.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection`: OK, 96 tests; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_docs_reports`: OK, 99 tests
+
 ## 2026-06-29 JST
 
 ### 23:50 Context drawdown guard threshold selection

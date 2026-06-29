@@ -87,6 +87,7 @@ SWEEP_KEY_COLUMNS = [
     "side_extra_margin_rules",
     "side_block_rules",
     "context_drawdown_guard_loss_threshold",
+    "context_drawdown_guard_min_entry_margin",
     "context_drawdown_guard_context_columns",
     "context_drawdown_guard_reset_monthly",
     "block_trend_regimes",
@@ -396,6 +397,7 @@ class ModelPolicyConfig:
     side_extra_margin_rules: tuple[str, ...] = ()
     side_block_rules: tuple[str, ...] = ()
     context_drawdown_guard_loss_threshold: float = float("inf")
+    context_drawdown_guard_min_entry_margin: float = float("inf")
     context_drawdown_guard_context_columns: tuple[str, ...] = ("combined_regime", "session_regime")
     context_drawdown_guard_reset_monthly: bool = True
     block_trend_regimes: tuple[str, ...] = ()
@@ -1512,7 +1514,9 @@ def run_backtest(
     config: BacktestConfig,
     *,
     entry_context: pd.Series | None = None,
+    entry_margin: pd.Series | None = None,
     context_drawdown_guard_loss_threshold: float = float("inf"),
+    context_drawdown_guard_min_entry_margin: float = float("inf"),
     context_drawdown_guard_reset_monthly: bool = True,
 ) -> list[Trade]:
     if len(df) != len(desired_position):
@@ -1525,6 +1529,22 @@ def run_backtest(
             raise ValueError("entry_context is required when context drawdown guard is enabled")
         if len(df) != len(entry_context):
             raise ValueError("df and entry_context must have the same length")
+        if (
+            context_drawdown_guard_min_entry_margin < 0
+            and not np.isneginf(context_drawdown_guard_min_entry_margin)
+        ):
+            raise ValueError(
+                "context_drawdown_guard_min_entry_margin must be non-negative, inf, or -inf"
+            )
+        if (
+            np.isfinite(context_drawdown_guard_min_entry_margin)
+            and entry_margin is None
+        ):
+            raise ValueError(
+                "entry_margin is required when context drawdown guard min entry margin is finite"
+            )
+        if entry_margin is not None and len(df) != len(entry_margin):
+            raise ValueError("df and entry_margin must have the same length")
     if config.execution_delay_bars < 0:
         raise ValueError("execution_delay_bars must be non-negative")
     if len(df) < 2:
@@ -1539,6 +1559,10 @@ def run_backtest(
         context_values = [""] * len(df)
     else:
         context_values = entry_context.astype("string").fillna("__missing__").tolist()
+    if entry_margin is None:
+        entry_margin_values = [float("nan")] * len(df)
+    else:
+        entry_margin_values = entry_margin.astype(float).tolist()
 
     position: Position | None = None
     trades: list[Trade] = []
@@ -1606,7 +1630,15 @@ def run_backtest(
                         str(context_values[decision_idx]),
                     )
                     if drawdown_key in blocked_contexts:
-                        continue
+                        if np.isposinf(context_drawdown_guard_min_entry_margin):
+                            continue
+                        if not np.isneginf(context_drawdown_guard_min_entry_margin):
+                            current_entry_margin = entry_margin_values[decision_idx]
+                            if (
+                                not np.isfinite(current_entry_margin)
+                                or current_entry_margin < context_drawdown_guard_min_entry_margin
+                            ):
+                                continue
                 position = Position(
                     direction=desired,
                     entry_timestamp=execution_timestamp,
@@ -2489,6 +2521,184 @@ def model_policy_entry_context(
     return pd.Series(output.to_numpy(), index=df.index, dtype="string")
 
 
+def model_policy_entry_margin(
+    df: pd.DataFrame,
+    predictions: pd.DataFrame,
+    config: ModelPolicyConfig,
+) -> pd.Series:
+    prediction_index = predictions.set_index("decision_timestamp")
+    aligned = prediction_index[[config.long_column, config.short_column]].reindex(df["timestamp"])
+    long_ev = aligned[config.long_column].reset_index(drop=True).astype(float)
+    short_ev = aligned[config.short_column].reset_index(drop=True).astype(float)
+
+    if config.policy == "fixed_horizon_ev":
+        validate_fixed_horizon_config(config)
+        long_fixed_aligned = prediction_index[list(config.long_fixed_horizon_columns)].reindex(
+            df["timestamp"]
+        )
+        short_fixed_aligned = prediction_index[list(config.short_fixed_horizon_columns)].reindex(
+            df["timestamp"]
+        )
+        long_ev, _ = fixed_horizon_scores(
+            long_fixed_aligned.reset_index(drop=True),
+            config.fixed_horizon_minutes,
+            config.fixed_horizon_score_mode,
+        )
+        short_ev, _ = fixed_horizon_scores(
+            short_fixed_aligned.reset_index(drop=True),
+            config.fixed_horizon_minutes,
+            config.fixed_horizon_score_mode,
+        )
+    if config.risk_penalty > 0:
+        risk_aligned = prediction_index[[config.long_risk_column, config.short_risk_column]].reindex(
+            df["timestamp"]
+        )
+        long_risk = risk_aligned[config.long_risk_column].reset_index(drop=True).astype(float)
+        short_risk = risk_aligned[config.short_risk_column].reset_index(drop=True).astype(float)
+        long_ev = long_ev - config.risk_penalty * (-long_risk).clip(lower=0)
+        short_ev = short_ev - config.risk_penalty * (-short_risk).clip(lower=0)
+    if config.profit_barrier_miss_penalty > 0:
+        barrier_aligned = prediction_index[
+            [config.long_profit_barrier_column, config.short_profit_barrier_column]
+        ].reindex(df["timestamp"])
+        long_barrier = barrier_aligned[config.long_profit_barrier_column].reset_index(drop=True).astype(float)
+        short_barrier = barrier_aligned[config.short_profit_barrier_column].reset_index(drop=True).astype(float)
+        long_ev = long_ev - config.profit_barrier_miss_penalty * (1.0 - long_barrier).clip(0.0, 1.0)
+        short_ev = short_ev - config.profit_barrier_miss_penalty * (1.0 - short_barrier).clip(0.0, 1.0)
+    if config.time_exit_penalty > 0:
+        time_exit_aligned = prediction_index[
+            [config.long_time_exit_column, config.short_time_exit_column]
+        ].reindex(df["timestamp"])
+        long_time_exit = time_exit_aligned[config.long_time_exit_column].reset_index(drop=True).astype(float)
+        short_time_exit = time_exit_aligned[config.short_time_exit_column].reset_index(drop=True).astype(float)
+        long_ev = long_ev - config.time_exit_penalty * long_time_exit.clip(0.0, 1.0)
+        short_ev = short_ev - config.time_exit_penalty * short_time_exit.clip(0.0, 1.0)
+    if config.loss_first_penalty > 0:
+        loss_first_aligned = prediction_index[
+            [config.long_loss_first_column, config.short_loss_first_column]
+        ].reindex(df["timestamp"])
+        long_loss_first = loss_first_aligned[config.long_loss_first_column].reset_index(drop=True).astype(float)
+        short_loss_first = loss_first_aligned[config.short_loss_first_column].reset_index(drop=True).astype(float)
+        long_ev = long_ev - config.loss_first_penalty * long_loss_first.clip(0.0, 1.0)
+        short_ev = short_ev - config.loss_first_penalty * short_loss_first.clip(0.0, 1.0)
+    for side, conditions, penalty in parsed_side_ev_penalty_rules(config):
+        condition_mask = side_rule_condition_mask(
+            prediction_index,
+            df["timestamp"],
+            df.index,
+            conditions,
+        )
+        side_penalty = pd.Series(
+            np.where(condition_mask.to_numpy(), penalty, 0.0),
+            index=df.index,
+        )
+        if side == 1:
+            long_ev = long_ev - side_penalty
+        else:
+            short_ev = short_ev - side_penalty
+    if config.side_confidence_penalty > 0 or config.side_confidence_penalty_rules:
+        side_confidence_aligned = prediction_index[
+            [config.long_side_confidence_column, config.short_side_confidence_column]
+        ].reindex(df["timestamp"])
+        long_side_confidence = (
+            side_confidence_aligned[config.long_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        short_side_confidence = (
+            side_confidence_aligned[config.short_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        side_confidence_penalty = pd.Series(
+            config.side_confidence_penalty,
+            index=df.index,
+            dtype="float64",
+        )
+        for conditions, penalty in parsed_side_confidence_penalty_rules(config):
+            condition_mask = side_rule_condition_mask(
+                prediction_index,
+                df["timestamp"],
+                df.index,
+                conditions,
+            )
+            side_confidence_penalty += np.where(condition_mask.to_numpy(), penalty, 0.0)
+        long_ev = long_ev - side_confidence_penalty * (1.0 - long_side_confidence).clip(0.0, 1.0)
+        short_ev = short_ev - side_confidence_penalty * (1.0 - short_side_confidence).clip(0.0, 1.0)
+    if config.side_confidence_overfit_penalty_rules:
+        side_confidence_aligned = prediction_index[
+            [config.long_side_confidence_column, config.short_side_confidence_column]
+        ].reindex(df["timestamp"])
+        long_side_confidence = (
+            side_confidence_aligned[config.long_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        short_side_confidence = (
+            side_confidence_aligned[config.short_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        side_confidence_overfit_penalty = pd.Series(0.0, index=df.index, dtype="float64")
+        for conditions, penalty in parsed_side_confidence_overfit_penalty_rules(config):
+            condition_mask = side_rule_condition_mask(
+                prediction_index,
+                df["timestamp"],
+                df.index,
+                conditions,
+            )
+            side_confidence_overfit_penalty += np.where(condition_mask.to_numpy(), penalty, 0.0)
+        long_ev = long_ev - side_confidence_overfit_penalty * long_side_confidence.clip(0.0, 1.0)
+        short_ev = short_ev - side_confidence_overfit_penalty * short_side_confidence.clip(0.0, 1.0)
+
+    valid_prediction = long_ev.notna() & short_ev.notna()
+    selected_side = pd.Series(0, index=df.index, dtype="int8")
+    selected_side.iloc[(valid_prediction & (long_ev >= short_ev)).to_numpy()] = 1
+    selected_side.iloc[(valid_prediction & (long_ev < short_ev)).to_numpy()] = -1
+    selected_score = pd.Series(
+        np.where(selected_side == 1, long_ev, short_ev),
+        index=df.index,
+    )
+    if secondary_score_tie_break_enabled(config):
+        secondary_aligned = prediction_index[
+            [config.long_secondary_score_column, config.short_secondary_score_column]
+        ].reindex(df["timestamp"])
+        long_secondary_score = (
+            secondary_aligned[config.long_secondary_score_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        short_secondary_score = (
+            secondary_aligned[config.short_secondary_score_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        secondary_valid = long_secondary_score.notna() & short_secondary_score.notna()
+        secondary_valid &= np.isfinite(long_secondary_score) & np.isfinite(
+            short_secondary_score
+        )
+        side_gap = (long_ev - short_ev).abs()
+        near_tie = valid_prediction & secondary_valid & (
+            side_gap <= config.secondary_score_tie_margin
+        )
+        secondary_prefers_long = long_secondary_score >= short_secondary_score
+        selected_side.iloc[(near_tie & secondary_prefers_long).to_numpy()] = 1
+        selected_side.iloc[(near_tie & ~secondary_prefers_long).to_numpy()] = -1
+        selected_score = pd.Series(
+            np.where(selected_side == 1, long_ev, short_ev),
+            index=df.index,
+        )
+
+    long_entry_threshold = config.entry_threshold + config.long_entry_threshold_offset
+    short_entry_threshold = config.entry_threshold + config.short_entry_threshold_offset
+    selected_threshold = pd.Series(
+        np.where(selected_side == 1, long_entry_threshold, short_entry_threshold),
+        index=df.index,
+    )
+    margin = selected_score - selected_threshold
+    return margin.where(valid_prediction)
+
+
 def parse_optional_csv_strings(value: str | None) -> tuple[str, ...]:
     if value is None:
         return ()
@@ -2576,6 +2786,7 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "secondary_score_tie_margin",
         "side_ev_penalty_replacement_min_margin",
         "context_drawdown_guard_loss_threshold",
+        "context_drawdown_guard_min_entry_margin",
     ]
     for column in numeric_columns:
         output[column] = pd.to_numeric(output[column], errors="raise")
@@ -3163,6 +3374,7 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         side_extra_margin_rules=parse_optional_csv_strings(args.side_extra_margin_rules),
         side_block_rules=parse_optional_csv_strings(args.side_block_rules),
         context_drawdown_guard_loss_threshold=args.context_drawdown_guard_loss_threshold,
+        context_drawdown_guard_min_entry_margin=args.context_drawdown_guard_min_entry_margin,
         context_drawdown_guard_context_columns=parse_csv_string_tuple(
             args.context_drawdown_guard_context_columns
         ),
@@ -3229,14 +3441,26 @@ def run_model_policy(
         raise ValueError("context_drawdown_guard_loss_threshold must be positive or inf")
     signal = model_signal_from_predictions(df, predictions, model_policy_config)
     entry_context = model_policy_entry_context(df, predictions, model_policy_config)
+    entry_margin = (
+        model_policy_entry_margin(df, predictions, model_policy_config)
+        if (
+            context_drawdown_guard_enabled(model_policy_config)
+            and np.isfinite(model_policy_config.context_drawdown_guard_min_entry_margin)
+        )
+        else None
+    )
     trades = trades_to_frame(
         run_backtest(
             df,
             signal,
             backtest_config,
             entry_context=entry_context,
+            entry_margin=entry_margin,
             context_drawdown_guard_loss_threshold=(
                 model_policy_config.context_drawdown_guard_loss_threshold
+            ),
+            context_drawdown_guard_min_entry_margin=(
+                model_policy_config.context_drawdown_guard_min_entry_margin
             ),
             context_drawdown_guard_reset_monthly=(
                 model_policy_config.context_drawdown_guard_reset_monthly
@@ -3612,6 +3836,16 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--context-drawdown-guard-min-entry-margin",
+        type=float,
+        default=float("inf"),
+        help=(
+            "after a context drawdown breach, allow a later same-context entry only "
+            "when selected score minus normal entry threshold is at least this value; "
+            "inf preserves hard blocking"
+        ),
+    )
+    parser.add_argument(
         "--context-drawdown-guard-context-columns",
         default="combined_regime,session_regime",
         help="comma-separated prediction columns used with direction as the online drawdown context",
@@ -3677,6 +3911,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
     )
     context_drawdown_guard_loss_thresholds = parse_csv_floats(
         args.context_drawdown_guard_loss_thresholds
+    )
+    context_drawdown_guard_min_entry_margins = parse_csv_floats(
+        args.context_drawdown_guard_min_entry_margins
     )
     regime_blocks = regime_blocks_from_args(args)
     side_ev_penalty_rule_sets = parse_optional_rule_sets(
@@ -3853,6 +4090,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_extra_margin_rule_sets,
         side_block_rule_sets,
         context_drawdown_guard_loss_thresholds,
+        context_drawdown_guard_min_entry_margins,
     )
     for (
         policy,
@@ -3886,6 +4124,7 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         side_extra_margin_rules,
         side_block_rules,
         context_drawdown_guard_loss_threshold,
+        context_drawdown_guard_min_entry_margin,
     ) in base_grid:
         if max_predicted_hold_minutes < min_predicted_hold_minutes:
             raise SystemExit(
@@ -3904,6 +4143,13 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         ):
             raise SystemExit(
                 "context_drawdown_guard_loss_thresholds must contain positive values or inf"
+            )
+        if (
+            np.isfinite(context_drawdown_guard_min_entry_margin)
+            and context_drawdown_guard_min_entry_margin < 0
+        ):
+            raise SystemExit(
+                "context_drawdown_guard_min_entry_margins must contain non-negative values, inf, or -inf"
             )
         policy_exit_thresholds = exit_thresholds if policy == "stateful_ev" else [0.0]
         active_profit_barrier_thresholds = (
@@ -3990,6 +4236,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     context_drawdown_guard_loss_threshold=(
                         context_drawdown_guard_loss_threshold
                     ),
+                    context_drawdown_guard_min_entry_margin=(
+                        context_drawdown_guard_min_entry_margin
+                    ),
                     context_drawdown_guard_context_columns=parse_csv_string_tuple(
                         args.context_drawdown_guard_context_columns
                     ),
@@ -4071,6 +4320,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
                     "context_drawdown_guard_loss_threshold": (
                         context_drawdown_guard_loss_threshold
                     ),
+                    "context_drawdown_guard_min_entry_margin": (
+                        context_drawdown_guard_min_entry_margin
+                    ),
                     "context_drawdown_guard_context_columns": regime_values_to_string(
                         model_policy_config.context_drawdown_guard_context_columns
                     ),
@@ -4148,6 +4400,9 @@ def handle_model_sweep(args: argparse.Namespace) -> int:
         ],
         "context_drawdown_guard_loss_thresholds": (
             context_drawdown_guard_loss_thresholds
+        ),
+        "context_drawdown_guard_min_entry_margins": (
+            context_drawdown_guard_min_entry_margins
         ),
         "context_drawdown_guard_context_columns": parse_csv_string_tuple(
             args.context_drawdown_guard_context_columns
@@ -4317,6 +4572,8 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
             late_defaults[field] = ""
     if "context_drawdown_guard_loss_threshold" not in output.columns:
         late_defaults["context_drawdown_guard_loss_threshold"] = float("inf")
+    if "context_drawdown_guard_min_entry_margin" not in output.columns:
+        late_defaults["context_drawdown_guard_min_entry_margin"] = float("inf")
     if "context_drawdown_guard_context_columns" not in output.columns:
         late_defaults["context_drawdown_guard_context_columns"] = "combined_regime,session_regime"
     if "context_drawdown_guard_reset_monthly" not in output.columns:
@@ -4359,6 +4616,7 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         "secondary_score_tie_margin",
         "side_ev_penalty_replacement_min_margin",
         "context_drawdown_guard_loss_threshold",
+        "context_drawdown_guard_min_entry_margin",
         "min_predicted_hold_minutes",
         "max_predicted_hold_minutes",
         "profit_barrier_miss_penalty",
@@ -10023,6 +10281,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "comma-separated positive realized loss thresholds that block later entries "
             "in the same online direction/context; inf disables"
+        ),
+    )
+    model_sweep.add_argument(
+        "--context-drawdown-guard-min-entry-margins",
+        default="inf",
+        help=(
+            "comma-separated selected-score margins required after a context drawdown "
+            "breach; inf preserves hard blocking"
         ),
     )
     model_sweep.add_argument(

@@ -53,7 +53,7 @@
 - exit timing target を追加し、oracle best exit と実行可能な close timing の差を縮める。
 - データを増やしても単月最適化を始めると同じ問題が再発するため、walk-forward を必須にする。
 - `direction + combined_regime + session_regime` の決済済み実績だけを使う online context drawdown guard。月内またはrolling recent tradesの同一文脈損失が閾値を超えたら、追加admission marginまたはcooldownでstay flatに寄せる。
-- online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` に寄りやすい。prior-only `worst` objective はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
+- online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 
 ## 外部データ候補
 
