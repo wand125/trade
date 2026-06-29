@@ -4007,7 +4007,10 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         late_defaults["forced_exit_rate"] = (
             output["forced_exit_count"] / trade_count
         ).fillna(0.0)
-    late_defaults["sweep_source"] = source
+    if "sweep_source" in output.columns:
+        output["sweep_source"] = output["sweep_source"].fillna(source)
+    else:
+        late_defaults["sweep_source"] = source
     if late_defaults:
         output = pd.concat(
             [output, pd.DataFrame(late_defaults, index=output.index)],

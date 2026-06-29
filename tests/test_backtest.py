@@ -1168,6 +1168,28 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(normalized["sweep_source"].tolist(), ["fold_a"])
         self.assertAlmostEqual(normalized["forced_exit_rate"].iloc[0], 0.25)
 
+    def test_sweep_metrics_normalization_preserves_existing_sweep_source(self):
+        frame = pd.DataFrame(
+            {
+                "policy": ["timed_ev"],
+                "entry_threshold": [15],
+                "exit_threshold": [0],
+                "side_margin": [5],
+                "total_adjusted_pnl": [10.0],
+                "total_raw_pnl": [12.0],
+                "trade_count": [4],
+                "win_rate": [0.5],
+                "max_drawdown": [3.0],
+                "forced_exit_count": [1],
+                "sweep_source": ["existing_fold"],
+            }
+        )
+
+        normalized = normalize_sweep_metrics(frame, "fallback_fold")
+
+        self.assertEqual(list(normalized.columns).count("sweep_source"), 1)
+        self.assertEqual(normalized["sweep_source"].tolist(), ["existing_fold"])
+
     def test_sweep_summary_keeps_predicted_hold_cap_as_key(self):
         def fold(long_cap_pnl, short_cap_pnl):
             return pd.DataFrame(

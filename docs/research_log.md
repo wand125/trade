@@ -4786,3 +4786,27 @@ Artifacts:
 - policy hookは機能し、2025-02単月では保有短縮が損失を縮めた。
 - ただしNoTrade未満であり、単月smokeなので採用しない。
 - 次は複数月walk-forwardで、threshold/capをvalidation内探索、fixed holdoutでは再探索なしで確認する。
+
+### 2026-06-29 19:32 JST Holding shortening multimonth validation
+
+作業:
+
+- 2025-02..2025-04のbase EV/holding predictionに、holding-shortening OOF probabilityを `decision_timestamp` で結合した。
+- `holding_shortening_thresholds=inf,0.60,0.65,0.70,0.75`、`holding_shortening_cap_minutes=30,60,120` を月別sweepした。
+- `model-sweep-summary` 実行時に `sweep_source` が重複追加される不具合を修正し、既存sourceを保持する回帰テストを追加した。
+- report: `docs/reports/00162_2026-06-29_holding_shortening_multimonth_validation.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| variant | 3m sum pnl | mean pnl | min month | max DD | mean trades |
+|---|---:|---:|---:|---:|---:|
+| disabled | `-172.4522` | `-57.4841` | `-125.9826` | `533.9704` | `43.0000` |
+| threshold `0.60`, cap `60` | `-53.9566` | `-17.9855` | `-43.7620` | `461.3556` | `69.6667` |
+| threshold `0.65`, cap `120` | `-119.4782` | `-39.8261` | `-96.9486` | `488.8364` | `52.0000` |
+
+判断:
+
+- `0.60 / 60` は3ヶ月すべてでdisabledを上回り、特に2025-04の損失を大きく縮めた。
+- ただしこの3ヶ月内で探索した値なので標準採用しない。
+- 次は `0.60 / 60` を固定候補として、未使用月または新規apply predictionへ再探索なしで適用する。
