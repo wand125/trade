@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 11:23 JST
+最終更新: 2026-06-29 11:30 JST
 
 ## 現在の状態
 
@@ -77,6 +77,8 @@ guard固定後entry/side候補のtrade-level drift診断を実施済み。valida
 `model-trade-delta-preflight` / `model-trade-delta-drift-stability` に、`delta_status` を落としたavailable-context driftを追加済み。これは比較後にしか分からない `only_candidate` をlive特徴として使わず、予測時点で見える `direction + combined_regime` だけで反転が残るかを見る。guard top / stack0を再実行すると、通常PnLの共通available flipは `short/down_normal_vol` 1件、statefulの共通available flipは `long/down_low_vol`, `long/up_normal_vol` 2件。ただしstateful OOF validation上では `short/down_normal_vol` target mean `+4.7383`, `long/down_low_vol` target mean `+2.1228` で、既存validation教師だけではholdout崩れを悪い文脈として学べていない。したがってavailable contextはhard ruleや単純特徴追加ではなく、追加walk-forward / stress-aware target / regime drift診断として扱う。詳細は `docs/reports/00134_2026-06-29_available_context_drift.md`。
 
 `stateful-examples-drift` を追加済み。複数の `stateful_candidate_examples.csv` をvalidation/holdoutに分けて読み、decision-time contextごとのtarget sum/mean、downside率、raw EV過大評価、validation-positive/holdout-negative反転を出す。guard validation/highcost + stack0 validation 対 guard apply/highcost + stack0 smoke の1544例では、`candidate_side + combined_regime` で15group中6groupがmean/sumとも反転。`short/range_normal_vol` はtarget sum `+501.7660 -> -298.2216`、`long/down_low_vol` は `+358.3530 -> -234.8292`、`short/down_normal_vol` は `+303.8836 -> -19.4788`。sessionまで足すと52group中10groupが反転し、`long/up_low_vol:london` が `+254.3226 -> -284.4936`、`short/range_normal_vol:rollover` が `+125.9528 -> -227.1028`。これはhard ruleではなく、stress-aware targetと追加walk-forward評価の監査軸として使う。詳細は `docs/reports/00135_2026-06-29_stateful_examples_drift.md`。
+
+`stateful-examples-drift` はstress-aware target監査列も出力するようになった。`context_stress_flag` はvalidation meanが正でholdout meanが負に反転したcontext、`context_stress_penalty` はそのmean低下幅、`target_context_stress_adjusted` は元targetからpenaltyを引いた値。available contextでは1544例中1083例がstress flag、target meanは `+0.6154` からstress-adjusted mean `-3.0618`。session contextでは387例がflag、stress-adjusted mean `-2.1435`。これはholdoutを使うためlive学習targetではなく、候補採用前監査と、将来のwalk-forward由来stress target設計の材料として扱う。詳細は `docs/reports/00136_2026-06-29_stateful_context_stress_target.md`。レポート採番と最新判断はファイルシステム更新時刻や `更新日時` ではなく、各レポート本文内の作成時刻 `日時` を基準にする。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

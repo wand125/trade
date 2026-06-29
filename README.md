@@ -588,9 +588,16 @@ python -m trade_data.backtest stateful-examples-drift \
 ```
 
 This writes `combined_stateful_examples.csv`, `split_group_metrics.csv`,
-`month_group_metrics.csv`, `group_drift.csv`, and `summary.json`. Use it to
-check whether a decision-time context is stable or flips under holdout/stress
-before adding it to a model.
+`month_group_metrics.csv`, `group_drift.csv`, and `summary.json`. The combined
+examples are also annotated with `context_stress_flag`,
+`context_stress_penalty`, `target_context_stress_adjusted`, and
+`target_context_holdout_mean_floor`; when flagged rows exist,
+`context_stressed_examples.csv` is written as a focused audit file. Use these
+columns to check whether a decision-time context is stable or flips under
+holdout/stress before adding it to a model. Because the stress columns are
+computed from the validation-vs-holdout comparison, they are audit targets by
+default; for training, recompute the same idea from prior walk-forward folds
+only.
 
 ## Rebuild Generated Artifacts
 

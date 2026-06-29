@@ -5652,6 +5652,105 @@ def stateful_examples_drift_metrics(
     return drift.reset_index(drop=True)
 
 
+def add_stateful_examples_context_stress_columns(
+    examples: pd.DataFrame,
+    drift: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    target_column: str = "target",
+) -> pd.DataFrame:
+    output = examples.copy()
+    if output.empty:
+        output["context_stress_flag"] = False
+        output["context_stress_penalty"] = 0.0
+        output["target_context_stress_adjusted"] = pd.to_numeric(
+            output.get(target_column, pd.Series(dtype=float)),
+            errors="coerce",
+        )
+        output["target_context_holdout_mean_floor"] = output[
+            "target_context_stress_adjusted"
+        ]
+        return output
+
+    missing_group_columns = [column for column in group_columns if column not in output.columns]
+    if missing_group_columns:
+        raise ValueError(f"stateful examples missing group columns: {missing_group_columns}")
+    if target_column not in output.columns:
+        raise ValueError(f"stateful examples missing target column: {target_column}")
+    if drift.empty:
+        target = pd.to_numeric(output[target_column], errors="coerce")
+        output["context_stress_flag"] = False
+        output["context_stress_penalty"] = 0.0
+        output["target_context_stress_adjusted"] = target
+        output["target_context_holdout_mean_floor"] = target
+        return output
+
+    profile_columns = [
+        column
+        for column in [
+            *group_columns,
+            "validation_support",
+            "holdout_support",
+            "validation_target_mean",
+            "holdout_target_mean",
+            "target_mean_holdout_minus_validation",
+            "validation_target_sum",
+            "holdout_target_sum",
+            "target_sum_holdout_minus_validation",
+            "validation_downside_rate",
+            "holdout_downside_rate",
+            "downside_rate_holdout_minus_validation",
+            "validation_positive_holdout_negative_mean",
+            "validation_positive_holdout_negative_sum",
+        ]
+        if column in drift.columns
+    ]
+    profile = drift.loc[:, profile_columns].copy()
+    rename = {
+        column: f"context_{column}"
+        for column in profile.columns
+        if column not in group_columns
+    }
+    profile = profile.rename(columns=rename)
+
+    merge_keys: list[str] = []
+    for index, column in enumerate(group_columns):
+        key = f"__context_group_key_{index}"
+        while key in output.columns or key in profile.columns:
+            key = f"_{key}"
+        merge_keys.append(key)
+        output[key] = output[column].astype("string").fillna("__missing__")
+        profile[key] = profile[column].astype("string").fillna("__missing__")
+    profile = profile.drop(columns=group_columns)
+    output = output.merge(profile, on=merge_keys, how="left")
+    output = output.drop(columns=merge_keys)
+
+    flag = output.get(
+        "context_validation_positive_holdout_negative_mean",
+        pd.Series(False, index=output.index),
+    ).fillna(False).astype(bool)
+    validation_mean = pd.to_numeric(
+        output.get("context_validation_target_mean", pd.Series(np.nan, index=output.index)),
+        errors="coerce",
+    )
+    holdout_mean = pd.to_numeric(
+        output.get("context_holdout_target_mean", pd.Series(np.nan, index=output.index)),
+        errors="coerce",
+    )
+    target = pd.to_numeric(output[target_column], errors="coerce")
+    penalty = (validation_mean - holdout_mean).clip(lower=0.0).fillna(0.0)
+    penalty = penalty.where(flag, 0.0)
+
+    output["context_stress_flag"] = flag
+    output["context_stress_penalty"] = penalty
+    output["target_context_stress_adjusted"] = target - penalty
+    output["target_context_holdout_mean_floor"] = np.minimum(
+        target,
+        holdout_mean.fillna(target),
+    )
+    return output
+
+
 def read_model_trade_delta_frames(
     base_paths: list[Path],
     candidate_paths: list[Path],
@@ -6532,9 +6631,20 @@ def handle_stateful_examples_drift(args: argparse.Namespace) -> int:
         large_downside_threshold=args.large_downside_threshold,
     )
     drift = stateful_examples_drift_metrics(split_metrics, group_columns=group_columns)
+    examples_with_stress = add_stateful_examples_context_stress_columns(
+        examples,
+        drift,
+        group_columns=group_columns,
+        target_column=args.target_column,
+    )
 
     run_dir = make_run_dir(args.output_dir, args.label)
-    examples.to_csv(run_dir / "combined_stateful_examples.csv", index=False)
+    examples_with_stress.to_csv(run_dir / "combined_stateful_examples.csv", index=False)
+    stressed_examples = examples_with_stress.loc[
+        examples_with_stress["context_stress_flag"].fillna(False).astype(bool)
+    ]
+    if not stressed_examples.empty:
+        stressed_examples.to_csv(run_dir / "context_stressed_examples.csv", index=False)
     split_metrics.to_csv(run_dir / "split_group_metrics.csv", index=False)
     if not month_metrics.empty:
         month_metrics.to_csv(run_dir / "month_group_metrics.csv", index=False)
@@ -6568,6 +6678,34 @@ def handle_stateful_examples_drift(args: argparse.Namespace) -> int:
                 "validation_positive_holdout_negative_sum",
                 pd.Series(False, index=drift.index),
             ).sum()
+        ),
+        "context_stress_flag_count": int(
+            examples_with_stress["context_stress_flag"].fillna(False).astype(bool).sum()
+        ),
+        "context_stress_penalty_sum": float(
+            pd.to_numeric(
+                examples_with_stress["context_stress_penalty"],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .sum()
+        ),
+        "context_stress_penalty_mean": float(
+            pd.to_numeric(
+                examples_with_stress["context_stress_penalty"],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .mean()
+        ),
+        "target_mean": float(
+            pd.to_numeric(examples_with_stress[args.target_column], errors="coerce").mean()
+        ),
+        "target_context_stress_adjusted_mean": float(
+            pd.to_numeric(
+                examples_with_stress["target_context_stress_adjusted"],
+                errors="coerce",
+            ).mean()
         ),
     }
     with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:

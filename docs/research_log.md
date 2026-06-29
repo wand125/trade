@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 11:30 Stateful context stress target
+
+- `stateful-examples-drift` の `combined_stateful_examples.csv` にstress-aware target監査列を追加した。
+- 追加列は `context_stress_flag`, `context_stress_penalty`, `target_context_stress_adjusted`, `target_context_holdout_mean_floor`。flagはvalidation meanが正でholdout meanが負に反転したcontext、penaltyは `validation_target_mean - holdout_target_mean` の正の部分。
+- available contextでは1544例中1083例がstress flag、penalty mean `3.6772`、target mean `+0.6154`、stress-adjusted mean `-3.0618`。
+- session contextでは1544例中387例がstress flag、penalty mean `2.7589`、stress-adjusted mean `-2.1435`。
+- 判断: これはholdoutを見た事後監査列なので、そのままlive学習targetにはしない。次はwalk-forwardで過去foldだけからstress penaltyを作り、OOF stateful modelへ使えるtargetに落とす。
+- report: `docs/reports/00136_2026-06-29_stateful_context_stress_target.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 11:23 Stateful examples drift
 
 - `stateful-examples-drift` を追加した。複数の `stateful_candidate_examples.csv` をvalidation/holdoutに分け、context別のtarget sum/mean、downside率、raw EV過大評価、validation-positive/holdout-negative反転を出す。

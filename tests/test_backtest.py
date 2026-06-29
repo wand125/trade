@@ -37,6 +37,7 @@ from trade_data.backtest import (
     summarize_model_trade_delta_preflight_group_drift,
     summarize_model_trade_delta_preflight,
     stateful_examples_drift_metrics,
+    add_stateful_examples_context_stress_columns,
     stateful_examples_metric_summary,
     stateful_examples_month_group_metrics,
     summarize_trades,
@@ -3130,6 +3131,11 @@ class BacktestTests(unittest.TestCase):
             group_columns=group_columns,
         )
         drift = stateful_examples_drift_metrics(split_metrics, group_columns=group_columns)
+        stressed = add_stateful_examples_context_stress_columns(
+            examples,
+            drift,
+            group_columns=group_columns,
+        )
 
         short_drift = drift[
             drift["candidate_side"].eq("short")
@@ -3146,6 +3152,19 @@ class BacktestTests(unittest.TestCase):
             set(month_metrics["dataset_month"]),
             {"2025-01", "2025-02", "2025-03", "2025-04"},
         )
+        stressed_short = stressed[
+            stressed["candidate_side"].eq("short")
+            & stressed["combined_regime"].eq("down_normal_vol")
+        ].iloc[0]
+        unstressed_long = stressed[
+            stressed["candidate_side"].eq("long")
+            & stressed["combined_regime"].eq("up_low_vol")
+        ].iloc[0]
+        self.assertTrue(stressed_short["context_stress_flag"])
+        self.assertAlmostEqual(stressed_short["context_stress_penalty"], 7.0)
+        self.assertAlmostEqual(stressed_short["target_context_stress_adjusted"], -3.0)
+        self.assertFalse(unstressed_long["context_stress_flag"])
+        self.assertAlmostEqual(unstressed_long["context_stress_penalty"], 0.0)
 
     def test_model_trade_delta_pairs_parent_runs_by_config_month(self):
         months = ["2025-01", "2025-02"]
