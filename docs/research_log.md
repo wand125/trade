@@ -4,6 +4,19 @@
 
 ## 2026-06-29 JST
 
+### 22:35 Side drift diagnostics
+
+- `scripts/experiments/side_drift_diagnostics.py` を追加した。prediction側のdense label side share / raw EV side shareと、selected trade側のside share / realized PnL / direction errorを月・regime・sessionで結合して出す。
+- 出力は `prediction_month_summary.csv`, `prediction_group_summary.csv`, `selected_trade_month_summary.csv`, `selected_trade_group_summary.csv`, `side_drift_alerts.csv`, `enriched_selected_trades.csv`, `metrics.json`。
+- fresh 2025-09..12 coststress `260m` を診断した。prediction rows `118887`, selected trades `234`, active alerts `12`。
+- freshは平均short過剰予測 `+0.4143`、nonflat label match `0.4466`。selected tradeでは total `-839.2544`, long PnL `-134.3244`, short PnL `-704.9300`, short losing months `4/4`。
+- 参考の2025-01..08 coststress `260m` も同じ診断にかけた。平均short過剰予測 `+0.2211`, nonflat label match `0.5117`, total `+458.9738`, short PnL `+51.5792`。
+- fresh active alertsは12件で、11件がshort。最大は2025-09 `range_low_vol/london` shortで、pred short share `0.9873`, actual short label share `0.1877`, 17 trades PnL `-140.3796`, direction error `0.8235`。
+- 判断: fresh windowのhard blockは作らない。次は対象月より前だけでside overpredictionとselected-side lossが繰り返す文脈を選ぶwalk-forward side prior drift guardを作る。
+- report: `docs/reports/00175_2026-06-29_side_drift_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m unittest tests.test_side_drift_diagnostics`: OK, 4 tests; `python3 -m py_compile scripts/experiments/side_drift_diagnostics.py`: OK
+
 ### 22:26 Holding max fresh 2025-09..12
 
 - 2025-09..12の `policy_combined` datasetをprofit `1.0` / loss `1.20` で追加生成し、2025-08と同じHGB/MLP splitでfresh predictionを作った。

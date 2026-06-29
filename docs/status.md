@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 22:26 JST
+最終更新: 2026-06-29 22:35 JST
 
 ## 現在の状態
 
@@ -41,6 +41,8 @@ holding error / exit regretをdense教師候補として分解した。`scripts/
 `holding_max_grid.py` を追加し、`max_predicted_hold_minutes` を2025-01..08の広いchronological windowで再評価した。結果は「`240m` 単独」ではなく `250..260m` 帯として扱うべきだった。fine gridでは no-cost `240m` total `803.6572` が最高だが、`260m` は `798.2040` と僅差でworst month `57.5406`、max DD `215.8250` が良い。cost stressでは `260m` total `458.9738` が `240m` `436.4600` と `480m` `403.4864` を上回った。`250m` はcost-stress worst month `-0.4550` の防御候補。`720m` はcost-stress total `465.9028` で高いが、worst month `-50.7592`、max DD `256.4396`、forced exits `10` のため標準候補にしない。広域artifactは stitched prediction のため2025-01/02/08でpost-exit prediction coverageが不完全であり、同一入力比較として読む。fresh applyではfull prediction frameと `--require-post-coverage` を使う。詳細は `docs/reports/00173_2026-06-29_holding_max_grid_2025_01_08.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 `250..260m` のfresh chronological確認として、2025-09..12 datasetをprofit `1.0` / loss `1.20` で生成し、HGB/MLP/hybrid/stateful riskを同じsplitで作り直して `max_predicted_hold_minutes=250/260/480` を評価した。2025-09..12では全候補が大幅マイナスで、cost stressは `260m` `-839.2544`, `480m` `-847.6138`, `250m` `-864.4160`。2025-09..11だけでも `250m` `-484.3794`, `260m` `-489.6290`, `480m` `-533.2928` とNoTrade未満。主因はholding capではなくside driftで、実ラベルはlong share `0.541..0.635` なのに予測EVはshort share `0.743..0.838`、selected tradeのdirection errorは `0.55..0.72` に達した。`250..260m` は相対的には`480m`よりましだが、標準採用しない。次の本流はside calibration / side prior drift control。詳細は `docs/reports/00174_2026-06-29_holding_max_fresh_2025_09_12.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`side_drift_diagnostics.py` を追加し、dense label side share、raw EV予測side share、selected trade side share、実現PnLを月/regime/sessionで同時に診断できるようにした。fresh 2025-09..12 coststress `260m` は平均short過剰予測 `+0.4143`、nonflat label match `0.4466`、short PnL `-704.9300`、short losing months `4/4`。参考の2025-01..08 coststress `260m` は平均short過剰予測 `+0.2211`、nonflat label match `0.5117`、short PnL `+51.5792`。fresh active alertは12件で、うち11件がshort、short alert PnL `-406.7756`。最大は2025-09 `range_low_vol/london` shortで予測short share `0.9873`、実short label share `0.1877`、17 trades PnL `-140.3796`、direction error `0.8235`。これはfresh期間のhard block材料ではなく、対象月より前だけで選ぶwalk-forward side prior drift guardへ進める。詳細は `docs/reports/00175_2026-06-29_side_drift_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 
