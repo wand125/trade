@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 11:17 Available-context drift
+
+- `model-trade-delta-preflight` に `direction + combined_regime` だけのavailable-context drift出力を追加した。`delta_status=only_candidate` は比較後に分かる情報なので、live特徴へ直接入れない。
+- `model-trade-delta-drift-stability` もavailable-context版を集計し、`flip_stability_available_pnl*.csv` / `flip_stability_available_stateful*.csv` と月別supportを出すようにした。
+- guard top / stack0の再実行では、通常PnLの共通available flipは `short/down_normal_vol` 1件、statefulの共通available flipは `long/down_low_vol`, `long/up_normal_vol` 2件。
+- stateful OOF context reportでは、`short/down_normal_vol` はsupport 15, target mean `+4.7383`、`long/down_low_vol` はsupport 66, target mean `+2.1228`。既存validation OOFだけでは、これらを悪い文脈として学べていない。
+- 判断: available contextは診断として有効だが、単純な教師特徴追加やhard gateでは不足。次は追加walk-forwardでexamplesを増やし、stress-aware targetやregime driftを学習・評価設計へ戻す。
+- report: `docs/reports/00134_2026-06-29_available_context_drift.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 11:07 Drift stability monthly support
 
 - `model-trade-delta-drift-stability` に、共通flip groupを元deltaの月別group CSVへ戻すsupport出力を追加した。

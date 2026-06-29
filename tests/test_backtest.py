@@ -3290,6 +3290,22 @@ class BacktestTests(unittest.TestCase):
                 filename="group_by_blocking_candidate_month_status_direction_combined_regime.csv",
                 metric_column="candidate_stateful_net_adjusted_pnl",
             )
+            _, available_group_drift = summarize_model_trade_delta_preflight_group_drift(
+                [validation_delta],
+                [holdout_delta],
+                group_columns=["direction", "combined_regime"],
+            )
+            _, available_stateful_group_drift = (
+                summarize_model_trade_delta_preflight_group_drift(
+                    [validation_delta],
+                    [holdout_delta],
+                    filename=(
+                        "group_by_blocking_candidate_month_status_direction_combined_regime.csv"
+                    ),
+                    group_columns=["direction", "combined_regime"],
+                    metric_column="candidate_stateful_net_adjusted_pnl",
+                )
+            )
 
         self.assertFalse(summary["preflight_pass"])
         self.assertEqual(summary["validation_case_count"], 1)
@@ -3324,6 +3340,26 @@ class BacktestTests(unittest.TestCase):
             -2.0,
         )
         self.assertTrue(stateful_drift_row["validation_positive_holdout_negative"])
+        available_drift_row = available_group_drift.iloc[0]
+        self.assertNotIn("delta_status", available_group_drift.columns)
+        self.assertEqual(available_drift_row["direction"], "long")
+        self.assertEqual(available_drift_row["combined_regime"], "up_low_vol")
+        self.assertAlmostEqual(available_drift_row["validation_pnl_delta_sum"], 3.0)
+        self.assertAlmostEqual(available_drift_row["holdout_pnl_delta_sum"], -3.0)
+        self.assertTrue(available_drift_row["validation_positive_holdout_negative"])
+        available_stateful_drift_row = available_stateful_group_drift.iloc[0]
+        self.assertAlmostEqual(
+            available_stateful_drift_row[
+                "validation_candidate_stateful_net_adjusted_pnl_sum"
+            ],
+            2.0,
+        )
+        self.assertAlmostEqual(
+            available_stateful_drift_row[
+                "holdout_candidate_stateful_net_adjusted_pnl_sum"
+            ],
+            -2.0,
+        )
 
     def test_model_trade_delta_drift_stability_finds_repeated_flip_groups(self):
         def write_preflight_run(path: Path, rows: list[dict[str, object]]) -> None:
@@ -3331,6 +3367,10 @@ class BacktestTests(unittest.TestCase):
             frame = pd.DataFrame(rows)
             frame.to_csv(
                 path / "group_drift_status_direction_combined_regime.csv",
+                index=False,
+            )
+            frame.drop(columns=["delta_status"]).to_csv(
+                path / "group_drift_direction_combined_regime.csv",
                 index=False,
             )
             stateful = frame.rename(
@@ -3348,6 +3388,10 @@ class BacktestTests(unittest.TestCase):
             )
             stateful.to_csv(
                 path / "stateful_group_drift_status_direction_combined_regime.csv",
+                index=False,
+            )
+            stateful.drop(columns=["delta_status"]).to_csv(
+                path / "stateful_group_drift_direction_combined_regime.csv",
                 index=False,
             )
 
@@ -3458,6 +3502,20 @@ class BacktestTests(unittest.TestCase):
                     metric_column="candidate_stateful_net_adjusted_pnl",
                 )
             )
+            available_stability, available_summary = summarize_model_trade_delta_drift_stability(
+                [run_a, run_b],
+                filename="group_drift_direction_combined_regime.csv",
+                metric_column="pnl_delta",
+                group_columns=["direction", "combined_regime"],
+            )
+            available_stateful_stability, available_stateful_summary = (
+                summarize_model_trade_delta_drift_stability(
+                    [run_a, run_b],
+                    filename="stateful_group_drift_direction_combined_regime.csv",
+                    metric_column="candidate_stateful_net_adjusted_pnl",
+                    group_columns=["direction", "combined_regime"],
+                )
+            )
             support, support_summary = summarize_model_trade_delta_drift_monthly_support(
                 [run_a, run_b],
                 stability,
@@ -3472,6 +3530,15 @@ class BacktestTests(unittest.TestCase):
                         "group_by_blocking_candidate_month_status_direction_combined_regime.csv"
                     ),
                     metric_column="candidate_stateful_net_adjusted_pnl",
+                )
+            )
+            available_support, available_support_summary = (
+                summarize_model_trade_delta_drift_monthly_support(
+                    [run_a, run_b],
+                    available_stability,
+                    filename="group_by_month_status_direction_combined_regime.csv",
+                    metric_column="pnl_delta",
+                    group_columns=["direction", "combined_regime"],
                 )
             )
 
@@ -3495,6 +3562,17 @@ class BacktestTests(unittest.TestCase):
         self.assertAlmostEqual(support_summary["metric_sum"].sum(), 10.0)
         self.assertEqual(len(stateful_support), 4)
         self.assertAlmostEqual(stateful_support_summary["metric_sum"].sum(), 10.0)
+        self.assertEqual(available_summary["common_flip_group_count"], 1)
+        self.assertEqual(available_stability.iloc[0]["direction"], "long")
+        self.assertEqual(available_stability.iloc[0]["combined_regime"], "down_low_vol")
+        self.assertNotIn("delta_status", available_stability.columns)
+        self.assertEqual(available_stateful_summary["common_flip_group_count"], 1)
+        self.assertAlmostEqual(
+            available_stateful_stability.iloc[0]["holdout_sum_total"],
+            -12.0,
+        )
+        self.assertEqual(len(available_support), 4)
+        self.assertAlmostEqual(available_support_summary["metric_sum"].sum(), 10.0)
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")

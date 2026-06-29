@@ -7030,6 +7030,7 @@ def summarize_model_trade_delta_drift_monthly_support(
 def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
     validation_paths = parse_csv_paths(args.validation_deltas)
     holdout_paths = parse_csv_paths(args.holdout_deltas)
+    available_context_group_columns = ["direction", "combined_regime"]
     cases, summary = summarize_model_trade_delta_preflight(
         validation_paths,
         holdout_paths,
@@ -7067,6 +7068,35 @@ def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
             ],
         )
     )
+    split_available_group_metrics, available_group_drift = (
+        summarize_model_trade_delta_preflight_group_drift(
+            validation_paths,
+            holdout_paths,
+            group_columns=available_context_group_columns,
+            extra_metric_columns=[
+                "row_count",
+                "base_adjusted_pnl",
+                "candidate_adjusted_pnl",
+                "base_trade_count",
+                "candidate_trade_count",
+            ],
+        )
+    )
+    split_available_stateful_group_metrics, available_stateful_group_drift = (
+        summarize_model_trade_delta_preflight_group_drift(
+            validation_paths,
+            holdout_paths,
+            filename="group_by_blocking_candidate_month_status_direction_combined_regime.csv",
+            group_columns=available_context_group_columns,
+            metric_column="candidate_stateful_net_adjusted_pnl",
+            extra_metric_columns=[
+                "candidate_adjusted_pnl",
+                "blocked_base_adjusted_pnl",
+                "blocked_base_positive_pnl",
+                "blocked_base_negative_pnl",
+            ],
+        )
+    )
     if not group_drift.empty:
         summary["group_drift_validation_positive_holdout_negative_count"] = int(
             group_drift["validation_positive_holdout_negative"].sum()
@@ -7080,6 +7110,20 @@ def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
         )
         summary["stateful_group_drift_validation_nonnegative_holdout_negative_count"] = int(
             stateful_group_drift["validation_nonnegative_holdout_negative"].sum()
+        )
+    if not available_group_drift.empty:
+        summary["available_group_drift_validation_positive_holdout_negative_count"] = int(
+            available_group_drift["validation_positive_holdout_negative"].sum()
+        )
+        summary["available_group_drift_validation_nonnegative_holdout_negative_count"] = int(
+            available_group_drift["validation_nonnegative_holdout_negative"].sum()
+        )
+    if not available_stateful_group_drift.empty:
+        summary["available_stateful_group_drift_validation_positive_holdout_negative_count"] = int(
+            available_stateful_group_drift["validation_positive_holdout_negative"].sum()
+        )
+        summary["available_stateful_group_drift_validation_nonnegative_holdout_negative_count"] = int(
+            available_stateful_group_drift["validation_nonnegative_holdout_negative"].sum()
         )
 
     run_dir = make_run_dir(args.output_dir, args.label)
@@ -7103,6 +7147,26 @@ def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
     if not stateful_group_drift.empty:
         stateful_group_drift.to_csv(
             run_dir / "stateful_group_drift_status_direction_combined_regime.csv",
+            index=False,
+        )
+    if not split_available_group_metrics.empty:
+        split_available_group_metrics.to_csv(
+            run_dir / "split_group_metrics_direction_combined_regime.csv",
+            index=False,
+        )
+    if not available_group_drift.empty:
+        available_group_drift.to_csv(
+            run_dir / "group_drift_direction_combined_regime.csv",
+            index=False,
+        )
+    if not split_available_stateful_group_metrics.empty:
+        split_available_stateful_group_metrics.to_csv(
+            run_dir / "split_stateful_group_metrics_direction_combined_regime.csv",
+            index=False,
+        )
+    if not available_stateful_group_drift.empty:
+        available_stateful_group_drift.to_csv(
+            run_dir / "stateful_group_drift_direction_combined_regime.csv",
             index=False,
         )
     metadata = {
@@ -7169,12 +7233,76 @@ def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
             .head(args.top_n)
             .to_string(index=False)
         )
+    if not available_group_drift.empty:
+        available_columns = [
+            "direction",
+            "combined_regime",
+            "validation_pnl_delta_sum",
+            "holdout_pnl_delta_sum",
+            "pnl_delta_holdout_minus_validation",
+            "validation_positive_holdout_negative",
+        ]
+        existing_available_columns = [
+            column for column in available_columns if column in available_group_drift.columns
+        ]
+        print("worst available-context validation/holdout group drift:")
+        print(
+            available_group_drift.loc[:, existing_available_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
+    if not available_stateful_group_drift.empty:
+        available_stateful_columns = [
+            "direction",
+            "combined_regime",
+            "validation_candidate_stateful_net_adjusted_pnl_sum",
+            "holdout_candidate_stateful_net_adjusted_pnl_sum",
+            "candidate_stateful_net_adjusted_pnl_holdout_minus_validation",
+            "validation_positive_holdout_negative",
+        ]
+        existing_available_stateful_columns = [
+            column
+            for column in available_stateful_columns
+            if column in available_stateful_group_drift.columns
+        ]
+        print("worst available-context validation/holdout stateful group drift:")
+        print(
+            available_stateful_group_drift.loc[:, existing_available_stateful_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
     print(f"artifacts: {run_dir}")
     return 0
 
 
+def optional_model_trade_delta_drift_stability(
+    preflight_paths: list[Path],
+    *,
+    filename: str,
+    metric_column: str,
+    group_columns: list[str],
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    missing = [str(path / filename) for path in preflight_paths if not (path / filename).exists()]
+    if missing:
+        return pd.DataFrame(), {
+            "preflight_run_count": len(preflight_paths),
+            "flip_group_count": 0,
+            "common_flip_group_count": 0,
+            "metric_column": metric_column,
+            "filename": filename,
+            "missing_files": missing,
+        }
+    return summarize_model_trade_delta_drift_stability(
+        preflight_paths,
+        filename=filename,
+        metric_column=metric_column,
+        group_columns=group_columns,
+    )
+
+
 def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
     preflight_paths = parse_csv_paths(args.preflight_runs)
+    available_context_group_columns = ["direction", "combined_regime"]
     pnl_stability, pnl_summary = summarize_model_trade_delta_drift_stability(
         preflight_paths,
         filename="group_drift_status_direction_combined_regime.csv",
@@ -7184,6 +7312,22 @@ def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
         preflight_paths,
         filename="stateful_group_drift_status_direction_combined_regime.csv",
         metric_column="candidate_stateful_net_adjusted_pnl",
+    )
+    available_pnl_stability, available_pnl_summary = (
+        optional_model_trade_delta_drift_stability(
+            preflight_paths,
+            filename="group_drift_direction_combined_regime.csv",
+            metric_column="pnl_delta",
+            group_columns=available_context_group_columns,
+        )
+    )
+    available_stateful_stability, available_stateful_summary = (
+        optional_model_trade_delta_drift_stability(
+            preflight_paths,
+            filename="stateful_group_drift_direction_combined_regime.csv",
+            metric_column="candidate_stateful_net_adjusted_pnl",
+            group_columns=available_context_group_columns,
+        )
     )
     pnl_support, pnl_support_summary = summarize_model_trade_delta_drift_monthly_support(
         preflight_paths,
@@ -7199,11 +7343,39 @@ def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
             metric_column="candidate_stateful_net_adjusted_pnl",
         )
     )
+    available_pnl_support, available_pnl_support_summary = (
+        summarize_model_trade_delta_drift_monthly_support(
+            preflight_paths,
+            available_pnl_stability,
+            filename="group_by_month_status_direction_combined_regime.csv",
+            metric_column="pnl_delta",
+            group_columns=available_context_group_columns,
+        )
+    )
+    available_stateful_support, available_stateful_support_summary = (
+        summarize_model_trade_delta_drift_monthly_support(
+            preflight_paths,
+            available_stateful_stability,
+            filename="group_by_blocking_candidate_month_status_direction_combined_regime.csv",
+            metric_column="candidate_stateful_net_adjusted_pnl",
+            group_columns=available_context_group_columns,
+        )
+    )
     run_dir = make_run_dir(args.output_dir, args.label)
     if not pnl_stability.empty:
         pnl_stability.to_csv(run_dir / "flip_stability_pnl.csv", index=False)
     if not stateful_stability.empty:
         stateful_stability.to_csv(run_dir / "flip_stability_stateful.csv", index=False)
+    if not available_pnl_stability.empty:
+        available_pnl_stability.to_csv(
+            run_dir / "flip_stability_available_pnl.csv",
+            index=False,
+        )
+    if not available_stateful_stability.empty:
+        available_stateful_stability.to_csv(
+            run_dir / "flip_stability_available_stateful.csv",
+            index=False,
+        )
     if not pnl_support.empty:
         pnl_support.to_csv(run_dir / "flip_stability_pnl_monthly_support.csv", index=False)
         pnl_support_summary.to_csv(
@@ -7219,12 +7391,34 @@ def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
             run_dir / "flip_stability_stateful_monthly_support_summary.csv",
             index=False,
         )
+    if not available_pnl_support.empty:
+        available_pnl_support.to_csv(
+            run_dir / "flip_stability_available_pnl_monthly_support.csv",
+            index=False,
+        )
+        available_pnl_support_summary.to_csv(
+            run_dir / "flip_stability_available_pnl_monthly_support_summary.csv",
+            index=False,
+        )
+    if not available_stateful_support.empty:
+        available_stateful_support.to_csv(
+            run_dir / "flip_stability_available_stateful_monthly_support.csv",
+            index=False,
+        )
+        available_stateful_support_summary.to_csv(
+            run_dir / "flip_stability_available_stateful_monthly_support_summary.csv",
+            index=False,
+        )
     summary = {
         "preflight_runs": [str(path) for path in preflight_paths],
         "pnl": pnl_summary,
         "stateful": stateful_summary,
+        "available_pnl": available_pnl_summary,
+        "available_stateful": available_stateful_summary,
         "pnl_monthly_support_rows": int(len(pnl_support)),
         "stateful_monthly_support_rows": int(len(stateful_support)),
+        "available_pnl_monthly_support_rows": int(len(available_pnl_support)),
+        "available_stateful_monthly_support_rows": int(len(available_stateful_support)),
     }
     with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, ensure_ascii=False, indent=2, default=json_default)
@@ -7232,8 +7426,15 @@ def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
     print("drift stability summary:")
     print(f"pnl common flip groups: {pnl_summary['common_flip_group_count']}")
     print(f"stateful common flip groups: {stateful_summary['common_flip_group_count']}")
+    print(f"available-context pnl common flip groups: {available_pnl_summary['common_flip_group_count']}")
+    print(
+        "available-context stateful common flip groups: "
+        f"{available_stateful_summary['common_flip_group_count']}"
+    )
     print(f"pnl monthly support rows: {len(pnl_support)}")
     print(f"stateful monthly support rows: {len(stateful_support)}")
+    print(f"available-context pnl monthly support rows: {len(available_pnl_support)}")
+    print(f"available-context stateful monthly support rows: {len(available_stateful_support)}")
     display_columns = [
         "delta_status",
         "direction",
@@ -7255,6 +7456,38 @@ def handle_model_trade_delta_drift_stability(args: argparse.Namespace) -> int:
             column for column in display_columns if column in stateful_stability.columns
         ]
         print(stateful_stability.loc[:, existing_columns].head(args.top_n).to_string(index=False))
+    available_display_columns = [
+        "direction",
+        "combined_regime",
+        "flip_comparison_count",
+        "flip_comparison_share",
+        "validation_sum_total",
+        "holdout_sum_total",
+        "holdout_minus_validation_sum",
+        "comparisons",
+    ]
+    if not available_pnl_stability.empty:
+        print("available-context pnl flip stability:")
+        existing_columns = [
+            column for column in available_display_columns if column in available_pnl_stability.columns
+        ]
+        print(
+            available_pnl_stability.loc[:, existing_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
+    if not available_stateful_stability.empty:
+        print("available-context stateful flip stability:")
+        existing_columns = [
+            column
+            for column in available_display_columns
+            if column in available_stateful_stability.columns
+        ]
+        print(
+            available_stateful_stability.loc[:, existing_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
     print(f"artifacts: {run_dir}")
     return 0
 
