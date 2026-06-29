@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 22:35 JST
+最終更新: 2026-06-29 22:47 JST
 
 ## 現在の状態
 
@@ -43,6 +43,8 @@ holding error / exit regretをdense教師候補として分解した。`scripts/
 `250..260m` のfresh chronological確認として、2025-09..12 datasetをprofit `1.0` / loss `1.20` で生成し、HGB/MLP/hybrid/stateful riskを同じsplitで作り直して `max_predicted_hold_minutes=250/260/480` を評価した。2025-09..12では全候補が大幅マイナスで、cost stressは `260m` `-839.2544`, `480m` `-847.6138`, `250m` `-864.4160`。2025-09..11だけでも `250m` `-484.3794`, `260m` `-489.6290`, `480m` `-533.2928` とNoTrade未満。主因はholding capではなくside driftで、実ラベルはlong share `0.541..0.635` なのに予測EVはshort share `0.743..0.838`、selected tradeのdirection errorは `0.55..0.72` に達した。`250..260m` は相対的には`480m`よりましだが、標準採用しない。次の本流はside calibration / side prior drift control。詳細は `docs/reports/00174_2026-06-29_holding_max_fresh_2025_09_12.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 `side_drift_diagnostics.py` を追加し、dense label side share、raw EV予測side share、selected trade side share、実現PnLを月/regime/sessionで同時に診断できるようにした。fresh 2025-09..12 coststress `260m` は平均short過剰予測 `+0.4143`、nonflat label match `0.4466`、short PnL `-704.9300`、short losing months `4/4`。参考の2025-01..08 coststress `260m` は平均short過剰予測 `+0.2211`、nonflat label match `0.5117`、short PnL `+51.5792`。fresh active alertは12件で、うち11件がshort、short alert PnL `-406.7756`。最大は2025-09 `range_low_vol/london` shortで予測short share `0.9873`、実short label share `0.1877`、17 trades PnL `-140.3796`、direction error `0.8235`。これはfresh期間のhard block材料ではなく、対象月より前だけで選ぶwalk-forward side prior drift guardへ進める。詳細は `docs/reports/00175_2026-06-29_side_drift_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`side_drift_guard_walkforward.py` を追加し、対象月より前のprediction side biasとselected trade損失から `side_ev_penalty_rules` を月別に作るsoft guardを検証した。2025-01..12 coststress `260m` の同一入力比較で、no guardは total `-419.0574`, worst `-370.8744`, max DD `376.0724`。broad guard p5は total `-394.7214`, worst `-308.3412`, max DD `308.3412` と防御面を改善したが、2025-05/06/08/10を悪化させた。strict short-only p10は total `-317.4998` と最大改善だが、worst `-364.5482`, max DD `369.7462` は大きく改善しない。guardは悪いshort文脈を検出できているが、代替tradeが別の損失を作るため標準採用しない。次はno-guard vs guardのtrade deltaで「悪いshort除外」と「悪いreplacement追加」を分ける。詳細は `docs/reports/00176_2026-06-29_side_drift_guard_walkforward.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 selected trade failure modelに `pred_hit_actual_miss` と `ev_overestimate_high` targetを追加済み。2025-05 highcostでは `failure only risk10` が adjusted PnLを `-52.9764 -> -7.1330` へ改善したが、OOF validation 2024-11..2025-04ではbaseline `407.8172` に対して `325.8466` と悪化した。`stateful + predhit w1` もvalidation `240.9596` で悪化。したがって今回のrisk penaltyは標準policyへ採用せず、`pred_hit_actual_miss` はexit timing / EV calibration / ranking feature候補として残す。詳細は `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`。
 

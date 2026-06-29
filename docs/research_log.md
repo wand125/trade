@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 22:47 Side drift guard walk-forward
+
+- `scripts/experiments/side_drift_guard_walkforward.py` を追加した。対象月より前だけを使い、prediction side biasとselected trade損失が揃うside/contextへ `side_ev_penalty_rules` を追加する。
+- 初回はOHLCV default pathが古く失敗したため、`--data data/processed/histdata/xauusd/xauusd_m1.parquet` を明示した。
+- 2025-01..12の同一入力比較で、no guardは total `-419.0574`, worst month `-370.8744`, max DD `376.0724`。
+- broad guardは `short,long`, min side bias `0.20`, min selected trades `5`, min selected months `2`。p5は total `-394.7214`, worst `-308.3412`, max DD `308.3412` で防御面を改善したが、2025-05/06/08/10を悪化させた。
+- strict short-onlyは `short`のみ、min side bias `0.30`, min selected trades `10`, min selected months `3`。p10は total `-317.4998` で最大改善だが、worst `-364.5482`, max DD `369.7462` は大きく改善しない。
+- 判断: guard infrastructureは有効。悪いshort文脈の検出はできているが、代替tradeが別の損失を作るため標準採用しない。次はno-guard vs guardのtrade deltaで「悪いshort除外」と「悪いreplacement追加」を分ける。
+- report: `docs/reports/00176_2026-06-29_side_drift_guard_walkforward.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m unittest tests.test_side_drift_guard_walkforward`: OK, 4 tests; `python3 -m py_compile scripts/experiments/side_drift_guard_walkforward.py`: OK
+
 ### 22:35 Side drift diagnostics
 
 - `scripts/experiments/side_drift_diagnostics.py` を追加した。prediction側のdense label side share / raw EV side shareと、selected trade側のside share / realized PnL / direction errorを月・regime・sessionで結合して出す。
