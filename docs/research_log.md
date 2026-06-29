@@ -4,6 +4,17 @@
 
 ## 2026-06-29 JST
 
+### 17:28 Predhit overestimate interaction
+
+- `scripts/experiments/predhit_overestimate_interaction.py` を追加し、chronological q75 high-overestimate予測と2025-05 apply予測を結合して、`pred_hit_actual_miss_prob` とのinteraction riskを作れるようにした。
+- 初回は評価月の `dataset_month` だけへpredictionを絞ってしまい、post期間のシグナルが標準 `model-policy` CLIと不一致になった。修正後は統合prediction frame全体を各月評価へ渡し、CLI単発結果と一致することを確認した。
+- 2025-02..2025-05 highcost固定評価では、`predhit_evhigh` interactionはほぼbaseline同等。`predhit_q75` は効くがweight感度が大きい。
+- fine gridでは `predhit_q75_w4` が total PnL `107.2486`, min month `-22.9762`, max monthly DD `233.5124`, trades `386`。risk0は `101.5974 / -61.3708 / 259.0392 / 408`、baseline risk5は `91.9002 / -48.2052 / 224.7524 / 386`。
+- ただし `w3=80.5836`, `w5=97.4686`, `w8=62.9580` と周辺が安定せず、安定した台地ではない。標準採用せず、`w4` / `w6` を固定候補として未使用月・別walk-forwardへ再探索なしで適用する。
+- 2025-05改善はcommon `long/down_low_vol` の損失が `-117.9480 -> -94.0680` へ縮んだことが主因。2025-04悪化は `only_base long/down_high_vol +8.7600` と `only_base short/range_normal_vol +7.0000` を落としたことが主因。
+- report: `docs/reports/00155_2026-06-29_predhit_overestimate_interaction.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 16:19 Trade overestimate scale diagnostics
 
 - `trade-overestimate-scale-diagnostics` を追加し、chronological overestimate modelのfit側target分布、holdout selected trade予測、全prediction行のthreshold発火率を診断できるようにした。

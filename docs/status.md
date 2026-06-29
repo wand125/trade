@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 16:59 JST
+最終更新: 2026-06-29 17:28 JST
 
 ## 現在の状態
 
@@ -31,6 +31,8 @@ trade overestimate high分類targetも追加済み。`oof-trade-overestimate-hig
 stateful examplesの追加support実験も実施済み。`oof-stateful-value-model` / `oof-stateful-risk-model` の `--examples` を複数CSV/ディレクトリ対応にし、`example_source` と `example_source_rows` を保存するようにした。3つのdelta sourceを混ぜて1093例に増やしたが、chronological OOFでは `blocking_cost_high` だけAUC `0.5439`、他は概ね0.5未満。`blocking_cost_high` を既存stateful risk5へ追加しても、2025-02..2025-04 totalは baseline `154.6374` に対し w5 `123.7672`, w10 `92.1764` へ悪化した。source別target率が大きく違うため、次は複数source混合ではなく同一固定policyのwalk-forward examplesを増やす。詳細は `docs/reports/00153_2026-06-29_augmented_stateful_blocking_examples.md`。
 
 同一固定policyのstateful examples再評価も完了。`fixed_highcost_risk5` vs `fixed_highcost_risk0` の2024-11..2025-05から607例を作り、2025-02..2025-05をchronological OOF評価した。`blocking_cost_high` はAUC `0.3563` と逆方向、`stateful_nonpositive` はAUC `0.5216` と薄いsignalに留まる。既存risk5へ追加すると、2025-02..2025-05 totalは baseline risk5 `101.6610` に対し blockcost w5 `78.5882`, blockcost w10 `35.7162`, nonpositive w5 `-88.3904`, nonpositive w10 `-96.3226` で全て悪化。高コスト4ヶ月ではrisk0 total `111.3582` がrisk5を上回るため、risk5は利益最大化signalではなく防御diagnosticとして扱う。詳細は `docs/reports/00154_2026-06-29_fixed_policy_stateful_examples.md`。
+
+`pred_hit_actual_miss` と high-overestimate q75 probabilityのinteraction riskを検証した。`scripts/experiments/predhit_overestimate_interaction.py` を追加し、標準CLIと同じく統合prediction frame全体を月別評価へ渡す形で2025-02..2025-05を再基準化した。`predhit_evhigh` interactionはほぼbaseline同等だが、`predhit_q75_w4` は total `107.2486`, min month `-22.9762`, max monthly DD `233.5124` で、この固定4ヶ月ではrisk0 `101.5974` / baseline risk5 `91.9002` を上回った。ただし `w3=80.5836`, `w5=97.4686`, `w8=62.9580` とweight感度が大きく、安定した台地ではないため標準採用しない。固定候補として `w4` / `w6` を未使用月・別walk-forwardで再探索なし確認へ回す。詳細は `docs/reports/00155_2026-06-29_predhit_overestimate_interaction.md`。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
