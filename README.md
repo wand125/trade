@@ -536,11 +536,14 @@ python -m trade_data.backtest model-trade-delta-preflight \
   --label model_trade_delta_preflight
 ```
 
-The command writes `case_metrics.csv`, `failed_cases.csv`, and `summary.json`.
+The command writes `case_metrics.csv`, `failed_cases.csv`, `summary.json`,
+`group_drift_status_direction_combined_regime.csv`, and
+`stateful_group_drift_status_direction_combined_regime.csv`.
 By default, every holdout case must have non-negative total PnL delta,
 non-negative worst-month PnL delta, and non-negative worst-month stateful target.
 Use this as a candidate rejection check; validation-only wins are not enough for
-promotion.
+promotion. The group drift files show which status/direction/regime groups were
+positive in validation but negative in holdout.
 
 Train a month-held-out stateful value model directly from those examples and
 optionally score validation/apply prediction parquet files:

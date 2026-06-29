@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 10:48 JST
+最終更新: 2026-06-29 10:54 JST
 
 ## 現在の状態
 
@@ -67,6 +67,8 @@ guard固定後entry/side候補のtrade-level drift診断を実施済み。valida
 `model-trade-delta` は複数月run入りの親ディレクトリを直接比較できるようになった。親ディレクトリを展開し、各runの `config.json` 内 `backtest_config.evaluation_start` の月でbase/candidateを対応付ける。月の重複・不一致はfail-fastする。標準候補 vs validation top候補を親ディレクトリ指定だけで再診断し、`00128` と同じ validation delta `+62.8970 / +86.4218`, apply delta `-289.3090 / -290.4310` を再現した。今後は候補採用前にこのCLIで `only_base`, `only_candidate`, blocking group, `stateful_candidate_examples.csv` を確認する。詳細は `docs/reports/00129_2026-06-29_model_trade_delta_parent_pairing.md`。
 
 `model-trade-delta-preflight` を追加済み。複数の `model-trade-delta` runをvalidation/holdoutに分け、case別の合計PnL delta、worst-month PnL delta、worst-month stateful targetを集計する。標準候補 vs validation top候補ではvalidation 2件がpassした一方、apply/holdout 2件は `pnl_delta_sum -289.3090 / -290.4310`, worst-month stateful target `-2.1726 / -2.4973` でfailし、preflight全体は `False`。今後の候補採用ではvalidation summaryだけでなく、このholdout preflightを反証ゲートとして使う。詳細は `docs/reports/00130_2026-06-29_model_trade_delta_preflight.md`。
+
+`model-trade-delta-preflight` はstatus/direction/combined_regime別のgroup driftも出力する。標準候補 vs validation top候補では、通常PnLのvalidation-positive/holdout-negative groupが10件、stateful groupも10件。`only_candidate long down_low_vol` は通常PnL `+84.3218 -> -93.4838`, stateful `+107.4676 -> -136.4816`、`only_candidate short down_normal_vol` は通常PnL `+25.4090 -> -91.0014`, stateful `+25.4090 -> -228.1214` に反転した。これを直接hard blockせず、追加walk-forwardで再現性を確認してからOOF/downside/stateful targetへ戻す。詳細は `docs/reports/00131_2026-06-29_model_trade_delta_preflight_group_drift.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 

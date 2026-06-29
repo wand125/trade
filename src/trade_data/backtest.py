@@ -6693,6 +6693,132 @@ def summarize_model_trade_delta_preflight(
     return cases.sort_values(["split", "case_pass", "pnl_delta_sum"]).reset_index(drop=True), summary
 
 
+def read_model_trade_delta_preflight_group_frame(
+    path: Path,
+    split: str,
+    filename: str,
+) -> pd.DataFrame:
+    group_path = path / filename
+    if not group_path.exists():
+        return pd.DataFrame()
+    frame = pd.read_csv(group_path)
+    if frame.empty:
+        return pd.DataFrame()
+    frame = frame.copy()
+    frame["split"] = split
+    frame["case_label"] = path.name
+    frame["delta_run"] = str(path)
+    return frame
+
+
+def summarize_model_trade_delta_preflight_group_drift(
+    validation_paths: list[Path],
+    holdout_paths: list[Path],
+    *,
+    filename: str = "group_by_month_status_direction_combined_regime.csv",
+    group_columns: list[str] | None = None,
+    metric_column: str = "pnl_delta",
+    extra_metric_columns: list[str] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if group_columns is None:
+        group_columns = ["delta_status", "direction", "combined_regime"]
+    metric_columns = [metric_column]
+    for column in extra_metric_columns or []:
+        if column not in metric_columns:
+            metric_columns.append(column)
+
+    frames: list[pd.DataFrame] = []
+    for path in expand_model_trade_delta_run_paths(validation_paths):
+        frame = read_model_trade_delta_preflight_group_frame(path, "validation", filename)
+        if not frame.empty:
+            frames.append(frame)
+    for path in expand_model_trade_delta_run_paths(holdout_paths):
+        frame = read_model_trade_delta_preflight_group_frame(path, "holdout", filename)
+        if not frame.empty:
+            frames.append(frame)
+    if not frames:
+        return pd.DataFrame(), pd.DataFrame()
+
+    rows = pd.concat(frames, ignore_index=True)
+    missing_group_columns = [column for column in group_columns if column not in rows.columns]
+    if missing_group_columns or metric_column not in rows.columns:
+        return pd.DataFrame(), pd.DataFrame()
+
+    rows = rows.copy()
+    for column in metric_columns:
+        if column in rows.columns:
+            rows[column] = pd.to_numeric(rows[column], errors="coerce").fillna(0.0)
+    if "row_count" not in rows.columns:
+        rows["row_count"] = 1.0
+    rows["row_count"] = pd.to_numeric(rows["row_count"], errors="coerce").fillna(0.0)
+    if "month" not in rows.columns:
+        rows["month"] = ""
+
+    aggregations: dict[str, tuple[str, str] | tuple[str, object]] = {
+        "month_count": ("month", "nunique"),
+        "row_count_sum": ("row_count", "sum"),
+    }
+    for column in metric_columns:
+        if column not in rows.columns:
+            continue
+        aggregations[f"{column}_sum"] = (column, "sum")
+        aggregations[f"{column}_min_month"] = (column, "min")
+        aggregations[f"{column}_negative_month_count"] = (
+            column,
+            lambda series: int((pd.to_numeric(series, errors="coerce").fillna(0.0) < 0).sum()),
+        )
+
+    split_group_columns = ["split", *group_columns]
+    split_metrics = (
+        rows.groupby(split_group_columns, dropna=False)
+        .agg(**aggregations)
+        .reset_index()
+        .sort_values(["split", f"{metric_column}_sum"], ascending=[True, True])
+        .reset_index(drop=True)
+    )
+
+    def prefixed(split: str) -> pd.DataFrame:
+        subset = split_metrics.loc[split_metrics["split"].eq(split)].drop(columns=["split"])
+        rename = {
+            column: f"{split}_{column}"
+            for column in subset.columns
+            if column not in group_columns
+        }
+        return subset.rename(columns=rename)
+
+    validation = prefixed("validation")
+    holdout = prefixed("holdout")
+    drift = validation.merge(holdout, on=group_columns, how="outer")
+    for split in ["validation", "holdout"]:
+        for column in ["month_count", "row_count_sum", f"{metric_column}_sum"]:
+            prefixed_column = f"{split}_{column}"
+            if prefixed_column in drift.columns:
+                drift[prefixed_column] = drift[prefixed_column].fillna(0.0)
+
+    validation_sum = f"validation_{metric_column}_sum"
+    holdout_sum = f"holdout_{metric_column}_sum"
+    if validation_sum in drift.columns and holdout_sum in drift.columns:
+        drift[f"{metric_column}_holdout_minus_validation"] = (
+            drift[holdout_sum] - drift[validation_sum]
+        )
+        drift["validation_positive_holdout_negative"] = (
+            drift[validation_sum].gt(0.0) & drift[holdout_sum].lt(0.0)
+        )
+        drift["validation_nonnegative_holdout_negative"] = (
+            drift[validation_sum].ge(0.0) & drift[holdout_sum].lt(0.0)
+        )
+        drift = drift.sort_values(
+            [
+                "validation_positive_holdout_negative",
+                "validation_nonnegative_holdout_negative",
+                holdout_sum,
+            ],
+            ascending=[False, False, True],
+        ).reset_index(drop=True)
+
+    return split_metrics, drift
+
+
 def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
     validation_paths = parse_csv_paths(args.validation_deltas)
     holdout_paths = parse_csv_paths(args.holdout_deltas)
@@ -6708,9 +6834,69 @@ def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
         min_validation_stateful_target_mean=args.min_validation_stateful_target_mean,
         min_holdout_stateful_target_mean=args.min_holdout_stateful_target_mean,
     )
+    split_group_metrics, group_drift = summarize_model_trade_delta_preflight_group_drift(
+        validation_paths,
+        holdout_paths,
+        extra_metric_columns=[
+            "row_count",
+            "base_adjusted_pnl",
+            "candidate_adjusted_pnl",
+            "base_trade_count",
+            "candidate_trade_count",
+        ],
+    )
+    split_stateful_group_metrics, stateful_group_drift = (
+        summarize_model_trade_delta_preflight_group_drift(
+            validation_paths,
+            holdout_paths,
+            filename="group_by_blocking_candidate_month_status_direction_combined_regime.csv",
+            metric_column="candidate_stateful_net_adjusted_pnl",
+            extra_metric_columns=[
+                "candidate_adjusted_pnl",
+                "blocked_base_adjusted_pnl",
+                "blocked_base_positive_pnl",
+                "blocked_base_negative_pnl",
+            ],
+        )
+    )
+    if not group_drift.empty:
+        summary["group_drift_validation_positive_holdout_negative_count"] = int(
+            group_drift["validation_positive_holdout_negative"].sum()
+        )
+        summary["group_drift_validation_nonnegative_holdout_negative_count"] = int(
+            group_drift["validation_nonnegative_holdout_negative"].sum()
+        )
+    if not stateful_group_drift.empty:
+        summary["stateful_group_drift_validation_positive_holdout_negative_count"] = int(
+            stateful_group_drift["validation_positive_holdout_negative"].sum()
+        )
+        summary["stateful_group_drift_validation_nonnegative_holdout_negative_count"] = int(
+            stateful_group_drift["validation_nonnegative_holdout_negative"].sum()
+        )
+
     run_dir = make_run_dir(args.output_dir, args.label)
     cases.to_csv(run_dir / "case_metrics.csv", index=False)
     cases.loc[~cases["case_pass"]].to_csv(run_dir / "failed_cases.csv", index=False)
+    if not split_group_metrics.empty:
+        split_group_metrics.to_csv(
+            run_dir / "split_group_metrics_status_direction_combined_regime.csv",
+            index=False,
+        )
+    if not group_drift.empty:
+        group_drift.to_csv(
+            run_dir / "group_drift_status_direction_combined_regime.csv",
+            index=False,
+        )
+    if not split_stateful_group_metrics.empty:
+        split_stateful_group_metrics.to_csv(
+            run_dir / "split_stateful_group_metrics_status_direction_combined_regime.csv",
+            index=False,
+        )
+    if not stateful_group_drift.empty:
+        stateful_group_drift.to_csv(
+            run_dir / "stateful_group_drift_status_direction_combined_regime.csv",
+            index=False,
+        )
     metadata = {
         "validation_deltas": [str(path) for path in validation_paths],
         "expanded_validation_deltas": [
@@ -6743,6 +6929,38 @@ def handle_model_trade_delta_preflight(args: argparse.Namespace) -> int:
     existing_display_columns = [column for column in display_columns if column in cases.columns]
     print("cases:")
     print(cases.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
+    if not group_drift.empty:
+        drift_columns = [
+            "delta_status",
+            "direction",
+            "combined_regime",
+            "validation_pnl_delta_sum",
+            "holdout_pnl_delta_sum",
+            "pnl_delta_holdout_minus_validation",
+            "validation_positive_holdout_negative",
+        ]
+        existing_drift_columns = [column for column in drift_columns if column in group_drift.columns]
+        print("worst validation/holdout group drift:")
+        print(group_drift.loc[:, existing_drift_columns].head(args.top_n).to_string(index=False))
+    if not stateful_group_drift.empty:
+        stateful_columns = [
+            "delta_status",
+            "direction",
+            "combined_regime",
+            "validation_candidate_stateful_net_adjusted_pnl_sum",
+            "holdout_candidate_stateful_net_adjusted_pnl_sum",
+            "candidate_stateful_net_adjusted_pnl_holdout_minus_validation",
+            "validation_positive_holdout_negative",
+        ]
+        existing_stateful_columns = [
+            column for column in stateful_columns if column in stateful_group_drift.columns
+        ]
+        print("worst validation/holdout stateful group drift:")
+        print(
+            stateful_group_drift.loc[:, existing_stateful_columns]
+            .head(args.top_n)
+            .to_string(index=False)
+        )
     print(f"artifacts: {run_dir}")
     return 0
 

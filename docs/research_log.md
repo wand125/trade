@@ -4,6 +4,16 @@
 
 ## 2026-06-29 JST
 
+### 10:54 Model trade delta preflight group drift
+
+- `model-trade-delta-preflight` にstatus/direction/combined_regime別のdrift出力を追加した。
+- 通常PnL用に `group_drift_status_direction_combined_regime.csv`、stateful blocking用に `stateful_group_drift_status_direction_combined_regime.csv` を出力する。validationでプラス、holdoutでマイナスになったgroupをflag化する。
+- 標準候補 vs validation top候補では、通常PnLのvalidation-positive/holdout-negative groupが10件、stateful groupも10件。`only_candidate long down_low_vol` は通常PnL `+84.3218 -> -93.4838`、stateful `+107.4676 -> -136.4816` に反転した。
+- `only_candidate short down_normal_vol` は通常PnL `+25.4090 -> -91.0014`、stateful `+25.4090 -> -228.1214` に反転し、2025-02/04側の機会損失を強く示す。
+- 判断: 次はこれらの反転groupを直接hard blockしない。先に追加walk-forwardで同じ反転groupが再現するかを確認し、OOF/downside/stateful target側に特徴として戻す。
+- report: `docs/reports/00131_2026-06-29_model_trade_delta_preflight_group_drift.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 10:48 Model trade delta preflight audit
 
 - `model-trade-delta-preflight` を追加した。複数の `model-trade-delta` runをvalidation/holdoutに分けて読み、case別に `pnl_delta_sum`, worst-month `pnl_delta`, worst-month `stateful_target` を集計する。

@@ -32,6 +32,7 @@ from trade_data.backtest import (
     summarize_holdout_audit,
     summarize_candidate_selection,
     summarize_candidate_selection_jackknife,
+    summarize_model_trade_delta_preflight_group_drift,
     summarize_model_trade_delta_preflight,
     summarize_trades,
     summarize_sweep_frames,
@@ -3214,6 +3215,42 @@ class BacktestTests(unittest.TestCase):
             pd.DataFrame(
                 {
                     "month": months,
+                    "delta_status": ["only_candidate"] * len(months),
+                    "direction": ["long"] * len(months),
+                    "combined_regime": ["up_low_vol"] * len(months),
+                    "row_count": [1] * len(months),
+                    "base_adjusted_pnl": [0.0] * len(months),
+                    "candidate_adjusted_pnl": pnl_deltas,
+                    "pnl_delta": pnl_deltas,
+                    "base_trade_count": [0.0] * len(months),
+                    "candidate_trade_count": [1.0] * len(months),
+                }
+            ).to_csv(
+                path / "group_by_month_status_direction_combined_regime.csv",
+                index=False,
+            )
+            pd.DataFrame(
+                {
+                    "month": months,
+                    "delta_status": ["only_candidate"] * len(months),
+                    "direction": ["long"] * len(months),
+                    "combined_regime": ["up_low_vol"] * len(months),
+                    "candidate_trade_count": [1.0] * len(months),
+                    "candidate_adjusted_pnl": pnl_deltas,
+                    "blocked_base_count": [1.0] * len(months),
+                    "blocked_base_adjusted_pnl": [0.25] * len(months),
+                    "blocked_base_positive_pnl": [0.5] * len(months),
+                    "blocked_base_negative_pnl": [-0.25] * len(months),
+                    "candidate_stateful_net_adjusted_pnl": stateful_targets,
+                    "candidate_stateful_positive_cost_adjusted_pnl": stateful_targets,
+                }
+            ).to_csv(
+                path / "group_by_blocking_candidate_month_status_direction_combined_regime.csv",
+                index=False,
+            )
+            pd.DataFrame(
+                {
+                    "month": months,
                     "target": stateful_targets,
                     "blocking_cost": [0.5] * len(months),
                     "replacement_regret": [0.25] * len(months),
@@ -3241,6 +3278,16 @@ class BacktestTests(unittest.TestCase):
                 [validation_delta],
                 [holdout_delta],
             )
+            split_groups, group_drift = summarize_model_trade_delta_preflight_group_drift(
+                [validation_delta],
+                [holdout_delta],
+            )
+            _, stateful_group_drift = summarize_model_trade_delta_preflight_group_drift(
+                [validation_delta],
+                [holdout_delta],
+                filename="group_by_blocking_candidate_month_status_direction_combined_regime.csv",
+                metric_column="candidate_stateful_net_adjusted_pnl",
+            )
 
         self.assertFalse(summary["preflight_pass"])
         self.assertEqual(summary["validation_case_count"], 1)
@@ -3257,6 +3304,24 @@ class BacktestTests(unittest.TestCase):
         self.assertFalse(holdout_case["pnl_delta_sum_ok"])
         self.assertFalse(holdout_case["pnl_delta_min_month_ok"])
         self.assertFalse(holdout_case["stateful_target_mean_min_month_ok"])
+        self.assertEqual(len(split_groups), 2)
+        drift_row = group_drift.iloc[0]
+        self.assertEqual(drift_row["delta_status"], "only_candidate")
+        self.assertEqual(drift_row["direction"], "long")
+        self.assertEqual(drift_row["combined_regime"], "up_low_vol")
+        self.assertAlmostEqual(drift_row["validation_pnl_delta_sum"], 3.0)
+        self.assertAlmostEqual(drift_row["holdout_pnl_delta_sum"], -3.0)
+        self.assertTrue(drift_row["validation_positive_holdout_negative"])
+        stateful_drift_row = stateful_group_drift.iloc[0]
+        self.assertAlmostEqual(
+            stateful_drift_row["validation_candidate_stateful_net_adjusted_pnl_sum"],
+            2.0,
+        )
+        self.assertAlmostEqual(
+            stateful_drift_row["holdout_candidate_stateful_net_adjusted_pnl_sum"],
+            -2.0,
+        )
+        self.assertTrue(stateful_drift_row["validation_positive_holdout_negative"])
 
     def test_prepare_analysis_predictions_uses_requested_ev_columns(self):
         timestamps = pd.date_range("2025-01-01 00:00:00+00:00", periods=1, freq="min")
