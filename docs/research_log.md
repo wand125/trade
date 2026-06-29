@@ -4,6 +4,15 @@
 
 ## 2026-06-29 JST
 
+### 12:11 Stateful downside risk policy
+
+- `oof-stateful-risk-model` に `--oof-scheme` / `--min-train-months` を追加し、walk-forward stress/floor由来の分類targetを追加した。
+- expanding OOFでは、available `walkforward_stress_flag` AUC `0.6512`、session `walkforward_floor_lowered` AUC `0.6473`。stateful value回帰よりrank signalはあるが、predicted meanがprevalenceを大きく下回りcalibrationは弱い。
+- 6ヶ月policy接続では、`session_floor_lowered risk=10` がbase最悪月を `-18.7168 -> +8.0320`、high cost最悪月を `-34.3748 -> -20.8080` へ改善した。一方でbase合計PnLは `543.9972 -> 422.1416`、high cost合計は `391.2374 -> 311.0372` へ低下した。
+- 判断: `session_floor_lowered` は防御signalとして残すが、標準policyには採用しない。risk budget / drawdown-aware ranking / candidate selectionの補助特徴として扱い、calibrationと追加月再現性を確認する。
+- report: `docs/reports/00139_2026-06-29_stateful_downside_risk_policy.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 11:56 Stateful value walk-forward target comparison
 
 - `oof-stateful-value-model` に `--oof-scheme leave_one_month|expanding` と `--min-train-months` を追加した。expandingでは対象月より前の月だけでfitし、学習月不足のfoldは `fold_plan` に `skipped` として残す。

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 11:56 JST
+最終更新: 2026-06-29 12:11 JST
 
 ## 現在の状態
 
@@ -83,6 +83,8 @@ guard固定後entry/side候補のtrade-level drift診断を実施済み。valida
 `stateful-examples-walkforward-stress` を追加済み。全stateful examplesを月順に並べ、対象月より前の月だけでpseudo validation / pseudo holdout profileを作り、`walkforward_context_stress_flag`, `walkforward_context_stress_penalty`, `target_walkforward_context_stress_adjusted` を出す。available contextはsupport `20/10` で1544例中397例がflag、target mean `+0.6154` からwalk-forward stress-adjusted mean `-1.2823`。session contextはsupport `10/5` で208例がflag、stress-adjusted mean `-0.7835`。未来月を見ないため、次のstateful value model target候補として使える。詳細は `docs/reports/00137_2026-06-29_stateful_walkforward_stress_target.md`。
 
 `oof-stateful-value-model` にchronologicalな `--oof-scheme expanding` と `--min-train-months` を追加済み。`00137` のwalk-forward targetを比較したところ、leave-one-monthではbase targetだけR2 `+0.0052` だったが、expanding OOFではbase targetもR2 `-0.0113`, bias `+1.5287` へ悪化した。available/session floor targetはMAE/RMSEを下げる一方で、expandingではR2 `-0.0945` / `-0.0498`、bias `+4.1365` / `+3.1195` と過大評価が強い。現時点ではpolicyへの直接EV replacementやhard gateには使わず、下方リスク分類、support-aware calibration、追加月でのchronological OOF診断に回す。詳細は `docs/reports/00138_2026-06-29_stateful_value_walkforward_target_comparison.md`。
+
+`oof-stateful-risk-model` にchronological OOFとwalk-forward stress/floor分類targetを追加済み。expanding OOFではavailable `walkforward_stress_flag` AUC `0.6512`、session `walkforward_floor_lowered` AUC `0.6473` と、回帰よりはrank signalがある。ただしpredicted meanがprevalenceを大きく下回りcalibrationは弱い。6ヶ月policy接続では `session_floor_lowered risk=10` がbase最悪月 `-18.7168 -> +8.0320`、high cost最悪月 `-34.3748 -> -20.8080` を改善したが、合計PnLをbase `543.9972 -> 422.1416`、high cost `391.2374 -> 311.0372` へ削った。標準policyには採用せず、risk budget / drawdown-aware ranking / candidate selectionの補助特徴として残す。詳細は `docs/reports/00139_2026-06-29_stateful_downside_risk_policy.md`。
 
 初回の軽量 multi-task 学習ベンチマークは作成済み。
 
@@ -326,6 +328,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 49. candidate quality drift診断では、fixed componentがtimed/clippedよりdownside targetとして現実的。ただし上位prediction bucketほど過大評価が強く、2024-11/2025-01でdownside prevalenceが上がる。quality scoreは単調rankではなく、support-aware calibrated downside featureとして扱う。
 50. guard固定後のentry/side小gridでも、validation top (`entry=14`, short offset `4`, `range_low_vol` 追加penalty) はapplyへ外挿せず現行標準を大きく下回った。今後はentry threshold/side penaltyのパラメータ探索を増やさず、OOF校正・downside feature・regime drift診断へ戻る。
 51. stateful value target比較は、leave-one-monthではなくchronologicalな `--oof-scheme expanding` を標準診断にする。floor targetは直接EV回帰として使わず、下方リスク分類やsupport-aware calibrationへ変換して試す。
+52. walk-forward floor分類targetのうち `session_floor_lowered` は防御signalとして有望だが、単独risk penaltyは合計PnLを削りすぎる。標準policyに固定せず、drawdown-aware candidate rankingかcalibrated risk budgetへ回す。
 
 ## 未決定事項
 
@@ -336,6 +339,8 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 - 現行の profit 1.0 / loss 1.20 に加えて、明示的なスプレッドコストを標準評価へ入れるか。
 
 ## 直近の推奨作業
+
+2026-06-29 12:11 JST 更新: walk-forward stress/floor targetを下方リスク分類に変換し、stateful risk modelでexpanding OOF評価した。`session_floor_lowered` はAUC `0.6473` で、policy接続でもrisk `10` がbase/high costの最悪月を改善したが、合計PnLを大きく削るため標準採用しない。次は直接penaltyではなく、drawdown-aware ranking、risk budget、calibration改善、追加月再現性確認へ回す。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 2026-06-29 11:56 JST 更新: `oof-stateful-value-model` にchronologicalなexpanding OOFを追加し、walk-forward stress/floor targetを比較した。expandingではbase targetのR2も `-0.0113` に落ち、available/session floorはMAE/RMSEを下げるがR2とbiasが悪化する。policyへの直接EV置換やhard gateには使わず、下方リスク分類、support-aware calibration、追加月でのchronological OOF診断へ回す。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

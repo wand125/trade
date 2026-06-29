@@ -289,6 +289,10 @@ STATEFUL_RISK_TARGET_NAMES = (
     "blocking_cost_high",
     "replacement_regret_high",
     "positive_replacement_regret_high",
+    "walkforward_stress_flag",
+    "walkforward_stress_adjusted_nonpositive",
+    "walkforward_floor_nonpositive",
+    "walkforward_floor_lowered",
 )
 
 
@@ -1620,6 +1624,19 @@ def finite_float_series(frame: pd.DataFrame, column: str, default: float = 0.0) 
     return values.fillna(default).astype(float)
 
 
+def finite_bool_series(frame: pd.DataFrame, column: str, default: bool = False) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(default, index=frame.index, dtype=bool)
+    values = frame[column]
+    if pd.api.types.is_bool_dtype(values):
+        return values.fillna(default).astype(bool)
+    text = values.astype("string").str.strip().str.lower()
+    true_values = text.isin(["true", "1", "yes", "y", "t"])
+    false_values = text.isin(["false", "0", "no", "n", "f", ""])
+    parsed = true_values.where(true_values | false_values, default)
+    return parsed.fillna(default).astype(bool)
+
+
 def timestamp_hour_features(frame: pd.DataFrame, timestamp_column: str) -> tuple[pd.Series, pd.Series]:
     if timestamp_column not in frame.columns:
         zeros = pd.Series(0.0, index=frame.index)
@@ -2507,6 +2524,12 @@ def stateful_risk_targets_from_examples(
         "blocking_cost_high": "blocking_cost",
         "replacement_regret_high": "replacement_regret",
         "positive_replacement_regret_high": "positive_replacement_regret",
+        "walkforward_stress_flag": "walkforward_context_stress_flag",
+        "walkforward_stress_adjusted_nonpositive": (
+            "target_walkforward_context_stress_adjusted"
+        ),
+        "walkforward_floor_nonpositive": "target_walkforward_context_holdout_mean_floor",
+        "walkforward_floor_lowered": "target_walkforward_context_holdout_mean_floor",
     }
     missing = sorted(
         {
@@ -2515,6 +2538,8 @@ def stateful_risk_targets_from_examples(
             if required_by_target[target_name] not in examples.columns
         }
     )
+    if "walkforward_floor_lowered" in config.target_names and "target" not in examples.columns:
+        missing.append("target")
     if missing:
         raise ValueError(f"stateful examples missing risk target columns: {', '.join(missing)}")
 
@@ -2548,6 +2573,26 @@ def stateful_risk_targets_from_examples(
         targets[stateful_risk_target_column("positive_replacement_regret_high")] = (
             positive_replacement_regret >= config.replacement_regret_threshold
         )
+    if "walkforward_stress_flag" in config.target_names:
+        targets[stateful_risk_target_column("walkforward_stress_flag")] = finite_bool_series(
+            examples,
+            "walkforward_context_stress_flag",
+        )
+    if "walkforward_stress_adjusted_nonpositive" in config.target_names:
+        stress_adjusted = finite_float_series(
+            examples,
+            "target_walkforward_context_stress_adjusted",
+        )
+        targets[stateful_risk_target_column("walkforward_stress_adjusted_nonpositive")] = (
+            stress_adjusted <= 0.0
+        )
+    if "walkforward_floor_nonpositive" in config.target_names:
+        floor = finite_float_series(examples, "target_walkforward_context_holdout_mean_floor")
+        targets[stateful_risk_target_column("walkforward_floor_nonpositive")] = floor <= 0.0
+    if "walkforward_floor_lowered" in config.target_names:
+        target = finite_float_series(examples, "target")
+        floor = finite_float_series(examples, "target_walkforward_context_holdout_mean_floor")
+        targets[stateful_risk_target_column("walkforward_floor_lowered")] = floor < target
     return targets.astype(int)
 
 
@@ -7560,12 +7605,30 @@ def oof_stateful_risk_model(args: argparse.Namespace) -> int:
     fold_prediction_outputs: list[pd.DataFrame] = []
     fold_example_outputs: list[pd.DataFrame] = []
     fold_metrics: dict[str, object] = {}
-    for fold_index, holdout_month in enumerate(validation_months):
-        fit_examples = validation_examples[
-            validation_examples["dataset_month"] != holdout_month
-        ].copy()
+    fold_plan = stateful_value_oof_fold_plan(
+        validation_months,
+        scheme=args.oof_scheme,
+        min_train_months=args.min_train_months,
+    )
+    for fold_index, fold in enumerate(fold_plan):
+        holdout_month = str(fold["holdout_month"])
+        fit_months = list(fold["fit_months"])
         holdout_examples = validation_examples[
             validation_examples["dataset_month"] == holdout_month
+        ].copy()
+        if fold["status"] != "profiled":
+            fold_metrics[holdout_month] = {
+                "status": fold["status"],
+                "skip_reason": fold["skip_reason"],
+                "fit_months": fit_months,
+                "fit_month_count": int(fold["fit_month_count"]),
+                "fit_examples": 0,
+                "holdout_examples": int(len(holdout_examples)),
+                "holdout_predictions": 0,
+            }
+            continue
+        fit_examples = validation_examples[
+            validation_examples["dataset_month"].isin(fit_months)
         ].copy()
         if fit_examples.empty or holdout_examples.empty:
             raise ValueError(f"cannot build stateful risk OOF fold for {holdout_month}")
@@ -7595,6 +7658,10 @@ def oof_stateful_risk_model(args: argparse.Namespace) -> int:
             fold_prediction_outputs.append(holdout_prediction_output)
             holdout_prediction_count = int(len(holdout_predictions))
         fold_metrics[holdout_month] = {
+            "status": fold["status"],
+            "skip_reason": fold["skip_reason"],
+            "fit_months": fit_months,
+            "fit_month_count": int(fold["fit_month_count"]),
             "fit_examples": int(len(fit_examples)),
             "holdout_examples": int(len(holdout_examples)),
             "holdout_predictions": holdout_prediction_count,
@@ -7608,6 +7675,8 @@ def oof_stateful_risk_model(args: argparse.Namespace) -> int:
             "category_mappings": fold_bundle.category_mappings,
         }
 
+    if not fold_example_outputs:
+        raise ValueError("no stateful risk OOF folds were profiled")
     validation_oof_examples = pd.concat(fold_example_outputs, ignore_index=True)
     if "decision_timestamp" in validation_oof_examples.columns:
         validation_oof_examples = validation_oof_examples.sort_values("decision_timestamp")
@@ -7646,6 +7715,9 @@ def oof_stateful_risk_model(args: argparse.Namespace) -> int:
         "apply_predictions": None if args.apply_predictions is None else str(args.apply_predictions),
         "validation_months": validation_months,
         "apply_months": apply_months,
+        "oof_scheme": args.oof_scheme,
+        "min_train_months": args.min_train_months,
+        "fold_plan": fold_plan,
         "source": {
             "source_mode": args.source_mode,
             "long_column": args.long_column,
@@ -8834,7 +8906,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "comma-separated stateful risk targets: stateful_nonpositive,"
             "positive_cost_nonpositive,positive_blocking,blocking_cost_high,"
-            "replacement_regret_high,positive_replacement_regret_high"
+            "replacement_regret_high,positive_replacement_regret_high,"
+            "walkforward_stress_flag,walkforward_stress_adjusted_nonpositive,"
+            "walkforward_floor_nonpositive,walkforward_floor_lowered"
         ),
     )
     stateful_risk_model_parser.add_argument("--blocking-cost-threshold", type=float, default=5.0)
@@ -8846,6 +8920,18 @@ def build_parser() -> argparse.ArgumentParser:
             "prefix for output columns, producing "
             "pred_stateful_risk_<prefix>_<target>_<side>_prob/risk"
         ),
+    )
+    stateful_risk_model_parser.add_argument(
+        "--oof-scheme",
+        choices=("leave_one_month", "expanding"),
+        default="leave_one_month",
+        help="month OOF scheme; expanding only trains on months before the holdout month",
+    )
+    stateful_risk_model_parser.add_argument(
+        "--min-train-months",
+        type=int,
+        default=1,
+        help="minimum fit months required for a stateful risk OOF fold",
     )
     add_trade_source_args(stateful_risk_model_parser)
     add_trade_quality_model_args(stateful_risk_model_parser, include_target_clip_quantile=False)

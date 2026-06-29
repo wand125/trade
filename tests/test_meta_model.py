@@ -250,12 +250,37 @@ class MetaModelTests(unittest.TestCase):
             {
                 "dataset_month": ["2024-07", "2024-07", "2024-09", "2024-09", "2025-01", "2025-01"],
                 "candidate_side": ["long", "short", "long", "short", "long", "short"],
+                "target": [1.0, -2.0, 3.0, 4.0, -5.0, 6.0],
                 "stateful_entry_value": [-1.0, 2.0, -3.0, 4.0, 5.0, -6.0],
                 "stateful_positive_cost_value": [-2.0, 1.0, -4.0, 3.0, 6.0, -7.0],
                 "blocking_cost": [0.0, 6.0, 0.0, 8.0, 2.0, 0.0],
                 "positive_blocking_cost": [0.0, 6.0, 0.0, 8.0, 2.0, 0.0],
                 "replacement_regret": [6.0, -2.0, 7.0, -1.0, 0.0, 8.0],
                 "positive_replacement_regret": [7.0, -1.0, 8.0, 0.0, 1.0, 9.0],
+                "walkforward_context_stress_flag": [
+                    False,
+                    True,
+                    "false",
+                    "true",
+                    0,
+                    1,
+                ],
+                "target_walkforward_context_stress_adjusted": [
+                    1.0,
+                    -1.0,
+                    0.0,
+                    2.0,
+                    -3.0,
+                    4.0,
+                ],
+                "target_walkforward_context_holdout_mean_floor": [
+                    0.5,
+                    -3.0,
+                    3.0,
+                    -1.0,
+                    -6.0,
+                    1.0,
+                ],
                 "pred_taken_ev": [12.0, 13.0, 14.0, 15.0, 16.0, 17.0],
                 "pred_opposite_ev": [11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
                 "trend_regime": ["up", "down", "up", "down", "range", "range"],
@@ -284,6 +309,10 @@ class MetaModelTests(unittest.TestCase):
                 "positive_blocking",
                 "positive_replacement_regret_high",
                 "stateful_nonpositive",
+                "walkforward_stress_flag",
+                "walkforward_stress_adjusted_nonpositive",
+                "walkforward_floor_nonpositive",
+                "walkforward_floor_lowered",
             ),
             blocking_cost_threshold=5.0,
             replacement_regret_threshold=5.0,
@@ -302,6 +331,22 @@ class MetaModelTests(unittest.TestCase):
         self.assertEqual(
             frame[stateful_risk_target_column("positive_replacement_regret_high")].tolist(),
             [1, 0, 1, 0, 0, 1],
+        )
+        self.assertEqual(
+            frame[stateful_risk_target_column("walkforward_stress_flag")].tolist(),
+            [0, 1, 0, 1, 0, 1],
+        )
+        self.assertEqual(
+            frame[stateful_risk_target_column("walkforward_stress_adjusted_nonpositive")].tolist(),
+            [0, 1, 1, 0, 1, 0],
+        )
+        self.assertEqual(
+            frame[stateful_risk_target_column("walkforward_floor_nonpositive")].tolist(),
+            [0, 1, 0, 1, 1, 0],
+        )
+        self.assertEqual(
+            frame[stateful_risk_target_column("walkforward_floor_lowered")].tolist(),
+            [1, 1, 0, 1, 1, 1],
         )
         for target_name in config.target_names:
             long_prob = stateful_risk_prob_column(target_name, "long", "stateful_test")
