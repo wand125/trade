@@ -3810,22 +3810,30 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["max_side_trade_share"].isna() | (output["max_side_trade_share"] == 0),
         output[["long_trade_share", "short_trade_share"]].max(axis=1),
     )
+    late_defaults: dict[str, object] = {}
     for column in PROFIT_BARRIER_DIAGNOSTIC_COLUMNS:
         if column not in output.columns:
-            output[column] = 0.0
+            late_defaults[column] = 0.0
     for column in PROFIT_BARRIER_CALIBRATION_COLUMNS:
         if column not in output.columns:
-            output[column] = 0.0
+            late_defaults[column] = 0.0
     for column in PROFIT_BARRIER_CALIBRATION_STRING_COLUMNS:
         if column not in output.columns:
-            output[column] = ""
+            late_defaults[column] = ""
     for field, _ in REGIME_BLOCK_FIELDS:
         if field not in output.columns:
-            output[field] = ""
+            late_defaults[field] = ""
     if "forced_exit_rate" not in output.columns:
         trade_count = output["trade_count"].replace(0, np.nan)
-        output["forced_exit_rate"] = (output["forced_exit_count"] / trade_count).fillna(0.0)
-    output["sweep_source"] = source
+        late_defaults["forced_exit_rate"] = (
+            output["forced_exit_count"] / trade_count
+        ).fillna(0.0)
+    late_defaults["sweep_source"] = source
+    if late_defaults:
+        output = pd.concat(
+            [output, pd.DataFrame(late_defaults, index=output.index)],
+            axis=1,
+        )
 
     required = [
         *SWEEP_KEY_COLUMNS,
@@ -5531,7 +5539,12 @@ def stateful_examples_metric_summary(
     working["_raw_overestimate"] = working["_raw_error"].clip(lower=0.0)
     working["_downside"] = working["_target"] <= downside_threshold
     working["_large_downside"] = working["_target"] <= large_downside_threshold
-    working = working.replace([np.inf, -np.inf], np.nan).dropna(subset=["_target"])
+    numeric_columns = working.select_dtypes(include=[np.number]).columns
+    working.loc[:, numeric_columns] = working.loc[:, numeric_columns].replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+    working = working.dropna(subset=["_target"])
     if working.empty:
         return pd.DataFrame(columns=columns)
     for column in group_columns:
@@ -5779,6 +5792,172 @@ def add_blank_walkforward_stress_columns(
     return output
 
 
+def add_blank_walkforward_prior_context_columns(
+    frame: pd.DataFrame,
+    *,
+    target_column: str,
+    status: str,
+) -> pd.DataFrame:
+    output = frame.copy()
+    target = pd.to_numeric(output[target_column], errors="coerce")
+    output["walkforward_prior_context_status"] = status
+    output["walkforward_prior_context_support"] = 0.0
+    output["walkforward_prior_context_month_count"] = 0.0
+    output["walkforward_prior_context_target_sum"] = np.nan
+    output["walkforward_prior_context_target_mean"] = np.nan
+    output["walkforward_prior_context_target_min"] = np.nan
+    output["walkforward_prior_context_target_q10"] = np.nan
+    output["walkforward_prior_context_downside_rate"] = np.nan
+    output["walkforward_prior_context_large_downside_rate"] = np.nan
+    output["walkforward_prior_context_raw_bias"] = np.nan
+    output["walkforward_prior_context_support_ok"] = False
+    output["walkforward_prior_context_loss_flag"] = False
+    output["target_walkforward_prior_context_mean_floor"] = target
+    return output
+
+
+def add_walkforward_prior_context_columns(
+    examples: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    target_column: str = "target",
+    raw_prediction_column: str = "pred_taken_ev",
+    downside_threshold: float = 0.0,
+    large_downside_threshold: float = -15.0,
+    min_prior_support: int = 1,
+) -> pd.DataFrame:
+    if examples.empty:
+        return add_blank_walkforward_prior_context_columns(
+            examples,
+            target_column=target_column,
+            status="empty",
+        )
+    if min_prior_support <= 0:
+        raise ValueError("min_prior_support must be positive")
+    missing_group_columns = [column for column in group_columns if column not in examples.columns]
+    if missing_group_columns:
+        raise ValueError(f"stateful examples missing group columns: {missing_group_columns}")
+    if target_column not in examples.columns:
+        raise ValueError(f"stateful examples missing target column: {target_column}")
+
+    working = examples.copy()
+    if "dataset_month" not in working.columns and "month" in working.columns:
+        working["dataset_month"] = working["month"].astype(str)
+    if "dataset_month" not in working.columns:
+        raise ValueError("stateful examples missing dataset_month/month column")
+    month_values = working["dataset_month"].astype("string").str.slice(0, 7)
+    if month_values.isna().any() or month_values.eq("").any():
+        raise ValueError("stateful examples contain missing dataset_month values")
+    working["__walkforward_month"] = month_values
+    working["__walkforward_order"] = np.arange(len(working), dtype="int64")
+    months = sorted(str(month) for month in working["__walkforward_month"].unique())
+
+    annotated_frames: list[pd.DataFrame] = []
+    for month_index, target_month in enumerate(months):
+        target_rows = working.loc[working["__walkforward_month"].eq(target_month)].copy()
+        prior_months = months[:month_index]
+        if not prior_months:
+            annotated_frames.append(
+                add_blank_walkforward_prior_context_columns(
+                    target_rows,
+                    target_column=target_column,
+                    status="insufficient_prior_months",
+                )
+            )
+            continue
+
+        prior = working.loc[working["__walkforward_month"].isin(prior_months)].copy()
+        prior["split"] = "prior"
+        metrics = stateful_examples_metric_summary(
+            prior,
+            group_columns=group_columns,
+            target_column=target_column,
+            raw_prediction_column=raw_prediction_column,
+            downside_threshold=downside_threshold,
+            large_downside_threshold=large_downside_threshold,
+        )
+        metrics = metrics.loc[metrics["split"].eq("prior")].drop(columns=["split"])
+        if metrics.empty:
+            annotated_frames.append(
+                add_blank_walkforward_prior_context_columns(
+                    target_rows,
+                    target_column=target_column,
+                    status="insufficient_prior_context",
+                )
+            )
+            continue
+
+        rename = {
+            "support": "walkforward_prior_context_support",
+            "month_count": "walkforward_prior_context_month_count",
+            "target_sum": "walkforward_prior_context_target_sum",
+            "target_mean": "walkforward_prior_context_target_mean",
+            "target_min": "walkforward_prior_context_target_min",
+            "target_q10": "walkforward_prior_context_target_q10",
+            "downside_rate": "walkforward_prior_context_downside_rate",
+            "large_downside_rate": "walkforward_prior_context_large_downside_rate",
+            "raw_bias": "walkforward_prior_context_raw_bias",
+        }
+        keep_columns = [*group_columns, *[column for column in rename if column in metrics.columns]]
+        profile = metrics.loc[:, keep_columns].rename(columns=rename)
+
+        merge_keys: list[str] = []
+        for index, column in enumerate(group_columns):
+            key = f"__prior_context_group_key_{index}"
+            while key in target_rows.columns or key in profile.columns:
+                key = f"_{key}"
+            merge_keys.append(key)
+            target_rows[key] = target_rows[column].astype("string").fillna("__missing__")
+            profile[key] = profile[column].astype("string").fillna("__missing__")
+        profile = profile.drop(columns=group_columns)
+        annotated = target_rows.merge(profile, on=merge_keys, how="left")
+        annotated = annotated.drop(columns=merge_keys)
+
+        support = pd.to_numeric(
+            annotated.get(
+                "walkforward_prior_context_support",
+                pd.Series(0.0, index=annotated.index),
+            ),
+            errors="coerce",
+        ).fillna(0.0)
+        prior_mean = pd.to_numeric(
+            annotated.get(
+                "walkforward_prior_context_target_mean",
+                pd.Series(np.nan, index=annotated.index),
+            ),
+            errors="coerce",
+        )
+        target = pd.to_numeric(annotated[target_column], errors="coerce")
+        support_ok = support.ge(min_prior_support)
+        annotated["walkforward_prior_context_status"] = np.where(
+            support_ok,
+            "profiled",
+            "insufficient_prior_context",
+        )
+        annotated["walkforward_prior_context_support"] = support
+        annotated["walkforward_prior_context_month_count"] = pd.to_numeric(
+            annotated.get(
+                "walkforward_prior_context_month_count",
+                pd.Series(0.0, index=annotated.index),
+            ),
+            errors="coerce",
+        ).fillna(0.0)
+        annotated["walkforward_prior_context_support_ok"] = support_ok
+        annotated["walkforward_prior_context_loss_flag"] = support_ok & prior_mean.lt(0.0)
+        annotated["target_walkforward_prior_context_mean_floor"] = np.minimum(
+            target,
+            prior_mean.fillna(target),
+        ).where(support_ok, target)
+        annotated_frames.append(annotated)
+
+    return (
+        pd.concat(annotated_frames, ignore_index=True)
+        .sort_values("__walkforward_order")
+        .drop(columns=["__walkforward_order"], errors="ignore")
+        .reset_index(drop=True)
+    )
+
+
 def rename_walkforward_stress_columns(frame: pd.DataFrame) -> pd.DataFrame:
     rename = {
         column: f"walkforward_{column}"
@@ -5810,6 +5989,7 @@ def stateful_examples_walkforward_stress_targets(
     min_validation_months: int = 1,
     min_validation_support: int = 1,
     min_holdout_support: int = 1,
+    min_prior_support: int = 1,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if examples.empty:
         raise ValueError("stateful examples are empty")
@@ -5821,6 +6001,8 @@ def stateful_examples_walkforward_stress_targets(
         raise ValueError("min_validation_support must be positive")
     if min_holdout_support <= 0:
         raise ValueError("min_holdout_support must be positive")
+    if min_prior_support <= 0:
+        raise ValueError("min_prior_support must be positive")
 
     missing_group_columns = [column for column in group_columns if column not in examples.columns]
     if missing_group_columns:
@@ -6042,6 +6224,15 @@ def stateful_examples_walkforward_stress_targets(
         )
 
     annotated_examples = pd.concat(annotated_frames, ignore_index=True)
+    annotated_examples = add_walkforward_prior_context_columns(
+        annotated_examples,
+        group_columns=group_columns,
+        target_column=target_column,
+        raw_prediction_column=raw_prediction_column,
+        downside_threshold=downside_threshold,
+        large_downside_threshold=large_downside_threshold,
+        min_prior_support=min_prior_support,
+    )
     annotated_examples = annotated_examples.drop(columns=["__walkforward_month"], errors="ignore")
     profile_drift = (
         pd.concat(drift_frames, ignore_index=True) if drift_frames else pd.DataFrame()
@@ -6154,6 +6345,157 @@ def trade_exposure_group_summary(
         sort_columns = ["month", *sort_columns]
         ascending = [True, *ascending]
     return summary.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
+
+
+def selected_trade_walkforward_context_outcomes(
+    annotated: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    target_column: str = "adjusted_pnl",
+    downside_threshold: float = 0.0,
+    large_downside_threshold: float = -15.0,
+) -> pd.DataFrame:
+    if annotated.empty:
+        return pd.DataFrame(columns=["target_month", *group_columns])
+    missing_group_columns = [column for column in group_columns if column not in annotated.columns]
+    if missing_group_columns:
+        raise ValueError(f"selected trades missing group columns: {missing_group_columns}")
+    if target_column not in annotated.columns:
+        raise ValueError(f"selected trades missing target column: {target_column}")
+
+    working = annotated.copy()
+    if "dataset_month" not in working.columns and "month" in working.columns:
+        working["dataset_month"] = working["month"].astype(str)
+    if "dataset_month" not in working.columns:
+        raise ValueError("selected trades missing dataset_month/month column")
+    working["target_month"] = working["dataset_month"].astype("string").str.slice(0, 7)
+    working["_target"] = pd.to_numeric(working[target_column], errors="coerce")
+    working["_downside"] = working["_target"] <= downside_threshold
+    working["_large_downside"] = working["_target"] <= large_downside_threshold
+    working["_stress_flag"] = (
+        working.get(
+            "walkforward_context_stress_flag",
+            pd.Series(False, index=working.index),
+        )
+        .mask(lambda series: series.isna(), False)
+        .astype(bool)
+    )
+    working["_stress_penalty"] = pd.to_numeric(
+        working.get(
+            "walkforward_context_stress_penalty",
+            pd.Series(0.0, index=working.index),
+        ),
+        errors="coerce",
+    ).fillna(0.0)
+    working = working.dropna(subset=["_target"])
+    if working.empty:
+        return pd.DataFrame(columns=["target_month", *group_columns])
+
+    for column in group_columns:
+        working[column] = working[column].astype("string").fillna("__missing__")
+
+    keys = ["target_month", *group_columns]
+    outcomes = (
+        working.groupby(keys, dropna=False, observed=True)
+        .agg(
+            target_support=("_target", "size"),
+            target_adjusted_pnl_sum=("_target", "sum"),
+            target_adjusted_pnl_mean=("_target", "mean"),
+            target_adjusted_pnl_min=("_target", "min"),
+            target_adjusted_pnl_q10=("_target", lambda series: float(series.quantile(0.10))),
+            target_downside_rate=("_downside", "mean"),
+            target_large_downside_rate=("_large_downside", "mean"),
+            walkforward_stress_flag_count=("_stress_flag", "sum"),
+            walkforward_stress_penalty_sum=("_stress_penalty", "sum"),
+        )
+        .reset_index()
+    )
+
+    profile_columns = [
+        column
+        for column in [
+            "walkforward_profile_status",
+            "walkforward_profile_validation_months",
+            "walkforward_profile_holdout_months",
+            "walkforward_profile_validation_month_count",
+            "walkforward_profile_holdout_month_count",
+            "walkforward_context_validation_support",
+            "walkforward_context_holdout_support",
+            "walkforward_context_validation_target_sum",
+            "walkforward_context_holdout_target_sum",
+            "walkforward_context_target_sum_holdout_minus_validation",
+            "walkforward_context_validation_target_mean",
+            "walkforward_context_holdout_target_mean",
+            "walkforward_context_target_mean_holdout_minus_validation",
+            "walkforward_context_validation_downside_rate",
+            "walkforward_context_holdout_downside_rate",
+            "walkforward_context_downside_rate_holdout_minus_validation",
+            "walkforward_context_validation_positive_holdout_negative_mean",
+            "walkforward_context_validation_positive_holdout_negative_sum",
+            "walkforward_prior_context_status",
+            "walkforward_prior_context_support",
+            "walkforward_prior_context_month_count",
+            "walkforward_prior_context_target_mean",
+            "walkforward_prior_context_downside_rate",
+            "walkforward_prior_context_large_downside_rate",
+            "walkforward_prior_context_support_ok",
+            "walkforward_prior_context_loss_flag",
+        ]
+        if column in working.columns
+    ]
+    if profile_columns:
+        profile = working.groupby(keys, dropna=False, observed=True)[profile_columns].first().reset_index()
+        outcomes = outcomes.merge(profile, on=keys, how="left")
+
+    return outcomes.sort_values(
+        ["target_month", "target_adjusted_pnl_sum", "target_support"],
+        ascending=[True, True, False],
+    ).reset_index(drop=True)
+
+
+def selected_trade_walkforward_context_stress_targets(
+    trades: pd.DataFrame,
+    *,
+    group_columns: list[str],
+    target_column: str = "adjusted_pnl",
+    raw_prediction_column: str = "pred_taken_ev",
+    downside_threshold: float = 0.0,
+    large_downside_threshold: float = -15.0,
+    holdout_month_count: int = 1,
+    min_validation_months: int = 1,
+    min_validation_support: int = 1,
+    min_holdout_support: int = 1,
+    min_prior_support: int = 1,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    if trades.empty:
+        raise ValueError("selected trades are empty")
+    working = trades.copy()
+    if "dataset_month" not in working.columns and "month" in working.columns:
+        working["dataset_month"] = working["month"].astype(str)
+    if "candidate_side" not in working.columns and "direction" in working.columns:
+        working["candidate_side"] = working["direction"].astype(str).str.lower()
+
+    annotated, profile_drift, month_summary = stateful_examples_walkforward_stress_targets(
+        working,
+        group_columns=group_columns,
+        target_column=target_column,
+        raw_prediction_column=raw_prediction_column,
+        downside_threshold=downside_threshold,
+        large_downside_threshold=large_downside_threshold,
+        holdout_month_count=holdout_month_count,
+        min_validation_months=min_validation_months,
+        min_validation_support=min_validation_support,
+        min_holdout_support=min_holdout_support,
+        min_prior_support=min_prior_support,
+    )
+    outcomes = selected_trade_walkforward_context_outcomes(
+        annotated,
+        group_columns=group_columns,
+        target_column=target_column,
+        downside_threshold=downside_threshold,
+        large_downside_threshold=large_downside_threshold,
+    )
+    return annotated, profile_drift, month_summary, outcomes
 
 
 def holdout_case_ids(frame: pd.DataFrame) -> pd.Series:
@@ -6901,6 +7243,140 @@ def handle_model_trade_exposure(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_model_trade_context_walkforward_stress(args: argparse.Namespace) -> int:
+    run_paths = parse_csv_paths(args.runs)
+    expanded_run_paths = expand_model_trade_exposure_run_paths(run_paths)
+    group_columns = parse_csv_strings(args.group_columns)
+    if not group_columns:
+        raise ValueError("at least one group column is required")
+    exposure_frames = read_model_trade_exposure_frames(
+        run_paths,
+        args.long_column,
+        args.short_column,
+    )
+    selected_trades = pd.concat(exposure_frames, ignore_index=True) if exposure_frames else pd.DataFrame()
+    if selected_trades.empty:
+        raise ValueError("selected trades are empty")
+
+    annotated, profile_drift, month_summary, outcomes = (
+        selected_trade_walkforward_context_stress_targets(
+            selected_trades,
+            group_columns=group_columns,
+            target_column=args.target_column,
+            raw_prediction_column=args.raw_prediction_column,
+            downside_threshold=args.downside_threshold,
+            large_downside_threshold=args.large_downside_threshold,
+            holdout_month_count=args.holdout_month_count,
+            min_validation_months=args.min_validation_months,
+            min_validation_support=args.min_validation_support,
+            min_holdout_support=args.min_holdout_support,
+            min_prior_support=args.min_prior_support,
+        )
+    )
+
+    run_dir = make_run_dir(args.output_dir, args.label)
+    selected_trades.to_csv(run_dir / "selected_trades.csv", index=False)
+    annotated.to_csv(run_dir / "walkforward_selected_trades.csv", index=False)
+    walkforward_stress_flag = annotated["walkforward_context_stress_flag"].mask(
+        annotated["walkforward_context_stress_flag"].isna(),
+        False,
+    ).astype(bool)
+    stressed = annotated.loc[walkforward_stress_flag]
+    if not stressed.empty:
+        stressed.to_csv(run_dir / "walkforward_context_stressed_trades.csv", index=False)
+    if not profile_drift.empty:
+        profile_drift.to_csv(run_dir / "walkforward_profile_drift.csv", index=False)
+    month_summary.to_csv(run_dir / "walkforward_month_summary.csv", index=False)
+    outcomes.to_csv(run_dir / "walkforward_context_outcomes.csv", index=False)
+
+    target = pd.to_numeric(annotated[args.target_column], errors="coerce")
+    adjusted = pd.to_numeric(
+        annotated["target_walkforward_context_stress_adjusted"],
+        errors="coerce",
+    )
+    floor = pd.to_numeric(
+        annotated["target_walkforward_context_holdout_mean_floor"],
+        errors="coerce",
+    )
+    summary = {
+        "runs": [str(path) for path in run_paths],
+        "expanded_runs": [str(path) for path in expanded_run_paths],
+        "long_column": args.long_column,
+        "short_column": args.short_column,
+        "target_column": args.target_column,
+        "raw_prediction_column": args.raw_prediction_column,
+        "group_columns": group_columns,
+        "downside_threshold": args.downside_threshold,
+        "large_downside_threshold": args.large_downside_threshold,
+        "holdout_month_count": args.holdout_month_count,
+        "min_validation_months": args.min_validation_months,
+        "min_validation_support": args.min_validation_support,
+        "min_holdout_support": args.min_holdout_support,
+        "min_prior_support": args.min_prior_support,
+        "row_count": int(len(annotated)),
+        "month_count": int(annotated["dataset_month"].astype(str).str.slice(0, 7).nunique()),
+        "context_outcome_count": int(len(outcomes)),
+        "walkforward_profiled_month_count": int(
+            month_summary["profile_status"].eq("profiled").sum()
+            if "profile_status" in month_summary.columns
+            else 0
+        ),
+        "walkforward_stress_flag_count": int(walkforward_stress_flag.sum()),
+        "walkforward_stress_penalty_sum": float(
+            pd.to_numeric(
+                annotated["walkforward_context_stress_penalty"],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .sum()
+        ),
+        "target_mean": float(target.mean()),
+        "target_walkforward_context_stress_adjusted_mean": float(adjusted.mean()),
+        "target_walkforward_context_holdout_mean_floor_mean": float(floor.mean()),
+        "target_walkforward_prior_context_mean_floor_mean": float(
+            pd.to_numeric(
+                annotated["target_walkforward_prior_context_mean_floor"],
+                errors="coerce",
+            ).mean()
+        ),
+        "walkforward_prior_context_loss_flag_count": int(
+            annotated["walkforward_prior_context_loss_flag"].mask(
+                annotated["walkforward_prior_context_loss_flag"].isna(),
+                False,
+            ).astype(bool).sum()
+        ),
+    }
+    with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, ensure_ascii=False, indent=2, default=json_default)
+
+    print("selected trade walk-forward context stress summary:")
+    for key, value in summary.items():
+        if not isinstance(value, list):
+            print(f"{key}: {value}")
+    display_columns = [
+        "target_month",
+        *group_columns,
+        "target_support",
+        "target_adjusted_pnl_sum",
+        "target_adjusted_pnl_mean",
+        "target_downside_rate",
+        "walkforward_stress_flag_count",
+        "walkforward_context_validation_support",
+        "walkforward_context_holdout_support",
+        "walkforward_context_validation_target_mean",
+        "walkforward_context_holdout_target_mean",
+        "walkforward_context_validation_positive_holdout_negative_mean",
+        "walkforward_prior_context_support",
+        "walkforward_prior_context_target_mean",
+        "walkforward_prior_context_loss_flag",
+    ]
+    existing_display_columns = [column for column in display_columns if column in outcomes.columns]
+    print("worst selected trade contexts:")
+    print(outcomes.loc[:, existing_display_columns].head(args.top_n).to_string(index=False))
+    print(f"artifacts: {run_dir}")
+    return 0
+
+
 def handle_stateful_examples_drift(args: argparse.Namespace) -> int:
     validation_paths = parse_csv_paths(args.validation_examples)
     holdout_paths = parse_csv_paths(args.holdout_examples)
@@ -7058,6 +7534,7 @@ def handle_stateful_examples_walkforward_stress(args: argparse.Namespace) -> int
         min_validation_months=args.min_validation_months,
         min_validation_support=args.min_validation_support,
         min_holdout_support=args.min_holdout_support,
+        min_prior_support=args.min_prior_support,
     )
 
     run_dir = make_run_dir(args.output_dir, args.label)
@@ -7087,6 +7564,7 @@ def handle_stateful_examples_walkforward_stress(args: argparse.Namespace) -> int
         "min_validation_months": args.min_validation_months,
         "min_validation_support": args.min_validation_support,
         "min_holdout_support": args.min_holdout_support,
+        "min_prior_support": args.min_prior_support,
         "row_count": int(len(annotated)),
         "month_count": int(month_summary["target_month"].nunique()),
         "profiled_month_count": int(month_summary["profile_status"].eq("profiled").sum()),
@@ -7115,6 +7593,18 @@ def handle_stateful_examples_walkforward_stress(args: argparse.Namespace) -> int
                 annotated["target_walkforward_context_stress_adjusted"],
                 errors="coerce",
             ).mean()
+        ),
+        "target_walkforward_prior_context_mean_floor_mean": float(
+            pd.to_numeric(
+                annotated["target_walkforward_prior_context_mean_floor"],
+                errors="coerce",
+            ).mean()
+        ),
+        "walkforward_prior_context_loss_flag_count": int(
+            annotated["walkforward_prior_context_loss_flag"].mask(
+                annotated["walkforward_prior_context_loss_flag"].isna(),
+                False,
+            ).astype(bool).sum()
         ),
     }
     with (run_dir / "summary.json").open("w", encoding="utf-8") as handle:
@@ -9052,6 +9542,92 @@ def build_parser() -> argparse.ArgumentParser:
     model_trade_exposure.add_argument("--top-n", type=int, default=3)
     model_trade_exposure.set_defaults(func=handle_model_trade_exposure)
 
+    model_trade_context_walkforward_stress = subparsers.add_parser(
+        "model-trade-context-walkforward-stress",
+        help="build leak-free walk-forward context stress diagnostics for selected trades",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--runs",
+        required=True,
+        help="comma-separated model-policy run dirs, trades.csv files, or parent dirs containing runs",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--group-columns",
+        default="direction,combined_regime",
+        help="comma-separated decision-time context columns for rolling selected-trade profiles",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--target-column",
+        default="adjusted_pnl",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--raw-prediction-column",
+        default="pred_taken_ev",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--long-column",
+        default="",
+        help="optional prediction column override; defaults to each run config long_column",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--short-column",
+        default="",
+        help="optional prediction column override; defaults to each run config short_column",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--downside-threshold",
+        type=float,
+        default=0.0,
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--large-downside-threshold",
+        type=float,
+        default=-15.0,
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--holdout-month-count",
+        type=int,
+        default=1,
+        help="number of immediately prior months used as pseudo-holdout profile",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--min-validation-months",
+        type=int,
+        default=1,
+        help="minimum older months required before the pseudo-holdout window",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--min-validation-support",
+        type=int,
+        default=1,
+        help="minimum prior validation trades required for a context penalty",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--min-holdout-support",
+        type=int,
+        default=1,
+        help="minimum prior pseudo-holdout trades required for a context penalty",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--min-prior-support",
+        type=int,
+        default=1,
+        help="minimum all-prior trades required for the prior-context mean floor",
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/reports/backtests"),
+    )
+    model_trade_context_walkforward_stress.add_argument(
+        "--label",
+        default="model_trade_context_walkforward_stress",
+    )
+    model_trade_context_walkforward_stress.add_argument("--top-n", type=int, default=20)
+    model_trade_context_walkforward_stress.set_defaults(
+        func=handle_model_trade_context_walkforward_stress
+    )
+
     model_trade_delta = subparsers.add_parser(
         "model-trade-delta",
         help="compare base and candidate model-policy trades and summarize added/removed exposure",
@@ -9175,6 +9751,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="minimum prior pseudo-holdout examples required for a context penalty",
+    )
+    stateful_examples_walkforward_stress.add_argument(
+        "--min-prior-support",
+        type=int,
+        default=1,
+        help="minimum all-prior examples required for the prior-context mean floor",
     )
     stateful_examples_walkforward_stress.add_argument(
         "--output-dir",

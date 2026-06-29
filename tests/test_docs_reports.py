@@ -1,3 +1,4 @@
+import os
 import re
 import unittest
 from datetime import datetime
@@ -37,6 +38,42 @@ class DocsReportTests(unittest.TestCase):
             )
 
             self.assertEqual(read_internal_report_time(path), datetime(2026, 1, 2, 3, 4))
+
+    def test_internal_report_time_ignores_filesystem_mtime(self):
+        with TemporaryDirectory() as directory:
+            older_internal = Path(directory) / "00001_2026-01-02_older.md"
+            newer_internal = Path(directory) / "00002_2026-01-03_newer.md"
+            older_internal.write_text(
+                "\n".join(
+                    [
+                        "# Older Internal",
+                        "",
+                        "日時: 2026-01-02 03:04 JST",
+                        "更新日時: 2026-01-02 03:04 JST",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            newer_internal.write_text(
+                "\n".join(
+                    [
+                        "# Newer Internal",
+                        "",
+                        "日時: 2026-01-03 03:04 JST",
+                        "更新日時: 2026-01-03 03:04 JST",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            os.utime(older_internal, (2000000000, 2000000000))
+            os.utime(newer_internal, (1000000000, 1000000000))
+
+            by_internal_time = sorted(
+                [newer_internal, older_internal],
+                key=read_internal_report_time,
+            )
+
+            self.assertEqual(by_internal_time, [older_internal, newer_internal])
 
     def test_report_numbers_follow_internal_report_time(self):
         report_paths = sorted(Path("docs/reports").glob("*.md"))

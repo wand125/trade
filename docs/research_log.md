@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 13:16 Selected trade walk-forward context
+
+- `model-trade-context-walkforward-stress` を追加した。model-policyのselected tradesを対象に、対象月より前の月だけでcontext stressとall-prior context floorを作る。
+- 追加列は `walkforward_prior_context_target_mean`, `walkforward_prior_context_loss_flag`, `target_walkforward_prior_context_mean_floor`。validation-positive / holdout-negative反転だけでなく、過去から一貫して弱い文脈をfuture-safeに拾う。
+- `risk=5` 固定runを2024-11..2025-05で再生成した。2025-05 highcostの未解決損失は `long:down_low_vol` `-117.9480` と `short:up_normal_vol` `-100.9936` が中心。
+- 広い文脈では `long:down_low_vol` と `short:up_normal_vol` は過去月だけのstressで捕捉できる。session分解では `long:down_low_vol:london` がprior support 11, mean `-9.2242`、`short:up_normal_vol:asia` がprior support 15, mean `-3.3029` でall-prior loss flagに入る。
+- ただし `short:up_normal_vol:london` は2025-05で大きく負けたが過去平均は正。contextだけでは捕捉しにくいため、exit timing / EV calibration / higher-order feature側へ戻す。
+- docs運用として、OSのmtimeが逆でもレポート本文の `日時` を採番・最新判断に使うテストを追加した。`更新日時` も採番には使わない。
+- 判断: hard blockにはしない。`target_walkforward_context_stress_adjusted` と `target_walkforward_prior_context_mean_floor` をdownside分類・EV校正・ranking featureへ戻す。
+- report: `docs/reports/00142_2026-06-29_selected_trade_walkforward_context.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 12:36 Stateful downside mean-match 2025-05 fixed
 
 - `00140` で事前登録candidateにした `mean_match + session_floor_lowered risk=5` を、同じ6ヶ月内で追加調整せず、2025-05へ固定適用した。

@@ -501,6 +501,31 @@ This writes `enriched_trades.csv` and `group_by_*` summaries. Use it for failure
 localization and robustness diagnostics; do not promote post-hoc session/regime
 blocks without a fresh pre-registered holdout.
 
+To profile selected-trade context risk without using the target month itself,
+use the walk-forward selected-trade stress diagnostic:
+
+```bash
+python -m trade_data.backtest model-trade-context-walkforward-stress \
+  --runs data/reports/backtests/<model_policy_runs_parent> \
+  --group-columns direction,combined_regime \
+  --min-validation-support 20 \
+  --min-holdout-support 10 \
+  --label model_trade_context_walkforward_stress
+```
+
+For each target month, this uses only earlier selected trades: the immediately
+prior month(s) become a pseudo-holdout profile, and older months become the
+pseudo-validation profile. It writes `selected_trades.csv`,
+`walkforward_selected_trades.csv`, `walkforward_profile_drift.csv`,
+`walkforward_month_summary.csv`, `walkforward_context_outcomes.csv`, and
+`summary.json`. In addition to validation-positive / holdout-negative stress
+columns, the selected-trade rows include all-prior context columns such as
+`walkforward_prior_context_target_mean`,
+`walkforward_prior_context_loss_flag`, and
+`target_walkforward_prior_context_mean_floor`. Use these to diagnose recurring
+common-trade losses and to build future-info-safe downside/context targets; do
+not convert a single target-month failure into a hard block.
+
 To compare two fixed policies and separate common, removed, and newly-added
 trades, use `model-trade-delta`:
 
@@ -615,8 +640,10 @@ month(s) become a pseudo-holdout profile, and older months become the
 pseudo-validation profile. It writes `walkforward_stateful_examples.csv`,
 `walkforward_profile_drift.csv`, `walkforward_month_summary.csv`, and
 `summary.json`. Use `target_walkforward_context_stress_adjusted` as a candidate
-OOF target; keep the validation-vs-holdout `target_context_stress_adjusted`
-column as an audit-only target.
+OOF target. Use `target_walkforward_prior_context_mean_floor` when the risk is
+not a validation-to-holdout flip but a persistently weak prior context. Keep the
+validation-vs-holdout `target_context_stress_adjusted` column as an audit-only
+target.
 
 To turn walk-forward stress/floor targets into side-specific stateful downside
 risk columns, use the stateful risk model. Prefer chronological OOF when judging

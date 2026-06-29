@@ -29,6 +29,7 @@ from trade_data.backtest import (
     read_model_trade_delta_frames,
     run_backtest,
     run_model_policy,
+    selected_trade_walkforward_context_stress_targets,
     summarize_holdout_audit,
     summarize_candidate_selection,
     summarize_candidate_selection_jackknife,
@@ -3251,6 +3252,166 @@ class BacktestTests(unittest.TestCase):
         ].iloc[0]
         self.assertTrue(march_drift["walkforward_context_stress_flag"])
         self.assertEqual(march_drift["profile_holdout_months"], "2025-02")
+        self.assertEqual(
+            month_summary.loc[
+                month_summary["target_month"].eq("2025-01"),
+                "profile_status",
+            ].iloc[0],
+            "insufficient_prior_months",
+        )
+
+    def test_selected_trade_walkforward_context_stress_uses_prior_selected_trades(self):
+        trades = pd.DataFrame(
+            [
+                {
+                    "month": "2025-01",
+                    "direction": "long",
+                    "combined_regime": "up_low_vol",
+                    "adjusted_pnl": 6.0,
+                    "pred_taken_ev": 10.0,
+                },
+                {
+                    "month": "2025-01",
+                    "direction": "long",
+                    "combined_regime": "up_low_vol",
+                    "adjusted_pnl": 4.0,
+                    "pred_taken_ev": 8.0,
+                },
+                {
+                    "month": "2025-01",
+                    "direction": "short",
+                    "combined_regime": "range_low_vol",
+                    "adjusted_pnl": -2.0,
+                    "pred_taken_ev": 3.0,
+                },
+                {
+                    "month": "2025-01",
+                    "direction": "short",
+                    "combined_regime": "range_low_vol",
+                    "adjusted_pnl": -4.0,
+                    "pred_taken_ev": 2.0,
+                },
+                {
+                    "month": "2025-02",
+                    "direction": "long",
+                    "combined_regime": "up_low_vol",
+                    "adjusted_pnl": -3.0,
+                    "pred_taken_ev": 9.0,
+                },
+                {
+                    "month": "2025-02",
+                    "direction": "long",
+                    "combined_regime": "up_low_vol",
+                    "adjusted_pnl": -5.0,
+                    "pred_taken_ev": 11.0,
+                },
+                {
+                    "month": "2025-02",
+                    "direction": "short",
+                    "combined_regime": "range_low_vol",
+                    "adjusted_pnl": -1.0,
+                    "pred_taken_ev": 4.0,
+                },
+                {
+                    "month": "2025-02",
+                    "direction": "short",
+                    "combined_regime": "range_low_vol",
+                    "adjusted_pnl": -3.0,
+                    "pred_taken_ev": 5.0,
+                },
+                {
+                    "month": "2025-03",
+                    "direction": "long",
+                    "combined_regime": "up_low_vol",
+                    "adjusted_pnl": -6.0,
+                    "pred_taken_ev": 12.0,
+                },
+                {
+                    "month": "2025-03",
+                    "direction": "short",
+                    "combined_regime": "down_low_vol",
+                    "adjusted_pnl": 7.0,
+                    "pred_taken_ev": 13.0,
+                },
+                {
+                    "month": "2025-03",
+                    "direction": "short",
+                    "combined_regime": "range_low_vol",
+                    "adjusted_pnl": 5.0,
+                    "pred_taken_ev": 14.0,
+                },
+            ]
+        )
+
+        annotated, drift, month_summary, outcomes = (
+            selected_trade_walkforward_context_stress_targets(
+                trades,
+                group_columns=["direction", "combined_regime"],
+                min_validation_support=2,
+                min_holdout_support=2,
+            )
+        )
+
+        march_long = annotated[
+            annotated["dataset_month"].eq("2025-03")
+            & annotated["direction"].eq("long")
+        ].iloc[0]
+        self.assertEqual(march_long["walkforward_profile_status"], "profiled")
+        self.assertEqual(march_long["walkforward_profile_validation_months"], "2025-01")
+        self.assertEqual(march_long["walkforward_profile_holdout_months"], "2025-02")
+        self.assertTrue(march_long["walkforward_context_stress_flag"])
+        self.assertAlmostEqual(march_long["walkforward_context_stress_penalty"], 9.0)
+        self.assertAlmostEqual(
+            march_long["target_walkforward_context_stress_adjusted"],
+            -15.0,
+        )
+        self.assertAlmostEqual(march_long["walkforward_prior_context_target_mean"], 0.5)
+        self.assertFalse(march_long["walkforward_prior_context_loss_flag"])
+        march_short = annotated[
+            annotated["dataset_month"].eq("2025-03")
+            & annotated["direction"].eq("short")
+            & annotated["combined_regime"].eq("down_low_vol")
+        ].iloc[0]
+        self.assertFalse(march_short["walkforward_context_stress_flag"])
+        march_prior_loss = annotated[
+            annotated["dataset_month"].eq("2025-03")
+            & annotated["direction"].eq("short")
+            & annotated["combined_regime"].eq("range_low_vol")
+        ].iloc[0]
+        self.assertTrue(march_prior_loss["walkforward_prior_context_loss_flag"])
+        self.assertAlmostEqual(
+            march_prior_loss["target_walkforward_prior_context_mean_floor"],
+            -2.5,
+        )
+        march_long_outcome = outcomes[
+            outcomes["target_month"].eq("2025-03")
+            & outcomes["direction"].eq("long")
+        ].iloc[0]
+        self.assertAlmostEqual(march_long_outcome["target_adjusted_pnl_sum"], -6.0)
+        self.assertEqual(march_long_outcome["walkforward_stress_flag_count"], 1)
+        self.assertAlmostEqual(
+            march_long_outcome["walkforward_context_validation_target_mean"],
+            5.0,
+        )
+        self.assertAlmostEqual(
+            march_long_outcome["walkforward_context_holdout_target_mean"],
+            -4.0,
+        )
+        march_prior_loss_outcome = outcomes[
+            outcomes["target_month"].eq("2025-03")
+            & outcomes["direction"].eq("short")
+            & outcomes["combined_regime"].eq("range_low_vol")
+        ].iloc[0]
+        self.assertAlmostEqual(
+            march_prior_loss_outcome["walkforward_prior_context_target_mean"],
+            -2.5,
+        )
+        self.assertTrue(march_prior_loss_outcome["walkforward_prior_context_loss_flag"])
+        march_drift = drift[
+            drift["target_month"].eq("2025-03")
+            & drift["direction"].eq("long")
+        ].iloc[0]
+        self.assertTrue(march_drift["walkforward_context_stress_flag"])
         self.assertEqual(
             month_summary.loc[
                 month_summary["target_month"].eq("2025-01"),
