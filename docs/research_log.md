@@ -4914,3 +4914,41 @@ Artifacts:
 
 - 今回はPnL改善実験ではなく、直接capからrisk/quality featureへ戻すための配線。
 - 次はholding-shortening列を含むmerged predictionを使い、trade overestimate / qualityのOOFとchronological applyを比較する。
+
+### 2026-06-29 20:28 JST Holding shortening quality feature diagnostics
+
+作業:
+
+- `scripts/experiments/merge_prediction_columns.py` を追加し、prediction parquet同士を `dataset_month, decision_timestamp` で横結合できるようにした。
+- 2025-02..04のholding-shortening probability / multimonth quantileを、trade failure prediction frameとfull validation prediction frameへ結合した。
+- 2025-05 apply predictionにも同じholding-shortening列を結合した。
+- 2025-02..04 highcost risk5 selected tradesで、quality baseline vs holding-feature、overestimate baseline vs holding-featureを同条件比較した。
+- 2025-05 highcost risk5 selected trades上でも、final model predictionの診断指標を比較した。
+- report: `docs/reports/00167_2026-06-29_holding_shortening_quality_feature_diagnostics.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| model | phase | baseline | holding feature | judgment |
+|---|---|---:|---:|---|
+| quality R2 | validation OOF | `-0.0199` | `-0.0166` | 微改善 |
+| quality R2 | 2025-05 apply selected | `0.0123` | `0.0095` | 悪化 |
+| overestimate R2 | validation OOF | `0.0979` | `0.0845` | 悪化 |
+| overestimate AUC | validation OOF | `0.6991` | `0.6901` | 悪化 |
+| overestimate R2 | 2025-05 apply selected | `0.1560` | `0.1545` | 悪化 |
+| overestimate AUC | 2025-05 apply selected | `0.7635` | `0.7609` | 悪化 |
+
+feature correlation:
+
+| phase | feature | corr adjusted PnL | corr overestimate target |
+|---|---|---:|---:|
+| validation 2025-02..04 | holding prob | `0.0070` | `0.0814` |
+| validation 2025-02..04 | holding quantile | `0.0042` | `0.0134` |
+| apply 2025-05 | holding prob | `-0.0319` | `-0.0296` |
+| apply 2025-05 | holding quantile | `-0.0396` | `-0.1426` |
+
+判断:
+
+- holding-shortening featureは配線として残すが、quality / overestimate modelの本流featureには採用しない。
+- validationで薄く見えた相関が2025-05で反転しており、直接連続回帰featureに入れると安定しない。
+- 次はholding-shorteningを、context-aware holding-cap target、exit-regret、holding-errorの教師・診断へ回す。
