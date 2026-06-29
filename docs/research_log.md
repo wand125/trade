@@ -5001,3 +5001,35 @@ Policy result, 2025-02..08:
 - `python3 -m unittest tests.test_holding_cap_context_walkforward`: OK, 2 tests
 - `python3 -m unittest tests.test_holding_risk_overlay tests.test_holding_cap_context_walkforward`: OK, 3 tests
 - `python3 -m py_compile scripts/experiments/holding_risk_overlay.py scripts/experiments/holding_cap_context_walkforward.py`: OK
+
+### 2026-06-29 20:54 JST Holding error target diagnostics
+
+作業:
+
+- `scripts/experiments/holding_error_target_diagnostics.py` を追加した。
+- `trade_delta_rows.csv` などのenriched trade rowsから、base/candidate側の存在行だけを使って保有時間失敗を診断できるようにした。
+- `oracle_holding_gap_minutes <= -30 and exit_regret >= 5` を `exit_shortening_target`、`oracle_holding_gap_minutes >= 30 and exit_regret >= 5` を `hold_extension_target` として分解した。
+- `pred_minus_oracle_holding_minutes = holding_error_minutes - oracle_holding_gap_minutes` を復元し、予測保有がoracleより長すぎるかを測れるようにした。
+- fixed highcost risk0/risk5の2024-11..2025-05 deltaで診断を実行した。
+- report: `docs/reports/00169_2026-06-29_holding_error_target_diagnostics.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+risk5結果:
+
+| gap side | trades | total pnl | avg pnl | exit regret mean | pred-minus-oracle mean | large loss rate |
+|---|---:|---:|---:|---:|---:|---:|
+| should exit earlier | `141` | `-1301.9486` | `-9.2337` | `16.5986` | `544.6843` | `0.2270` |
+| near correct | `50` | `315.8636` | `6.3173` | `6.2852` | `231.5543` | `0.0000` |
+| should hold longer | `416` | `1340.9258` | `3.2234` | `27.0006` | `-326.4777` | `0.0288` |
+
+判断:
+
+- `hold_extension_target` は頻度が高く利益機会も多いため、risk targetとしては不向き。
+- `exit_shortening_target` は損失bucketを明確に分離しており、次の本流targetにする。
+- context別の悪化はあるが、priorからholdoutへの反転も多いため、hard ruleではなく分類probability / soft riskへ接続する。
+- 次は selected trade failure / stateful risk 系に `exit_shortening_high` targetを追加し、chronological OOFでAUCとpolicy効果を確認する。
+
+検証:
+
+- `python3 -m unittest tests.test_holding_error_target_diagnostics`: OK, 3 tests
+- `python3 -m py_compile scripts/experiments/holding_error_target_diagnostics.py`: OK

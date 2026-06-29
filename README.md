@@ -592,6 +592,23 @@ python scripts/experiments/holding_risk_overlay.py \
   --exclude-month-context-scope pooled
 ```
 
+To split selected-trade holding mistakes into "should have exited earlier" and
+"should have held longer" targets, use:
+
+```bash
+python scripts/experiments/holding_error_target_diagnostics.py \
+  --trade-rows data/reports/backtests/<trade_delta_run> \
+  --pnl-source candidate \
+  --case-label risk5 \
+  --label holding_error_target_diagnostics
+```
+
+The script writes `holding_error_trade_rows.csv`, grouped summaries, and
+`walkforward_context_profiles.csv`. Treat `exit_shortening_target`
+(`oracle_holding_gap_minutes <= -30` and `exit_regret >= 5`) as the first risk
+target candidate. `hold_extension_target` often includes profitable missed
+upside, so do not turn it into a hard block without separate validation.
+
 Before adopting a candidate, combine validation and holdout/apply delta runs in
 a preflight audit:
 
