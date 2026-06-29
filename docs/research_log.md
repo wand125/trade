@@ -4,6 +4,18 @@
 
 ## 2026-06-29 JST
 
+### 18:06 Holding risk overlay
+
+- `scripts/experiments/holding_risk_overlay.py` を追加し、`pred_hit_actual_miss_prob * q75 high-overestimate prob` をentry riskではなくMLP予測保有時間capとして使えるようにした。
+- thresholdはchronological q75 OOFの2025-02..2025-04から固定し、2025-05/06/07へは再探索なしで適用する形にした。
+- both-side capでは `q0.75 cap60 risk0` がmax DDを `259.0392 -> 145.4232` に縮めたが、long側まで壊してtotalは `222.1276 -> 200.8008` に落ちた。
+- short-onlyに限定すると、2025-02..2025-06で `short-only q0.75 cap60 risk0` が total `314.7458`, min month `-47.5324`, max DD `145.4232` となり、risk0 `222.1276 / -61.3708 / 259.0392` とbaseline risk5 `203.3466 / -48.2052 / 224.7524` を上回った。
+- 2025-07固定適用でも小幅に改善し、risk0は `-9.4002 -> -0.8914`、risk5は `8.2858 -> 16.7946`。ただしshort active率は `6.75%` と低く、改善幅は小さい。
+- delta診断では2025-04 `common short/range_normal_vol` が `-77.8268 -> +30.0540` へ改善した一方、2025-02/03では追加short損失が出た。2025-07でも `common short/up_low_vol` は悪化している。
+- 判断: `short-only q0.75 cap60` は固定候補に昇格するが、標準採用はまだしない。次は2025-08固定、またはshort context filterで `range_low_vol/range_normal_vol` に絞る。
+- report: `docs/reports/00157_2026-06-29_holding_risk_overlay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
 ### 17:43 Predhit overestimate fixed 2025-06
 
 - `00155` の固定候補 `predhit_q75_w4` / `w6` を再探索なしで未使用月2025-06へ適用した。

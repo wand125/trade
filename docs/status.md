@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-29 17:43 JST
+最終更新: 2026-06-29 18:06 JST
 
 ## 現在の状態
 
@@ -35,6 +35,8 @@ stateful examplesの追加support実験も実施済み。`oof-stateful-value-mod
 `pred_hit_actual_miss` と high-overestimate q75 probabilityのinteraction riskを検証した。`scripts/experiments/predhit_overestimate_interaction.py` を追加し、標準CLIと同じく統合prediction frame全体を月別評価へ渡す形で2025-02..2025-05を再基準化した。`predhit_evhigh` interactionはほぼbaseline同等だが、`predhit_q75_w4` は total `107.2486`, min month `-22.9762`, max monthly DD `233.5124` で、この固定4ヶ月ではrisk0 `101.5974` / baseline risk5 `91.9002` を上回った。ただし `w3=80.5836`, `w5=97.4686`, `w8=62.9580` とweight感度が大きく、安定した台地ではないため標準採用しない。固定候補として `w4` / `w6` を未使用月・別walk-forwardで再探索なし確認へ回す。詳細は `docs/reports/00155_2026-06-29_predhit_overestimate_interaction.md`。
 
 `predhit_q75_w4` / `w6` を再探索なしで未使用月2025-06へ固定適用した。現行schemaの2025-06 predictionが不足していたため、2025-05固定確認と同じ設定でdataset/HGB/MLP/hybrid/stateful/failure/quality/q75 applyを作り直した。2025-06 highcostでは risk0 `120.5302`, baseline risk5 `111.4464`, `predhit_q75_w4` `105.8618`, `predhit_q75_w6` `102.0418` で、q75 interactionはbaselineを下回った。delta診断でも baseline側の良い `only_base short/range_normal_vol +25.6700` を落としており、固定候補から降格する。q75 high-overestimateは直接risk penaltyではなく、exit timing calibration / EV過大評価校正 / selected trade診断特徴として残す。詳細は `docs/reports/00156_2026-06-29_predhit_overestimate_fixed_2025_06.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+`pred_hit_actual_miss * q75 high-overestimate` をentry riskではなくMLP予測保有時間capとして使う `holding_risk_overlay.py` を追加した。both-side capはlong側を壊したが、short-onlyでは2025-02..2025-06で `short-only q0.75 cap60 risk0` が total `314.7458`, min month `-47.5324`, max DD `145.4232` となり、risk0 `222.1276 / -61.3708 / 259.0392` とbaseline risk5 `203.3466 / -48.2052 / 224.7524` を上回った。2025-07固定適用でもrisk0 `-9.4002 -> -0.8914`, risk5 `8.2858 -> 16.7946` と小幅改善。標準採用はまだせず、固定候補として2025-08またはshort context filterへ進める。詳細は `docs/reports/00157_2026-06-29_holding_risk_overlay.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 entry quality を密に学習するための追加教師targetは実装済み。主datasetの再生成、HGB再学習、quality filter付きpolicy評価まで完了。
 
