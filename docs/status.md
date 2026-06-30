@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 10:18 JST
+最終更新: 2026-06-30 10:31 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+fixed short budget trigger監査を追加した。`short_budget_fixed_rule_audit.py` は、primary `gap5/budget0`、defensive `gap0/budget0`、trigger `recent_short_losing_months >= 1` を固定して、対象月より前の月だけで選ぶ。min4は total `+232.2466`, worst `-46.0150`, short PnL `+154.7572`、min6も `+26.3116` だが、late-onlyのmin8は `-15.0104` でNoTrade未満。`short_budget_replacement_trade_audit.py` では late 2025-08..12 の candidate-only shortが `gap5/budget0` 67件 `-286.9878`、`gap0/budget0` 16件 `-38.6214` と分かり、`gap5` の損失は `up_low_vol/ny_overlap`, `range_low_vol/ny_overlap`, `range_low_vol/asia` に集中した。標準採用せず、追加未使用月または2024側へ固定適用する。詳細は `docs/reports/00197_2026-06-30_fixed_short_budget_trigger_audit.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 budget0後のreplacement path診断を追加した。alert context `budget0` は all-windowで baseline `-90.1378` を `+6.0170` へ改善するが、global `gap0/budget0` `+418.2596`、global `gap5/budget0` `+508.9838` に届かない。late 2025-08..12では alert context `budget0` が base short `-333.9178` を除去しても、common short `-382.7524` と replacement short `-293.7604` が残る。一方 global `gap0/budget0` は late base short `-716.6702` を全て消し、replacement shortを `-38.6214` に抑える。alert context限定gateを本流として増やさず、次は `gap5/budget0` から `gap0/budget0` へ落とすdeterioration triggerを追加未使用月・追加データで再探索なし検証する。詳細は `docs/reports/00196_2026-06-30_budget0_replacement_path_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

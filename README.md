@@ -315,6 +315,24 @@ python scripts/experiments/short_budget_drift_trigger_selection.py \
   --recent-month-count 3
 ```
 
+Once a rule is fixed, audit it without re-searching primary candidates or
+thresholds:
+
+```bash
+python scripts/experiments/short_budget_fixed_rule_audit.py \
+  --summary-by-run data/reports/backtests/<short_entry_budget_sweep>/summary_by_run.csv \
+  --output-dir data/reports/backtests \
+  --label short_budget_fixed_rule_gap5_to_gap0_audit \
+  --primary-candidate 5:0 \
+  --defensive-candidate 0:0 \
+  --trigger-metric recent_short_losing_months \
+  --operator ge \
+  --trigger-threshold 1 \
+  --min-train-months 4,5,6,7,8 \
+  --train-window-months 0,4,6,8 \
+  --recent-month-count 3
+```
+
 To include prior-only prediction side drift metrics, add prediction month
 summaries and explicitly request those trigger metrics:
 
@@ -374,6 +392,22 @@ Rows outside the side-drift guarded prediction context are assigned unique
 inactive contexts, so ordinary trades do not share drawdown state. This is a
 dynamic backtest diagnostic and should still be judged by worst month,
 drawdown, and side-level PnL, not total PnL alone.
+
+To decompose whether a guard created harmful replacement short trades, run a
+candidate-only replacement audit over `model-trade-delta` output:
+
+```bash
+python scripts/experiments/short_budget_replacement_trade_audit.py \
+  --delta-run global_gap5_budget0=data/reports/backtests/<gap5_trade_delta_run> \
+  --delta-run global_gap0_budget0=data/reports/backtests/<gap0_trade_delta_run> \
+  --output-dir data/reports/backtests \
+  --label short_budget_replacement_trade_audit \
+  --top-n 40
+```
+
+This reads `trade_delta_rows.csv`, filters `delta_status=only_candidate` and
+`direction=short`, then writes replacement summaries by month,
+regime/session, exit reason, and worst individual trades.
 
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:

@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 10:31 Fixed short budget trigger audit
+
+- `gap5/budget0 -> gap0/budget0` triggerを、primary/defensive/trigger条件固定で再探索なし監査する `short_budget_fixed_rule_audit.py` を追加した。
+- 固定ルールは primary `gap5/budget0`、defensive `gap0/budget0`、trigger `recent_short_losing_months >= 1`、recent 3ヶ月。
+- min4では target 2025-05..12 total `+232.2466`, worst `-46.0150`, short PnL `+154.7572`。primary `-30.4328`、defensive `+150.3206` の両方を上回った。
+- min5は `+184.8928`、min6は `+26.3116`。min7は `-61.0254`、min8は `-15.0104` で、late-onlyではtail control止まり。
+- `short_budget_replacement_trade_audit.py` を追加し、`model-trade-delta` の `only_candidate` shortをtrade単位で集計した。late 2025-08..12 replacement shortは `gap5/budget0` が67件 `-286.9878`、`gap0/budget0` が16件 `-38.6214`。
+- `gap5` の損失集中は 2025-09 `-182.3932`、contextでは `up_low_vol/ny_overlap -103.5756`, `range_low_vol/ny_overlap -86.5792`, `range_low_vol/asia -82.6692`。
+- 判断: fixed triggerはdiagnostic candidate / preflightに留める。標準採用せず、追加未使用月または2024側の同一familyへ固定適用する。
+- report: `docs/reports/00197_2026-06-30_fixed_short_budget_trigger_audit.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile ...`: OK; `python3 -m unittest tests.test_short_budget_fixed_rule_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 16 tests; `git diff --check`: OK
+
 ### 10:18 Budget0 replacement path diagnostics
 
 - alert context限定 `budget0` が global `gap0/budget0` / `gap5/budget0` に届かない理由を、`model-trade-delta` の `only_base`, `only_candidate`, `common` short exposureで分解した。
