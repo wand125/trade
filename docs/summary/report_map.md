@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 23:56 JST
+最終更新: 2026-07-01 00:27 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,6 +20,7 @@
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
 | `00186`..`00239` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00239で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断、scale quantile診断、quantile policy backtest、role selector、positive EV floor、trade context診断、exit capture診断、hold-cap sensitivity、prior-only inversion guard、prior context risk score、residual losing month診断、exit-capture target診断、executable EV calibration、executable EV selector feature、executable EV stateful score、dense executable capture model、side-balance score penalty、side-balance feature diagnostics、side-balance downside interaction、side-balance downside selector、side-balance downside coverage audit、side-balance downside composite selector、composite target decompositionを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。cal2024はprediction入力側ではside margin supportがほぼなく、refit2025はlong EV scaleが大きすぎる。00218でside/regime/session-local quantileが候補数を比較可能にする軸だと確認し、00219でstateful backtestへ接続したが、fresh/refit validationのworstが負。00220のrole selectorでもstrict3/clean2ともNoTrade。00221のEV floor候補も全てNoTrade。00222で失敗はentry floorだけでなくcontext-side inversionとexit captureに分かれると確認し、00223でq95/q99は `260m` capがbindingしているがdirection/context errorも残るためblind hold延長は不可とした。00224で `720m` capは有望だが、same-validation guard込みでもmonth floorを通らないため標準はNoTrade。00225でprior-only guardへ置き換えてもvalidationは近似pass止まり、fresh fixedではover-blockingが出た。00226でrisk score化しcal+fresh prior fixedは改善したが、月次floor未達。00227で残差月はentry floor不足ではなくdirection-side inversion、exit capture、realized EV calibration不足だと確認した。00228でexit-capture targetは有用だがprior risk hard blockはfresh fixed利益を削ると確認した。00229でexecutable EV calibrationは有用だがhard thresholdは不安定と確認し、00230でcandidate-level selector featureでもNoTrade-first gateを超えないと確認した。00231でexecutable EVをstateful scoreへ入れるとrefit long過剰は改善したが、q99 floor5も月次floorとsupport不足でNoTradeのまま。00232でdense capture modelはrow-level MAEを改善したが、stateful validationではfresh tailとsupport不足が残りNoTrade。00233でside-balance direct penaltyはrefit long過剰を縮めたがfresh tailを悪化させた。00234でside-balance-only feature screenもq95/q99間で不安定と確認した。00235でside-balance x downside interactionはq99の一部損失を拾うが、q95 tailとfresh最大損失が残り、hard gateではなく低容量featureへ回す。00236でcandidate-level pressureはfloor5 fresh tailを示すが、低pressure候補はcoverage不足のfloor10系であり、support/coverage制約なしに選べない。00237でrequired-role coverageを明示するとstrict/relaxed/sensitivity全てNoTradeになり、coverage preflightの必要性が確定した。00238でdirection/exit/EV overestimateも含むcomposite gateを試したが、strict/relaxed/sensitivity全てNoTradeで、missing roleはunknown/high riskとして扱う必要が確定した。00239でcompositeをfeature/targetへ分解し、target-activeでも利益になるoverlapがあるため単一binary labelへ圧縮しない方針を確認した。 |
+| `00240` | component target calibration | 00239のcomponent targetをsupport/pressure bucketの低容量calibrationで診断。chronological / role holdoutの両方で相対的に残ったのはEV overestimateだけで、direction/exit/lossはsupport+pressureだけでは不足。標準policyはNoTradeのまま、EV overestimateをcalibration head候補、direction/exitをside/context/holding/capture特徴付きheadへ進める。 |
 
 ## テーマ別読む順
 
@@ -78,6 +79,7 @@
 51. `00237_2026-06-30_entry_ev_side_balance_downside_coverage_audit.md`
 52. `00238_2026-06-30_entry_ev_side_balance_downside_composite_selector.md`
 53. `00239_2026-06-30_entry_ev_composite_target_decomposition.md`
+54. `00240_2026-07-01_entry_ev_component_target_calibration.md`
 
 ### 現在の候補軸を知る
 
@@ -134,6 +136,7 @@
 51. `00237_2026-06-30_entry_ev_side_balance_downside_coverage_audit.md`
 52. `00238_2026-06-30_entry_ev_side_balance_downside_composite_selector.md`
 53. `00239_2026-06-30_entry_ev_composite_target_decomposition.md`
+54. `00240_2026-07-01_entry_ev_component_target_calibration.md`
 
 ### holding / exit 系の経緯を知る
 

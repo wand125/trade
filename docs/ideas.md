@@ -108,6 +108,7 @@
 - 00237でrequired-role coverageを明示すると、coverage/support-aware gatesはstrict/relaxed/sensitivityすべてNoTradeだった。missing supportを低riskではなく未知riskとして扱い、early monthsやfresh role missingを別featureとしてmodel/selectorへ渡す。
 - 00238でcoverage/support、side-balance/downside、direction/exit、EV overestimateをcomposite gateへ入れてもstrict/relaxed/sensitivityすべてNoTradeだった。composite hard gateを増やすのではなく、missing-support indicator、direction-side inversion target、exit-capture target、executable EV calibration targetへ分解して学習側へ戻す。
 - 00239でcompositeをfeature/targetへ分解すると、target-activeでも利益になるoverlapがある。`composite_failure_target` を単一no-trade labelにせず、direction-side inversion、exit capture、EV overestimate、realized lossを別target headとして学習し、selector/rankingで組み合わせる。
+- 00240でsupport/pressure bucketだけの低容量calibrationを試すと、EV overestimate targetだけがchronological / role holdoutの両方で相対的に残った。direction/exit/lossは同じbucketでは弱いか逆向きなので、EV overestimateを先にcalibration headとして伸ばし、direction/exitはside/context/holding/capture特徴を足して別headで診断する。
 
 ## 外部データ候補
 

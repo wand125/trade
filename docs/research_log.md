@@ -2,6 +2,22 @@
 
 時系列の作業記録。判断、実験、失敗、次の行動を追記する。
 
+## 2026-07-01 JST
+
+### 00:27 Entry EV component target calibration
+
+- 00239の `component_trade_targets.csv` を使い、target別の低容量calibration診断 `scripts/experiments/entry_ev_component_target_calibration.py` を追加した。
+- artifactは `data/reports/backtests/20260630_153252_20260701_entry_ev_component_target_calibration_s2/`。
+- groupは `support_bucket + pressure_bucket`、prior_strength `5`、min_group_support `3`。chronological monthは対象月より前だけ、role holdoutはholdout role以外だけでfitする。
+- 対象targetは `direction_side_inversion_target`, `exit_capture_failure_target`, `executable_ev_overestimate_target`, `realized_loss_target`。
+- chronological mean AUCは `executable_ev_overestimate_target 0.6741`, `realized_loss_target 0.4819`, `exit_capture_failure_target 0.4457`, `direction_side_inversion_target 0.2644`。
+- role holdout mean AUCは `executable_ev_overestimate_target 0.6401`, `realized_loss_target 0.5009`, `direction_side_inversion_target 0.2587`, `exit_capture_failure_target 0.2716`。
+- `medium/high` groupは3 rowsでEV overestimate / exit failure / realized lossが全て `1.0000`、total `-43.1964` だがsupportが小さいためhard blockerにしない。`missing/low` は81 rowsでtotal `-1.6042` とほぼflatなので、missing supportの自動拒否もしない。
+- 判断: component target calibration infrastructureはaccepted。`support+pressure` だけを十分なtarget modelとは扱わない。EV overestimateはcalibration target候補、direction/exitはside/context/holding/capture特徴を足した別headへ進める。
+- report: `docs/reports/00240_2026-07-01_entry_ev_component_target_calibration.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: component target calibration unit tests OK; py_compile OK; diagnostic run OK
+
 ## 2026-06-30 JST
 
 ### 23:56 Entry EV composite target decomposition
