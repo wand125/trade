@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 12:54 JST
+最終更新: 2026-06-30 13:08 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00207` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00207で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocolを分解した。全2024 OOFではbest sourceでもNoTradeを超えず、標準採用しない。 |
+| `00186`..`00208` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00208で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admissionを分解した。全2024 OOFではbest sourceでもNoTradeを超えず、calibrated high-threshold candidatesもvalidationではNoTrade tieなので標準採用しない。 |
 
 ## テーマ別読む順
 
@@ -46,6 +46,7 @@
 19. `00205_2026-06-30_samefamily_side_calibration_diagnostics.md`
 20. `00206_2026-06-30_early2024_chrono_risk_oof.md`
 21. `00207_2026-06-30_chrono_2024_full_protocol.md`
+22. `00208_2026-06-30_entry_ev_calibration_admission.md`
 
 ### 現在の候補軸を知る
 
@@ -70,6 +71,7 @@
 19. `00205_2026-06-30_samefamily_side_calibration_diagnostics.md`
 20. `00206_2026-06-30_early2024_chrono_risk_oof.md`
 21. `00207_2026-06-30_chrono_2024_full_protocol.md`
+22. `00208_2026-06-30_entry_ev_calibration_admission.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -274,6 +276,15 @@ Question: 00206の混合family bridgeを解消して、2024-03..12を同一chron
 Best evidence: train 2023-01..12, valid 2024-01..02, test 2024-03..12. OOF 2024-05..12: source p10/replm10 -3.1736, risk5 side -10.4618, risk0 side -32.7828, no-side -141.8816. Best still below NoTrade.
 Decision: 標準採用なし。source/risk5はdiagnostic baseline。entry EV calibration / admission layerを優先する。
 Next: fix EV scale drift and evaluate candidates against NoTrade first; run gap0/gap5/budget0 on this family only as diagnostic stress test.
+```
+
+```text
+Report: 00208 Entry EV Calibration Admission
+Status: diagnostic candidate / not standard
+Question: raw EVとcalibrated EVのadmission thresholdは2024 validationからtestへ外挿するか。
+Best evidence: raw validation winner entry12/short3 is +22.7292 on validation but -442.4662 on full 2024 test. Calibrated entry10/short6 is +100.3612 and entry12/short6 is +74.0644 on full 2024 test, but both are selected only as validation NoTrade ties.
+Decision: calibrated EV + high short thresholdは診断候補。validationでpositive edgeを証明していないため標準採用しない。
+Next: pre-register NoTrade tie selector and rerun the same calibrated admission grid on fresh chronological folds.
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

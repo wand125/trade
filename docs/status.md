@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 12:54 JST
+最終更新: 2026-06-30 13:08 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+entry EV calibration / admission layerを診断した。`2024-01..02` validation hybridを追加生成し、raw EVと `pred_calibrated_*_best_adjusted_pnl` を同じgridで比較した。raw validation winnersは full 2024 testで大きく崩れ、raw `entry12/short3` はvalidation `+22.7292` からtest `-442.4662`。calibrated EVはvalidationでは高thresholdがNoTrade tieになっただけだが、full 2024 test固定では `entry10/short6` が total `+100.3612`, worst `-43.2296`, max DD `51.5828`, trades `60`、`entry12/short6` が total `+74.0644`, worst `-37.8326`, max DD `37.8326`, trades `26`。判断: calibrated EV + 高いshort thresholdは診断候補だが、validationでpositive edgeを証明していないため標準採用しない。次はfresh chronological foldsとNoTrade tie selectorを事前固定する。詳細は `docs/reports/00208_2026-06-30_entry_ev_calibration_admission.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 全2024のchronological HGB+MLP predictionとstateful risk OOFを生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-01..02` をvalidation、`2024-03..12` をtestにしたため、00206の混合family bridge問題は解消した。hybrid predictionは `296,756` rows、forced target欠損 `0`。OOF riskは `2024-05..12` へ出力され、AUC `0.6689`。OOF 8ヶ月固定比較では source p10/replm10 が最良だが total `-3.1736` でNoTrade `0` に届かない。risk5 side `-10.4618`、risk0 side `-32.7828`、risk0 no-side `-141.8816`。判断: 標準採用なし。source/risk5は診断比較対象として残し、次はside hook追加ではなくentry EV calibration / admission layerを優先する。詳細は `docs/reports/00207_2026-06-30_chrono_2024_full_protocol.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

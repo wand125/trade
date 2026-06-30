@@ -4,6 +4,17 @@
 
 ## 2026-06-30 JST
 
+### 13:08 Entry EV calibration admission
+
+- 00207でNoTrade未満だったため、side hook追加ではなくentry EV calibration / admissionを診断した。`2024-01..02` validation用のHGB entry + MLP exit hybrid predictionを追加生成し、`56,077` rows、MLP exit missing `0`、forced target欠損 `0` を確認した。
+- raw EVはvalidationで良く見える候補を出したが、full 2024 testで崩れた。raw `entry=12, short_offset=3` はvalidation `+22.7292`, trades `61` だったが、`2024-03..12` fixed testでは `-442.4662`, worst `-150.2104`, trades `516`。
+- calibrated EVはvalidationでは `entry=10, short_offset=6`、`12/3`、`12/6` がいずれも `0` trade / `0` PnL のNoTrade tieになった。これはpositive edgeではなく「validationでは入らなかった」だけ。
+- full 2024 fixed testでは calibrated `entry10/short6` が total `+100.3612`, worst `-43.2296`, max DD `51.5828`, trades `60`、calibrated `entry12/short6` が total `+74.0644`, worst `-37.8326`, max DD `37.8326`, trades `26`。一方、calibrated `entry12/short3` は `-27.2164` で、short thresholdを緩めると壊れる。
+- 判断: calibrated EV + 高いshort thresholdは診断候補として残すが、validationで選べたわけではないため標準採用しない。threshold selectorはNoTrade tieの扱いを事前固定し、fresh chronological foldsで再確認する。
+- report: `docs/reports/00208_2026-06-30_entry_ev_calibration_admission.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: validation hybrid生成 OK; validation raw/calibrated sweeps OK; full 2024 fixed tests OK; compact comparison artifact生成 OK
+
 ### 12:54 Full-2024 chronological protocol
 
 - 00206の混合family bridgeを解消するため、2024-03..12をすべて同一chronological protocolで再生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-01..02` をvalidation、`2024-03..12` をtestにした。
