@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 12:38 JST
+最終更新: 2026-06-30 12:54 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-早期2024のchronological HGB+MLP predictionとstateful risk OOFを生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-03..06` へtest出力したため、既存same-familyより保守的なbridge artifactである。early side-penalty delta examplesを既存examplesに足し、stateful risk OOFは `2024-05, 2024-06, 2024-07, 2024-09, 2024-11, 2024-12, 2025-01..04` へ前倒しできた。OOF AUCは `0.6800`。純2024の利用可能6ヶ月固定比較では source p10/replm10 が total `+21.6688` で最良だが、worst `-107.9646` / max DD `123.1386` は no-side-penalty の `+12.0322`, worst `-74.9020`, max DD `112.0964` より悪い。判断: sourceやside-penaltyを標準採用せず、混合family artifactとして診断に残す。詳細は `docs/reports/00206_2026-06-30_early2024_chrono_risk_oof.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+全2024のchronological HGB+MLP predictionとstateful risk OOFを生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-01..02` をvalidation、`2024-03..12` をtestにしたため、00206の混合family bridge問題は解消した。hybrid predictionは `296,756` rows、forced target欠損 `0`。OOF riskは `2024-05..12` へ出力され、AUC `0.6689`。OOF 8ヶ月固定比較では source p10/replm10 が最良だが total `-3.1736` でNoTrade `0` に届かない。risk5 side `-10.4618`、risk0 side `-32.7828`、risk0 no-side `-141.8816`。判断: 標準採用なし。source/risk5は診断比較対象として残し、次はside hook追加ではなくentry EV calibration / admission layerを優先する。詳細は `docs/reports/00207_2026-06-30_chrono_2024_full_protocol.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+早期2024のchronological HGB+MLP predictionとstateful risk OOFを生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-03..06` へtest出力したため、既存same-familyより保守的なbridge artifactである。early side-penalty delta examplesを既存examplesに足し、stateful risk OOFは `2024-05, 2024-06, 2024-07, 2024-09, 2024-11, 2024-12, 2025-01..04` へ前倒しできた。OOF AUCは `0.6800`。純2024の利用可能6ヶ月固定比較では source p10/replm10 が total `+21.6688` で最良だが、worst `-107.9646` / max DD `123.1386` は no-side-penalty の `+12.0322`, worst `-74.9020`, max DD `112.0964` より悪い。判断: sourceやside-penaltyを標準採用せず、混合family artifactとして診断に残す。00207で全2024同一protocolへ置き換え済み。詳細は `docs/reports/00206_2026-06-30_early2024_chrono_risk_oof.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 same-family side calibration診断を実施した。ローカルM1価格データは `2009-03-15` から `2026-06-01` まで存在し、純2024検証の不足は価格データではなく、早期2024の同一family HGB+MLP forced predictionが未生成なこと。raw EV predictionは `2025-04..06` でactual label short shareに対して `+0.27..+0.30` のshort biasを持つが、追加applyではshort-only suppressionだけでは解けない。`gap5/budget0` は `2025-06` の良いshortを削ってsource比 `-86.2130` 悪化し、残存最大損失は `2025-07 down_low_vol/ny_overlap long -97.4172` などlong側にも移る。判断: 同じ2025系列でshort-only hookを増やさず、早期2024の同一family prediction生成とsource policyのside/EV calibration再評価を優先する。詳細は `docs/reports/00205_2026-06-30_samefamily_side_calibration_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

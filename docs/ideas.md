@@ -75,6 +75,7 @@
 - 00204で `gap5/budget0` 単体を `2024-11..2025-08` same-familyへ拡張した。10ヶ月合計は `+384.6968` でsource `+219.9460` を上回るが、追加apply `2025-05..08` だけでは `+13.9434` でsource `+66.7730` とbaseline `+176.8236` に負けた。`gap5/budget0` も標準採用候補から外し、診断baselineにする。純2024検証には2024前半の同一risk列生成が必要。
 - 00205でsame-family side calibrationを診断した。raw EVには `2025-04..06` でshort biasがあるが、gap5は2025-06の良いshortを消して悪化し、残存最大損失はlong側にも移った。これ以上2025系列にshort-only hookを積まず、早期2024のHGB+MLP forced prediction生成、同一risk列拡張、side/EV calibration preflightを優先する。
 - 00206で早期2024のchronological HGB+MLP predictionとstateful risk OOFを生成した。risk OOFは `2024-05` から出せたが、2024-03..06は2023-only model、2024-07以降は既存familyなのでbridge artifact。純2024利用可能6ヶ月ではsource p10/replm10が合計 `+21.6688` で最良、no-sideは `+12.0322` だが worst/DD が最良。次は混合familyのままgap0/gap5比較へ進むか、全2024を同一chronological protocolで再生成するかを決める。
+- 00207で全2024を同一chronological protocolへ再生成し、混合family問題を解消した。OOF 8ヶ月ではsource p10/replm10が相対最良でも total `-3.1736` でNoTradeを超えない。HGB validationではcalibrated selectionが `0` rowなのにtestでは大量選択されるため、次はside hookではなくentry EV scale drift、validation-time calibration、NoTrade first admission layerを主軸にする。`gap0/gap5/budget0` をこのfamilyで試す場合も、標準採用ではなく診断stress testとして扱う。
 
 ## 外部データ候補
 

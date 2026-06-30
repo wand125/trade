@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 12:54 Full-2024 chronological protocol
+
+- 00206の混合family bridgeを解消するため、2024-03..12をすべて同一chronological protocolで再生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-01..02` をvalidation、`2024-03..12` をtestにした。
+- hybrid predictionは `296,756` rows、MLP exit merge missing `0`、forced target欠損 `0`。canonical artifactは `data/reports/modeling/20260630_chrono_hgb_mlp_exit_2024_03_12/predictions_hgb_entry_mlp_exit_2024_03_12.parquet`。
+- model diagnosticsでは entry EV が弱い。HGB validation `long_best_adjusted_pnl R2=-0.0757`, `short_best_adjusted_pnl R2=-0.0311`。MLPはEVでは弱いが exit timingは test `long_exit_event_minutes R2=0.2038`, `short_exit_event_minutes R2=0.2153`。
+- raw 10ヶ月では no-side risk0 `-260.3458`、side-penalty risk0 `-180.1554`。side penaltyは総損益を改善するが、worst `-156.8664`、max DD `220.3144` へtailを悪化させるため、採用根拠ではなくstateful examplesの材料とした。
+- 新しい2024-only side-penalty deltaから session context walk-forward stress examplesを作り、stateful risk OOFを `2024-05..12` に出力した。OOF AUCは `0.6689`、candidate count `736`。
+- OOF 8ヶ月固定比較では source p10/replm10 が total `-3.1736` で最良、risk5 side `-10.4618`、risk0 side `-32.7828`、risk0 no-side `-141.8816`。bestでもNoTrade `0` に届かない。
+- 判断: 標準採用なし。source/risk5は診断比較対象として残す。次はside hook追加ではなく、entry EV calibration / admission layer、NoTrade firstの評価、より広いtrain history / purged walk-forwardを優先する。
+- report: `docs/reports/00207_2026-06-30_chrono_2024_full_protocol.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: HGB/MLP train OK; hybrid merge OK; raw fixed backtests OK; delta examples OK; walk-forward stress OK; stateful risk OOF OK; OOF fixed comparisons OK
+
 ### 12:38 Early-2024 chronological risk OOF
 
 - 00205の次アクションとして、早期2024のHGB+MLP hybrid predictionを生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-01..02` をvalidation、`2024-03..06` をtestにした。既存same-familyより保守的なchronological bridge artifactとして扱う。
