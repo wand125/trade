@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 11:38 JST
+最終更新: 2026-06-30 11:51 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00202` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00202で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hookを分解した。triggered profit-miss min4は強い候補だが未使用期間検証が必要。 |
+| `00186`..`00203` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00203で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed checkを分解した。現時点ではtriggered profit-missより `gap5/budget0` 単体が強い。 |
 
 ## テーマ別読む順
 
@@ -41,6 +41,7 @@
 14. `00200_2026-06-30_focus_entry_dynamic_hook.md`
 15. `00201_2026-06-30_replacement_risk_target_diagnostics.md`
 16. `00202_2026-06-30_triggered_replacement_risk_hook.md`
+17. `00203_2026-06-30_triggered_profit_miss_samefamily_check.md`
 
 ### 現在の候補軸を知る
 
@@ -60,6 +61,7 @@
 14. `00200_2026-06-30_focus_entry_dynamic_hook.md`
 15. `00201_2026-06-30_replacement_risk_target_diagnostics.md`
 16. `00202_2026-06-30_triggered_replacement_risk_hook.md`
+17. `00203_2026-06-30_triggered_profit_miss_samefamily_check.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -217,8 +219,17 @@ Report: 00202 Triggered Replacement Risk Hook
 Status: strongest candidate / not standard
 Question: prior deterioration trigger後だけreplacement risk hookを動的に重ねると、一玉制約とreplacement込みで改善するか
 Best evidence: gap5/budget0 baseline +508.9838 / worst -215.1172. triggered profit-miss min4 +790.3634 / worst -46.0150 / max DD 129.7364. low-EV only +540.5594 and leaves worst unchanged.
-Decision: triggered profit-miss is strongest candidate; low-EV is diagnostic only. Not standard until unseen same-family validation.
-Next: apply fixed triggered profit-miss to 2024 same-family or additional unseen months without re-search
+Decision: triggered profit-miss was strongest candidate before 00203; low-EV is diagnostic only. Not standard until unseen same-family validation.
+Next: fixed triggered profit-miss was checked in 00203 and failed to beat gap5/budget0
+```
+
+```text
+Report: 00203 Triggered Profit-Miss Same-Family Check
+Status: fixed-check refutation / not standard
+Question: 00202のtriggered profit-missを同一risk列の別期間へ再探索なしで固定適用すると汎化するか
+Best evidence: 2024-11..2025-04 same-family smoke: gap5/budget0 +445.8266 / worst -39.0766; triggered profit-miss +367.8768 / worst -39.0766. Trigger fired in 2025-03/04 and removed profitable short exposure.
+Decision: triggered profit-miss is downgraded to diagnostic candidate. gap5/budget0 is the current stronger candidate.
+Next: fixed-apply gap5/budget0 itself to additional same-family windows; generate wider same-risk 2024 columns for pure 2024 checks.
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

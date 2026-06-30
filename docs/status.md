@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 11:38 JST
+最終更新: 2026-06-30 11:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+triggered profit-miss hookのsame-family固定チェックを実施した。完全同一risk列が利用できたのは `2024-11, 2024-12, 2025-01..04` で、純2024の4 prior monthsはまだ不足している。baseline `coststress_maxhold_260` は total `+258.9936`, worst `-26.2112`、p10/replm10 sourceは `+209.8370`, worst `-36.9134`。`gap5/budget0` は `+445.8266`, worst `-39.0766` まで改善した一方、00202固定の triggered profit-miss min4 は `+367.8768`, worst `-39.0766` に悪化した。2025-03/04の発火で勝ちを削ったため、triggered profit-missは最有力候補から診断候補へ降格し、次は `gap5/budget0` 自体の追加同一family検証を優先する。詳細は `docs/reports/00203_2026-06-30_triggered_profit_miss_samefamily_check.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 trigger限定replacement risk hookを追加した。`side_context_interaction_guard_apply.py` は `signal_short_raw_gap_or_triggered_low_ev` と `signal_short_raw_gap_or_triggered_profit_miss` を受け取れる。triggerは対象月より前の `gap5/budget0` summaryだけを見て、直近3ヶ月にshort負け月が1つ以上、かつ `min_prior_months=4` で発火する。2025-01..12 coststress 260 / p10 replacement-margin10では baseline `gap5/budget0` total `+508.9838`, worst `-215.1172` に対し、triggered profit-miss min4 が total `+790.3634`, worst `-46.0150`, max DD `129.7364`。low-EVは total `+540.5594` だがworstが残るため本線ではない。標準採用はまだせず、同一familyの2024または追加未使用月へ再探索なしで適用する。詳細は `docs/reports/00202_2026-06-30_triggered_replacement_risk_hook.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

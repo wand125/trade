@@ -4,6 +4,17 @@
 
 ## 2026-06-30 JST
 
+### 11:51 Triggered profit-miss same-family check
+
+- 00202の triggered profit-miss hookを条件再探索なしで、同一risk列が使える `2024-11, 2024-12, 2025-01..04` へ固定適用した。純2024だけで `min_prior_months=4` を満たすには2024前半の同一risk列が不足しているため、same-family smokeとして扱う。
+- baseline `coststress_maxhold_260` は total `+258.9936`, worst `-26.2112`。side drift `p10 + replm10` sourceは total `+209.8370`, worst `-36.9134`。
+- `gap5/budget0` は total `+445.8266`, worst `-39.0766`。`gap0/budget0` は total `+190.6394`, worst `-50.5156`。
+- 00202固定の triggered profit-miss min4 は total `+367.8768`, worst `-39.0766`。2025-03 `+69.1790 -> +33.6446`、2025-04 `+267.2254 -> +224.8100` と、発火月で勝ちを削った。
+- 判断: triggered profit-missは最有力candidateから診断candidateへ降格。`gap5/budget0` がこのsmokeでも最も強い。次は `gap5/budget0` 自体を追加same-family windowへ固定適用する。
+- report: `docs/reports/00203_2026-06-30_triggered_profit_miss_samefamily_check.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: holding max baseline / side drift p10+replm10 / short raw-gap budget / triggered hook fixed apply artifact生成 OK
+
 ### 11:38 Triggered replacement risk hook
 
 - 00201のreplacement risk targetをdynamic hook化し、`side_context_interaction_guard_apply.py` に `signal_short_raw_gap_or_triggered_low_ev` と `signal_short_raw_gap_or_triggered_profit_miss` を追加した。

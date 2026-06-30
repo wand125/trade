@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-06-30 11:38 JST
+最終更新: 2026-06-30 11:51 JST
 
 ## 結論
 
@@ -19,7 +19,7 @@
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
 | Short raw gap guard | 介入対象の発見には有効 | all-window bestは total `+18.5106` だが prior-only min4 `-274.9360` | 単独採用しない |
-| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。triggered profit-miss min4 は total `+790.3634`, worst `-46.0150`, max DD `129.7364` | 現在最有望な候補軸。ただし同じ2025系列で作ったため標準採用はまだ不可。次は同一family未使用期間へ固定適用 |
+| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | 2025 all-window `gap5/budget0` total `+508.9838`。2024-11..2025-04 same-family smokeでも `gap5/budget0` total `+445.8266`。triggered profit-missはsmokeで `+367.8768` に悪化 | 現在最有望なのは `gap5/budget0` 単体。triggered profit-missは診断候補へ降格 |
 | Online context feature | post-filterでは損失説明力あり | context特徴追加はOOF AUCを改善せず。min8 large_loss AUC `0.5523 -> 0.5364` | raw feature昇格なし |
 | Cooldown / recovery | hard blockの緩和 | cooldown/recoveryはprior-onlyで既存hard block系に負ける | 採用しない |
 
@@ -51,7 +51,7 @@
 - focused entry-level residual signal audit as preflight, not dynamic policy
 - focus entry dynamic hook as diagnostics only
 - replacement risk target diagnostics
-- triggered replacement profit-miss hook as strongest candidate, not standard
+- triggered replacement profit-miss hook as diagnostic candidate after same-family smoke failure
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -84,15 +84,15 @@
 - guard後も replacement short が残り、損失の尾部を作る
 - alert contextだけを止めても late common short `-382.7524` と replacement short `-293.7604` が残る
 - `gap5` replacement shortのうち `up_low_vol/ny_overlap` は prior prediction biasで拾える。`range_low_vol/ny_overlap` は prior context signalでは拾いにくいが、entry-level side gap / rank signalを足すと大半を事前説明できる。ただしdynamic hookではreplacementが再発し、OR条件は小幅悪化した
-- replacementは全期間では利益にもなるため、global hard gateは危険。late bad regimeでは `profit_hit_lt0p5` が強いが全期間では良いreplacementを消す。prior deterioration triggerと `min_prior_months=4` を加えたdynamic hookでは、triggered profit-missが `+790.3634` まで改善した
+- replacementは全期間では利益にもなるため、global hard gateは危険。late bad regimeでは `profit_hit_lt0p5` が強いが全期間では良いreplacementを消す。prior deterioration triggerと `min_prior_months=4` を加えたdynamic hookは2025 all-windowで `+790.3634` まで改善したが、2024-11..2025-04 same-family smokeでは勝ちを削った
 
 したがって、次の改善は「holding capの再探索」ではなく、short side admission / first-loss control / replacement-risk control を優先する。
 
 ## 次に検証すべきこと
 
-1. coststress 260 + stateful risk5 + replacement margin10 の2024同一family monthly prediction/backtestを生成し、00202の triggered profit-miss hookを再探索なしで固定適用する。
-2. `gap0/budget0`, `gap5/budget0`, `gap5 -> gap0` deterioration triggerも同じ未使用期間に固定適用し、NoTrade、worst month、max DD、short PnLで比較する。
-3. 2024側で壊れる場合、`pred_short_profit_barrier_hit` を0/1ではなく確率または校正済み確率に差し替える。
+1. `gap5/budget0` 自体を追加same-family windowへ固定適用する。2025 all-windowと2024-11..2025-04 smokeの両方で強いが、まだ標準採用には未使用期間が不足している。
+2. 2024-07/09/11/12 または別の早期月に同一risk列を生成し、純2024内で `min_prior_months=4` を満たす検証を作る。
+3. `pred_short_profit_barrier_hit` を0/1ではなく確率または校正済み確率に差し替えてから、profit-miss系hookを再評価する。
 4. short/range_low_vol の context drawdownを、現在月のrealized PnLだけで発火させる低容量hookとして評価する。
 5. side prior driftを、predicted side share vs dense label side share の prior window差分で補正する。
 6. 新しいcandidateは必ず NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、short PnLで比較する。
@@ -120,3 +120,4 @@
 - `00200`: focus entry dynamic hook
 - `00201`: replacement risk target diagnostics
 - `00202`: triggered replacement risk hook
+- `00203`: triggered profit-miss same-family check
