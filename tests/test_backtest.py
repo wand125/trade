@@ -372,6 +372,70 @@ class BacktestTests(unittest.TestCase):
         self.assertEqual(len(trades), 1)
         self.assertEqual(trades.iloc[0]["direction"], "short")
 
+    def test_context_entry_budget_zero_blocks_budgeted_context_entries(self):
+        df = frame_with_opens([100, 101, 102, 103, 104])
+        signal = pd.Series([-1, 0, -1, 0, 0])
+        entry_budget_context = pd.Series(["short_budget"] * len(df), index=df.index)
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        trades = trades_to_frame(
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_budget_context=entry_budget_context,
+                context_entry_budget=0,
+            )
+        )
+
+        self.assertEqual(len(trades), 0)
+
+    def test_context_entry_budget_ignores_missing_budget_context(self):
+        df = frame_with_opens([100, 101, 102, 103, 104])
+        signal = pd.Series([-1, 0, -1, 0, 0])
+        entry_budget_context = pd.Series(
+            [pd.NA, pd.NA, "short_budget", "short_budget", "short_budget"],
+            index=df.index,
+            dtype="string",
+        )
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        trades = trades_to_frame(
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_budget_context=entry_budget_context,
+                context_entry_budget=0,
+            )
+        )
+
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades.iloc[0]["direction"], "short")
+
+    def test_context_entry_budget_rejects_negative_budget(self):
+        df = frame_with_opens([100, 101, 102])
+        signal = pd.Series([1, 0, 0])
+        config = BacktestConfig(
+            evaluation_start=df["timestamp"].iloc[0],
+            evaluation_end=df["timestamp"].iloc[-1] + pd.Timedelta(minutes=1),
+        )
+
+        with self.assertRaisesRegex(ValueError, "non-negative"):
+            run_backtest(
+                df,
+                signal,
+                config,
+                entry_budget_context=pd.Series(["ctx"] * len(df), index=df.index),
+                context_entry_budget=-1,
+            )
+
     def test_context_entry_budget_rejects_fractional_budget(self):
         df = frame_with_opens([100, 101, 102])
         signal = pd.Series([1, 0, 0])

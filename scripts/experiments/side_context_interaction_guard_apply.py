@@ -259,6 +259,14 @@ def interaction_entry_context(
     return context.astype("string"), active
 
 
+def active_only_budget_context(
+    entry_context: pd.Series,
+    active: pd.Series,
+) -> pd.Series:
+    """Return budget contexts only for rows that should consume the budget."""
+    return entry_context.astype("string").where(active.astype(bool), pd.NA)
+
+
 def aggregate_summary(summary: pd.DataFrame) -> pd.DataFrame:
     if summary.empty:
         return pd.DataFrame()
@@ -352,6 +360,7 @@ def apply_interaction_guard(
                     ),
                 )
                 active_signal_count = int((active_mask & signal.ne(0)).sum())
+                entry_budget_context = active_only_budget_context(entry_context, active_mask)
                 for threshold in thresholds:
                     for min_entry_margin in min_entry_margins:
                         for recover_after_pnl_recovery in recover_after_pnl_recovery_values:
@@ -363,7 +372,7 @@ def apply_interaction_guard(
                                         backtest_config,
                                         entry_context=entry_context,
                                         entry_margin=entry_margin,
-                                        entry_budget_context=entry_context,
+                                        entry_budget_context=entry_budget_context,
                                         context_entry_budget=entry_budget,
                                         context_entry_budget_reset_monthly=True,
                                         context_drawdown_guard_loss_threshold=threshold,

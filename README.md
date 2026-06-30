@@ -272,9 +272,9 @@ python scripts/experiments/side_context_interaction_guard_apply.py \
 ```
 
 To test a monthly/regime entry-count budget on those active contexts, set
-`--entry-budgets`. A finite budget constrains only repeated entries sharing the
-guarded context; inactive rows are assigned unique contexts and remain
-effectively unconstrained:
+`--entry-budgets`. A finite budget constrains only active guarded contexts;
+inactive rows are passed with missing budget context and remain unconstrained.
+Budget `0` is allowed and means "do not enter this active context":
 
 ```bash
 python scripts/experiments/side_context_interaction_guard_apply.py \
@@ -285,7 +285,7 @@ python scripts/experiments/side_context_interaction_guard_apply.py \
   --short-gap-thresholds 0,5,10 \
   --thresholds inf \
   --min-entry-margins inf \
-  --entry-budgets 1,2,3,5,10,inf
+  --entry-budgets 0,1,2,3,5,10,inf
 ```
 
 Then audit whether the budget can be selected from prior months using

@@ -1558,8 +1558,8 @@ def run_backtest(
         if context_drawdown_guard_cooldown_minutes < 0:
             raise ValueError("context_drawdown_guard_cooldown_minutes must be non-negative")
     if context_entry_budget_enabled:
-        if context_entry_budget <= 0:
-            raise ValueError("context_entry_budget must be positive or inf")
+        if context_entry_budget < 0:
+            raise ValueError("context_entry_budget must be non-negative or inf")
         if not float(context_entry_budget).is_integer():
             raise ValueError("context_entry_budget must be an integer count or inf")
         if entry_budget_context is None:
@@ -1584,10 +1584,11 @@ def run_backtest(
         context_values = entry_context.astype("string").fillna("__missing__").tolist()
     if entry_budget_context is None:
         budget_context_values = [""] * len(df)
+        budget_context_active_values = [False] * len(df)
     else:
-        budget_context_values = (
-            entry_budget_context.astype("string").fillna("__missing__").tolist()
-        )
+        budget_context_series = entry_budget_context.astype("string")
+        budget_context_active_values = budget_context_series.notna().tolist()
+        budget_context_values = budget_context_series.fillna("__missing__").tolist()
     if entry_margin is None:
         entry_margin_values = [float("nan")] * len(df)
     else:
@@ -1678,13 +1679,16 @@ def run_backtest(
                 drawdown_key = ""
                 budget_key = ""
                 if context_entry_budget_enabled:
-                    budget_key = context_budget_key(
-                        decision_timestamp,
-                        desired,
-                        str(budget_context_values[decision_idx]),
-                    )
-                    if context_entry_counts.get(budget_key, 0) >= context_entry_budget_limit:
-                        continue
+                    if not budget_context_active_values[decision_idx]:
+                        budget_key = ""
+                    else:
+                        budget_key = context_budget_key(
+                            decision_timestamp,
+                            desired,
+                            str(budget_context_values[decision_idx]),
+                        )
+                        if context_entry_counts.get(budget_key, 0) >= context_entry_budget_limit:
+                            continue
                 if context_drawdown_guard_enabled:
                     drawdown_key = context_drawdown_key(
                         decision_timestamp,
@@ -1727,7 +1731,7 @@ def run_backtest(
                     max_exit_timestamp=execution_timestamp + config.max_holding,
                     context_drawdown_key=drawdown_key,
                 )
-                if context_entry_budget_enabled:
+                if context_entry_budget_enabled and budget_key:
                     context_entry_counts[budget_key] = context_entry_counts.get(budget_key, 0) + 1
 
     if position is not None:

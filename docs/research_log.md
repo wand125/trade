@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 09:05 Context entry budget zero
+
+- `context_entry_budget=0` を許可し、`entry_budget_context` が欠損しているrowはbudget対象外にした。`side_context_interaction_guard_apply.py` は active context だけをbudget対象にし、inactive rowは欠損budget contextとして渡す。
+- これにより `signal_short_raw_gap` active short contextを完全にstay-flat化する budget0 診断が可能になった。
+- budget-zero sweepは `data/reports/backtests/20260630_000340_short_raw_gap_entry_budget_zero_p10_margin10/`。drawdown guardは `threshold=inf` で無効化し、budgetだけを評価した。
+- all-windowでは `gap5/budget0` が total `+508.9838`, short PnL `+164.7278`。ただし worst month `-215.1172` が残る。
+- 防御寄りの `gap0/budget0` は total `+418.2596`, worst `-45.4774`, max DD `126.7826`, short PnL `+74.0036`。2025-09..12のlate short regimeを大きく縮小した。
+- prior-only min4では `defensive_budget` が target 8ヶ月 total `+232.2466`, worst `-46.0150`, short PnL `+154.7572`。`00189` の min4 `-4.8828` から大幅改善。
+- prior-only min8では `defensive_budget` / `recent_active_stability` が `gap0/budget0` を選び、target 4ヶ月 total `-15.0104`, worst `-45.4774`, max DD `81.8860`。`00189` の min8 `-226.5946` から改善したが、まだNoTrade未満。
+- 判断: `gap0/budget0` はこのfamilyの現時点の防御候補として残す。ただし標準採用は保留。次は budget0 を常時使うのではなく、prior side-drift deterioration から発火させる検知器を作る。
+- report: `docs/reports/00190_2026-06-30_context_entry_budget_zero.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/side_context_interaction_guard_apply.py tests/test_backtest.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 119 tests; `git diff --check`: OK
+
 ### 08:53 Short budget selection
 
 - `scripts/experiments/short_budget_guard_selection.py` を追加し、`00188` の entry budget候補を prior short PnL / active short PnL / losing month count / recent active stability で選ぶ診断を作った。

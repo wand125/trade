@@ -7,16 +7,19 @@
 1. `../GOAL.md`
    研究目的、取引ルール、評価方針。
 
-2. `status.md`
+2. `summary/`
+   `docs/reports/` の大量レポートを俯瞰する入口。現在の評価、テーマ別地図、採用/保留/棄却の整理。
+
+3. `status.md`
    現在の到達点、利用可能なデータ、次の作業。
 
-3. `trading_ml_generalization_principles.md`
+4. `trading_ml_generalization_principles.md`
    トレードMLで守るべき汎化・検証・リーク防止の原則。
 
-4. `research_log.md`
+5. `research_log.md`
    時系列の作業記録。
 
-5. `research_plan.md`
+6. `research_plan.md`
    体系的な研究ロードマップ。
 
 ## 仕様と方針

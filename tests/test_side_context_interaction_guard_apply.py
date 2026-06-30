@@ -111,6 +111,26 @@ class SideContextInteractionGuardApplyTests(unittest.TestCase):
         self.assertTrue(context.iloc[1].startswith("inactive|"))
         self.assertTrue(context.iloc[2].startswith("inactive|"))
 
+    def test_active_only_budget_context_drops_inactive_rows(self):
+        entry_context = pd.Series(
+            [
+                "guarded|dataset_month=2025-01",
+                "inactive|row=1",
+                "guarded|dataset_month=2025-01",
+            ],
+            dtype="string",
+        )
+        active = pd.Series([True, False, True])
+
+        budget_context = side_context_interaction_guard_apply.active_only_budget_context(
+            entry_context,
+            active,
+        )
+
+        self.assertEqual(budget_context.iloc[0], "guarded|dataset_month=2025-01")
+        self.assertTrue(pd.isna(budget_context.iloc[1]))
+        self.assertEqual(budget_context.iloc[2], "guarded|dataset_month=2025-01")
+
 
 if __name__ == "__main__":
     unittest.main()
