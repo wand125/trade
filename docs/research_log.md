@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 19:08 Entry EV side-balance feature diagnostics
+
+- 00233の反省に沿って、side-balance driftをdirect scoreではなくselected-trade featureとして診断する `scripts/experiments/entry_ev_side_balance_feature_diagnostics.py` を追加した。
+- 00233と同じvalidation 6ヶ月を `--write-trades` 付きで再実行した。artifactは `data/reports/backtests/20260630_100703_20260630_entry_ev_side_balance_dense720_policy_backtest_s1_trades_validation_months/`。
+- feature diagnosticsは `data/reports/backtests/20260630_100834_20260630_entry_ev_side_balance_feature_diagnostics_s1_clean/`。
+- trade単位で `side_balance_signed_drift_for_trade`、selected side overrepresented/underrepresented、taken penaltyを作り、pointwise screen effectsを集計した。
+- fresh q95 floor5は total `-82.2428`, overrep share `0.3750`。refit q95 floor5は total `+93.9912`, overrep share `0.4737`。winning refitの方がabs driftもoverrep shareも高く、high drift / overrepはgeneric blockerにならない。
+- q99 floor5では `selected_underrepresented >=0.02` が11 trades / `-16.8394` を拾い、kept total `+6.6108`, kept min role `+1.6420` へ改善する。ただしq95 floor5では `selected_underrepresented >=0.05` が `+14.0236` の利益を削り、`selected_overrepresented >=0.05` も `+35.3140` を削る。
+- 最大fresh損失は、long `range_low_vol/london -33.4920` が signed drift `-0.1400` でunderrepresented、short `range_low_vol/london -32.0364` が signed drift `+0.0131` で通常閾値未満。side drift単体ではtailを拾えない。
+- 判断: side-balance selected-trade feature diagnosticsはaccepted。side-balance単独gateは採用しない。次はprior side PnL、direction error、exit capture failure、context loss、realized executable EVと組み合わせる。
+- report: `docs/reports/00234_2026-06-30_entry_ev_side_balance_feature_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: side-balance feature diagnostics unit tests OK; py_compile OK; validation `--write-trades` backtest OK; feature diagnostics OK
+
 ### 18:55 Entry EV side-balance score penalty
 
 - 00232の次アクションとして、dense executable scoreへ prior-only side-balance penaltyを掛ける `scripts/experiments/entry_ev_side_balance_score_inputs.py` を追加した。

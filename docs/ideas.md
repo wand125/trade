@@ -102,6 +102,7 @@
 - 00231でstateful policyのlong/short scoreをexecutable EVへ差し替えるとrefit2025のlong過剰は大きく改善したが、best near-missの `720m q99 floor5` もvalidation min month `-1.8000` とtrade support不足でNoTrade。floorなしとfloor `2/3/4` はtailを戻すため、floor細密探索は本流にしない。次はexecutable EVを粗いcontext平均factorではなく、dense target / model feature / calibration layerとして学習させ、追加chronological validationでsupportを増やす。
 - 00232でdense capture modelを試すとrow-level EV MAEは大きく改善したが、fixed720/fixed240 direct scoreはstateful validationでNoTrade。次はdense captureを直接scoreにせず、side-balance penalty、side-drift correction、downside-weighted target、admitted-candidate focused selector featureとして使う。
 - 00233でprior-only side-balance penaltyをdirect scoreへ掛けると、refit long過剰は縮むがfresh tailが悪化した。次は `pred_side_balance_long_share_drift`、prior predicted/target side share、side scaleを無条件multiplierではなく、prior side PnL、direction error、exit capture failure、realized executable EVと組み合わせたdownside-conditioned selector/ranking featureにする。
+- 00234でside-balanceをselected-trade featureとして見ても、high drift / selected overrepresented はgeneric blockerにならなかった。q99では一部post-hoc改善するがq95では利益を削るため、次は q95/q99 を分け、side-balance driftと prior downside evidence の相互作用だけを低容量featureとして試す。
 
 ## 外部データ候補
 

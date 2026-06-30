@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 18:55 JST
+最終更新: 2026-06-30 19:08 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV side-balance feature diagnosticsを追加した。00233の反省に沿って、side-balance driftをdirect scoreではなくselected-trade featureとして診断した。`side_balance_signed_drift_for_trade`、selected side overrepresented/underrepresented、taken penaltyをtradeへ再結合し、pointwise screenを評価した。fresh q95 floor5は total `-82.2428` だが overrep share `0.3750`、refit q95 floor5は total `+93.9912` で overrep share `0.4737` と高く、high drift / overrepはgeneric blockerにならない。q99 floor5では `selected_underrepresented >=0.02` が11 trades / `-16.8394` を拾い kept total `+6.6108` に改善するが、q95 floor5では同系screenが利益を削る。判断: side-balance selected-trade feature diagnosticsはaccepted、side-balance単独gateは採用しない。次はprior side PnL、direction error、exit capture failure、context loss、realized executable EVと組み合わせる。詳細は `docs/reports/00234_2026-06-30_entry_ev_side_balance_feature_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV side-balance score penalty診断を追加した。00232のdense executable scoreに対し、対象月より前のprediction全行から `predicted selected long share - fixed720 dense label long share` を作り、過剰sideだけを縮小する prior-only penalty を入れた。refit2025のlong過剰は `2025-01 0.9453 -> 0.8911`, `2025-02 0.8970 -> 0.8750` へ少し改善し、refit validation q95 floor5は `+93.9912`, min month `+9.5300` になった。一方、fresh validationは q95 floor5 `-82.2428`, q99 floor5 `-38.3550` と悪化し、overall q95 floor5も total `+14.6138` だが min role `-82.2428`, min month `-46.5308` でNoTrade。判断: side-balance infrastructureはaccepted、generic side-balance penaltyをdirect scoreとして標準採用しない。side-balanceはselector/ranking feature、downside-conditioned penalty、context-specific correctionとして扱う。詳細は `docs/reports/00233_2026-06-30_entry_ev_side_balance_score_penalty.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

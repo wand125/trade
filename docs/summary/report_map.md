@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 18:55 JST
+最終更新: 2026-06-30 19:08 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00233` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00233で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断、scale quantile診断、quantile policy backtest、role selector、positive EV floor、trade context診断、exit capture診断、hold-cap sensitivity、prior-only inversion guard、prior context risk score、residual losing month診断、exit-capture target診断、executable EV calibration、executable EV selector feature、executable EV stateful score、dense executable capture model、side-balance score penaltyを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。cal2024はprediction入力側ではside margin supportがほぼなく、refit2025はlong EV scaleが大きすぎる。00218でside/regime/session-local quantileが候補数を比較可能にする軸だと確認し、00219でstateful backtestへ接続したが、fresh/refit validationのworstが負。00220のrole selectorでもstrict3/clean2ともNoTrade。00221のEV floor候補も全てNoTrade。00222で失敗はentry floorだけでなくcontext-side inversionとexit captureに分かれると確認し、00223でq95/q99は `260m` capがbindingしているがdirection/context errorも残るためblind hold延長は不可とした。00224で `720m` capは有望だが、same-validation guard込みでもmonth floorを通らないため標準はNoTrade。00225でprior-only guardへ置き換えてもvalidationは近似pass止まり、fresh fixedではover-blockingが出た。00226でrisk score化しcal+fresh prior fixedは改善したが、月次floor未達。00227で残差月はentry floor不足ではなくdirection-side inversion、exit capture、realized EV calibration不足だと確認した。00228でexit-capture targetは有用だがprior risk hard blockはfresh fixed利益を削ると確認した。00229でexecutable EV calibrationは有用だがhard thresholdは不安定と確認し、00230でcandidate-level selector featureでもNoTrade-first gateを超えないと確認した。00231でexecutable EVをstateful scoreへ入れるとrefit long過剰は改善したが、q99 floor5も月次floorとsupport不足でNoTradeのまま。00232でdense capture modelはrow-level MAEを改善したが、stateful validationではfresh tailとsupport不足が残りNoTrade。00233でside-balance direct penaltyはrefit long過剰を縮めたがfresh tailを悪化させたため、feature化へ戻す。 |
+| `00186`..`00234` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00234で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断、scale quantile診断、quantile policy backtest、role selector、positive EV floor、trade context診断、exit capture診断、hold-cap sensitivity、prior-only inversion guard、prior context risk score、residual losing month診断、exit-capture target診断、executable EV calibration、executable EV selector feature、executable EV stateful score、dense executable capture model、side-balance score penalty、side-balance feature diagnosticsを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。cal2024はprediction入力側ではside margin supportがほぼなく、refit2025はlong EV scaleが大きすぎる。00218でside/regime/session-local quantileが候補数を比較可能にする軸だと確認し、00219でstateful backtestへ接続したが、fresh/refit validationのworstが負。00220のrole selectorでもstrict3/clean2ともNoTrade。00221のEV floor候補も全てNoTrade。00222で失敗はentry floorだけでなくcontext-side inversionとexit captureに分かれると確認し、00223でq95/q99は `260m` capがbindingしているがdirection/context errorも残るためblind hold延長は不可とした。00224で `720m` capは有望だが、same-validation guard込みでもmonth floorを通らないため標準はNoTrade。00225でprior-only guardへ置き換えてもvalidationは近似pass止まり、fresh fixedではover-blockingが出た。00226でrisk score化しcal+fresh prior fixedは改善したが、月次floor未達。00227で残差月はentry floor不足ではなくdirection-side inversion、exit capture、realized EV calibration不足だと確認した。00228でexit-capture targetは有用だがprior risk hard blockはfresh fixed利益を削ると確認した。00229でexecutable EV calibrationは有用だがhard thresholdは不安定と確認し、00230でcandidate-level selector featureでもNoTrade-first gateを超えないと確認した。00231でexecutable EVをstateful scoreへ入れるとrefit long過剰は改善したが、q99 floor5も月次floorとsupport不足でNoTradeのまま。00232でdense capture modelはrow-level MAEを改善したが、stateful validationではfresh tailとsupport不足が残りNoTrade。00233でside-balance direct penaltyはrefit long過剰を縮めたがfresh tailを悪化させた。00234でside-balance-only feature screenもq95/q99間で不安定と確認し、downside evidenceとの相互作用へ戻す。 |
 
 ## テーマ別読む順
 
@@ -72,6 +72,7 @@
 45. `00231_2026-06-30_entry_ev_executable_ev_stateful_score.md`
 46. `00232_2026-06-30_entry_ev_dense_executable_capture_model.md`
 47. `00233_2026-06-30_entry_ev_side_balance_score_penalty.md`
+48. `00234_2026-06-30_entry_ev_side_balance_feature_diagnostics.md`
 
 ### 現在の候補軸を知る
 
@@ -122,6 +123,7 @@
 45. `00231_2026-06-30_entry_ev_executable_ev_stateful_score.md`
 46. `00232_2026-06-30_entry_ev_dense_executable_capture_model.md`
 47. `00233_2026-06-30_entry_ev_side_balance_score_penalty.md`
+48. `00234_2026-06-30_entry_ev_side_balance_feature_diagnostics.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -569,6 +571,15 @@ Question: prior predicted-vs-target side share driftでdense executable scoreの
 Best evidence: refit2025 long share improves from 0.9453 -> 0.8911 in 2025-01 and 0.8970 -> 0.8750 in 2025-02; refit q95 floor5 becomes +93.9912 with min month +9.5300. However fresh q95 floor5 is -82.2428, q99 floor5 is -38.3550, and overall q95 floor5 still has min role -82.2428 / min month -46.5308.
 Decision: direct side-balance penalty is rejected. It helps one visible side-drift mode but worsens fresh validation tail.
 Next: use side-balance drift and side scales as selector/ranking/downside-conditioned features, not unconditional score multipliers.
+```
+
+```text
+Report: 00234 Entry EV Side Balance Feature Diagnostics
+Status: accepted selected-trade diagnostics / side-balance-only screens not standard
+Question: side-balance driftをselected-trade featureとして見ると、負けtradeを安定して識別できるか。
+Best evidence: fresh q95 floor5 is -82.2428 with overrep share 0.3750, while refit q95 floor5 is +93.9912 with overrep share 0.4737. q99 floor5 selected_underrepresented>=0.02 removes 11 trades / -16.8394 and keeps +6.6108, but q95 floor5 selected_underrepresented>=0.05 removes +14.0236 profit and selected_overrepresented>=0.05 removes +35.3140 profit.
+Decision: side-balance drift alone is not a stable blocker or rank feature. q99 post-hoc improvement does not generalize to q95 and does not model stateful replacement.
+Next: combine side-balance drift with prior side PnL, direction error, exit capture failure, context loss, and realized executable EV.
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。
