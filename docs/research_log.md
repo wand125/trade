@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 14:42 Entry EV validation inventory
+
+- 00214の次アクションとして、既存entry EV / rank sweep artifactを、追加validation windowとして使えるか棚卸しした。
+- `scripts/experiments/entry_ev_validation_inventory.py` を追加した。`metrics.csv` 群を読み、月、family、role、protocol、grid完全性、reference key一致数を `monthly_inventory.csv` と `window_candidate_summary.csv` へ出力する。
+- `39` metrics filesを検査し、window candidate summaryは `10` family groups。完全rank gridとしてvalidation候補に使える既存windowは fresh2024 rank validation `2024-03,2024-04` と refit2025 rank validation `2025-01,2025-02` の2本だけ。
+- refit2025 `2025-03..12` はfull rank gridだが固定testなので同じaudit内でvalidationへ流用しない。chrono2024 `2024-05..12` は固定test扱いで、しかも `18` rows/month の部分rank gridとentry8の `1` row/month add-onだけなので、完全rank validationとして比較できない。
+- `2024-01..02` はnon-rank gridで、rank gridとして使うには再生成が必要。使う場合もcalibration-validationであり、clean outer holdoutとは分ける。
+- 判断: sparse high-rank rowを評価するには追加validation windowが必要だが、既存fixed-test artifactをそのままvalidation化しない。新しいchronological fold、またはrank grid再生成 + 新しいouter test予約を先に決める。
+- report: `docs/reports/00215_2026-06-30_entry_ev_validation_inventory.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: validation inventory/admission scripts py_compile OK; validation inventory/sparse/gate/selector/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; inventory run OK
+
 ### 14:31 Entry EV sparse rank diagnostics
 
 - 00213の次アクションとして、fixed-test-positiveに見えた sparse high-rank rowを、fixed-test PnLで採用せず、validation evidenceだけで診断した。

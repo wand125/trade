@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 14:31 JST
+最終更新: 2026-06-30 14:42 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00214` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00214で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断を分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。side/regime/window gateを振っても固定テストに耐える候補は出ていない。sparse high-rank fixed-positive rowもvalidation未観測/negativeで、採用するとhindsightになる。 |
+| `00186`..`00215` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00215で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventoryを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。side/regime/window gateを振っても固定テストに耐える候補は出ていない。sparse high-rank fixed-positive rowもvalidation未観測/negativeで、採用するとhindsightになる。既存artifactでfull-rank validationとして使えるのは2本だけで、fixed testをvalidationへ流用しない。 |
 
 ## テーマ別読む順
 
@@ -53,6 +53,7 @@
 26. `00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`
 27. `00213_2026-06-30_entry_ev_gate_sensitivity.md`
 28. `00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`
+29. `00215_2026-06-30_entry_ev_validation_inventory.md`
 
 ### 現在の候補軸を知る
 
@@ -84,6 +85,7 @@
 26. `00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`
 27. `00213_2026-06-30_entry_ev_gate_sensitivity.md`
 28. `00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`
+29. `00215_2026-06-30_entry_ev_validation_inventory.md`
 
 ### holding / exit 系の経緯を知る
 

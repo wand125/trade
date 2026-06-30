@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 14:31 JST
+最終更新: 2026-06-30 14:42 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV validation inventoryを追加した。`entry_ev_validation_inventory.py` は既存entry EV/rank `metrics.csv` を棚卸しし、role、protocol、grid完全性、reference key一致をCSV化する。`39` metrics filesを検査した結果、完全rank gridとして追加validation候補に使える既存windowは fresh2024 `2024-03..04` と refit2025 `2025-01..02` の2本だけ。refit2025 `2025-03..12` は完全rank gridだが固定test、chrono2024 `2024-05..12` は固定testかつ部分rank grid、`2024-01..02` はnon-rank gridなので再生成が必要。判断: 固定testをvalidationへ流用せず、新しいchronological foldか明示的なrank sweep再生成を行う。詳細は `docs/reports/00215_2026-06-30_entry_ev_validation_inventory.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV sparse high-rank診断を追加した。`entry_ev_sparse_rank_diagnostics.py` はmulti-window validation summary、window-level summary、fixed-test summaryを読み、fixed-test PnLを選択に使わず、validation evidenceだけでcandidate blockerを列挙する。`min_trades=20`, active months `4`, `validation_worst>=0`, `worst_window>=0`, `min_window_trades>=1`, `max_side_trade_share<=0.95` で `72` candidatesを診断すると、validation eligibleは `0`。fixed-positive audit rowは `entry14/short9/min_rank0.6` 1件だけだが、validation total `-0.3844`, trades `3`, active months `2`, min window trades `0`, side share `1.0000`。fresh2024は0 trade、refit2025は3 long-only tradesで `-0.3844`。判断: sparse high-rank rowは現validationでは採用根拠なし。標準policyはNoTrade。詳細は `docs/reports/00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
