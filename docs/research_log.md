@@ -4,6 +4,21 @@
 
 ## 2026-06-30 JST
 
+### 18:41 Entry EV dense executable capture model
+
+- 00231の次アクションとして、selected tradeだけのprior context平均ではなく、prediction全行からdense executable capture targetを作る `scripts/experiments/entry_ev_dense_executable_capture_model.py` を追加した。
+- fixed720 dense inputは `data/reports/backtests/20260630_093629_20260630_entry_ev_dense_capture_fixed720_inputs/`。
+- fixed720 stateful backtestは `data/reports/backtests/20260630_093749_20260630_entry_ev_dense_capture_policy_backtest_720/`、selectorは `data/reports/backtests/20260630_093817_20260630_entry_ev_dense_capture_policy_selector_720_relaxed_trades/`。
+- fixed720 fresh fixed diagnosticは `data/reports/backtests/20260630_093832_20260630_entry_ev_dense_capture_policy_backtest_720_fixed_2024_10_11/`。
+- fixed240 dense inputは `data/reports/backtests/20260630_093859_20260630_entry_ev_dense_capture_fixed240_inputs/`。
+- fixed240 stateful backtestは `data/reports/backtests/20260630_094008_20260630_entry_ev_dense_capture_fixed240_policy_backtest_720/`、selectorは `data/reports/backtests/20260630_094027_20260630_entry_ev_dense_capture_fixed240_policy_selector_720_relaxed_trades/`。
+- fixed720 targetでは row-level EV MAEが `2025-01 17.0734 -> 10.6154`, `2025-02 19.9742 -> 13.9449` へ改善。fixed240 targetでは `2025-01 16.0786 -> 6.0691`, `2025-02 17.4734 -> 8.1887` へ改善。
+- 一方、stateful validationではfixed720 q95 floor5が total `+16.4192` でも fresh role `-76.2788`、q99 floor5は total `-25.4216`。fixed240も q99 floor10が total `+8.5684` だが min month `-1.8000` とsupport不足でNoTrade。
+- 判断: dense capture model infrastructureはaccepted。fixed720/fixed240 dense scoreを標準policyへ昇格しない。row-level MAE改善だけでは一玉制約下のadmission品質を保証しない。
+- report: `docs/reports/00232_2026-06-30_entry_ev_dense_executable_capture_model.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: dense capture unit tests OK; py_compile OK; fixed720/fixed240 input generation, stateful backtest, selector OK
+
 ### 18:19 Entry EV executable EV stateful score
 
 - 00230の次アクションとして、post-trade selector featureではなく、実際の `timed_ev` stateful policyのentry scoreをexecutable EVへ差し替える `scripts/experiments/entry_ev_executable_ev_policy_inputs.py` を追加した。

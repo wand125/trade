@@ -100,6 +100,7 @@
 - 00229でexecutable EV calibrationを試した。raw EVの過大評価は大きく縮むが、低calibrated EV hard thresholdはwindow間で符号反転する。次は `pred_capture_calibrated_ev`, `executable_capture_factor`, `raw_ev - executable_ev` をselector/ranking featureにし、NoTrade-first monthly gateで評価する。
 - 00230でcandidate-level selector featureへ戻してもNoTrade-first gateは超えなかった。次はpost-trade candidate selectorではなく、stateful policy内で competing entry / replacement entry のscoreを `pred_capture_calibrated_ev` に差し替え、同じ一玉制約で実際の経路が変わるかを見る。
 - 00231でstateful policyのlong/short scoreをexecutable EVへ差し替えるとrefit2025のlong過剰は大きく改善したが、best near-missの `720m q99 floor5` もvalidation min month `-1.8000` とtrade support不足でNoTrade。floorなしとfloor `2/3/4` はtailを戻すため、floor細密探索は本流にしない。次はexecutable EVを粗いcontext平均factorではなく、dense target / model feature / calibration layerとして学習させ、追加chronological validationでsupportを増やす。
+- 00232でdense capture modelを試すとrow-level EV MAEは大きく改善したが、fixed720/fixed240 direct scoreはstateful validationでNoTrade。次はdense captureを直接scoreにせず、side-balance penalty、side-drift correction、downside-weighted target、admitted-candidate focused selector featureとして使う。
 
 ## 外部データ候補
 
