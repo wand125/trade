@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 10:54 JST
+最終更新: 2026-06-30 11:10 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00199` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00199で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signalを分解した。focus signalは有望だがdynamic policy化は未検証。 |
+| `00186`..`00200` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00200で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hookを分解した。focus ORはreplacement込みで悪化し、rank-onlyは小幅改善止まり。 |
 
 ## テーマ別読む順
 
@@ -38,6 +38,7 @@
 11. `00197_2026-06-30_fixed_short_budget_trigger_audit.md`
 12. `00198_2026-06-30_replacement_prior_signal_audit.md`
 13. `00199_2026-06-30_entry_signal_residual_context_audit.md`
+14. `00200_2026-06-30_focus_entry_dynamic_hook.md`
 
 ### 現在の候補軸を知る
 
@@ -54,6 +55,7 @@
 11. `00197_2026-06-30_fixed_short_budget_trigger_audit.md`
 12. `00198_2026-06-30_replacement_prior_signal_audit.md`
 13. `00199_2026-06-30_entry_signal_residual_context_audit.md`
+14. `00200_2026-06-30_focus_entry_dynamic_hook.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -185,7 +187,16 @@ Status: diagnostic preflight / not standard
 Question: 00198で残ったrange_low_vol/ny_overlap replacement shortをentry時点のcausal signalで覆えるか
 Best evidence: gap5 late replacement -286.9878; prior OR focus entry signal covers -252.0972 and leaves -34.8906. Focus entry signal alone catches 2025-10/12 initial losses that first-loss control cannot catch.
 Decision: focused entry signalは有望だが、まだpreflight。gap0へ広げると良いreplacementを消す可能性がある
-Next: implement gap5 / primary branch only dynamic hook and verify one-position replacement PnL
+Next: dynamic hook was tested in 00200; move to replacement-aware target
+```
+
+```text
+Report: 00200 Focus Entry Dynamic Hook
+Status: diagnostic infrastructure / not standard
+Question: focused entry signalをgap5/budget0へ動的に重ねると、一玉制約とreplacement込みで改善するか
+Best evidence: original OR condition worsens +508.9838 -> +507.4968 and worst -215.1172 -> -220.3612. Rank-only 0.53 gives +511.5964 with same worst/DD, but the gain is only +2.6126.
+Decision: hookは残す。OR condition and side-gap-only are rejected. Rank-only is weak candidate, not standard.
+Next: model only_candidate replacement short as replacement risk target
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

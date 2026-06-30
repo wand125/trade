@@ -60,6 +60,10 @@ MODEL_POLICY_TUPLE_FIELDS = {
 }
 SIDE_NAME_TO_VALUE = {"short": -1, "long": 1}
 SIDE_DRIFT_ALERT_REQUIRED_COLUMNS = {"month", "side", "is_alert"}
+MATCH_MODES_WITH_SHORT_GAP = {
+    "signal_short_raw_gap",
+    "signal_short_raw_gap_or_focus_short_entry",
+}
 
 
 def parse_csv_bools(value: str) -> list[bool]:
@@ -232,16 +236,23 @@ def side_rule_match_mask(
     alert_recent_month_count: int = 0,
     alert_sides: tuple[str, ...] = ("short",),
     alert_context_columns: tuple[str, ...] = (),
+    focus_combined_regime: str = "range_low_vol",
+    focus_session_regime: str = "ny_overlap",
+    focus_side_gap_threshold: float = 0.0,
+    focus_entry_rank_threshold: float = 0.52,
 ) -> pd.Series:
     if match_mode not in {
         "any_rule",
         "selected_side_rule",
         "signal_short_raw_gap",
+        "focus_short_entry_signal",
+        "signal_short_raw_gap_or_focus_short_entry",
         "prior_side_drift_alert",
     }:
         raise ValueError(
             "match_mode must be any_rule, selected_side_rule, "
-            "signal_short_raw_gap, or prior_side_drift_alert"
+            "signal_short_raw_gap, focus_short_entry_signal, "
+            "signal_short_raw_gap_or_focus_short_entry, or prior_side_drift_alert"
         )
     if match_mode == "prior_side_drift_alert":
         if side_drift_alerts is None:
@@ -299,20 +310,67 @@ def side_rule_match_mask(
                 continue
             active |= signal.eq(side_value) & row_context_key.isin(keys).to_numpy()
         return active.fillna(False).astype(bool)
-    if match_mode == "signal_short_raw_gap":
+    if match_mode in MATCH_MODES_WITH_SHORT_GAP or match_mode == "focus_short_entry_signal":
         prediction_index = predictions.set_index("decision_timestamp")
-        aligned = prediction_index[
-            [policy_config.long_column, policy_config.short_column]
-        ].reindex(df["timestamp"])
+        short_gap_columns = [policy_config.long_column, policy_config.short_column]
+        focus_columns = [
+            "combined_regime",
+            "session_regime",
+            policy_config.long_side_confidence_column,
+            policy_config.short_side_confidence_column,
+            policy_config.short_entry_rank_column,
+        ]
+        required_columns = short_gap_columns
+        if match_mode != "signal_short_raw_gap":
+            required_columns = [*short_gap_columns, *focus_columns]
+        missing_prediction_columns = sorted(set(required_columns) - set(prediction_index.columns))
+        if missing_prediction_columns:
+            raise ValueError(
+                "predictions missing focus entry signal columns: "
+                + ", ".join(missing_prediction_columns)
+            )
+        aligned = prediction_index[required_columns].reindex(df["timestamp"])
         long_score = aligned[policy_config.long_column].reset_index(drop=True).astype(float)
         short_score = aligned[policy_config.short_column].reset_index(drop=True).astype(float)
         raw_short_gap = short_score - long_score
-        return (
+        raw_gap_active = (
             signal.eq(-1)
             & raw_short_gap.notna()
             & np.isfinite(raw_short_gap)
             & raw_short_gap.ge(short_gap_threshold)
         ).fillna(False).astype(bool)
+        if match_mode == "signal_short_raw_gap":
+            return raw_gap_active
+        combined_regime = aligned["combined_regime"].reset_index(drop=True).astype("string")
+        session_regime = aligned["session_regime"].reset_index(drop=True).astype("string")
+        short_confidence = (
+            aligned[policy_config.short_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        long_confidence = (
+            aligned[policy_config.long_side_confidence_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        short_entry_rank = (
+            aligned[policy_config.short_entry_rank_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        side_confidence_gap = short_confidence - long_confidence
+        focus_active = (
+            signal.eq(-1)
+            & combined_regime.eq(focus_combined_regime)
+            & session_regime.eq(focus_session_regime)
+            & (
+                side_confidence_gap.le(focus_side_gap_threshold)
+                | short_entry_rank.ge(focus_entry_rank_threshold)
+            )
+        ).fillna(False).astype(bool)
+        if match_mode == "focus_short_entry_signal":
+            return focus_active
+        return (raw_gap_active | focus_active).fillna(False).astype(bool)
     prediction_index = predictions.set_index("decision_timestamp")
     active = pd.Series(False, index=df.index)
     for side, conditions, _ in parsed_side_ev_penalty_rules(policy_config):
@@ -341,6 +399,10 @@ def interaction_entry_context(
     target_month: str | None = None,
     alert_recent_month_count: int = 0,
     alert_sides: tuple[str, ...] = ("short",),
+    focus_combined_regime: str = "range_low_vol",
+    focus_session_regime: str = "ny_overlap",
+    focus_side_gap_threshold: float = 0.0,
+    focus_entry_rank_threshold: float = 0.52,
 ) -> tuple[pd.Series, pd.Series]:
     active = side_rule_match_mask(
         df,
@@ -354,6 +416,10 @@ def interaction_entry_context(
         alert_recent_month_count=alert_recent_month_count,
         alert_sides=alert_sides,
         alert_context_columns=context_columns,
+        focus_combined_regime=focus_combined_regime,
+        focus_session_regime=focus_session_regime,
+        focus_side_gap_threshold=focus_side_gap_threshold,
+        focus_entry_rank_threshold=focus_entry_rank_threshold,
     )
     base_context = base_context_series(df, predictions, context_columns)
     timestamps = pd.to_datetime(df["timestamp"], utc=True).dt.strftime("%Y%m%d%H%M%S")
@@ -412,6 +478,10 @@ def aggregate_summary(summary: pd.DataFrame) -> pd.DataFrame:
                 "short_gap_threshold",
                 "active_min_entry_margin",
                 "context_entry_budget",
+                "focus_combined_regime",
+                "focus_session_regime",
+                "focus_side_gap_threshold",
+                "focus_entry_rank_threshold",
             ],
             dropna=False,
         )
@@ -452,6 +522,10 @@ def apply_interaction_guard(
     side_drift_alerts: pd.DataFrame | None,
     alert_recent_month_count: int,
     alert_sides: tuple[str, ...],
+    focus_combined_regime: str,
+    focus_session_regime: str,
+    focus_side_gap_threshold: float,
+    focus_entry_rank_threshold: float,
     warmup_days: int,
     post_days: int,
 ) -> Path:
@@ -480,7 +554,7 @@ def apply_interaction_guard(
         for match_mode in match_modes:
             active_short_gap_thresholds = (
                 short_gap_thresholds
-                if match_mode == "signal_short_raw_gap"
+                if match_mode in MATCH_MODES_WITH_SHORT_GAP
                 else [float("nan")]
             )
             for short_gap_threshold in active_short_gap_thresholds:
@@ -498,6 +572,10 @@ def apply_interaction_guard(
                     target_month=month,
                     alert_recent_month_count=alert_recent_month_count,
                     alert_sides=alert_sides,
+                    focus_combined_regime=focus_combined_regime,
+                    focus_session_regime=focus_session_regime,
+                    focus_side_gap_threshold=focus_side_gap_threshold,
+                    focus_entry_rank_threshold=focus_entry_rank_threshold,
                 )
                 entry_budget_context = active_only_budget_context(entry_context, active_mask)
                 for threshold in thresholds:
@@ -624,6 +702,10 @@ def apply_interaction_guard(
                                             ),
                                             "active_min_entry_margin": active_min_entry_margin,
                                             "context_entry_budget": entry_budget,
+                                            "focus_combined_regime": focus_combined_regime,
+                                            "focus_session_regime": focus_session_regime,
+                                            "focus_side_gap_threshold": focus_side_gap_threshold,
+                                            "focus_entry_rank_threshold": focus_entry_rank_threshold,
                                             "interaction_context_columns": ",".join(
                                                 context_columns
                                             ),
@@ -671,6 +753,10 @@ def apply_interaction_guard(
         "side_drift_alerts": None if side_drift_alerts is None else "provided",
         "alert_recent_month_count": alert_recent_month_count,
         "alert_sides": alert_sides,
+        "focus_combined_regime": focus_combined_regime,
+        "focus_session_regime": focus_session_regime,
+        "focus_side_gap_threshold": focus_side_gap_threshold,
+        "focus_entry_rank_threshold": focus_entry_rank_threshold,
         "warmup_days": warmup_days,
         "post_days": post_days,
         "rows": int(len(summary)),
@@ -717,6 +803,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--side-drift-alerts", type=parse_csv_paths, default=[])
     parser.add_argument("--alert-recent-month-count", type=int, default=0)
     parser.add_argument("--alert-sides", type=parse_csv_string_tuple, default=("short",))
+    parser.add_argument("--focus-combined-regime", default="range_low_vol")
+    parser.add_argument("--focus-session-regime", default="ny_overlap")
+    parser.add_argument("--focus-side-gap-threshold", type=float, default=0.0)
+    parser.add_argument("--focus-entry-rank-threshold", type=float, default=0.52)
     parser.add_argument("--warmup-days", type=int, default=7)
     parser.add_argument("--post-days", type=int, default=4)
     return parser
@@ -740,6 +830,10 @@ def main(argv: list[str] | None = None) -> int:
         side_drift_alerts=read_side_drift_alerts(args.side_drift_alerts),
         alert_recent_month_count=args.alert_recent_month_count,
         alert_sides=args.alert_sides,
+        focus_combined_regime=args.focus_combined_regime,
+        focus_session_regime=args.focus_session_regime,
+        focus_side_gap_threshold=args.focus_side_gap_threshold,
+        focus_entry_rank_threshold=args.focus_entry_rank_threshold,
         warmup_days=args.warmup_days,
         post_days=args.post_days,
     )

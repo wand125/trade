@@ -111,6 +111,107 @@ class SideContextInteractionGuardApplyTests(unittest.TestCase):
         self.assertTrue(context.iloc[1].startswith("inactive|"))
         self.assertTrue(context.iloc[2].startswith("inactive|"))
 
+    def test_focus_short_entry_signal_uses_context_side_gap_and_entry_rank(self):
+        timestamps = pd.to_datetime(
+            [
+                "2025-01-01T00:00:00Z",
+                "2025-01-01T00:01:00Z",
+                "2025-01-01T00:02:00Z",
+                "2025-01-01T00:03:00Z",
+                "2025-01-01T00:04:00Z",
+            ]
+        )
+        df = pd.DataFrame({"timestamp": timestamps})
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "dataset_month": ["2025-01"] * 5,
+                "combined_regime": [
+                    "range_low_vol",
+                    "range_low_vol",
+                    "range_low_vol",
+                    "range_low_vol",
+                    "range_low_vol",
+                ],
+                "session_regime": [
+                    "ny_overlap",
+                    "ny_overlap",
+                    "asia",
+                    "ny_overlap",
+                    "ny_overlap",
+                ],
+                "pred_long_best_adjusted_pnl": [12.0, 12.0, 12.0, 12.0, 12.0],
+                "pred_short_best_adjusted_pnl": [13.0, 13.0, 13.0, 13.0, 13.0],
+                "pred_best_side_prob_1": [0.51, 0.45, 0.51, 0.45, 0.51],
+                "pred_best_side_prob_-1": [0.49, 0.55, 0.49, 0.55, 0.49],
+                "pred_short_entry_local_rank": [0.50, 0.53, 0.50, 0.53, 0.55],
+            }
+        )
+        config = ModelPolicyConfig(predictions=Path("predictions.parquet"))
+        signal = pd.Series([-1, -1, -1, -1, 1], index=df.index)
+
+        context, active = side_context_interaction_guard_apply.interaction_entry_context(
+            df,
+            predictions,
+            config,
+            signal,
+            context_columns=("dataset_month", "combined_regime"),
+            match_mode="focus_short_entry_signal",
+            focus_combined_regime="range_low_vol",
+            focus_session_regime="ny_overlap",
+            focus_side_gap_threshold=0.0,
+            focus_entry_rank_threshold=0.52,
+        )
+
+        self.assertEqual(active.tolist(), [True, True, False, True, False])
+        self.assertEqual(
+            context.iloc[0],
+            "guarded|dataset_month=2025-01|combined_regime=range_low_vol",
+        )
+        self.assertTrue(context.iloc[2].startswith("inactive|"))
+        self.assertTrue(context.iloc[4].startswith("inactive|"))
+
+    def test_signal_short_raw_gap_or_focus_short_entry_unions_both_masks(self):
+        timestamps = pd.to_datetime(
+            [
+                "2025-01-01T00:00:00Z",
+                "2025-01-01T00:01:00Z",
+                "2025-01-01T00:02:00Z",
+            ]
+        )
+        df = pd.DataFrame({"timestamp": timestamps})
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "dataset_month": ["2025-01"] * 3,
+                "combined_regime": ["range_low_vol", "range_low_vol", "up_low_vol"],
+                "session_regime": ["ny_overlap", "asia", "london"],
+                "pred_long_best_adjusted_pnl": [20.0, 10.0, 10.0],
+                "pred_short_best_adjusted_pnl": [21.0, 20.0, 13.0],
+                "pred_best_side_prob_1": [0.51, 0.70, 0.40],
+                "pred_best_side_prob_-1": [0.49, 0.30, 0.60],
+                "pred_short_entry_local_rank": [0.50, 0.50, 0.50],
+            }
+        )
+        config = ModelPolicyConfig(predictions=Path("predictions.parquet"))
+        signal = pd.Series([-1, -1, -1], index=df.index)
+
+        _, active = side_context_interaction_guard_apply.interaction_entry_context(
+            df,
+            predictions,
+            config,
+            signal,
+            context_columns=("dataset_month", "combined_regime"),
+            match_mode="signal_short_raw_gap_or_focus_short_entry",
+            short_gap_threshold=5.0,
+            focus_combined_regime="range_low_vol",
+            focus_session_regime="ny_overlap",
+            focus_side_gap_threshold=0.0,
+            focus_entry_rank_threshold=0.52,
+        )
+
+        self.assertEqual(active.tolist(), [True, True, False])
+
     def test_prior_side_drift_alert_mode_uses_only_prior_matching_contexts(self):
         timestamps = pd.to_datetime(
             [

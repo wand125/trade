@@ -68,6 +68,7 @@
 - alert contextだけへの `context_entry_budget=0/1` と追加entry marginはbaselineを改善したがglobal budget0系に届かず、prior-onlyでも崩れた。同じalert context内のfirst-loss / fast-stopも全期間小改善止まりでprior-onlyでは崩れた。00196でlate windowのcommon shortとreplacement shortが残存差分だと確認し、00197で固定 `gap5/budget0 -> gap0/budget0` triggerとcandidate-only late replacement shortを分解した。2024側の同一family固定適用は、coststress 260 + stateful risk5 + replacement margin10の2024 prediction/backtest生成後に行う。
 - 00198で、`gap5` replacement shortのprior signal coverageを監査した。prior alert単体は弱く、prior alert OR prediction short biasなら損失上限を大きく削れるが、`range_low_vol/ny_overlap` はprior context signalでほぼ拾えない。次はentry-level EV overestimate、NY-overlap固有のside inversion、またはcurrent-month first-loss controlでこの未検知contextを狙う。
 - 00199で、`range_low_vol/ny_overlap` replacement shortはentry時点の `side_gap <= 0` または `candidate_entry_rank >= 0.52` をprior signalに足すと大半を覆えると分かった。first-loss controlは月初の初回損失を拾えないため弱い。次は `gap5` / primary branch限定のdynamic hookに入れ、one-position replacement込みで改善するか確認する。`gap0` へ広げるのは良いreplacementを消す可能性があるため避ける。
+- 00200でfocus entry signalをdynamic hook化した。00199のOR条件はreplacement込みで `+508.9838 -> +507.4968` と悪化し、side-gap onlyも悪化。rank-only `0.53` は `+511.5964` と小幅改善するが採用するほどではない。次は `model-trade-delta` の `only_candidate` shortをreplacement risk targetとして学習・診断し、削除後に悪いreplacementが入る局面を事前に避ける。
 
 ## 外部データ候補
 

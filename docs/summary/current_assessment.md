@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-06-30 10:54 JST
+最終更新: 2026-06-30 11:10 JST
 
 ## 結論
 
@@ -19,7 +19,7 @@
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
 | Short raw gap guard | 介入対象の発見には有効 | all-window bestは total `+18.5106` だが prior-only min4 `-274.9360` | 単独採用しない |
-| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。fixed trigger min4 `+232.2466`, min6 `+26.3116`, min8 `-15.0104`。`gap5` late replacement short `-286.9878` のうち prior alert OR pred-biasで `-192.4296`、prior OR focus entry signalで `-252.0972` は覆える | 現在最有望な防御軸。ただしlate-onlyでは利益policyにならない。focus entry signalはpreflightで、dynamic policy化が未検証 |
+| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。fixed trigger min4 `+232.2466`, min6 `+26.3116`, min8 `-15.0104`。focus entry ORはpreflightで残存を削ったがdynamicでは `+507.4968` に悪化。rank-only `0.53` は `+511.5964` | 現在最有望な防御軸。ただしlate-onlyでは利益policyにならない。focus entry hookは診断基盤止まり |
 | Online context feature | post-filterでは損失説明力あり | context特徴追加はOOF AUCを改善せず。min8 large_loss AUC `0.5523 -> 0.5364` | raw feature昇格なし |
 | Cooldown / recovery | hard blockの緩和 | cooldown/recoveryはprior-onlyで既存hard block系に負ける | 採用しない |
 
@@ -49,6 +49,7 @@
 - budget0 replacement-path decomposition as candidate adoption preflight
 - replacement prior signal audit as preflight, not dynamic policy
 - focused entry-level residual signal audit as preflight, not dynamic policy
+- focus entry dynamic hook as diagnostics only
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -66,6 +67,7 @@
 - context alert count / loss-bias triggerの直接採用
 - alert context限定budget/admissionの標準採用
 - alert context限定first-loss / fast-stopの標準採用
+- focus entry OR / side-gap-only dynamic hookの標準採用
 
 ## 中心的な失敗構造
 
@@ -79,15 +81,15 @@
 - confidenceやside gapだけでは除外できない
 - guard後も replacement short が残り、損失の尾部を作る
 - alert contextだけを止めても late common short `-382.7524` と replacement short `-293.7604` が残る
-- `gap5` replacement shortのうち `up_low_vol/ny_overlap` は prior prediction biasで拾える。`range_low_vol/ny_overlap` は prior context signalでは拾いにくいが、entry-level side gap / rank signalを足すと大半を事前説明できる
+- `gap5` replacement shortのうち `up_low_vol/ny_overlap` は prior prediction biasで拾える。`range_low_vol/ny_overlap` は prior context signalでは拾いにくいが、entry-level side gap / rank signalを足すと大半を事前説明できる。ただしdynamic hookではreplacementが再発し、OR条件は小幅悪化した
 
 したがって、次の改善は「holding capの再探索」ではなく、short side admission / first-loss control / replacement-risk control を優先する。
 
 ## 次に検証すべきこと
 
-1. `range_low_vol/ny_overlap` の focused entry signal を `gap5` / primary branch 限定のdynamic hookへ入れ、one-position replacement込みで損益が本当に改善するか確認する。`gap0` には良いreplacementを消す可能性があるため適用しない。
+1. `model-trade-delta` の `only_candidate` shortをreplacement risk targetにし、削除後に入るtradeの品質を事前評価できるか検証する。
 2. `gap0/budget0`, `gap5/budget0`, `gap5 -> gap0` deterioration triggerを、追加未使用月または2024側の同一familyへ再探索なしで適用する。2024側はcoststress 260 + stateful risk5 + replacement margin10のprediction/backtest生成が先に必要。
-3. side drift guard後の replacement trade を、削除tradeと追加tradeに分けて評価する。
+3. side drift guard後の replacement trade を、削除tradeと追加tradeに分けるだけでなく、追加tradeを目的変数化する。
 4. short/range_low_vol の context drawdownを、現在月のrealized PnLだけで発火させる低容量hookとして評価する。
 5. side prior driftを、predicted side share vs dense label side share の prior window差分で補正する。
 6. 新しいcandidateは必ず NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、short PnLで比較する。
@@ -112,3 +114,4 @@
 - `00197`: fixed short budget trigger audit
 - `00198`: replacement prior signal audit
 - `00199`: entry signal residual context audit
+- `00200`: focus entry dynamic hook

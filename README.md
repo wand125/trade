@@ -446,6 +446,33 @@ trades in the same candidate/window/month/context for current-month state, but
 it does not simulate the next replacement trade that would appear after a
 dynamic block.
 
+To move a focused entry signal into the one-position dynamic backtest, use the
+focus match modes in `side_context_interaction_guard_apply.py`:
+
+```bash
+python scripts/experiments/side_context_interaction_guard_apply.py \
+  --runs data/reports/backtests/<monthly_model_policy_runs> \
+  --data data/processed/histdata/xauusd/xauusd_m1.parquet \
+  --output-dir data/reports/backtests \
+  --label short_focus_entry_dynamic_hook \
+  --thresholds inf \
+  --min-entry-margins inf \
+  --context-columns dataset_month,combined_regime \
+  --match-modes signal_short_raw_gap_or_focus_short_entry \
+  --short-gap-thresholds 5 \
+  --entry-budgets 0 \
+  --active-min-entry-margins=-inf \
+  --focus-combined-regime range_low_vol \
+  --focus-session-regime ny_overlap \
+  --focus-side-gap-threshold=-inf \
+  --focus-entry-rank-threshold 0.53
+```
+
+`focus_short_entry_signal` tests only the focused entry condition.
+`signal_short_raw_gap_or_focus_short_entry` applies it on top of the existing
+short raw-gap budget context. Treat these as replacement-aware diagnostics:
+small improvements can disappear when the next trade is simulated.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 

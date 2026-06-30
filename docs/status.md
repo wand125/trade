@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 10:54 JST
+最終更新: 2026-06-30 11:10 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-entry-level residual context監査を追加した。`short_budget_entry_signal_audit.py` は同じ `candidate/window/month/combined_regime/session_regime` の過去replacement tradeだけで current-month stateを作る。`gap5/budget0` late 2025-08..12 replacement short `-286.9878` に対し、`range_low_vol/ny_overlap` after first lossは `-37.9120` しか覆えない。一方、focus context限定の `pred_side_confidence_gap <= 0 OR pred_taken_entry_local_rank >= 0.52` は同context `-86.5792` のうち `-80.9316` を覆い、00198の prior alert OR pred-bias と組み合わせると残存は `-94.5582 -> -34.8906`。標準採用せず、次はこのfocus conditionをdynamic hook化し、再replacement込みでbacktestする。詳細は `docs/reports/00199_2026-06-30_entry_signal_residual_context_audit.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+focus entry dynamic hookを追加した。`side_context_interaction_guard_apply.py` は `focus_short_entry_signal` と `signal_short_raw_gap_or_focus_short_entry` を受け取れる。00199の `range_low_vol/ny_overlap` OR条件をそのまま `gap5/budget0` に重ねると total `+508.9838 -> +507.4968`、worst `-215.1172 -> -220.3612` へ悪化した。side-gap onlyも悪化。rank-only `pred_short_entry_local_rank >= 0.53` は total `+511.5964`, worst `-215.1172` と小幅改善だが、改善幅が小さいため標準採用しない。次は `only_candidate` shortをreplacement risk targetとして扱う。詳細は `docs/reports/00200_2026-06-30_focus_entry_dynamic_hook.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+entry-level residual context監査を追加した。`short_budget_entry_signal_audit.py` は同じ `candidate/window/month/combined_regime/session_regime` の過去replacement tradeだけで current-month stateを作る。`gap5/budget0` late 2025-08..12 replacement short `-286.9878` に対し、`range_low_vol/ny_overlap` after first lossは `-37.9120` しか覆えない。一方、focus context限定の `pred_side_confidence_gap <= 0 OR pred_taken_entry_local_rank >= 0.52` は同context `-86.5792` のうち `-80.9316` を覆い、00198の prior alert OR pred-bias と組み合わせると残存は `-94.5582 -> -34.8906`。標準採用せず、dynamic hook化は00200で検証済み。詳細は `docs/reports/00199_2026-06-30_entry_signal_residual_context_audit.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 replacement shortのprior signal監査を追加した。2024側同一familyは既存artifactだけでは不足しており、2025 `predictions_side_guard_input.parquet` は2025-01..12のみ、2024 `guard_fixed_standard_validation_base` はcostなし・max hold 480・risk penalty 0の別familyだった。`short_budget_replacement_signal_audit.py` で00197のreplacement short rowsをprior alerts / prediction group / selected trade groupへ結合したところ、`gap5/budget0` late 2025-08..12の `-286.9878` に対し prior alert単体は `-133.9066` しか覆えず、prior alert OR prior prediction short bias `>=0.30` で `-192.4296` を覆い残存 `-94.5582`。ただし `range_low_vol/ny_overlap -86.5792` はprior alert 0、prior biasも弱く、既存context signalではほぼ拾えない。詳細は `docs/reports/00198_2026-06-30_replacement_prior_signal_audit.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

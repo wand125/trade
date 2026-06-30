@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 11:06 Focus entry dynamic hook
+
+- 00199の `range_low_vol/ny_overlap` focused entry signalを `side_context_interaction_guard_apply.py` のdynamic hookへ移した。
+- 新しい `match_mode` は `focus_short_entry_signal` と `signal_short_raw_gap_or_focus_short_entry`。後者は既存 `signal_short_raw_gap` の `gap5/budget0` active rowにfocus entry conditionをORする。
+- 00199のOR条件そのままでは、12ヶ月 totalが `+508.9838 -> +507.4968`、worstが `-215.1172 -> -220.3612` へ悪化した。2025-10は `+4.7796` 改善するが、2025-09が `-5.2440` 悪化する。
+- side-gap onlyも `+504.5282` へ悪化。rank-onlyは小幅改善し、`pred_short_entry_local_rank >= 0.53` が total `+511.5964`, worst `-215.1172`, max DD `215.1172`。
+- 判断: hookはdiagnostic infrastructureとして残す。OR条件とside-gap-onlyは標準採用しない。rank-only `0.53` は弱いcandidateだが改善幅が小さく、標準採用しない。
+- 次はentry削除条件を増やすのではなく、`model-trade-delta` の `only_candidate` shortをreplacement risk targetとして扱い、replacement後の候補品質を事前評価する。
+- report: `docs/reports/00200_2026-06-30_focus_entry_dynamic_hook.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_side_context_interaction_guard_apply tests.test_backtest tests.test_short_budget_entry_signal_audit tests.test_short_budget_replacement_signal_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_fixed_rule_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 127 tests; `git diff --check`: OK; dynamic hook sweep/delta生成 OK
+
 ### 10:51 Entry signal residual context audit
 
 - 00198でprior context signalが拾えなかった `range_low_vol/ny_overlap` replacement shortを、entry-level予測特徴と同月first-loss状態で監査した。
