@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 13:58 JST
+最終更新: 2026-06-30 14:09 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV multi-window admission selectorを追加した。`entry_ev_admission_selection.py` は `--multi-window` で各 `--family-sweeps` をvalidation windowとして扱い、`min_windows`, `min_positive_windows`, `min_window_total`, `min_window_trades`, `max_side_trade_share`, regime/session worst bucket floorsを標準selector gateに使える。fresh2024 `2024-03..04` と refit2025 `2025-01..02` を同時評価すると、strict support gate (`min_window_trades=10`, `min_worst_pnl=0`, positive windows `2`) はNoTrade。relaxed gate (`min_window_trades=1`) は `entry10/short9/min_rank0.0` を validation total `+190.4544`, worst `+0.7230`, trades `173` で選ぶが、両fixed test windowでは `-943.9322`, worst `-294.1980`, trades `1144` へ崩れた。`max_side_trade_share<=0.95` ではNoTradeに戻る。判断: multi-window selectorはaccepted infrastructure。標準policyはNoTrade。詳細は `docs/reports/00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV rank gateを2025-refit foldで検証した。train `2024-01..12`、validation `2025-01..02`、test `2025-03..12` のchronological model-refit。support gateは validation total `+209.4234`, worst `+71.1950`, trades `170` の `entry12/short3/min_rank0.0` を選んだが、固定testでは total `-1002.1534`, worst `-294.1980`, trades `1147`, max DD `332.4446` へ崩れ、NoTrade `0` に大きく負けた。test hindsight topの `entry14/short9/min_rank0.7` は total `+324.5040`, trades `17` だが、validationでは取引ゼロなので採用不可。判断: rank gateの前に、2ヶ月validationだけで未来10ヶ月を代表させる設計が弱い。標準policyはNoTradeのまま。詳細は `docs/reports/00211_2026-06-30_entry_ev_rank_refit_2025_fold.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

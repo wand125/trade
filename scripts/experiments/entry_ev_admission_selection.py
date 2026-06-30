@@ -98,6 +98,13 @@ def aggregate_validation(frame: pd.DataFrame) -> pd.DataFrame:
             if "forced_exit_count" in group.columns
             else 0
         )
+        min_monthly_trades = int(group["trade_count"].min())
+        max_monthly_trades = int(group["trade_count"].max())
+        long_trades = int(group.get("long_trade_count", pd.Series(dtype=float)).sum())
+        short_trades = int(group.get("short_trade_count", pd.Series(dtype=float)).sum())
+        max_side_trade_share = (
+            max(long_trades, short_trades) / trade_count if trade_count > 0 else 0.0
+        )
         rows.append(
             {
                 "family": family,
@@ -107,14 +114,26 @@ def aggregate_validation(frame: pd.DataFrame) -> pd.DataFrame:
                 "validation_total": float(group["total_adjusted_pnl"].sum()),
                 "validation_worst": float(group["total_adjusted_pnl"].min()),
                 "validation_trades": trade_count,
+                "validation_min_monthly_trades": min_monthly_trades,
+                "validation_max_monthly_trades": max_monthly_trades,
                 "validation_max_dd": float(group["max_drawdown"].max()),
                 "validation_forced_exit_count": forced_exit_count,
-                "validation_long_trades": int(group.get("long_trade_count", pd.Series(dtype=float)).sum()),
-                "validation_short_trades": int(group.get("short_trade_count", pd.Series(dtype=float)).sum()),
+                "validation_long_trades": long_trades,
+                "validation_short_trades": short_trades,
+                "validation_max_side_trade_share": float(max_side_trade_share),
                 "validation_long_pnl": float(group.get("long_adjusted_pnl", pd.Series(dtype=float)).sum()),
                 "validation_short_pnl": float(group.get("short_adjusted_pnl", pd.Series(dtype=float)).sum()),
                 "validation_ev_over_realized": float(
                     group.get("ev_overestimate_vs_realized_mean", pd.Series(dtype=float)).mean()
+                ),
+                "validation_direction_session_pnl_min": float(
+                    group.get("direction_session_adjusted_pnl_min", pd.Series(dtype=float)).min()
+                ),
+                "validation_combined_regime_pnl_min": float(
+                    group.get("combined_regime_adjusted_pnl_min", pd.Series(dtype=float)).min()
+                ),
+                "validation_direction_combined_regime_pnl_min": float(
+                    group.get("direction_combined_regime_adjusted_pnl_min", pd.Series(dtype=float)).min()
                 ),
             }
         )
@@ -126,6 +145,76 @@ def aggregate_validation(frame: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
+def aggregate_multiwindow_validation(frame: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate each family as a separate validation window."""
+    window_summary = aggregate_validation(frame)
+    grouped = window_summary.groupby(SWEEP_KEY_COLUMNS, dropna=False)
+    rows: list[dict[str, object]] = []
+    for keys, group in grouped:
+        key_values = dict(zip(SWEEP_KEY_COLUMNS, keys, strict=True))
+        trade_count = int(group["validation_trades"].sum())
+        long_trades = int(group["validation_long_trades"].sum())
+        short_trades = int(group["validation_short_trades"].sum())
+        max_side_trade_share = (
+            max(long_trades, short_trades) / trade_count if trade_count > 0 else 0.0
+        )
+        rows.append(
+            {
+                "family": "multi_window",
+                **key_values,
+                "validation_windows": int(group["family"].nunique()),
+                "validation_positive_windows": int((group["validation_total"] > 0).sum()),
+                "validation_active_windows": int((group["validation_trades"] > 0).sum()),
+                "validation_worst_window": float(group["validation_total"].min()),
+                "validation_best_window": float(group["validation_total"].max()),
+                "months": int(group["months"].sum()),
+                "validation_active_months": int(group["validation_active_months"].sum()),
+                "validation_total": float(group["validation_total"].sum()),
+                "validation_worst": float(group["validation_worst"].min()),
+                "validation_trades": trade_count,
+                "validation_min_monthly_trades": int(group["validation_min_monthly_trades"].min()),
+                "validation_max_monthly_trades": int(group["validation_max_monthly_trades"].max()),
+                "validation_min_window_trades": int(group["validation_trades"].min()),
+                "validation_max_window_trades": int(group["validation_trades"].max()),
+                "validation_max_dd": float(group["validation_max_dd"].max()),
+                "validation_forced_exit_count": int(group["validation_forced_exit_count"].sum()),
+                "validation_long_trades": long_trades,
+                "validation_short_trades": short_trades,
+                "validation_max_side_trade_share": float(max_side_trade_share),
+                "validation_max_window_side_trade_share": float(
+                    group["validation_max_side_trade_share"].max()
+                ),
+                "validation_long_pnl": float(group["validation_long_pnl"].sum()),
+                "validation_short_pnl": float(group["validation_short_pnl"].sum()),
+                "validation_ev_over_realized": float(
+                    group["validation_ev_over_realized"].mean()
+                ),
+                "validation_direction_session_pnl_min": float(
+                    group["validation_direction_session_pnl_min"].min()
+                ),
+                "validation_combined_regime_pnl_min": float(
+                    group["validation_combined_regime_pnl_min"].min()
+                ),
+                "validation_direction_combined_regime_pnl_min": float(
+                    group["validation_direction_combined_regime_pnl_min"].min()
+                ),
+                "validation_window_families": ",".join(sorted(group["family"].astype(str).unique())),
+            }
+        )
+
+    summary = pd.DataFrame(rows)
+    return summary.sort_values(
+        ["validation_total", "validation_worst_window", "validation_worst"],
+        ascending=[False, False, False],
+    ).reset_index(drop=True)
+
+
+def column_or_default(frame: pd.DataFrame, column: str, default: float) -> pd.Series:
+    if column in frame.columns:
+        return frame[column].fillna(default)
+    return pd.Series(default, index=frame.index)
+
+
 def select_standard_policy(
     summary: pd.DataFrame,
     *,
@@ -134,6 +223,17 @@ def select_standard_policy(
     min_active_months: int,
     min_worst_pnl: float,
     max_drawdown: float,
+    min_windows: int = 0,
+    min_positive_windows: int = 0,
+    min_active_windows: int = 0,
+    min_window_total: float = -float("inf"),
+    min_window_trades: int = 0,
+    min_monthly_trades: int = 0,
+    max_monthly_trades: float = float("inf"),
+    max_side_trade_share: float = float("inf"),
+    min_direction_session_pnl: float = -float("inf"),
+    min_combined_regime_pnl: float = -float("inf"),
+    min_direction_combined_regime_pnl: float = -float("inf"),
 ) -> dict[str, object]:
     eligible = summary[
         (summary["validation_total"] > min_positive_pnl)
@@ -141,6 +241,59 @@ def select_standard_policy(
         & (summary["validation_active_months"] >= min_active_months)
         & (summary["validation_worst"] >= min_worst_pnl)
         & (summary["validation_max_dd"] <= max_drawdown)
+        & (column_or_default(summary, "validation_windows", min_windows) >= min_windows)
+        & (
+            column_or_default(summary, "validation_positive_windows", min_positive_windows)
+            >= min_positive_windows
+        )
+        & (
+            column_or_default(summary, "validation_active_windows", min_active_windows)
+            >= min_active_windows
+        )
+        & (
+            column_or_default(summary, "validation_worst_window", min_window_total)
+            >= min_window_total
+        )
+        & (
+            column_or_default(summary, "validation_min_window_trades", min_window_trades)
+            >= min_window_trades
+        )
+        & (
+            column_or_default(summary, "validation_min_monthly_trades", min_monthly_trades)
+            >= min_monthly_trades
+        )
+        & (
+            column_or_default(summary, "validation_max_monthly_trades", 0.0)
+            <= max_monthly_trades
+        )
+        & (
+            column_or_default(summary, "validation_max_side_trade_share", 0.0)
+            <= max_side_trade_share
+        )
+        & (
+            column_or_default(
+                summary,
+                "validation_direction_session_pnl_min",
+                min_direction_session_pnl,
+            )
+            >= min_direction_session_pnl
+        )
+        & (
+            column_or_default(
+                summary,
+                "validation_combined_regime_pnl_min",
+                min_combined_regime_pnl,
+            )
+            >= min_combined_regime_pnl
+        )
+        & (
+            column_or_default(
+                summary,
+                "validation_direction_combined_regime_pnl_min",
+                min_direction_combined_regime_pnl,
+            )
+            >= min_direction_combined_regime_pnl
+        )
     ].copy()
     if eligible.empty:
         best_total = float(summary["validation_total"].max()) if not summary.empty else 0.0
@@ -153,6 +306,17 @@ def select_standard_policy(
             "min_active_months": min_active_months,
             "min_worst_pnl": min_worst_pnl,
             "max_drawdown": max_drawdown,
+            "min_windows": min_windows,
+            "min_positive_windows": min_positive_windows,
+            "min_active_windows": min_active_windows,
+            "min_window_total": min_window_total,
+            "min_window_trades": min_window_trades,
+            "min_monthly_trades": min_monthly_trades,
+            "max_monthly_trades": max_monthly_trades,
+            "max_side_trade_share": max_side_trade_share,
+            "min_direction_session_pnl": min_direction_session_pnl,
+            "min_combined_regime_pnl": min_combined_regime_pnl,
+            "min_direction_combined_regime_pnl": min_direction_combined_regime_pnl,
             "best_validation_total": best_total,
         }
     selected = eligible.sort_values(
@@ -218,6 +382,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-active-months", type=int, default=0)
     parser.add_argument("--min-worst-pnl", type=float, default=-float("inf"))
     parser.add_argument("--max-drawdown", type=float, default=float("inf"))
+    parser.add_argument(
+        "--multi-window",
+        action="store_true",
+        help="treat each family as one validation window and select across windows",
+    )
+    parser.add_argument("--min-windows", type=int, default=0)
+    parser.add_argument("--min-positive-windows", type=int, default=0)
+    parser.add_argument("--min-active-windows", type=int, default=0)
+    parser.add_argument("--min-window-total", type=float, default=-float("inf"))
+    parser.add_argument("--min-window-trades", type=int, default=0)
+    parser.add_argument("--min-monthly-trades", type=int, default=0)
+    parser.add_argument("--max-monthly-trades", type=float, default=float("inf"))
+    parser.add_argument("--max-side-trade-share", type=float, default=float("inf"))
+    parser.add_argument("--min-direction-session-pnl", type=float, default=-float("inf"))
+    parser.add_argument("--min-combined-regime-pnl", type=float, default=-float("inf"))
+    parser.add_argument(
+        "--min-direction-combined-regime-pnl",
+        type=float,
+        default=-float("inf"),
+    )
     parser.add_argument("--near-notrade-tolerance", type=float, default=2.0)
     parser.add_argument("--diagnostic-max-trades", type=int, default=10)
     parser.add_argument("--label", default="entry_ev_admission_selection")
@@ -229,7 +413,12 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     families = parse_family_sweeps(args.family_sweeps)
     frame = read_family_sweeps(families)
-    summary = aggregate_validation(frame)
+    window_summary = aggregate_validation(frame) if args.multi_window else None
+    summary = (
+        aggregate_multiwindow_validation(frame)
+        if args.multi_window
+        else aggregate_validation(frame)
+    )
     standard = select_standard_policy(
         summary,
         min_positive_pnl=args.min_positive_pnl,
@@ -237,6 +426,17 @@ def main(argv: list[str] | None = None) -> int:
         min_active_months=args.min_active_months,
         min_worst_pnl=args.min_worst_pnl,
         max_drawdown=args.max_drawdown,
+        min_windows=args.min_windows,
+        min_positive_windows=args.min_positive_windows,
+        min_active_windows=args.min_active_windows,
+        min_window_total=args.min_window_total,
+        min_window_trades=args.min_window_trades,
+        min_monthly_trades=args.min_monthly_trades,
+        max_monthly_trades=args.max_monthly_trades,
+        max_side_trade_share=args.max_side_trade_share,
+        min_direction_session_pnl=args.min_direction_session_pnl,
+        min_combined_regime_pnl=args.min_combined_regime_pnl,
+        min_direction_combined_regime_pnl=args.min_direction_combined_regime_pnl,
     )
     diagnostic = select_near_notrade_diagnostic(
         summary,
@@ -246,15 +446,29 @@ def main(argv: list[str] | None = None) -> int:
 
     run_dir = make_run_dir(args.output_dir, args.label)
     summary.to_csv(run_dir / "validation_summary.csv", index=False)
+    if window_summary is not None:
+        window_summary.to_csv(run_dir / "window_validation_summary.csv", index=False)
     pd.DataFrame([standard, diagnostic]).to_csv(run_dir / "selections.csv", index=False)
     manifest = {
         "mode": "entry_ev_admission_selection",
+        "multi_window": args.multi_window,
         "families": {family: [str(path) for path in paths] for family, paths in families.items()},
         "min_positive_pnl": args.min_positive_pnl,
         "min_trades": args.min_trades,
         "min_active_months": args.min_active_months,
         "min_worst_pnl": args.min_worst_pnl,
         "max_drawdown": args.max_drawdown,
+        "min_windows": args.min_windows,
+        "min_positive_windows": args.min_positive_windows,
+        "min_active_windows": args.min_active_windows,
+        "min_window_total": args.min_window_total,
+        "min_window_trades": args.min_window_trades,
+        "min_monthly_trades": args.min_monthly_trades,
+        "max_monthly_trades": args.max_monthly_trades,
+        "max_side_trade_share": args.max_side_trade_share,
+        "min_direction_session_pnl": args.min_direction_session_pnl,
+        "min_combined_regime_pnl": args.min_combined_regime_pnl,
+        "min_direction_combined_regime_pnl": args.min_direction_combined_regime_pnl,
         "near_notrade_tolerance": args.near_notrade_tolerance,
         "diagnostic_max_trades": args.diagnostic_max_trades,
         "standard_selection": standard,

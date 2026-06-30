@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 14:09 Entry EV multi-window admission selector
+
+- 00211の反省を受け、`entry_ev_admission_selection.py` に `--multi-window` を追加した。各 `--family-sweeps` を1 validation windowとして扱い、同じpolicy keyを複数windowで集約してからNoTrade-first selectionする。
+- 追加gateは `min_windows`, `min_positive_windows`, `min_active_windows`, `min_window_total`, `min_window_trades`, `min_monthly_trades`, `max_monthly_trades`, `max_side_trade_share`, direction/session・combined regime worst bucket floors。multi-window runでは `window_validation_summary.csv` も保存する。
+- fresh2024 (`2024-03..04`) と refit2025 (`2025-01..02`) を同時評価した。strict support gate `min_window_trades=10`, `min_worst_pnl=0`, `positive_windows=2` はNoTrade。best row `entry10/short9/min_rank0.0` は total `+190.4544` だが fresh2024側windowが4 tradesしかない。
+- relaxed `min_window_trades=1` では `entry10/short9/min_rank0.0` を選ぶ。validation total `+190.4544`, worst `+0.7230`, worst window `+17.0910`, trades `173`。ただし validation side share `0.9595`, worst-window side share `0.9763` と偏っている。
+- relaxed-selected rowを fixed test `2024-05..12` と `2025-03..12` へ適用すると total `-943.9322`, worst `-294.1980`, trades `1144`。NoTrade `0` に大きく負ける。
+- `max_side_trade_share<=0.95` を足すと標準selectorはNoTradeに戻る。side-balance gateは有望なrejection axisだが、閾値 `0.95` はこの単発auditから標準化しない。
+- 両test windowに存在するconfigだけのhindsight topは `entry14/short9/min_rank0.6` の total `+98.9868` だが worst `-133.6912`。robust standard candidateではない。
+- 判断: multi-window selectorはaccepted infrastructure。標準policyはNoTrade。今後のentry admission reviewは単一2ヶ月validationではなくmulti-windowを標準経路にする。
+- report: `docs/reports/00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: selector py_compile OK; selector unit tests OK; strict/relaxed/side-balance multi-window runs OK; fixed test audit CSV生成 OK
+
 ### 13:58 Entry EV rank refit 2025 fold
 
 - 00210の次アクションとして、calibrated entry EV + MLP exit timing + `min_entry_rank` gridを追加chronological model-refit foldへ適用した。foldは train `2024-01..12`, validation `2025-01..02`, test `2025-03..12`。

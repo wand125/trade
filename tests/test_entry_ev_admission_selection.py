@@ -127,6 +127,69 @@ class EntryEvAdmissionSelectionTests(unittest.TestCase):
         self.assertEqual(int(summary.loc[0, "validation_active_months"]), 2)
         self.assertAlmostEqual(float(summary.loc[0, "validation_ev_over_realized"]), 18.0)
 
+    def test_multiwindow_selector_requires_positive_windows(self):
+        frame = pd.DataFrame(
+            {
+                "family": ["win_a", "win_b"],
+                "month": ["2024-03", "2025-01"],
+                "policy": ["timed_ev", "timed_ev"],
+                "entry_threshold": [12.0, 12.0],
+                "long_entry_threshold_offset": [0.0, 0.0],
+                "short_entry_threshold_offset": [6.0, 6.0],
+                "exit_threshold": [0.0, 0.0],
+                "side_margin": [5.0, 5.0],
+                "risk_penalty": [0.0, 0.0],
+                "fixed_horizon_score_mode": ["max", "max"],
+                "min_predicted_hold_minutes": [1.0, 1.0],
+                "max_predicted_hold_minutes": [260.0, 260.0],
+                "min_valid_predicted_hold_minutes": [30.0, 30.0],
+                "total_adjusted_pnl": [20.0, -5.0],
+                "total_raw_pnl": [20.0, -4.0],
+                "trade_count": [12, 11],
+                "win_rate": [0.7, 0.4],
+                "max_drawdown": [3.0, 6.0],
+                "forced_exit_count": [0, 0],
+                "long_trade_count": [6, 10],
+                "short_trade_count": [6, 1],
+                "long_adjusted_pnl": [10.0, -6.0],
+                "short_adjusted_pnl": [10.0, 1.0],
+            }
+        )
+        frame = entry_ev_admission_selection.normalize_sweep_metrics(frame, "test")
+
+        summary = entry_ev_admission_selection.aggregate_multiwindow_validation(frame)
+
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(int(summary.loc[0, "validation_windows"]), 2)
+        self.assertEqual(int(summary.loc[0, "validation_positive_windows"]), 1)
+        self.assertAlmostEqual(float(summary.loc[0, "validation_worst_window"]), -5.0)
+
+        selected = entry_ev_admission_selection.select_standard_policy(
+            summary,
+            min_positive_pnl=0.0,
+            min_trades=1,
+            min_active_months=0,
+            min_worst_pnl=-float("inf"),
+            max_drawdown=float("inf"),
+            min_windows=2,
+            min_positive_windows=2,
+        )
+
+        self.assertEqual(selected["selected"], "no_trade")
+
+        selected = entry_ev_admission_selection.select_standard_policy(
+            summary,
+            min_positive_pnl=0.0,
+            min_trades=1,
+            min_active_months=0,
+            min_worst_pnl=-float("inf"),
+            max_drawdown=float("inf"),
+            min_windows=2,
+            min_positive_windows=1,
+        )
+
+        self.assertEqual(selected["selected"], "policy")
+
 
 if __name__ == "__main__":
     unittest.main()
