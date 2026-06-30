@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 14:21 Entry EV gate sensitivity
+
+- 00212の次アクションとして、`max_side_trade_share=0.95` を単点で固定せず、side balance / regime floor / window support gateの感度をgrid評価した。
+- `scripts/experiments/entry_ev_admission_gate_sensitivity.py` を追加した。既存のmulti-window `validation_summary.csv` と fixed-test summaryを読み、selector gateごとにNoTrade-first selectionを再実行し、共通 `SWEEP_KEY_COLUMNS` でfixed-test metricsを結合する。
+- `entry_ev_admission_selection.py` には `filter_standard_candidates` helperを切り出し、通常selectorと感度分析でgate条件がずれないようにした。
+- base gateは `min_trades=20`, `active_months>=4`, `validation_worst>=0`, `windows=2`, `positive_windows=2`, `active_windows=2`, `worst_window>=0`。gridは `min_window_trades in {1,4,10}`, `max_side_trade_share in {0.90,0.95,0.98,inf}`, direction/session floor `{-inf,-30,0}`, combined floor `{-inf,-50,-40,0}`, direction/combined floor `{-inf,-60,-40,0}`。
+- `576` gate中 `568` はNoTrade、`8` だけがpolicyを選択。選ばれたpolicyは全て `entry10/short9/min_rank0.0` で、validation total `+190.4544`, worst window `+17.0910`, min window trades `4`, side share `0.9595`。
+- 選択された全gateのfixed testは同じく total `-943.9322`, worst `-294.1980`, trades `1144`。`max_side_trade_share<=0.95`, `min_window_trades=10`, `min_combined_regime_pnl>=-50` は全てNoTrade。
+- fixed-test positiveの `entry14/short9/min_rank0.6` は total `+98.9868` だが、validation total `-0.3844`, min window trades `0`, side share `1.0000` のため現selectorでは採用不可。固定testを見て昇格させるとhindsight selectionになる。
+- 判断: gate sensitivityはaccepted infrastructure。単純なside/regime/window gate閾値調整では汎化候補は見つからず、標準policyはNoTradeのまま。次はvalidation window数を増やし、sparse high-rank rowを固定test PnLなしで説明できるrank/EV calibrationへ進む。
+- report: `docs/reports/00213_2026-06-30_entry_ev_gate_sensitivity.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: selector/gate sensitivity py_compile OK; selector/gate sensitivity/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; gate sensitivity run OK
+
 ### 14:09 Entry EV multi-window admission selector
 
 - 00211の反省を受け、`entry_ev_admission_selection.py` に `--multi-window` を追加した。各 `--family-sweeps` を1 validation windowとして扱い、同じpolicy keyを複数windowで集約してからNoTrade-first selectionする。

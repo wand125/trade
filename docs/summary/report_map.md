@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 14:09 JST
+最終更新: 2026-06-30 14:21 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00212` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00212で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selectorを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。 |
+| `00186`..`00213` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00213で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivityを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。side/regime/window gateを振っても固定テストに耐える候補は出ていない。 |
 
 ## テーマ別読む順
 
@@ -51,6 +51,7 @@
 24. `00210_2026-06-30_entry_ev_rank_gate_support_audit.md`
 25. `00211_2026-06-30_entry_ev_rank_refit_2025_fold.md`
 26. `00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`
+27. `00213_2026-06-30_entry_ev_gate_sensitivity.md`
 
 ### 現在の候補軸を知る
 
@@ -80,6 +81,7 @@
 24. `00210_2026-06-30_entry_ev_rank_gate_support_audit.md`
 25. `00211_2026-06-30_entry_ev_rank_refit_2025_fold.md`
 26. `00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`
+27. `00213_2026-06-30_entry_ev_gate_sensitivity.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -311,6 +313,33 @@ Question: `min_entry_rank` を明示grid化し、support gateを追加するとf
 Best evidence: fresh 2024-03..04 best is entry10/short9/min_rank0.0 with +17.0910, worst +0.7230, but only 4 validation trades. With min_trades=10, active_months>=2, worst>=0, standard selector returns NoTrade. Fixed 2024-05..12 for that row is +87.8942, worst -2.2800, trades 10; entry8/short9/min_rank0.6 is +74.2970, worst -20.1600, trades 11.
 Decision: rank gate is useful diagnostic admission axis, but low-support candidates are not standard policies.
 Next: run rank/quantile admission on additional chronological model-refit folds and require support before promotion.
+```
+
+```text
+Report: 00211 Entry EV Rank Refit 2025 Fold
+Status: validation-design stress test / not standard
+Question: 2024で再fitし、2025-01..02 validationでsupport gateを満たすrank候補は2025-03..12へ外挿するか。
+Best evidence: validation selects entry12/short3/min_rank0.0 with +209.4234, worst +71.1950, trades 170. Fixed test collapses to -1002.1534, worst -294.1980, trades 1147.
+Decision: support gateだけでは不十分。2ヶ月validationは未来10ヶ月regimeを代表できない。
+Next: use multiple validation windows, side/regime floors, side balance, and trade-frequency gates.
+```
+
+```text
+Report: 00212 Entry EV Multi-Window Admission Selector
+Status: accepted selector infrastructure / not standard
+Question: fresh2024 and refit2025 validation windowsを同時に通すと、NoTradeを上回る候補を選べるか。
+Best evidence: strict support gate returns NoTrade. Relaxed min_window_trades=1 selects entry10/short9/min_rank0.0 with validation +190.4544, but fixed tests are -943.9322. max_side_trade_share<=0.95 returns NoTrade.
+Decision: multi-window selector is accepted, but relaxed-selected policy is rejected. Side balance and window support are rejection axes, not frozen thresholds yet.
+Next: evaluate side/regime/window gate sensitivity before freezing any admission gate.
+```
+
+```text
+Report: 00213 Entry EV Gate Sensitivity
+Status: accepted diagnostic infrastructure / not standard
+Question: side balance, window support, and regime floor thresholdsを振れば、fixed testに耐えるentry EV candidateが出るか。
+Best evidence: 576 gate variants: 568 NoTrade, 8 policy. All 8 select entry10/short9/min_rank0.0 and fixed-test to -943.9322. max_side<=0.95, min_window_trades=10, and min_combined_regime>=-50 all produce NoTrade.
+Decision: gate sensitivity infrastructure is accepted. Simple threshold tuning does not find a robust policy; current standard remains NoTrade.
+Next: add more validation windows and investigate sparse high-rank rows without using fixed-test PnL for selection.
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

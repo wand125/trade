@@ -215,7 +215,7 @@ def column_or_default(frame: pd.DataFrame, column: str, default: float) -> pd.Se
     return pd.Series(default, index=frame.index)
 
 
-def select_standard_policy(
+def filter_standard_candidates(
     summary: pd.DataFrame,
     *,
     min_positive_pnl: float,
@@ -234,8 +234,8 @@ def select_standard_policy(
     min_direction_session_pnl: float = -float("inf"),
     min_combined_regime_pnl: float = -float("inf"),
     min_direction_combined_regime_pnl: float = -float("inf"),
-) -> dict[str, object]:
-    eligible = summary[
+) -> pd.DataFrame:
+    return summary[
         (summary["validation_total"] > min_positive_pnl)
         & (summary["validation_trades"] >= min_trades)
         & (summary["validation_active_months"] >= min_active_months)
@@ -295,6 +295,47 @@ def select_standard_policy(
             >= min_direction_combined_regime_pnl
         )
     ].copy()
+
+
+def select_standard_policy(
+    summary: pd.DataFrame,
+    *,
+    min_positive_pnl: float,
+    min_trades: int,
+    min_active_months: int,
+    min_worst_pnl: float,
+    max_drawdown: float,
+    min_windows: int = 0,
+    min_positive_windows: int = 0,
+    min_active_windows: int = 0,
+    min_window_total: float = -float("inf"),
+    min_window_trades: int = 0,
+    min_monthly_trades: int = 0,
+    max_monthly_trades: float = float("inf"),
+    max_side_trade_share: float = float("inf"),
+    min_direction_session_pnl: float = -float("inf"),
+    min_combined_regime_pnl: float = -float("inf"),
+    min_direction_combined_regime_pnl: float = -float("inf"),
+) -> dict[str, object]:
+    eligible = filter_standard_candidates(
+        summary,
+        min_positive_pnl=min_positive_pnl,
+        min_trades=min_trades,
+        min_active_months=min_active_months,
+        min_worst_pnl=min_worst_pnl,
+        max_drawdown=max_drawdown,
+        min_windows=min_windows,
+        min_positive_windows=min_positive_windows,
+        min_active_windows=min_active_windows,
+        min_window_total=min_window_total,
+        min_window_trades=min_window_trades,
+        min_monthly_trades=min_monthly_trades,
+        max_monthly_trades=max_monthly_trades,
+        max_side_trade_share=max_side_trade_share,
+        min_direction_session_pnl=min_direction_session_pnl,
+        min_combined_regime_pnl=min_combined_regime_pnl,
+        min_direction_combined_regime_pnl=min_direction_combined_regime_pnl,
+    )
     if eligible.empty:
         best_total = float(summary["validation_total"].max()) if not summary.empty else 0.0
         return {
