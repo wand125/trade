@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 17:28 Entry EV residual 2024-03 loss diagnostics
+
+- 00226で残った fresh `2024-03` の `q95_floor5 / 720m` 月次損失 `-9.1718` を、trade単位で方向ミス、exit capture不足、prior risk coverageに分解する `scripts/experiments/entry_ev_residual_month_loss_diagnostics.py` を追加した。
+- main診断は `data/reports/backtests/20260630_entry_ev_residual_month_loss_diagnostics/20260630_082721_entry_ev_residual_2024_03_q95_720/`。
+- `prior_context_risk>=0.20` の後付け感度は `data/reports/backtests/20260630_entry_ev_residual_month_loss_diagnostics/20260630_082752_entry_ev_residual_2024_03_q95_720_prior020/`。
+- 対象18 tradesの合計は `-9.1718`。loss tradesは7件 / `-52.0548`、win rateは `0.6111`。
+- 18 tradesすべてに同方向oracle利益余地があり、same-side oracle totalは `+327.9840`、actual best totalは `+485.5670`。`no_edge_entry` は0件。
+- direction errorは7件 / `-46.3626`、large exit regretは13件 / `-30.5188`、large best-side regretは15件 / `-34.7518`。
+- `prior_context_risk>=0.50` は0件で、この月の損失を拾えない。`>=0.20` なら4件 / `-31.2560` を拾うが、局所的な後付けなので採用しない。
+- 判断: この残差月はentry floor不足ではなく、direction-side inversion、exit capture、realized-executable EV calibration不足として扱う。標準policyはNoTrade。
+- report: `docs/reports/00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: residual diagnostics unit tests OK; py_compile OK; main residual diagnostic run OK; prior threshold sensitivity run OK
+
 ### 17:13 Entry EV prior context risk score
 
 - 00225の反省を受け、prior context-side evidenceをhard blockへ直結せずrisk scoreとして診断する `scripts/experiments/entry_ev_prior_context_risk_diagnostics.py` を追加した。

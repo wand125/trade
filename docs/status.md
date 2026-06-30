@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 17:13 JST
+最終更新: 2026-06-30 17:28 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV residual 2024-03 loss diagnosticsを追加した。00226で残った fresh `2024-03` の `q95_floor5 / 720m` 月次損失 `-9.1718` をtrade単位で分解したところ、18 tradesすべてに同方向oracle利益余地があり、same-side oracle totalは `+327.9840`、actual best totalは `+485.5670`。`no_edge_entry` は0件で、loss trades 7件 / `-52.0548` は全てsame-side oracle edgeを持つ。direction errorは7件 / `-46.3626`、large exit regretは13件 / `-30.5188`、large best-side regretは15件 / `-34.7518`。`prior_context_risk>=0.50` は0件で残差損失を拾えず、後付け感度の `>=0.20` は4件 / `-31.2560` を拾うが採用しない。判断: 残差月はentry floor不足ではなく、direction-side inversion、exit capture、realized-executable EV calibration不足として扱う。標準policyはNoTrade。詳細は `docs/reports/00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV prior context risk score診断を追加した。prior context-side evidenceをhard blockへ直結せず、対象月より前の同一 `direction + combined_regime + session_regime` 実績からrisk scoreを作り、bucket別PnLとstateful guardを比較する。validation q95/q99では broad hard flagが52 trades / `-84.6872` を拾うが、fresh q95の良いtradeも消す。`risk_score>=0.50` は8 trades / `-15.3772` と狭い。stateful validationでは q95_floor5/720m が `+117.0340 -> +133.2270` に改善、fresh fixedでは fresh-only priorは `+402.1118 -> +396.0818` と小幅悪化、cal+fresh priorは `+427.6524` へ改善した。ただし min month `-9.1718` は残る。判断: risk score script、`prior_risk` guard、`--prior-roles` はaccepted infrastructure。標準policyはNoTrade。詳細は `docs/reports/00226_2026-06-30_entry_ev_prior_context_risk_score.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
