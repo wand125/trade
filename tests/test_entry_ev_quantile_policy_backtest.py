@@ -53,6 +53,24 @@ class EntryEvQuantilePolicyBacktestTests(unittest.TestCase):
         self.assertEqual(candidate.scope, "month")
         self.assertEqual(candidate.score_quantile, 0.99)
 
+    def test_policy_candidate_parses_positive_ev_floor(self):
+        candidate = entry_ev_quantile_policy_backtest.policy_candidate_from_name(
+            "q95_sg95_rank90_floor2p5_side_regime_session_month"
+        )
+
+        self.assertEqual(candidate.scope, "side_regime_session_month")
+        self.assertEqual(candidate.score_quantile, 0.95)
+        self.assertEqual(candidate.side_gap_quantile, 0.95)
+        self.assertEqual(candidate.rank_quantile, 0.90)
+        self.assertEqual(candidate.entry_threshold, 2.5)
+
+    def test_parse_policy_candidates_allows_dynamic_floor_candidates(self):
+        names = entry_ev_quantile_policy_backtest.parse_policy_candidates(
+            "q95_sg95_rank90_floor10_side_regime_session_month"
+        )
+
+        self.assertEqual(names, ["q95_sg95_rank90_floor10_side_regime_session_month"])
+
     def test_parse_role_months_maps_family_month_pairs(self):
         role_lookup = entry_ev_quantile_policy_backtest.parse_role_months(
             ["validation=fresh2024:2024-03,2024-04"]

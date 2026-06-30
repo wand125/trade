@@ -93,9 +93,16 @@ def parse_optional_csv(value: str) -> list[str]:
 
 def parse_policy_candidates(value: str) -> list[str]:
     names = parse_optional_csv(value)
-    unknown = sorted(set(names) - set(DEFAULT_POLICY_CANDIDATES))
-    if unknown:
-        raise argparse.ArgumentTypeError(f"unknown policy candidates: {','.join(unknown)}")
+    invalid: list[str] = []
+    for name in names:
+        try:
+            policy_candidate_from_name(name)
+        except ValueError:
+            invalid.append(name)
+    if invalid:
+        raise argparse.ArgumentTypeError(
+            f"unknown policy candidates: {','.join(sorted(invalid))}"
+        )
     return names
 
 
@@ -124,6 +131,10 @@ def quantile_column(score_kind: str, metric: str, scope: str) -> str:
     return f"pred_{score_kind}_{metric}_pct_{scope}"
 
 
+def parse_candidate_number(value: str) -> float:
+    return float(value.replace("p", "."))
+
+
 def policy_candidate_from_name(name: str) -> PolicyCandidate:
     if name == "abs_entry10_short9_side5_rank0":
         return PolicyCandidate(
@@ -137,19 +148,35 @@ def policy_candidate_from_name(name: str) -> PolicyCandidate:
     parts = name.split("_")
     if len(parts) < 4 or not parts[0].startswith("q") or not parts[1].startswith("sg"):
         raise ValueError(f"unknown policy candidate: {name}")
-    score_quantile = float(parts[0][1:]) / 100.0
-    side_gap_quantile = float(parts[1][2:]) / 100.0
     rank_part = parts[2]
     if not rank_part.startswith("rank"):
         raise ValueError(f"unknown policy candidate: {name}")
-    rank_quantile = float(rank_part[4:]) / 100.0
-    scope = "_".join(parts[3:])
+    rank_quantile = parse_candidate_number(rank_part[4:]) / 100.0
+    entry_threshold = 0.0
+    scope_parts = parts[3:]
+    if scope_parts and scope_parts[0].startswith("floor"):
+        entry_threshold = parse_candidate_number(scope_parts[0][5:])
+        scope_parts = scope_parts[1:]
+    if not scope_parts:
+        raise ValueError(f"unknown policy candidate: {name}")
+    score_quantile = parse_candidate_number(parts[0][1:]) / 100.0
+    side_gap_quantile = parse_candidate_number(parts[1][2:]) / 100.0
+    if (
+        not 0 <= score_quantile <= 1
+        or not 0 <= side_gap_quantile <= 1
+        or not 0 <= rank_quantile <= 1
+    ):
+        raise ValueError(f"unknown policy candidate: {name}")
+    if entry_threshold < 0:
+        raise ValueError(f"unknown policy candidate: {name}")
+    scope = "_".join(scope_parts)
     return PolicyCandidate(
         name=name,
         scope=scope,
         score_quantile=score_quantile,
         side_gap_quantile=side_gap_quantile,
         rank_quantile=rank_quantile,
+        entry_threshold=entry_threshold,
     )
 
 

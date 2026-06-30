@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 15:47 JST
+最終更新: 2026-06-30 15:57 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile positive floor候補を追加した。`q95_sg95_rank90_floor10_side_regime_session_month` のような候補名で、local quantile gateに selected calibrated EV floorを事前登録できる。floor `5/10`、score q `90/95/99`、side gap q `90/95`、rank q90の8候補を評価したが、strict3/clean2ともNoTrade。floor10はfresh2024 validationを少し改善するがrefit2025 validationの負けを解けず、q90 score quantileはfresh2024 tailを悪化させた。判断: floor syntaxはaccepted infrastructure、現floor候補は標準採用しない。詳細は `docs/reports/00221_2026-06-30_entry_ev_quantile_positive_floor.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile role selectorを追加した。00219の `monthly_policy_metrics.csv` を、validation roleだけで審査し、fixed diagnostic roleは選択後の参考列に分離する。strict3 (`cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`) はNoTrade。clean2 (`fresh2024_validation`, `refit2025_validation`) もNoTrade。clean2では絶対閾値baselineが validation total `+254.7066`, min role total `+16.1220`, min month `+1.0490` だが、fresh role trades `4` と validation max side share `0.9595` で落ちる。判断: role-level selectorはaccepted infrastructure、現quantile候補は標準採用しない。詳細は `docs/reports/00220_2026-06-30_entry_ev_quantile_role_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

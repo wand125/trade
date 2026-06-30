@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 15:47 JST
+最終更新: 2026-06-30 15:57 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00220` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00220で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断、scale quantile診断、quantile policy backtest、role selectorを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。cal2024はprediction入力側ではside margin supportがほぼなく、refit2025はlong EV scaleが大きすぎる。00218でside/regime/session-local quantileが候補数を比較可能にする軸だと確認し、00219でstateful backtestへ接続したが、fresh/refit validationのworstが負。00220のrole selectorでもstrict3/clean2ともNoTrade。 |
+| `00186`..`00221` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00221で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断、scale quantile診断、quantile policy backtest、role selector、positive EV floorを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。cal2024はprediction入力側ではside margin supportがほぼなく、refit2025はlong EV scaleが大きすぎる。00218でside/regime/session-local quantileが候補数を比較可能にする軸だと確認し、00219でstateful backtestへ接続したが、fresh/refit validationのworstが負。00220のrole selectorでもstrict3/clean2ともNoTrade。00221のEV floor候補も全てNoTrade。 |
 
 ## テーマ別読む順
 
@@ -59,6 +59,7 @@
 32. `00218_2026-06-30_entry_ev_scale_quantile_diagnostics.md`
 33. `00219_2026-06-30_entry_ev_quantile_policy_backtest.md`
 34. `00220_2026-06-30_entry_ev_quantile_role_selector.md`
+35. `00221_2026-06-30_entry_ev_quantile_positive_floor.md`
 
 ### 現在の候補軸を知る
 
@@ -96,6 +97,7 @@
 32. `00218_2026-06-30_entry_ev_scale_quantile_diagnostics.md`
 33. `00219_2026-06-30_entry_ev_quantile_policy_backtest.md`
 34. `00220_2026-06-30_entry_ev_quantile_role_selector.md`
+35. `00221_2026-06-30_entry_ev_quantile_positive_floor.md`
 
 ### holding / exit 系の経緯を知る
 

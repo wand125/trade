@@ -89,6 +89,7 @@
 - 00218でquantile admission診断を追加した。`side_regime_session_month` scopeの `score>=q99`, `side_gap>=q95`, `rank>=q90` は cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesとなり、絶対閾値よりfold間候補数が比較しやすい。次はこのquantile列をprediction/backtest inputに接続し、stateful timed-EV policyとしてNoTradeと比較する。
 - 00219でquantile列をstateful timed-EVへ接続した。cal2024のno-entry問題は解消したが、fresh/refit validationのworst monthが負になった。quantile gate単独は標準採用せず、追加chronological validation windows、role-level worst-month gate、side share cap、small positive EV floorを事前登録してから再評価する。
 - 00220でrole-level selectorを追加した。strict3/clean2ともNoTradeで、clean2の絶対閾値baselineもrole trades不足とside concentrationで落ちる。今後のquantile候補はこのselectorを通してからfixed diagnostic/cost stressを見る。
+- 00221でpositive EV floor候補を追加した。floor `5/10` を入れてもstrict3/clean2はNoTradeで、floor10はfresh validationを少し改善する一方refitの負けを解けない。同じrole上でfloor値を細かく探索せず、次はselected trade contextとEV calibrationをrole別に比較するか、chronological validation windowを増やす。
 
 ## 外部データ候補
 

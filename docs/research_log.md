@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 15:57 Entry EV quantile positive floor
+
+- 00220の次アクションとして、quantile admission候補へ小さなpositive EV floorを追加した。
+- `scripts/experiments/entry_ev_quantile_policy_backtest.py` のcandidate parserを拡張し、`q95_sg95_rank90_floor10_side_regime_session_month` のような名前で `entry_threshold=10` を指定できるようにした。`floor2p5` は `2.5` と解釈する。
+- floor policy runでは `score q90/q95/q99`, `side_gap q90/q95`, `rank q90`, floor `5/10` の8候補を `cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`, `fresh2024_fixed_diagnostic` に適用した。
+- `q95_sg95_rank90_floor10` はfresh2024 validation worstを `-3.6326 -> -1.6462` に少し改善したが、cal2024 worstを `+0.2074 -> -11.3846` に悪化させ、refit2025 validationは `-23.6438` のまま負。
+- `q90_sg90_rank90_floor5` は候補数を増やすが、fresh2024 validation total `-50.8200`, worst `-37.3312` とtailを悪化させた。
+- strict3 selectorもclean2 selectorもNoTrade。全8候補が `positive_roles_low`, `role_total_pnl_below_floor`, `month_pnl_below_floor` で落ちた。
+- 判断: positive EV floor構文はaccepted infrastructure。現floor候補は標準採用しない。失敗は「selected EVが正か」では解けず、role/regime instabilityに残っている。
+- report: `docs/reports/00221_2026-06-30_entry_ev_quantile_positive_floor.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: quantile policy backtest unit tests OK; py_compile OK; floor policy backtest run OK; strict3/clean2 selector runs OK
+
 ### 15:47 Entry EV quantile role selector
 
 - 00219の次アクションとして、quantile policy結果をvalidation roleだけでNoTrade-first選択するselectorを追加した。

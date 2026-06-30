@@ -776,6 +776,10 @@ python scripts/experiments/entry_ev_quantile_policy_selection.py \
   --max-side-trade-share 0.95
 ```
 
+Quantile policy candidate names may include a pre-registered selected-EV floor,
+for example `q95_sg95_rank90_floor10_side_regime_session_month`. A decimal floor
+uses `p` in the name, such as `floor2p5` for `entry_threshold=2.5`.
+
 Sweep policy thresholds on a validation month:
 
 ```bash
