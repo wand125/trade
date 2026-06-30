@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 18:41 JST
+最終更新: 2026-06-30 18:55 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-Entry EV dense executable capture model診断を追加した。selected tradeだけのprior context平均ではなく、prediction全行をlong/short side-rowへ展開し、`side_fixed_720m_adjusted_pnl / side_best_adjusted_pnl` と `side_fixed_240m_adjusted_pnl / side_best_adjusted_pnl` を月順OOFで学習した。row-level EV MAEは大きく改善し、fixed720では `2025-01` raw `17.0734 -> 10.6154`, `2025-02` `19.9742 -> 13.9449`、fixed240では `2025-01` `16.0786 -> 6.0691`, `2025-02` `17.4734 -> 8.1887`。しかしstateful trade成績には転化せず、fixed720 q95 floor5は validation total `+16.4192` だが fresh role `-76.2788`、fixed240 q99 floor10も min month `-1.8000` とsupport不足でNoTrade。判断: dense capture model infrastructureはaccepted、fixed720/fixed240 dense scoreは標準採用しない。次はside-balance / side-drift penalty、downside-weighted target、selector/ranking featureとして使う。詳細は `docs/reports/00232_2026-06-30_entry_ev_dense_executable_capture_model.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+Entry EV side-balance score penalty診断を追加した。00232のdense executable scoreに対し、対象月より前のprediction全行から `predicted selected long share - fixed720 dense label long share` を作り、過剰sideだけを縮小する prior-only penalty を入れた。refit2025のlong過剰は `2025-01 0.9453 -> 0.8911`, `2025-02 0.8970 -> 0.8750` へ少し改善し、refit validation q95 floor5は `+93.9912`, min month `+9.5300` になった。一方、fresh validationは q95 floor5 `-82.2428`, q99 floor5 `-38.3550` と悪化し、overall q95 floor5も total `+14.6138` だが min role `-82.2428`, min month `-46.5308` でNoTrade。判断: side-balance infrastructureはaccepted、generic side-balance penaltyをdirect scoreとして標準採用しない。side-balanceはselector/ranking feature、downside-conditioned penalty、context-specific correctionとして扱う。詳細は `docs/reports/00233_2026-06-30_entry_ev_side_balance_score_penalty.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+Entry EV dense executable capture model診断を追加した。selected tradeだけのprior context平均ではなく、prediction全行をlong/short side-rowへ展開し、`side_fixed_720m_adjusted_pnl / side_best_adjusted_pnl` と `side_fixed_240m_adjusted_pnl / side_best_adjusted_pnl` を月順OOFで学習した。row-level EV MAEは大きく改善し、fixed720では `2025-01` raw `17.0734 -> 10.6154`, `2025-02` `19.9742 -> 13.9449`、fixed240では `2025-01` `16.0786 -> 6.0691`, `2025-02` `17.4734 -> 8.1887`。しかしstateful trade成績には転化せず、fixed720 q95 floor5は validation total `+16.4192` だが fresh role `-76.2788`、fixed240 q99 floor10も min month `-1.8000` とsupport不足でNoTrade。判断: dense capture model infrastructureはaccepted、fixed720/fixed240 dense scoreは標準採用しない。次はdownside-weighted target、selector/ranking featureとして使う。詳細は `docs/reports/00232_2026-06-30_entry_ev_dense_executable_capture_model.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV executable EV stateful score診断を追加した。00230の次アクションとして、post-trade featureではなく、prediction parquet全行に prior-only executable capture factorを付け、`pred_executable_calibrated_long_best_adjusted_pnl` / `short` を `timed_ev` の実entry scoreへ差し替えた。refit2025のlong shareは `0.9169..0.9150` から `0.4367..0.4705` まで縮み、`720m q99 floor5` は validation total `+43.0418`, min role `+2.4158` まで改善した。一方、validation min month `-1.8000` と `month_trades_low`、fresh fixed `2024-10 -10.3560` が残りNoTrade-first gateは通らない。floorなしはvalidation `-51.2934` などで悪化し、floor `2/3/4` に安定台地はない。判断: executable EV stateful score infrastructureはaccepted、標準policyはNoTrade。詳細は `docs/reports/00231_2026-06-30_entry_ev_executable_ev_stateful_score.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

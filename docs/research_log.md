@@ -4,6 +4,21 @@
 
 ## 2026-06-30 JST
 
+### 18:55 Entry EV side-balance score penalty
+
+- 00232の次アクションとして、dense executable scoreへ prior-only side-balance penaltyを掛ける `scripts/experiments/entry_ev_side_balance_score_inputs.py` を追加した。
+- side-balance input generationは `data/reports/backtests/20260630_095101_20260630_entry_ev_side_balance_dense720_inputs_s1/`。
+- validation stateful backtestは `data/reports/backtests/20260630_095136_20260630_entry_ev_side_balance_dense720_policy_backtest_s1/`、selectorは `data/reports/backtests/20260630_095158_20260630_entry_ev_side_balance_dense720_policy_selector_s1_relaxed_trades/`。
+- fresh fixed diagnosticは `data/reports/backtests/20260630_095220_20260630_entry_ev_side_balance_dense720_policy_backtest_s1_fixed_2024_10_11/`。
+- 対象月より前のprediction全行から `prior_pred_long_share - prior_target_long_share` を作り、過剰に出ているsideのscoreだけを縮小する。`target_month` と未来月のlabelは使わない。
+- refit2025のlong過剰は縮んだ。long shareは `2025-01 0.9453 -> 0.8911`, `2025-02 0.8970 -> 0.8750`。refit validation q95 floor5は `+93.9912`, min month `+9.5300`, trades `19`。
+- 一方、fresh validationは q95 floor5 `-82.2428`, q99 floor5 `-38.3550`。overall q95 floor5は total `+14.6138` だが min role `-82.2428`, min month `-46.5308`。selectorはNoTrade。
+- fresh fixed `2024-10..11` は q99 floor5 `+27.3080` だが2 tradesだけ、q95 floor5は `-33.9804`。
+- 判断: side-balance score infrastructureはaccepted。generic side-balance penaltyをdirect scoreとして標準採用しない。side-balance driftはselector/ranking feature、downside-conditioned penalty、context-specific correctionへ回す。
+- report: `docs/reports/00233_2026-06-30_entry_ev_side_balance_score_penalty.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: side-balance unit tests OK; py_compile OK; input generation, stateful backtest, selector, fresh fixed diagnostic OK
+
 ### 18:41 Entry EV dense executable capture model
 
 - 00231の次アクションとして、selected tradeだけのprior context平均ではなく、prediction全行からdense executable capture targetを作る `scripts/experiments/entry_ev_dense_executable_capture_model.py` を追加した。
