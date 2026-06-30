@@ -73,6 +73,7 @@
 - 00202でtrigger限定replacement risk hookをdynamic backtestした。`min_prior_months=4` と `recent_short_losing_months>=1` の後だけ `pred_short_profit_barrier_hit=0` を止めると、`gap5/budget0` baseline `+508.9838 / worst -215.1172` から `+790.3634 / worst -46.0150` へ改善。low-EVはworstを止めない。次は同一familyの2024または追加未使用月へ、trigger条件とthresholdを再探索せず固定適用する。
 - 00203でtriggered profit-missを `2024-11,2024-12,2025-01..04` same-family smokeへ固定適用したところ、`gap5/budget0 +445.8266` に対して `+367.8768` へ悪化した。発火した2025-03/04で勝ちshortを削ったため、profit-miss hookは診断候補へ降格。
 - 00204で `gap5/budget0` 単体を `2024-11..2025-08` same-familyへ拡張した。10ヶ月合計は `+384.6968` でsource `+219.9460` を上回るが、追加apply `2025-05..08` だけでは `+13.9434` でsource `+66.7730` とbaseline `+176.8236` に負けた。`gap5/budget0` も標準採用候補から外し、診断baselineにする。純2024検証には2024前半の同一risk列生成が必要。
+- 00205でsame-family side calibrationを診断した。raw EVには `2025-04..06` でshort biasがあるが、gap5は2025-06の良いshortを消して悪化し、残存最大損失はlong側にも移った。これ以上2025系列にshort-only hookを積まず、早期2024のHGB+MLP forced prediction生成、同一risk列拡張、side/EV calibration preflightを優先する。
 
 ## 外部データ候補
 

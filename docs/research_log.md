@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 12:14 Same-family side calibration diagnostics
+
+- 00204で `gap5/budget0` が追加apply `2025-05..08` に外挿しなかったため、同じ10ヶ月窓でbaseline / source p10+replm10 / gap5のside drift診断を実施した。
+- ローカルM1価格データは `2009-03-15 22:00 UTC` から `2026-06-01 04:58 UTC` まで存在する。純2024検証の不足は価格データ不足ではなく、同一familyの早期2024 HGB+MLP forced predictionが未生成なこと。
+- raw EV predictionは `2025-04..06` でactual label short shareに対して `+0.27..+0.30` のshort biasを持つ。
+- しかし `gap5/budget0` は追加applyでshort tradesを `190 -> 87` に削り、source short PnL `+37.4170` を `-15.4126` へ悪化させた。特に2025-06は source short `+68.8738` に対して gap5 short `-17.3392`。
+- gap5後の代表損失は `2025-07 down_low_vol/ny_overlap long -97.4172`、`2025-06 range_normal_vol/ny_overlap short -42.0708`、`2025-08 up_low_vol/asia long -36.7772`。short-only suppression後はlong側の残存riskも大きい。
+- 判断: 同じ2025系列でshort-only hookを増やさない。`side_drift_diagnostics.py` をfuture candidate preflightにし、次は早期2024のHGB+MLP forced prediction生成と同一risk列拡張へ進む。
+- report: `docs/reports/00205_2026-06-30_samefamily_side_calibration_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: baseline/source/gap5 side drift diagnostics artifact生成 OK; data coverage preflight OK
+
 ### 12:02 Gap5/budget0 same-family extension
 
 - 00203の次アクションとして、`gap5/budget0` 自体を追加same-family windowへ再探索なしで固定適用した。
