@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 16:55 JST
+最終更新: 2026-06-30 17:13 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV prior context risk score診断を追加した。prior context-side evidenceをhard blockへ直結せず、対象月より前の同一 `direction + combined_regime + session_regime` 実績からrisk scoreを作り、bucket別PnLとstateful guardを比較する。validation q95/q99では broad hard flagが52 trades / `-84.6872` を拾うが、fresh q95の良いtradeも消す。`risk_score>=0.50` は8 trades / `-15.3772` と狭い。stateful validationでは q95_floor5/720m が `+117.0340 -> +133.2270` に改善、fresh fixedでは fresh-only priorは `+402.1118 -> +396.0818` と小幅悪化、cal+fresh priorは `+427.6524` へ改善した。ただし min month `-9.1718` は残る。判断: risk score script、`prior_risk` guard、`--prior-roles` はaccepted infrastructure。標準policyはNoTrade。詳細は `docs/reports/00226_2026-06-30_entry_ev_prior_context_risk_score.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile prior-only inversion guardを追加した。00224のsame-validation diagnostic guardを、対象月より前のselected trade実績だけで作る `prior_inversion` modeへ置き換え、floor/candidate重複tradeは `month + entry_decision_timestamp + direction + combined_regime + session_regime` でdedupeする。validationでは fast prior `720m q95_floor5` が `+139.0422 / min role +17.7308 / min month -0.4914` まで改善したが、NoTrade-first gateはまだ通らない。fresh fixed diagnosticでは no-guard `720m q95_floor5` が `+402.1118 / min role +76.2204`、prior guard `720m` が `+373.4814 / min role +2.0982` で、guardが良い取引も削る。判断: prior-only guard infrastructureはaccepted、現prior inversion guardは標準採用しない。`720m` は診断capとして残し、標準policyはNoTrade。詳細は `docs/reports/00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

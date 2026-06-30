@@ -846,6 +846,38 @@ python scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py \
   --prior-min-direction-error-rate 1.0
 ```
 
+For a softer preflight, score prior context-side risk before turning it into a
+hard rule:
+
+```bash
+python scripts/experiments/entry_ev_prior_context_risk_diagnostics.py \
+  --target-enriched-trades data/reports/backtests/<trade_diagnostics_run>/enriched_trades.csv \
+  --prior-enriched-trades data/reports/backtests/<trade_diagnostics_run>/enriched_trades.csv \
+  --target-roles cal2024_calibration_validation,fresh2024_validation,refit2025_validation \
+  --prior-roles cal2024_calibration_validation,fresh2024_validation,refit2025_validation \
+  --candidates q95_sg95_rank90_floor5_side_regime_session_month,q95_sg95_rank90_floor10_side_regime_session_month \
+  --min-prior-months 1 \
+  --risk-thresholds 0.25,0.50,0.75
+```
+
+The same score can be tested inside the stateful hold-cap sensitivity with
+`prior_risk`. Use `--prior-roles` when the evidence window should differ from
+the target evaluation roles:
+
+```bash
+python scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py \
+  --family-predictions fresh2024=data/reports/backtests/<quantile_inputs>/enriched_predictions/fresh2024_predictions_quantiles.parquet \
+  --role-months fresh2024_validation=fresh2024:2024-03,2024-04 \
+  --role-months fresh2024_fixed_diagnostic=fresh2024:2024-05,2024-06,2024-07,2024-08,2024-09,2024-10,2024-11,2024-12 \
+  --roles fresh2024_validation,fresh2024_fixed_diagnostic \
+  --prior-roles cal2024_calibration_validation,fresh2024_validation \
+  --prior-enriched-trades data/reports/backtests/<trade_diagnostics_run>/enriched_trades.csv \
+  --policy-candidates q95_sg95_rank90_floor5_side_regime_session_month \
+  --max-predicted-hold-minutes 720 \
+  --guard-modes none,prior_risk \
+  --prior-risk-threshold 0.50
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash

@@ -4,6 +4,23 @@
 
 ## 2026-06-30 JST
 
+### 17:13 Entry EV prior context risk score
+
+- 00225の反省を受け、prior context-side evidenceをhard blockへ直結せずrisk scoreとして診断する `scripts/experiments/entry_ev_prior_context_risk_diagnostics.py` を追加した。
+- `scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py` に `prior_risk` guard modeと `--prior-roles` を追加し、対象roleとprior evidence roleを分けられるようにした。
+- validation pointwise診断は `data/reports/backtests/20260630_entry_ev_prior_context_risk_diagnostics/20260630_080544_entry_ev_prior_context_risk_validation_q95q99/`。
+- fresh q95_floor5 720m no-guard trade生成は `data/reports/backtests/20260630_entry_ev_prior_context_risk_diagnostics/20260630_080607_entry_ev_q95_floor5_720_fresh_trades/`、enriched trade診断は `data/reports/backtests/20260630_entry_ev_prior_context_risk_diagnostics/20260630_080630_entry_ev_q95_floor5_720_fresh_trade_diagnostics/`。
+- stateful validation prior_risk guardは `data/reports/backtests/20260630_entry_ev_prior_context_risk_diagnostics/20260630_080935_entry_ev_prior_risk_guard_validation_q95_floor5/`。
+- stateful fresh-only prior_risk guardは `data/reports/backtests/20260630_entry_ev_prior_context_risk_diagnostics/20260630_081001_entry_ev_prior_risk_guard_fresh_q95_floor5/`。
+- stateful cal+fresh prior_risk guardは `data/reports/backtests/20260630_entry_ev_prior_context_risk_diagnostics/20260630_081420_entry_ev_prior_risk_guard_fresh_q95_floor5_crossprior/`。
+- validation q95/q99 pointwiseでは broad hard flagが52 trades / `-84.6872` を拾うが、fresh q95の良いtradeも消す。`risk_score>=0.50` は8 trades / `-15.3772` と狭く副作用が小さい。
+- stateful validationでは q95_floor5/720m が no-guard `+117.0340 / min role +16.2628 / min month -9.1718` から prior_risk `+133.2270 / min role +24.5508 / min month -9.1718` へ改善した。
+- fresh fixedでは fresh-only prior が `+402.1118 -> +396.0818` と小幅悪化。cal+fresh priorでは `+427.6524` へ改善したが、min month `-9.1718` は残る。
+- 判断: risk score diagnostics、`prior_risk` guard、`--prior-roles` はaccepted infrastructure。現guardは標準採用しない。標準policyはNoTrade。
+- report: `docs/reports/00226_2026-06-30_entry_ev_prior_context_risk_score.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: prior context risk diagnostics unit tests OK; hold-cap sensitivity unit tests OK; py_compile OK; pointwise diagnostics OK; stateful prior_risk runs OK
+
 ### 16:55 Entry EV quantile prior inversion guard
 
 - 00224のsame-validation diagnostic inversion guardを、対象月より前のselected trade実績だけで作る `prior_inversion` guard modeへ置き換えた。

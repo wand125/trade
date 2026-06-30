@@ -135,6 +135,51 @@ class EntryEvQuantileHoldCapSensitivityTests(unittest.TestCase):
         self.assertEqual(eligible.iloc[0]["trade_count"], 2)
         self.assertEqual(eligible.iloc[0]["total_adjusted_pnl"], -9.0)
 
+    def test_prior_risk_scores_contexts_before_blocking(self):
+        trades = pd.DataFrame(
+            {
+                "role": ["fresh", "fresh", "fresh"],
+                "candidate": ["q95", "q95", "q95"],
+                "month": ["2024-01", "2024-02", "2024-02"],
+                "direction": ["short", "short", "long"],
+                "entry_decision_timestamp": [
+                    "2024-01-10T00:00:00Z",
+                    "2024-02-10T00:00:00Z",
+                    "2024-02-11T00:00:00Z",
+                ],
+                "combined_regime": ["range_low_vol", "range_low_vol", "range_low_vol"],
+                "session_regime": ["ny_overlap", "ny_overlap", "ny_overlap"],
+                "adjusted_pnl": [-10.0, -5.0, -30.0],
+                "direction_error": [True, True, True],
+                "exit_regret": [1.0, 2.0, 3.0],
+            }
+        )
+        prior_frame = entry_ev_quantile_hold_cap_sensitivity.prior_trade_context_frame(
+            trades,
+            roles={"fresh"},
+            candidates={"q95"},
+        )
+
+        rules, eligible = (
+            entry_ev_quantile_hold_cap_sensitivity.derive_prior_context_side_risk_rules(
+                prior_frame,
+                target_month="2024-03",
+                min_prior_months=1,
+                recent_month_count=0,
+                min_trade_count=1,
+                min_risk_score=0.98,
+                max_total_pnl=0.0,
+                support_scale=1.0,
+                pnl_scale=10.0,
+            )
+        )
+
+        self.assertEqual(
+            rules,
+            ["long:combined_regime=range_low_vol+session_regime=ny_overlap"],
+        )
+        self.assertGreaterEqual(eligible.iloc[0]["prior_context_risk_score"], 0.50)
+
 
 if __name__ == "__main__":
     unittest.main()

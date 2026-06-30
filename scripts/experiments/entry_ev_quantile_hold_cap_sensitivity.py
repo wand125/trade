@@ -239,6 +239,86 @@ def derive_prior_context_side_block_rules(
     return eligible["side_block_rule"].drop_duplicates().astype(str).tolist(), eligible
 
 
+def derive_prior_context_side_risk_rules(
+    trades: pd.DataFrame,
+    *,
+    target_month: str,
+    min_prior_months: int,
+    recent_month_count: int,
+    min_trade_count: int,
+    min_risk_score: float,
+    max_total_pnl: float,
+    support_scale: float,
+    pnl_scale: float,
+) -> tuple[list[str], pd.DataFrame]:
+    if trades.empty:
+        return [], pd.DataFrame()
+    target_period = pd.Period(target_month, freq="M")
+    trade_periods = pd.PeriodIndex(trades["month"].astype(str), freq="M")
+    prior_mask = trade_periods < target_period
+    if recent_month_count > 0:
+        prior_mask &= trade_periods >= (target_period - recent_month_count)
+    prior = trades[prior_mask].copy()
+    if prior.empty:
+        return [], pd.DataFrame()
+    prior_month_count = int(prior["month"].nunique())
+    if prior_month_count < min_prior_months:
+        return [], pd.DataFrame()
+
+    prior["_loss"] = prior["adjusted_pnl"].astype(float) < 0
+    prior["_loss_pnl"] = prior["adjusted_pnl"].astype(float).where(prior["_loss"], 0.0)
+    grouped = (
+        prior.groupby(["direction", "combined_regime", "session_regime"], dropna=False)
+        .agg(
+            trade_count=("adjusted_pnl", "size"),
+            total_adjusted_pnl=("adjusted_pnl", "sum"),
+            loss_adjusted_pnl=("_loss_pnl", "sum"),
+            loss_count=("_loss", "sum"),
+            direction_error_count=("direction_error", "sum"),
+            exit_regret_sum=("exit_regret", "sum"),
+            prior_month_count=("month", "nunique"),
+        )
+        .reset_index()
+    )
+    grouped["target_month"] = target_month
+    grouped["avg_adjusted_pnl"] = np.where(
+        grouped["trade_count"] > 0,
+        grouped["total_adjusted_pnl"] / grouped["trade_count"],
+        0.0,
+    )
+    grouped["loss_rate"] = np.where(
+        grouped["trade_count"] > 0,
+        grouped["loss_count"] / grouped["trade_count"],
+        0.0,
+    )
+    grouped["direction_error_rate"] = np.where(
+        grouped["trade_count"] > 0,
+        grouped["direction_error_count"] / grouped["trade_count"],
+        0.0,
+    )
+    grouped["support_weight"] = np.clip(grouped["trade_count"] / support_scale, 0.0, 1.0)
+    grouped["pnl_risk_component"] = np.clip(-grouped["avg_adjusted_pnl"] / pnl_scale, 0.0, 1.0)
+    grouped["prior_context_risk_score"] = grouped["support_weight"] * (
+        0.45 * grouped["direction_error_rate"]
+        + 0.35 * grouped["loss_rate"]
+        + 0.20 * grouped["pnl_risk_component"]
+    )
+    eligible = grouped[
+        (grouped["trade_count"] >= min_trade_count)
+        & (grouped["prior_context_risk_score"] >= min_risk_score)
+        & (grouped["total_adjusted_pnl"] <= max_total_pnl)
+    ].copy()
+    eligible["side_block_rule"] = [
+        rule_for_context(str(row.direction), str(row.combined_regime), str(row.session_regime))
+        for row in eligible.itertuples(index=False)
+    ]
+    eligible = eligible.sort_values(
+        ["target_month", "prior_context_risk_score", "total_adjusted_pnl", "trade_count"],
+        ascending=[True, False, True, False],
+    ).reset_index(drop=True)
+    return eligible["side_block_rule"].drop_duplicates().astype(str).tolist(), eligible
+
+
 def summarize_candidates(monthly: pd.DataFrame) -> pd.DataFrame:
     role_summary = summarize_by_group(
         monthly,
@@ -319,12 +399,13 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
     candidate_names = parse_policy_candidates(args.policy_candidates)
     role_lookup = parse_role_months(args.role_months)
     roles = set(parse_optional_csv(args.roles))
+    prior_roles = set(parse_optional_csv(args.prior_roles)) or roles
     hold_caps = parse_float_csv(args.max_predicted_hold_minutes)
     guard_modes = parse_optional_csv(args.guard_modes)
     if not guard_modes:
         guard_modes = ["none"]
     invalid_modes = sorted(
-        set(guard_modes) - {"none", "diagnostic_inversion", "prior_inversion"}
+        set(guard_modes) - {"none", "diagnostic_inversion", "prior_inversion", "prior_risk"}
     )
     if invalid_modes:
         raise ValueError(f"unknown guard modes: {', '.join(invalid_modes)}")
@@ -345,12 +426,12 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
             max_total_pnl=args.guard_max_total_pnl,
         )
     prior_trades = pd.DataFrame()
-    if "prior_inversion" in guard_modes:
+    if "prior_inversion" in guard_modes or "prior_risk" in guard_modes:
         if not args.prior_enriched_trades:
-            raise ValueError("--prior-enriched-trades is required for prior_inversion")
+            raise ValueError("--prior-enriched-trades is required for prior guard modes")
         prior_trades = prior_trade_context_frame(
             pd.read_csv(args.prior_enriched_trades),
-            roles=roles,
+            roles=prior_roles,
             candidates=set(candidate_names),
         )
 
@@ -358,6 +439,7 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
     price_data = read_ohlcv(args.data)
     monthly_rows: list[dict[str, Any]] = []
     prior_guard_rows: list[pd.DataFrame] = []
+    prior_risk_rows: list[pd.DataFrame] = []
 
     for family, prediction_path in family_predictions.items():
         predictions = pd.read_parquet(prediction_path)
@@ -400,6 +482,26 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
                                 prior_contexts["candidate"] = candidate.name
                                 prior_contexts["max_predicted_hold_minutes"] = max_hold
                                 prior_guard_rows.append(prior_contexts)
+                        elif guard_mode == "prior_risk":
+                            prior_rules, prior_contexts = derive_prior_context_side_risk_rules(
+                                prior_trades,
+                                target_month=month,
+                                min_prior_months=args.prior_min_months,
+                                recent_month_count=args.prior_recent_month_count,
+                                min_trade_count=args.prior_risk_min_trade_count,
+                                min_risk_score=args.prior_risk_threshold,
+                                max_total_pnl=args.prior_risk_max_total_pnl,
+                                support_scale=args.prior_risk_support_scale,
+                                pnl_scale=args.prior_risk_pnl_scale,
+                            )
+                            side_block_rules = tuple(prior_rules)
+                            if not prior_contexts.empty:
+                                prior_contexts = prior_contexts.copy()
+                                prior_contexts["family"] = family
+                                prior_contexts["role"] = role
+                                prior_contexts["candidate"] = candidate.name
+                                prior_contexts["max_predicted_hold_minutes"] = max_hold
+                                prior_risk_rows.append(prior_contexts)
                         else:
                             side_block_rules = ()
                         model_config = replace(
@@ -464,6 +566,11 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
             run_dir / "prior_inversion_guard_contexts.csv",
             index=False,
         )
+    if prior_risk_rows:
+        pd.concat(prior_risk_rows, ignore_index=True).drop_duplicates().to_csv(
+            run_dir / "prior_risk_guard_contexts.csv",
+            index=False,
+        )
     selected = select_policy(candidate_summary)
     (run_dir / "selected_policy.json").write_text(
         json.dumps(selected, indent=2, default=local_json_default),
@@ -474,6 +581,7 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
         "policy_candidates": candidate_names,
         "role_months": args.role_months,
         "roles": sorted(roles),
+        "prior_roles": sorted(prior_roles),
         "guard_modes": guard_modes,
         "guard_context_summary": args.guard_context_summary,
         "guard_min_trade_count": args.guard_min_trade_count,
@@ -487,6 +595,11 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
         "prior_min_trade_count": args.prior_min_trade_count,
         "prior_min_direction_error_rate": args.prior_min_direction_error_rate,
         "prior_max_total_pnl": args.prior_max_total_pnl,
+        "prior_risk_threshold": args.prior_risk_threshold,
+        "prior_risk_min_trade_count": args.prior_risk_min_trade_count,
+        "prior_risk_max_total_pnl": args.prior_risk_max_total_pnl,
+        "prior_risk_support_scale": args.prior_risk_support_scale,
+        "prior_risk_pnl_scale": args.prior_risk_pnl_scale,
         "max_predicted_hold_minutes": hold_caps,
         "data": args.data,
         "score_kind": args.score_kind,
@@ -549,6 +662,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=",".join(DEFAULT_Q95_Q99_CANDIDATES),
     )
     parser.add_argument("--roles", default="")
+    parser.add_argument("--prior-roles", default="")
     parser.add_argument("--role-months", action="append", default=[])
     parser.add_argument("--guard-modes", default="none,diagnostic_inversion")
     parser.add_argument("--guard-context-summary", type=Path, default=None)
@@ -561,6 +675,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prior-min-trade-count", type=int, default=2)
     parser.add_argument("--prior-min-direction-error-rate", type=float, default=0.75)
     parser.add_argument("--prior-max-total-pnl", type=float, default=-1e-9)
+    parser.add_argument("--prior-risk-threshold", type=float, default=0.50)
+    parser.add_argument("--prior-risk-min-trade-count", type=int, default=1)
+    parser.add_argument("--prior-risk-max-total-pnl", type=float, default=0.0)
+    parser.add_argument("--prior-risk-support-scale", type=float, default=4.0)
+    parser.add_argument("--prior-risk-pnl-scale", type=float, default=10.0)
     parser.add_argument("--max-predicted-hold-minutes", default="260,480,720,1440")
     parser.add_argument(
         "--data",

@@ -94,6 +94,7 @@
 - 00223でq95/q99のexit captureを診断した。`max_predicted_hold=260m` が強くbindingし、oracle best holdingより早く出ているtradeが多い。ただしrefit側にはdirection/context errorも残るため、blind cap延長は危険。次は `260/480/720/1440` hold-cap sensitivityをvalidation roleだけで事前登録し、context-side inversion guardなし/ありを分けて評価する。
 - 00224でhold-cap sensitivityを実施した。`720m` はexit capture改善軸として有望で、same-validation diagnostic inversion guardありならrole totalsは全て正になる。ただし月別tailが残り、全候補が `month_pnl_below_floor` で落ちる。次は同月結果から作ったguardではなく、prior-only selected-trade context direction error / side PnL / prediction side bias で inversion detectorを作る。
 - 00225でprior-only inversion guardを試すと、validationは `720m q95_floor5` が min month `-0.4914` まで近づいたが、fresh fixedではguardが良い取引も削った。context-side evidenceは即hard blockにせず、prior direction error、prior side PnL、support、predicted side bias、side share driftをrisk scoreやrank特徴へ変換して、entry admission / exit cap selection / model featureに戻す。
+- 00226でprior context risk scoreを実装した。`risk_score>=0.50` は広いhard blockより副作用が小さく、cal+fresh priorならfresh fixed q95_floor5/720mを改善したが、月次floorは通らない。次はprior role protocolを事前固定した複数windowで評価し、hard blockではなくselector feature、candidate rank、exit cap selectionの説明変数へ移す。
 
 ## 外部データ候補
 
