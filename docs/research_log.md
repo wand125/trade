@@ -4,6 +4,19 @@
 
 ## 2026-07-01 JST
 
+### 08:04 Entry EV overestimate context diagnostics
+
+- 00241でEV overestimate high-riskがfresh損失とrefit勝ちの両方に出ると分かったため、high-risk rowsをside/contextで分解する `scripts/experiments/entry_ev_overestimate_context_diagnostics.py` を追加した。
+- artifactは `data/reports/backtests/20260630_230353_20260701_entry_ev_overestimate_context_diagnostics_s1/`。
+- contextは `direction`, `support_bucket`, `pressure_bucket`, `prior_support_bucket`, `feature_pressure_bucket`, `side_drift_bucket`。
+- 最悪contextは `long / missing / low / missing / low / negative` で 6 rows / `-83.0680`、全てhigh-risk。
+- `short / medium / high / medium / medium / neutral` は 1 row / `-32.0364` でfresh-specific lossだがsupportが薄い。
+- 逆に `short / missing / low / missing / low / negative` は high-riskで `+89.2040` とrefitで強く勝っている。`missing/low` を一律に悪い文脈として扱えない。
+- 判断: EV-overestimate risk context decompositionはaccepted。EV overestimate riskは削除gateではなく、`direction + side drift + support/pressure` 付きのranking/calibration headへ回す。
+- report: `docs/reports/00242_2026-07-01_entry_ev_overestimate_context_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: overestimate context diagnostics unit tests OK; py_compile OK; diagnostic run OK
+
 ### 03:11 Entry EV overestimate risk selector
 
 - 00240で相対的に残った `executable_ev_overestimate_target` を、candidate selector featureとして評価する `scripts/experiments/entry_ev_overestimate_risk_selector.py` を追加した。

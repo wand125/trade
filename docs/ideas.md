@@ -110,6 +110,7 @@
 - 00239でcompositeをfeature/targetへ分解すると、target-activeでも利益になるoverlapがある。`composite_failure_target` を単一no-trade labelにせず、direction-side inversion、exit capture、EV overestimate、realized lossを別target headとして学習し、selector/rankingで組み合わせる。
 - 00240でsupport/pressure bucketだけの低容量calibrationを試すと、EV overestimate targetだけがchronological / role holdoutの両方で相対的に残った。direction/exit/lossは同じbucketでは弱いか逆向きなので、EV overestimateを先にcalibration headとして伸ばし、direction/exitはside/context/holding/capture特徴を足して別headで診断する。
 - 00241でEV overestimate riskを候補selectorへ戻すと、fresh損失はpointwiseに拾えるが、refit勝ちroleの高risk利益も削る。EV overestimateはhard blockではなく、side/context付きranking、entry score calibration、downside-weighted targetとして使う。
+- 00242でhigh-riskをside/context分解すると、`long/missing/low/negative drift` は大きく悪い一方、`short/missing/low/negative drift` はrefitで大きく勝つ。`missing/low` やhigh-riskを一律に削らず、directionとside driftを含む低容量interactionでranking/calibrationする。
 
 ## 外部データ候補
 
