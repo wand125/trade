@@ -473,6 +473,25 @@ python scripts/experiments/side_context_interaction_guard_apply.py \
 short raw-gap budget context. Treat these as replacement-aware diagnostics:
 small improvements can disappear when the next trade is simulated.
 
+To turn candidate-only replacement trades into a supervised risk target and
+audit causal warning features:
+
+```bash
+python scripts/experiments/short_replacement_risk_target_diagnostics.py \
+  --delta-run global_gap5_budget0=data/reports/backtests/<gap5_vs_base_delta> \
+  --delta-run global_gap0_budget0=data/reports/backtests/<gap0_vs_base_delta> \
+  --output-dir data/reports/backtests \
+  --label short_replacement_risk_target_diagnostics \
+  --direction short \
+  --delta-status only_candidate \
+  --large-loss-threshold 10
+```
+
+This writes `replacement_risk_examples.csv` with `replacement_pnl`,
+`replacement_is_loss`, and `replacement_large_loss` targets, plus condition
+summaries for causal prediction columns. It is still a preflight: blocking a
+covered replacement may admit a further replacement trade.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 

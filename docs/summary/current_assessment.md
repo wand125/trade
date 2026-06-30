@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-06-30 11:10 JST
+最終更新: 2026-06-30 11:23 JST
 
 ## 結論
 
@@ -19,7 +19,7 @@
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
 | Short raw gap guard | 介入対象の発見には有効 | all-window bestは total `+18.5106` だが prior-only min4 `-274.9360` | 単独採用しない |
-| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。fixed trigger min4 `+232.2466`, min6 `+26.3116`, min8 `-15.0104`。focus entry ORはpreflightで残存を削ったがdynamicでは `+507.4968` に悪化。rank-only `0.53` は `+511.5964` | 現在最有望な防御軸。ただしlate-onlyでは利益policyにならない。focus entry hookは診断基盤止まり |
+| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。focus entry ORはdynamicでは `+507.4968` に悪化。replacement risk targetでは late `gap5` replacement `-286.9878`、`pred_ev_lt15` が全12ヶ月 `-87.9540` / late `-83.8596` | 現在最有望な防御軸。ただしlate-onlyでは利益policyにならない。次はtrigger限定replacement low-EV hook |
 | Online context feature | post-filterでは損失説明力あり | context特徴追加はOOF AUCを改善せず。min8 large_loss AUC `0.5523 -> 0.5364` | raw feature昇格なし |
 | Cooldown / recovery | hard blockの緩和 | cooldown/recoveryはprior-onlyで既存hard block系に負ける | 採用しない |
 
@@ -50,6 +50,7 @@
 - replacement prior signal audit as preflight, not dynamic policy
 - focused entry-level residual signal audit as preflight, not dynamic policy
 - focus entry dynamic hook as diagnostics only
+- replacement risk target diagnostics
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -82,12 +83,13 @@
 - guard後も replacement short が残り、損失の尾部を作る
 - alert contextだけを止めても late common short `-382.7524` と replacement short `-293.7604` が残る
 - `gap5` replacement shortのうち `up_low_vol/ny_overlap` は prior prediction biasで拾える。`range_low_vol/ny_overlap` は prior context signalでは拾いにくいが、entry-level side gap / rank signalを足すと大半を事前説明できる。ただしdynamic hookではreplacementが再発し、OR条件は小幅悪化した
+- replacementは全期間では利益にもなるため、global hard gateは危険。late bad regimeでは `profit_hit_lt0p5` が強いが全期間では良いreplacementを消す。`pred_ev_lt15` は小supportながら全期間/lateとも悪いreplacementに寄る
 
 したがって、次の改善は「holding capの再探索」ではなく、short side admission / first-loss control / replacement-risk control を優先する。
 
 ## 次に検証すべきこと
 
-1. `model-trade-delta` の `only_candidate` shortをreplacement risk targetにし、削除後に入るtradeの品質を事前評価できるか検証する。
+1. prior deterioration trigger後だけに限定した replacement low-EV hookをdynamic backtestする。まず `pred_taken_ev < 15`、次に trigger限定 `profit_hit_lt0p5` を比較する。
 2. `gap0/budget0`, `gap5/budget0`, `gap5 -> gap0` deterioration triggerを、追加未使用月または2024側の同一familyへ再探索なしで適用する。2024側はcoststress 260 + stateful risk5 + replacement margin10のprediction/backtest生成が先に必要。
 3. side drift guard後の replacement trade を、削除tradeと追加tradeに分けるだけでなく、追加tradeを目的変数化する。
 4. short/range_low_vol の context drawdownを、現在月のrealized PnLだけで発火させる低容量hookとして評価する。
@@ -115,3 +117,4 @@
 - `00198`: replacement prior signal audit
 - `00199`: entry signal residual context audit
 - `00200`: focus entry dynamic hook
+- `00201`: replacement risk target diagnostics

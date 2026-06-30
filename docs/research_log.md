@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 11:19 Replacement risk target diagnostics
+
+- 00200の結論を受け、`model-trade-delta` の `only_candidate` shortをreplacement risk targetとして扱う `short_replacement_risk_target_diagnostics.py` を追加した。
+- 出力targetは `replacement_pnl`, `replacement_is_loss`, `replacement_large_loss`, `replacement_ev_overestimate_vs_pnl`。
+- `global_gap5_budget0` replacement shortは全12ヶ月では `255 trades / +210.5324` だが、late 2025-08..12では `67 trades / -286.9878`、late 2025-09..12では `50 trades / -264.2848`。replacementの良悪は期間regimeで反転する。
+- late `global_gap5_budget0` では `pred_taken_profit_barrier_hit < 0.5` が `-291.8810` を覆い、残りは `+4.8932`。ただし全12ヶ月では同条件covered PnLが `+144.2660` で、global gateにすると良いreplacementを消す。
+- `pred_taken_ev < 15` はsupportが少ないが、全12ヶ月 `-87.9540`、late `-83.8596` と一貫して悪いreplacementに寄った。
+- 判断: replacement risk target化は有効。`profit_hit_lt0p5` はprior deterioration後に限定しないと危険。次は `pred_ev_lt15` またはtrigger限定 `profit_hit_lt0p5` をdynamic hookで検証する。
+- report: `docs/reports/00201_2026-06-30_replacement_risk_target_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/short_replacement_risk_target_diagnostics.py tests/test_short_replacement_risk_target_diagnostics.py`: OK; `python3 -m unittest tests.test_short_replacement_risk_target_diagnostics tests.test_short_budget_replacement_trade_audit tests.test_short_budget_entry_signal_audit tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 16 tests; `git diff --check`: OK; replacement risk diagnostics artifact生成 OK
+
 ### 11:06 Focus entry dynamic hook
 
 - 00199の `range_low_vol/ny_overlap` focused entry signalを `side_context_interaction_guard_apply.py` のdynamic hookへ移した。

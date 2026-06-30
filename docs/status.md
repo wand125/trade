@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 11:10 JST
+最終更新: 2026-06-30 11:23 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+replacement risk target診断を追加した。`short_replacement_risk_target_diagnostics.py` は `model-trade-delta` の `only_candidate` shortから `replacement_pnl`, `replacement_is_loss`, `replacement_large_loss` を作る。`global_gap5_budget0` replacement shortは全12ヶ月では `255 trades / +210.5324` だが、late 2025-08..12では `67 trades / -286.9878`。lateでは `profit_hit_lt0p5` が `-291.8810` を覆うが、全12ヶ月では同条件covered PnL `+144.2660` で危険。`pred_ev_lt15` は全12ヶ月 `-87.9540`、late `-83.8596` と小supportながら一貫して悪いreplacementに寄る。次はtrigger限定replacement risk hookをdynamic backtestする。詳細は `docs/reports/00201_2026-06-30_replacement_risk_target_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 focus entry dynamic hookを追加した。`side_context_interaction_guard_apply.py` は `focus_short_entry_signal` と `signal_short_raw_gap_or_focus_short_entry` を受け取れる。00199の `range_low_vol/ny_overlap` OR条件をそのまま `gap5/budget0` に重ねると total `+508.9838 -> +507.4968`、worst `-215.1172 -> -220.3612` へ悪化した。side-gap onlyも悪化。rank-only `pred_short_entry_local_rank >= 0.53` は total `+511.5964`, worst `-215.1172` と小幅改善だが、改善幅が小さいため標準採用しない。次は `only_candidate` shortをreplacement risk targetとして扱う。詳細は `docs/reports/00200_2026-06-30_focus_entry_dynamic_hook.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
