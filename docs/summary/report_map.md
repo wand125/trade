@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 09:23 JST
+最終更新: 2026-06-30 09:32 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00192` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized triggerによりtailは大きく縮んだが、月次prediction-share triggerは上積みできず、min8ではまだNoTradeを超えない。 |
+| `00186`..`00193` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできず、min8ではまだNoTradeを超えない。 |
 
 ## テーマ別読む順
 
@@ -31,6 +31,7 @@
 4. `00190_2026-06-30_context_entry_budget_zero.md`
 5. `00191_2026-06-30_short_budget_drift_trigger.md`
 6. `00192_2026-06-30_prediction_side_drift_trigger.md`
+7. `00193_2026-06-30_context_alert_budget_trigger.md`
 
 ### 現在の候補軸を知る
 
@@ -40,6 +41,7 @@
 4. `00190_2026-06-30_context_entry_budget_zero.md`
 5. `00191_2026-06-30_short_budget_drift_trigger.md`
 6. `00192_2026-06-30_prediction_side_drift_trigger.md`
+7. `00193_2026-06-30_context_alert_budget_trigger.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -109,6 +111,15 @@ Question: 月次prediction side driftでrealized PnL悪化前にbudget0へ落と
 Best evidence: best label-share trigger min4 total +210.3068; realized trigger 00191 is +232.2466; min8 remains -15.0104
 Decision: optional metricsは残すが月次prediction-share triggerは採用しない
 Next: context/session-level drift alert or prediction-drift AND realized first-loss trigger
+```
+
+```text
+Report: 00193 Context Alert Budget Trigger
+Status: diagnostic only / not standard
+Question: context/session side drift alertでglobal budget0発火を改善できるか
+Best evidence: alert-only over-triggers to +150.3206; alert AND short losing month matches 00191 at +232.2466; min8 remains -15.0104
+Decision: global context-alert triggerは採用しない
+Next: apply budget/admission only to alert contexts, not entire months
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

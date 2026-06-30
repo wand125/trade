@@ -176,6 +176,50 @@ class ShortBudgetDriftTriggerSelectionTests(unittest.TestCase):
         self.assertTrue(bool(second["triggered"]))
         self.assertAlmostEqual(float(second["recent_pred_short_bias_mean"]), 0.6)
 
+    def test_side_drift_alert_metric_combines_prior_alerts_with_candidate_loss(self):
+        side_drift_alerts = pd.DataFrame(
+            {
+                "month": ["2025-04"],
+                "side": ["short"],
+                "is_alert": [True],
+                "loss_bias_score": [25.0],
+                "total_adjusted_pnl": [-30.0],
+            }
+        )
+        rule = RuleSpec(
+            name="alert_and_loss",
+            primary=Candidate(5.0, 0.0),
+            defensive=Candidate(0.0, 0.0),
+            trigger_metric="recent_short_alert_and_short_losing_months",
+            operator="ge",
+            threshold=1.0,
+        )
+
+        selected = short_budget_drift_trigger_selection.walkforward_trigger_selection(
+            base_frame(),
+            rules=[rule],
+            min_train_months=3,
+            train_window_months=0,
+            recent_month_count=2,
+            side_drift_alerts=(
+                short_budget_drift_trigger_selection.normalize_side_drift_alerts(
+                    side_drift_alerts
+                )
+            ),
+        )
+
+        first = selected[selected["target_month"] == "2025-04"].iloc[0]
+        second = selected[selected["target_month"] == "2025-05"].iloc[0]
+        self.assertEqual(first["selected_candidate"], "short_gap_threshold=5|context_entry_budget=0")
+        self.assertFalse(bool(first["triggered"]))
+        self.assertEqual(second["selected_candidate"], "short_gap_threshold=0|context_entry_budget=0")
+        self.assertTrue(bool(second["triggered"]))
+        self.assertAlmostEqual(
+            float(second["recent_short_alert_and_short_losing_months"]),
+            1.0,
+        )
+        self.assertAlmostEqual(float(second["recent_short_side_drift_loss_bias_sum"]), 25.0)
+
 
 if __name__ == "__main__":
     unittest.main()

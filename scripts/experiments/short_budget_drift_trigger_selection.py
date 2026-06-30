@@ -27,6 +27,12 @@ METRIC_DIRECTIONS = {
     "recent_actual_short_share_mean": "lt",
     "recent_pred_match_rate_mean": "lt",
     "recent_pred_side_score_mean": "lt",
+    "recent_side_drift_alert_count": "ge",
+    "recent_short_side_drift_alert_count": "ge",
+    "recent_short_side_drift_alert_months": "ge",
+    "recent_short_side_drift_loss_bias_sum": "ge",
+    "recent_short_side_drift_min_pnl": "lt",
+    "recent_short_alert_and_short_losing_months": "ge",
 }
 DEFAULT_THRESHOLDS = {
     "recent_short_pnl": (-100.0, -50.0, 0.0, 50.0, 100.0, 150.0),
@@ -41,6 +47,20 @@ DEFAULT_THRESHOLDS = {
     "recent_actual_short_share_mean": (0.30, 0.35, 0.40, 0.45),
     "recent_pred_match_rate_mean": (0.45, 0.48, 0.50, 0.52, 0.55),
     "recent_pred_side_score_mean": (-5.0, -4.0, -3.0, -2.0, -1.0, 0.0),
+    "recent_side_drift_alert_count": (1.0, 2.0, 3.0, 5.0, 10.0),
+    "recent_short_side_drift_alert_count": (1.0, 2.0, 3.0, 5.0, 10.0),
+    "recent_short_side_drift_alert_months": (1.0, 2.0, 3.0),
+    "recent_short_side_drift_loss_bias_sum": (10.0, 25.0, 50.0, 100.0),
+    "recent_short_side_drift_min_pnl": (-100.0, -50.0, -25.0, 0.0),
+    "recent_short_alert_and_short_losing_months": (1.0, 2.0, 3.0),
+}
+PREDICTION_METRICS = {
+    "recent_pred_short_bias_mean",
+    "recent_pred_short_bias_max",
+    "recent_pred_short_share_mean",
+    "recent_actual_short_share_mean",
+    "recent_pred_match_rate_mean",
+    "recent_pred_side_score_mean",
 }
 PREDICTION_SUMMARY_COLUMNS = {
     "pred_ev_short_share",
@@ -48,6 +68,21 @@ PREDICTION_SUMMARY_COLUMNS = {
     "pred_short_minus_actual_label_short_share",
     "pred_ev_matches_nonflat_label_rate",
     "pred_side_score_mean",
+}
+SIDE_DRIFT_ALERT_METRICS = {
+    "recent_side_drift_alert_count",
+    "recent_short_side_drift_alert_count",
+    "recent_short_side_drift_alert_months",
+    "recent_short_side_drift_loss_bias_sum",
+    "recent_short_side_drift_min_pnl",
+    "recent_short_alert_and_short_losing_months",
+}
+SIDE_DRIFT_ALERT_COLUMNS = {
+    "month",
+    "side",
+    "is_alert",
+    "loss_bias_score",
+    "total_adjusted_pnl",
 }
 
 
@@ -176,6 +211,24 @@ def normalize_prediction_summary(frame: pd.DataFrame) -> pd.DataFrame:
     return output.sort_values("month").reset_index(drop=True)
 
 
+def normalize_side_drift_alerts(frame: pd.DataFrame) -> pd.DataFrame:
+    output = frame.copy()
+    missing = sorted(SIDE_DRIFT_ALERT_COLUMNS - set(output.columns))
+    if missing:
+        raise ValueError("side drift alerts missing columns: " + ", ".join(missing))
+    output["month"] = output["month"].astype(str)
+    output["side"] = output["side"].astype(str).str.lower()
+    if output["is_alert"].dtype == bool:
+        output["is_alert"] = output["is_alert"].astype(bool)
+    else:
+        output["is_alert"] = output["is_alert"].astype(str).str.lower().isin(
+            {"1", "true", "yes"}
+        )
+    for column in ["loss_bias_score", "total_adjusted_pnl"]:
+        output[column] = pd.to_numeric(output[column], errors="raise")
+    return output.sort_values(["month", "side"]).reset_index(drop=True)
+
+
 def read_prediction_summaries(paths: list[Path]) -> pd.DataFrame | None:
     if not paths:
         return None
@@ -188,6 +241,17 @@ def read_prediction_summaries(paths: list[Path]) -> pd.DataFrame | None:
         .sort_values("month")
         .reset_index(drop=True)
     )
+
+
+def read_side_drift_alerts(paths: list[Path]) -> pd.DataFrame | None:
+    if not paths:
+        return None
+    frames = []
+    for path in paths:
+        frames.append(normalize_side_drift_alerts(pd.read_csv(path)))
+    return pd.concat(frames, ignore_index=True, sort=False).sort_values(
+        ["month", "side"]
+    ).reset_index(drop=True)
 
 
 def candidate_mask(frame: pd.DataFrame, candidate: Candidate) -> pd.Series:
@@ -231,11 +295,48 @@ def prediction_metric_bundle(
     }
 
 
+def side_drift_alert_metric_bundle(
+    side_drift_alerts: pd.DataFrame | None,
+    recent_months: list[str],
+    recent_candidate_rows: pd.DataFrame,
+) -> dict[str, float]:
+    if side_drift_alerts is None:
+        return {}
+    recent_alerts = side_drift_alerts[
+        side_drift_alerts["month"].isin(recent_months) & side_drift_alerts["is_alert"]
+    ]
+    short_alerts = recent_alerts[recent_alerts["side"].eq("short")]
+    short_alert_months = set(short_alerts["month"].astype(str))
+    short_losing_months = set(
+        recent_candidate_rows.loc[
+            recent_candidate_rows["short_adjusted_pnl"] < 0,
+            "month",
+        ].astype(str)
+    )
+    if short_alerts.empty:
+        short_min_pnl = 0.0
+    else:
+        short_min_pnl = float(short_alerts["total_adjusted_pnl"].min())
+    return {
+        "recent_side_drift_alert_count": float(len(recent_alerts)),
+        "recent_short_side_drift_alert_count": float(len(short_alerts)),
+        "recent_short_side_drift_alert_months": float(len(short_alert_months)),
+        "recent_short_side_drift_loss_bias_sum": float(
+            short_alerts["loss_bias_score"].sum()
+        ),
+        "recent_short_side_drift_min_pnl": short_min_pnl,
+        "recent_short_alert_and_short_losing_months": float(
+            len(short_alert_months & short_losing_months)
+        ),
+    }
+
+
 def metric_bundle(
     prior: pd.DataFrame,
     candidate: Candidate,
     recent_month_count: int,
     prediction_summary: pd.DataFrame | None = None,
+    side_drift_alerts: pd.DataFrame | None = None,
 ) -> dict[str, float]:
     months = sorted(prior["month"].unique())
     recent_months = months[-recent_month_count:] if recent_month_count > 0 else months
@@ -252,6 +353,7 @@ def metric_bundle(
         "recent_total_losing_months": float((recent["total_adjusted_pnl"] < 0).sum()),
     }
     output.update(prediction_metric_bundle(prediction_summary, recent_months))
+    output.update(side_drift_alert_metric_bundle(side_drift_alerts, recent_months, recent))
     return output
 
 
@@ -331,6 +433,7 @@ def walkforward_trigger_selection(
     train_window_months: int,
     recent_month_count: int,
     prediction_summary: pd.DataFrame | None = None,
+    side_drift_alerts: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     if min_train_months <= 0:
         raise ValueError("min_train_months must be positive")
@@ -353,6 +456,7 @@ def walkforward_trigger_selection(
                 rule.primary,
                 recent_month_count,
                 prediction_summary=prediction_summary,
+                side_drift_alerts=side_drift_alerts,
             )
             trigger_value = metrics[rule.trigger_metric]
             triggered = should_trigger(trigger_value, rule.operator, rule.threshold)
@@ -441,6 +545,7 @@ def parse_threshold_overrides(values: list[str]) -> dict[str, tuple[float, ...]]
 def run_selection(args: argparse.Namespace) -> Path:
     source = normalize_summary(pd.read_csv(args.summary_by_run))
     prediction_summary = read_prediction_summaries(args.prediction_month_summaries)
+    side_drift_alerts = read_side_drift_alerts(args.side_drift_alerts)
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     run_dir = output_dir / args.label
@@ -453,6 +558,10 @@ def run_selection(args: argparse.Namespace) -> Path:
     primary_candidates = parse_candidates(args.primary_candidates)
     defensive_candidate = parse_candidate(args.defensive_candidate)
     metrics = parse_csv_strings(args.trigger_metrics)
+    if PREDICTION_METRICS.intersection(metrics) and prediction_summary is None:
+        raise ValueError("prediction trigger metrics require --prediction-month-summaries")
+    if SIDE_DRIFT_ALERT_METRICS.intersection(metrics) and side_drift_alerts is None:
+        raise ValueError("side drift alert trigger metrics require --side-drift-alerts")
     threshold_overrides = parse_threshold_overrides(args.threshold_override)
     rules = make_rule_specs(
         primary_candidates=primary_candidates,
@@ -467,6 +576,7 @@ def run_selection(args: argparse.Namespace) -> Path:
         train_window_months=args.train_window_months,
         recent_month_count=args.recent_month_count,
         prediction_summary=prediction_summary,
+        side_drift_alerts=side_drift_alerts,
     )
     summary = summarize_walkforward(selection)
     selection.to_csv(run_dir / "walkforward_selection.csv", index=False)
@@ -480,6 +590,9 @@ def run_selection(args: argparse.Namespace) -> Path:
         "threshold_overrides": threshold_overrides,
         "prediction_month_summaries": [
             str(path) for path in args.prediction_month_summaries
+        ],
+        "side_drift_alerts": [
+            str(path) for path in args.side_drift_alerts
         ],
         "min_train_months": args.min_train_months,
         "train_window_months": args.train_window_months,
@@ -506,6 +619,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_csv_paths,
         default=[],
         help="Optional comma-separated prediction_month_summary.csv paths",
+    )
+    parser.add_argument(
+        "--side-drift-alerts",
+        type=parse_csv_paths,
+        default=[],
+        help="Optional comma-separated side_drift_alerts.csv paths",
     )
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     parser.add_argument("--label", default="short_budget_drift_trigger_selection")

@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 09:32 Context alert budget trigger
+
+- `short_budget_drift_trigger_selection.py` に `--side-drift-alerts` を追加し、`side_drift_alerts.csv` の context/session alertをprior trigger metricとして使えるようにした。
+- 追加metricは `recent_short_side_drift_alert_count`, `recent_short_side_drift_alert_months`, `recent_short_side_drift_loss_bias_sum`, `recent_short_side_drift_min_pnl`, `recent_short_alert_and_short_losing_months` など。
+- alert単独metricは早すぎる。min4では多くが常時 `gap0/budget0` に倒れ、total `+150.3206` 止まり。
+- composite `recent_short_alert_and_short_losing_months >= 1` は min4 total `+232.2466`, worst `-46.0150`, max DD `129.7364`, short PnL `+154.7572`。00191のrealized triggerと同一成績。
+- min8は total `-15.0104`, worst `-45.4774` のままでNoTrade未満。
+- 判断: context alertは単独triggerとして採用しない。compositeは00191を「context drift付きshort loss」として説明する診断。次は月全体budget0ではなく、alert contextだけのbudget/admission marginを試す。
+- report: `docs/reports/00193_2026-06-30_context_alert_budget_trigger.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/short_budget_drift_trigger_selection.py tests/test_short_budget_drift_trigger_selection.py`: OK; `python3 -m unittest tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 124 tests; `git diff --check`: OK
+
 ### 09:23 Prediction side drift trigger
 
 - `short_budget_drift_trigger_selection.py` に `--prediction-month-summaries` を追加し、prediction month summary から prior window の side drift metricをtriggerに使えるようにした。

@@ -331,6 +331,22 @@ python scripts/experiments/short_budget_drift_trigger_selection.py \
   --recent-month-count 3
 ```
 
+To use context/session side-drift alerts from `side_drift_diagnostics.py`, pass
+`side_drift_alerts.csv` files and request alert metrics:
+
+```bash
+python scripts/experiments/short_budget_drift_trigger_selection.py \
+  --summary-by-run data/reports/backtests/<short_entry_budget_sweep>/summary_by_run.csv \
+  --side-drift-alerts data/reports/modeling/<reference>/side_drift_alerts.csv,data/reports/modeling/<fresh>/side_drift_alerts.csv \
+  --output-dir data/reports/backtests \
+  --label short_budget_context_alert_trigger_selection \
+  --primary-candidates 5:0,5:1,0:1,10:0 \
+  --defensive-candidate 0:0 \
+  --trigger-metrics recent_short_side_drift_alert_count,recent_short_side_drift_alert_months,recent_short_side_drift_loss_bias_sum,recent_short_side_drift_min_pnl,recent_short_alert_and_short_losing_months \
+  --min-train-months 4 \
+  --recent-month-count 3
+```
+
 This is a diagnostic selector. It should be read as "can prior deterioration
 turn on budget0 before the bad target month?", not as a free parameter search
 for the best-looking rule.
