@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 18:00 Entry EV executable EV selector feature
+
+- 00229の `pred_capture_calibrated_ev` を、単独thresholdではなくNoTrade-first selectorのcandidate-level featureとして評価する `scripts/experiments/entry_ev_executable_ev_selector_diagnostics.py` を追加した。
+- validation q95/q99 base selectorは `data/reports/backtests/20260630_entry_ev_executable_ev_selector_diagnostics/20260630_085941_entry_ev_executable_ev_selector_validation_q95q99/`。
+- validation q95/q99 feature screenは `data/reports/backtests/20260630_entry_ev_executable_ev_selector_diagnostics/20260630_090005_entry_ev_executable_ev_selector_validation_q95q99_feature_screen/`。
+- fresh q95_floor5 / 720m base selectorは `data/reports/backtests/20260630_entry_ev_executable_ev_selector_diagnostics/20260630_085941_entry_ev_executable_ev_selector_fresh_q95_720/`。
+- fresh q95_floor5 / 720m feature screenは `data/reports/backtests/20260630_entry_ev_executable_ev_selector_diagnostics/20260630_090005_entry_ev_executable_ev_selector_fresh_q95_720_feature_screen/`。
+- validation q95/q99ではq99候補が `capture_ev_mean > 5`, `capture_ev_low2_share < 0.10` を満たすが、refit role totalと月次floorが負でNoTrade。
+- fresh q95/720は validation total `+76.2204`、fixed total `+325.8914` だが、validation min month `-9.1718` でNoTrade。
+- 判断: executable EV featureはcandidate説明には有用だが、promotion gateを超えない。次はpost-trade selectorではなくstateful entry ranking / replacement choiceへ入れる。
+- report: `docs/reports/00230_2026-06-30_entry_ev_executable_ev_selector_feature.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: executable EV selector unit tests OK; py_compile OK; validation/fresh selector runs OK
+
 ### 17:51 Entry EV executable EV calibration
 
 - 00228のexit-capture targetを使い、oracle EVを「現exit policyで実現できるcapture factor」で割り引く `scripts/experiments/entry_ev_executable_ev_calibration_diagnostics.py` を追加した。

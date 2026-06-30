@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 17:51 JST
+最終更新: 2026-06-30 18:00 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV executable EV selector feature診断を追加した。00229の `pred_capture_calibrated_ev` を、単独thresholdではなくcandidate-level selector featureとして再集計した。validation q95/q99ではq99候補が `capture_ev_mean > 5` と `capture_ev_low2_share < 0.10` を満たすが、refit role totalと月次floorが負でNoTrade。fresh q95/720は validation total `+76.2204`、fixed total `+325.8914` だが、validation min month `-9.1718` でNoTrade。判断: executable EV featureは説明・ranking候補としてacceptedだが、promotion gateは超えない。次はpost-trade selectorではなくstateful entry ranking / replacement choiceへ入れる。詳細は `docs/reports/00230_2026-06-30_entry_ev_executable_ev_selector_feature.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV executable EV calibrationを追加した。00228のexit-capture targetを使い、対象月より前のselected tradeだけからglobal + context-local capture factorを作り、`pred_capture_calibrated_ev = pred_taken_ev * executable_capture_factor` を診断した。non-negative capture factor `[0,1]` では、validation q95/q99のMAEが refit q95/q99で `20.8969..22.0208 -> 7.3980..7.6244`、fresh q95で `13.9256 -> 6.1870` へ改善。fresh q95/720でも validation `14.7507 -> 8.4237`、fixed `13.4582 -> 7.0417` と一貫して改善した。一方、hard thresholdは不安定で、`EV<3` はvalidation横断で `+87.4464` 改善するがfresh q95/720では `-31.9218` 悪化、`EV<2` はfresh q95/720で `+49.6632` 改善するがvalidation横断では `-5.3592` 悪化。判断: executable EVはaccepted continuous feature、hard thresholdは標準採用しない。詳細は `docs/reports/00229_2026-06-30_entry_ev_executable_ev_calibration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
