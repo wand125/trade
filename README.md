@@ -780,6 +780,18 @@ Quantile policy candidate names may include a pre-registered selected-EV floor,
 for example `q95_sg95_rank90_floor10_side_regime_session_month`. A decimal floor
 uses `p` in the name, such as `floor2p5` for `entry_threshold=2.5`.
 
+When the quantile policy backtest is run with `--write-trades`, diagnose the
+selected trade contexts by validation role:
+
+```bash
+python scripts/experiments/entry_ev_quantile_trade_diagnostics.py \
+  --monthly-metrics data/reports/backtests/<quantile_policy_run>/monthly_policy_metrics.csv \
+  --trade-root data/reports/backtests/<quantile_policy_run>/trades \
+  --family-predictions fresh2024=data/reports/backtests/<inputs>/enriched_predictions/fresh2024_predictions_quantiles.parquet \
+  --family-predictions refit2025=data/reports/backtests/<inputs>/enriched_predictions/refit2025_predictions_quantiles.parquet \
+  --roles fresh2024_validation,refit2025_validation
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash

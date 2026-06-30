@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 16:12 Entry EV quantile trade context diagnostics
+
+- 00221の次アクションとして、positive EV floor候補の実tradeをrole/context別に分解した。
+- `scripts/experiments/entry_ev_quantile_trade_diagnostics.py` を追加した。`monthly_policy_metrics.csv`、`--write-trades` 付きbacktestのtrade CSV、family prediction parquetを読み、prediction / oracle label / realized PnLを再結合する。
+- 00221と同じ8候補を `--write-trades` 付きで再実行した。出力は `data/reports/backtests/20260630_entry_ev_quantile_floor_policy_backtest_with_trades/20260630_070948_entry_ev_quantile_floor_policy_backtest_with_trades/`。
+- 診断出力は `data/reports/backtests/20260630_entry_ev_quantile_trade_diagnostics/20260630_071126_entry_ev_quantile_trade_diagnostics/`。
+- q95/q99系は validation role 3本中2本がpositiveだが、worst roleはrefit2025。`q95 floor10` refitは total `-23.6438`, direction error `0.4643`, exit regret `572.3960`。
+- q90系はfresh2024 validationが主に壊れる。`q90_sg90_floor5` freshは total `-50.8200`, loss PnL `-189.6420`。
+- worst context aggregateは refit short `range_normal_vol/ny_overlap` total `-256.8672`, direction error `1.0`、fresh short `up_normal_vol/ny_late` total `-214.2720`, direction error `1.0`。
+- 判断: entry floorの細密探索ではなく、context-side inversionとexit captureを分離して診断する。現quantile/floor候補は標準採用しない。標準policyはNoTrade。
+- report: `docs/reports/00222_2026-06-30_entry_ev_quantile_trade_context_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: quantile trade diagnostics unit tests OK; py_compile OK; trade-writing backtest run OK; trade context diagnostics run OK
+
 ### 15:57 Entry EV quantile positive floor
 
 - 00220の次アクションとして、quantile admission候補へ小さなpositive EV floorを追加した。

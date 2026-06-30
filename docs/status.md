@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 15:57 JST
+最終更新: 2026-06-30 16:12 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile trade context diagnosticsを追加した。00221のfloor候補を `--write-trades` 付きで再実行し、実tradeをprediction/label列へ再結合してrole/candidate/context別に診断した。validation roleだけでは、q95/q99系は `refit2025_validation` が主な負けrole、q90系は `fresh2024_validation` が主な負けrole。q95/q99 refitの負けはno-edge率が低い一方、direction errorとexit regretが大きい。fresh q95は平均ではoracle EVを過大評価していないが、realizedとの差が大きく、entry floorだけでは解けない。判断: trade diagnosticsはaccepted infrastructure、現floor候補は標準採用しない。次はcontext-side inversionとexit captureを分けて診断する。詳細は `docs/reports/00222_2026-06-30_entry_ev_quantile_trade_context_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile positive floor候補を追加した。`q95_sg95_rank90_floor10_side_regime_session_month` のような候補名で、local quantile gateに selected calibrated EV floorを事前登録できる。floor `5/10`、score q `90/95/99`、side gap q `90/95`、rank q90の8候補を評価したが、strict3/clean2ともNoTrade。floor10はfresh2024 validationを少し改善するがrefit2025 validationの負けを解けず、q90 score quantileはfresh2024 tailを悪化させた。判断: floor syntaxはaccepted infrastructure、現floor候補は標準採用しない。詳細は `docs/reports/00221_2026-06-30_entry_ev_quantile_positive_floor.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
