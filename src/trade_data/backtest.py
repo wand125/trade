@@ -62,6 +62,12 @@ SWEEP_KEY_COLUMNS = [
     "short_holding_fallback_column",
     "max_wait_regret",
     "min_entry_rank",
+    "min_entry_score_quantile",
+    "min_side_gap_quantile",
+    "min_entry_rank_quantile",
+    "entry_score_quantile_column",
+    "side_gap_quantile_column",
+    "entry_rank_quantile_column",
     "min_trade_quality",
     "profit_barrier_miss_penalty",
     "time_exit_penalty",
@@ -375,6 +381,12 @@ class ModelPolicyConfig:
     short_trade_quality_column: str = "pred_trade_quality_short_adjusted_pnl"
     max_wait_regret: float = float("inf")
     min_entry_rank: float = 0.0
+    min_entry_score_quantile: float = 0.0
+    min_side_gap_quantile: float = 0.0
+    min_entry_rank_quantile: float = 0.0
+    entry_score_quantile_column: str = ""
+    side_gap_quantile_column: str = ""
+    entry_rank_quantile_column: str = ""
     min_trade_quality: float = -float("inf")
     profit_barrier_miss_penalty: float = 0.0
     time_exit_penalty: float = 0.0
@@ -639,6 +651,12 @@ def prediction_required_columns(config: ModelPolicyConfig) -> list[str]:
         required_columns.extend([config.long_wait_regret_column, config.short_wait_regret_column])
     if config.min_entry_rank > 0:
         required_columns.extend([config.long_entry_rank_column, config.short_entry_rank_column])
+    if config.min_entry_score_quantile > 0 and config.entry_score_quantile_column:
+        required_columns.append(config.entry_score_quantile_column)
+    if config.min_side_gap_quantile > 0 and config.side_gap_quantile_column:
+        required_columns.append(config.side_gap_quantile_column)
+    if config.min_entry_rank_quantile > 0 and config.entry_rank_quantile_column:
+        required_columns.append(config.entry_rank_quantile_column)
     profit_barrier_prediction_columns = [
         config.long_profit_barrier_column,
         config.short_profit_barrier_column,
@@ -940,6 +958,27 @@ def model_signal_from_predictions(
         raise ValueError("side_confidence_penalty must be non-negative")
     if not 0 <= config.min_side_confidence <= 1:
         raise ValueError("min_side_confidence must be between 0 and 1")
+    for value, label, column in [
+        (
+            config.min_entry_score_quantile,
+            "min_entry_score_quantile",
+            config.entry_score_quantile_column,
+        ),
+        (
+            config.min_side_gap_quantile,
+            "min_side_gap_quantile",
+            config.side_gap_quantile_column,
+        ),
+        (
+            config.min_entry_rank_quantile,
+            "min_entry_rank_quantile",
+            config.entry_rank_quantile_column,
+        ),
+    ]:
+        if not 0 <= value <= 1:
+            raise ValueError(f"{label} must be between 0 and 1")
+        if value > 0 and not column:
+            raise ValueError(f"{label} requires a quantile column")
     if config.min_predicted_hold_minutes < 0:
         raise ValueError("min_predicted_hold_minutes must be non-negative")
     if config.max_predicted_hold_minutes < config.min_predicted_hold_minutes:
@@ -1316,6 +1355,48 @@ def model_signal_from_predictions(
         short_rank = rank_aligned[config.short_entry_rank_column].reset_index(drop=True).astype(float)
         side_rank = pd.Series(np.where(selected_side == 1, long_rank, short_rank), index=df.index)
         quality_ok &= side_rank.notna() & (side_rank >= config.min_entry_rank)
+    if config.min_entry_score_quantile > 0:
+        score_quantile_aligned = prediction_index[
+            [config.entry_score_quantile_column]
+        ].reindex(df["timestamp"])
+        score_quantile = (
+            score_quantile_aligned[config.entry_score_quantile_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        quality_ok &= (
+            score_quantile.notna()
+            & np.isfinite(score_quantile)
+            & (score_quantile >= config.min_entry_score_quantile)
+        )
+    if config.min_side_gap_quantile > 0:
+        side_gap_quantile_aligned = prediction_index[
+            [config.side_gap_quantile_column]
+        ].reindex(df["timestamp"])
+        side_gap_quantile = (
+            side_gap_quantile_aligned[config.side_gap_quantile_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        quality_ok &= (
+            side_gap_quantile.notna()
+            & np.isfinite(side_gap_quantile)
+            & (side_gap_quantile >= config.min_side_gap_quantile)
+        )
+    if config.min_entry_rank_quantile > 0:
+        entry_rank_quantile_aligned = prediction_index[
+            [config.entry_rank_quantile_column]
+        ].reindex(df["timestamp"])
+        entry_rank_quantile = (
+            entry_rank_quantile_aligned[config.entry_rank_quantile_column]
+            .reset_index(drop=True)
+            .astype(float)
+        )
+        quality_ok &= (
+            entry_rank_quantile.notna()
+            & np.isfinite(entry_rank_quantile)
+            & (entry_rank_quantile >= config.min_entry_rank_quantile)
+        )
     if np.isfinite(config.min_trade_quality):
         trade_quality_aligned = prediction_index[
             [config.long_trade_quality_column, config.short_trade_quality_column]
@@ -2851,6 +2932,9 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "min_valid_predicted_hold_minutes",
         "max_wait_regret",
         "min_entry_rank",
+        "min_entry_score_quantile",
+        "min_side_gap_quantile",
+        "min_entry_rank_quantile",
         "min_trade_quality",
         "profit_barrier_miss_penalty",
         "time_exit_penalty",
@@ -2903,6 +2987,9 @@ def normalize_sweep_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "short_holding_fallback_column",
         "long_secondary_score_column",
         "short_secondary_score_column",
+        "entry_score_quantile_column",
+        "side_gap_quantile_column",
+        "entry_rank_quantile_column",
         "side_confidence_penalty_rules",
         "side_confidence_overfit_penalty_rules",
         "side_ev_penalty_rules",
@@ -3426,6 +3513,12 @@ def model_policy_config_from_args(args: argparse.Namespace) -> ModelPolicyConfig
         short_wait_regret_column=args.short_wait_regret_column,
         long_entry_rank_column=args.long_entry_rank_column,
         short_entry_rank_column=args.short_entry_rank_column,
+        min_entry_score_quantile=args.min_entry_score_quantile,
+        min_side_gap_quantile=args.min_side_gap_quantile,
+        min_entry_rank_quantile=args.min_entry_rank_quantile,
+        entry_score_quantile_column=args.entry_score_quantile_column,
+        side_gap_quantile_column=args.side_gap_quantile_column,
+        entry_rank_quantile_column=args.entry_rank_quantile_column,
         long_profit_barrier_column=args.long_profit_barrier_column,
         short_profit_barrier_column=args.short_profit_barrier_column,
         long_time_exit_column=args.long_time_exit_column,
@@ -3780,6 +3873,24 @@ def add_model_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--short-wait-regret-column", default="pred_short_wait_regret")
     parser.add_argument("--long-entry-rank-column", default="pred_long_entry_local_rank")
     parser.add_argument("--short-entry-rank-column", default="pred_short_entry_local_rank")
+    parser.add_argument("--min-entry-score-quantile", type=float, default=0.0)
+    parser.add_argument("--min-side-gap-quantile", type=float, default=0.0)
+    parser.add_argument("--min-entry-rank-quantile", type=float, default=0.0)
+    parser.add_argument(
+        "--entry-score-quantile-column",
+        default="",
+        help="selected-entry score percentile column used by min-entry-score-quantile",
+    )
+    parser.add_argument(
+        "--side-gap-quantile-column",
+        default="",
+        help="selected-side gap percentile column used by min-side-gap-quantile",
+    )
+    parser.add_argument(
+        "--entry-rank-quantile-column",
+        default="",
+        help="selected entry-rank percentile column used by min-entry-rank-quantile",
+    )
     parser.add_argument("--long-profit-barrier-column", default="pred_long_profit_barrier_hit")
     parser.add_argument("--short-profit-barrier-column", default="pred_short_profit_barrier_hit")
     parser.add_argument("--long-time-exit-column", default="pred_long_exit_event_prob_0")
@@ -4656,6 +4767,18 @@ def normalize_sweep_metrics(frame: pd.DataFrame, source: str) -> pd.DataFrame:
         output["max_wait_regret"] = float("inf")
     if "min_entry_rank" not in output.columns:
         output["min_entry_rank"] = 0.0
+    if "min_entry_score_quantile" not in output.columns:
+        output["min_entry_score_quantile"] = 0.0
+    if "min_side_gap_quantile" not in output.columns:
+        output["min_side_gap_quantile"] = 0.0
+    if "min_entry_rank_quantile" not in output.columns:
+        output["min_entry_rank_quantile"] = 0.0
+    if "entry_score_quantile_column" not in output.columns:
+        output["entry_score_quantile_column"] = ""
+    if "side_gap_quantile_column" not in output.columns:
+        output["side_gap_quantile_column"] = ""
+    if "entry_rank_quantile_column" not in output.columns:
+        output["entry_rank_quantile_column"] = ""
     if "min_trade_quality" not in output.columns:
         output["min_trade_quality"] = -float("inf")
     if "require_profit_barrier" not in output.columns:

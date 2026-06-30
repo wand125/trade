@@ -87,6 +87,7 @@
 - 00216で `2024-01..02` をfull rank sweepとして再生成したが、calibration-validationでありclean holdoutではない。cal2024自体はtrade 8 / total `-70.3272` で、3-window selectorに入れてもstrictはNoTrade、relaxedは既存の `entry10/short9/min_rank0.0` のまま、side095でNoTrade。次はno-trade calibration windowを増やすより、新しいchronological foldと新outer test、またはEV scale/rank distributionの消失理由を診断する。
 - 00217でEV scale/rank distributionの入力診断を実施した。cal2024はholding validityではなく `side_gap>=5` が `11 / 56,077` しかないことで高threshold候補が消え、refit2025はlong EV scaleが大きく `entry10/short9/min_rank0.0` で `29,522` long entriesを出す。次は絶対EV thresholdではなく、side/regime-local EV quantile、side-gap quantile、rank quantileをadmission scaleとして比較する。
 - 00218でquantile admission診断を追加した。`side_regime_session_month` scopeの `score>=q99`, `side_gap>=q95`, `rank>=q90` は cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesとなり、絶対閾値よりfold間候補数が比較しやすい。次はこのquantile列をprediction/backtest inputに接続し、stateful timed-EV policyとしてNoTradeと比較する。
+- 00219でquantile列をstateful timed-EVへ接続した。cal2024のno-entry問題は解消したが、fresh/refit validationのworst monthが負になった。quantile gate単独は標準採用せず、追加chronological validation windows、role-level worst-month gate、side share cap、small positive EV floorを事前登録してから再評価する。
 
 ## 外部データ候補
 

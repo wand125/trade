@@ -742,6 +742,28 @@ python -m trade_data.backtest model-policy \
   --loss-multiplier 1.20
 ```
 
+Saved predictions can also carry local percentile columns for quantile admission
+gates. This is useful when absolute EV scale drifts across chronological folds:
+
+```bash
+python -m trade_data.backtest model-policy \
+  --month 2025-01 \
+  --predictions data/reports/backtests/<run>/enriched_predictions/family_predictions_quantiles.parquet \
+  --policy timed_ev \
+  --long-column pred_calibrated_long_best_adjusted_pnl \
+  --short-column pred_calibrated_short_best_adjusted_pnl \
+  --long-holding-column pred_mlp_long_exit_event_minutes \
+  --short-holding-column pred_mlp_short_exit_event_minutes \
+  --min-entry-score-quantile 0.99 \
+  --entry-score-quantile-column pred_calibrated_selected_score_pct_side_regime_session_month \
+  --min-side-gap-quantile 0.95 \
+  --side-gap-quantile-column pred_calibrated_side_gap_pct_side_regime_session_month \
+  --min-entry-rank-quantile 0.90 \
+  --entry-rank-quantile-column pred_calibrated_selected_entry_rank_pct_side_regime_session_month \
+  --profit-multiplier 1.0 \
+  --loss-multiplier 1.20
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash

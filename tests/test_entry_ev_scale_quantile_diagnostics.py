@@ -122,6 +122,28 @@ class EntryEvScaleQuantileDiagnosticsTests(unittest.TestCase):
         self.assertEqual(int(monthly.loc[0, "quantile_long_enter_count"]), 1)
         self.assertEqual(int(monthly.loc[0, "quantile_short_enter_count"]), 0)
 
+    def test_enrich_prediction_frame_writes_quantile_columns(self):
+        enriched = (
+            entry_ev_scale_quantile_diagnostics.enrich_prediction_frame_with_quantiles(
+                self.prediction_frame(),
+                family="example",
+                score_kinds=["raw"],
+                quantile_scopes=["month"],
+                long_rank_column="pred_long_entry_local_rank",
+                short_rank_column="pred_short_entry_local_rank",
+            )
+        )
+
+        self.assertIn("pred_raw_selected_score_pct_month", enriched.columns)
+        self.assertIn("pred_raw_side_gap_pct_month", enriched.columns)
+        self.assertIn("pred_raw_selected_entry_rank_pct_month", enriched.columns)
+        self.assertIn("pred_raw_quantile_scope_count_month", enriched.columns)
+        self.assertEqual(
+            enriched["pred_raw_selected_score_pct_month"].tolist(),
+            [0.25, 0.5, 0.75, 1.0],
+        )
+        self.assertEqual(enriched["pred_raw_quantile_scope_count_month"].tolist(), [4, 4, 4, 4])
+
 
 if __name__ == "__main__":
     unittest.main()

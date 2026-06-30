@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 15:14 JST
+最終更新: 2026-06-30 15:36 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile policy backtestを追加した。00218のstateless quantile列を `timed_ev` backtestへ接続し、`ModelPolicyConfig` / `model-policy` に score/side-gap/rank quantile gateを追加した。`side_regime_session_month` の `q99/side_gap_q95/rank_q90` は cal2024で `+6.2048`, worst `+1.8830`, `14` tradesとno-entry問題を解消したが、fresh2024 validation worst `-12.4240`、refit2025 validation total `-27.9456`。`q95` はfresh fixed diagnosticで強いがrefit validation `-23.2338`、rank gate offはfresh validation `-70.7894`。絶対閾値baselineはpositiveでもcal2024 0 trades、refit long share `0.9763` でscale driftを解いた証拠ではない。判断: quantile admissionはaccepted infrastructure、標準policyはNoTrade。詳細は `docs/reports/00219_2026-06-30_entry_ev_quantile_policy_backtest.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV scale quantile diagnosticsを追加した。raw/calibrated EV、selected side、side gap、entry rankを月別・regime/session別に集計し、`month`, `side_month`, `side_regime_session_month` のquantile gateでstateless entry countを比較できる。calibrated selected score q95は cal2024 `11.16..11.22`, fresh2024 `12.08..15.86`, refit2025 `23.52..23.73`、side gap q95は cal2024 `2.48..2.91`, refit2025 `10.03..10.28` と大きくズレる。`score>=q99`, `side_gap>=q95`, `rank>=q90` は `side_regime_session_month` scopeで cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesとなり、絶対閾値より比較可能なadmission surfaceを作れる。判断: quantile admissionは次のbacktest接続候補だが、現時点ではstateless診断であり標準policyはNoTrade。詳細は `docs/reports/00218_2026-06-30_entry_ev_scale_quantile_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

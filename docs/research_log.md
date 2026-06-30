@@ -4,6 +4,21 @@
 
 ## 2026-06-30 JST
 
+### 15:36 Entry EV quantile policy backtest
+
+- 00218のstateless quantile admissionを `timed_ev` stateful backtestへ接続した。
+- `src/trade_data/backtest.py` の `ModelPolicyConfig` / `model-policy` に `min_entry_score_quantile`, `min_side_gap_quantile`, `min_entry_rank_quantile` と対応列名を追加した。
+- `entry_ev_scale_quantile_diagnostics.py --write-enriched-predictions` でquantile列付きprediction parquetを出せるようにした。
+- `scripts/experiments/entry_ev_quantile_policy_backtest.py` を追加し、family/month/role別にquantile policyを同条件で評価できるようにした。
+- 評価条件は profit multiplier `1.0`, loss multiplier `1.20`, MLP exit holding, `min_valid_hold=30`, `max_predicted_hold=260`。
+- `side_regime_session_month` の `q99/side_gap_q95/rank_q90` は cal2024で total `+6.2048`, worst `+1.8830`, `14` trades。cal2024のno-entry問題は解消した。
+- ただし同候補は fresh2024 validation total `+34.2940` でも worst `-12.4240`、refit2025 validation total `-27.9456`。`q95` もrefit validation `-23.2338`、rank gate offはfresh validation `-70.7894`。
+- 絶対閾値baseline `entry10/short9/side5/rank0` はpositiveだが、cal2024は0 trades、refit2025はlong share `0.9763`。scale driftを解いた証拠ではない。
+- 判断: quantile admissionはaccepted infrastructure。標準policyはNoTrade。次は追加chronological validation windowsとrole-level selector gateを先に整える。
+- report: `docs/reports/00219_2026-06-30_entry_ev_quantile_policy_backtest.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: backtest / scale quantile / quantile policy tests OK; py_compile OK; quantile input run OK; quantile policy backtest run OK
+
 ### 15:14 Entry EV scale quantile diagnostics
 
 - 00217の次アクションとして、絶対EV閾値ではなくfold内quantileでentry admission候補を比較する診断を追加した。

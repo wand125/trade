@@ -42,6 +42,11 @@ SCOPE_COLUMNS = {
         "session_regime",
     ],
 }
+QUANTILE_COLUMN_SUFFIXES = {
+    "selected_score": "selected_score_pct",
+    "side_gap": "side_gap_pct",
+    "selected_rank": "selected_entry_rank_pct",
+}
 BASE_PRINT_COLUMNS = [
     "score_kind",
     "family",
@@ -324,6 +329,56 @@ def add_scope_quantiles(
     return result
 
 
+def quantile_column_name(
+    *,
+    score_kind: str,
+    source_column: str,
+    scope_name: str,
+) -> str:
+    if source_column not in QUANTILE_COLUMN_SUFFIXES:
+        raise ValueError(f"unknown quantile source column: {source_column}")
+    return f"pred_{score_kind}_{QUANTILE_COLUMN_SUFFIXES[source_column]}_{scope_name}"
+
+
+def enrich_prediction_frame_with_quantiles(
+    raw: pd.DataFrame,
+    *,
+    family: str,
+    score_kinds: list[str],
+    quantile_scopes: list[str],
+    long_rank_column: str,
+    short_rank_column: str,
+) -> pd.DataFrame:
+    result = raw.copy()
+    for score_kind in score_kinds:
+        if score_kind not in SCORE_DEFINITIONS:
+            raise ValueError(f"unknown score kind: {score_kind}")
+        long_column, short_column = SCORE_DEFINITIONS[score_kind]
+        score_frame = build_score_frame(
+            raw,
+            family=family,
+            score_kind=score_kind,
+            long_score_column=long_column,
+            short_score_column=short_column,
+            long_rank_column=long_rank_column,
+            short_rank_column=short_rank_column,
+        )
+        for scope_name in quantile_scopes:
+            scoped = add_scope_quantiles(score_frame, scope_name=scope_name)
+            for source_column in QUANTILE_COLUMN_SUFFIXES:
+                result[
+                    quantile_column_name(
+                        score_kind=score_kind,
+                        source_column=source_column,
+                        scope_name=scope_name,
+                    )
+                ] = scoped[f"{source_column}_pct"].to_numpy()
+            result[f"pred_{score_kind}_quantile_scope_count_{scope_name}"] = scoped[
+                "selected_score_scope_count"
+            ].to_numpy()
+    return result
+
+
 def summarize_quantile_gate_group(
     group: pd.DataFrame,
     *,
@@ -480,6 +535,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-scope-rows", type=int, default=20)
     parser.add_argument("--long-rank-column", default="pred_long_entry_local_rank")
     parser.add_argument("--short-rank-column", default="pred_short_entry_local_rank")
+    parser.add_argument(
+        "--write-enriched-predictions",
+        action="store_true",
+        help="write family-specific prediction parquet files with quantile columns",
+    )
     parser.add_argument("--label", default="entry_ev_scale_quantile_diagnostics")
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     return parser
@@ -537,6 +597,20 @@ def main(argv: list[str] | None = None) -> int:
         + "\n",
         encoding="utf-8",
     )
+    if args.write_enriched_predictions:
+        enriched_dir = run_dir / "enriched_predictions"
+        enriched_dir.mkdir(parents=True, exist_ok=True)
+        for family, path in families.items():
+            raw = pd.read_parquet(path)
+            enriched = enrich_prediction_frame_with_quantiles(
+                raw,
+                family=family,
+                score_kinds=list(SCORE_DEFINITIONS),
+                quantile_scopes=parse_scope_csv(args.quantile_scopes),
+                long_rank_column=args.long_rank_column,
+                short_rank_column=args.short_rank_column,
+            )
+            enriched.to_parquet(enriched_dir / f"{family}_predictions_quantiles.parquet")
 
     print(f"artifacts: {run_dir}")
     print(base_distribution[BASE_PRINT_COLUMNS].to_string(index=False))

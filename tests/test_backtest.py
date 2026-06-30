@@ -771,6 +771,56 @@ class BacktestTests(unittest.TestCase):
 
         self.assertEqual(signal.tolist(), [0, 1, 0])
 
+    def test_model_signal_can_filter_by_entry_quantiles(self):
+        df = frame_with_opens([100, 101, 102])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0, 20.0, 20.0],
+                "pred_short_best_adjusted_pnl": [1.0, 1.0, 1.0],
+                "score_pct": [0.99, 0.80, 0.99],
+                "gap_pct": [0.99, 0.99, 0.70],
+                "rank_pct": [0.99, 0.99, 0.99],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            min_entry_score_quantile=0.95,
+            min_side_gap_quantile=0.95,
+            min_entry_rank_quantile=0.95,
+            entry_score_quantile_column="score_pct",
+            side_gap_quantile_column="gap_pct",
+            entry_rank_quantile_column="rank_pct",
+        )
+
+        signal = model_signal_from_predictions(df, predictions, config)
+
+        self.assertEqual(signal.tolist(), [1, 0, 0])
+
+    def test_model_signal_requires_quantile_column_when_gate_enabled(self):
+        df = frame_with_opens([100])
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": df["timestamp"],
+                "pred_long_best_adjusted_pnl": [20.0],
+                "pred_short_best_adjusted_pnl": [1.0],
+            }
+        )
+        config = ModelPolicyConfig(
+            predictions=Path("unused"),
+            policy="stateless_ev",
+            entry_threshold=10,
+            min_entry_score_quantile=0.95,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "min_entry_score_quantile requires a quantile column",
+        ):
+            model_signal_from_predictions(df, predictions, config)
+
     def test_model_signal_uses_profit_barrier_threshold(self):
         df = frame_with_opens([100, 101, 102])
         predictions = pd.DataFrame(
