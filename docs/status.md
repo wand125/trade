@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 15:36 JST
+最終更新: 2026-06-30 15:47 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile role selectorを追加した。00219の `monthly_policy_metrics.csv` を、validation roleだけで審査し、fixed diagnostic roleは選択後の参考列に分離する。strict3 (`cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`) はNoTrade。clean2 (`fresh2024_validation`, `refit2025_validation`) もNoTrade。clean2では絶対閾値baselineが validation total `+254.7066`, min role total `+16.1220`, min month `+1.0490` だが、fresh role trades `4` と validation max side share `0.9595` で落ちる。判断: role-level selectorはaccepted infrastructure、現quantile候補は標準採用しない。詳細は `docs/reports/00220_2026-06-30_entry_ev_quantile_role_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile policy backtestを追加した。00218のstateless quantile列を `timed_ev` backtestへ接続し、`ModelPolicyConfig` / `model-policy` に score/side-gap/rank quantile gateを追加した。`side_regime_session_month` の `q99/side_gap_q95/rank_q90` は cal2024で `+6.2048`, worst `+1.8830`, `14` tradesとno-entry問題を解消したが、fresh2024 validation worst `-12.4240`、refit2025 validation total `-27.9456`。`q95` はfresh fixed diagnosticで強いがrefit validation `-23.2338`、rank gate offはfresh validation `-70.7894`。絶対閾値baselineはpositiveでもcal2024 0 trades、refit long share `0.9763` でscale driftを解いた証拠ではない。判断: quantile admissionはaccepted infrastructure、標準policyはNoTrade。詳細は `docs/reports/00219_2026-06-30_entry_ev_quantile_policy_backtest.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

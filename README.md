@@ -764,6 +764,18 @@ python -m trade_data.backtest model-policy \
   --loss-multiplier 1.20
 ```
 
+After monthly quantile policy metrics are generated, select candidates from
+validation roles only and keep fixed windows as diagnostics:
+
+```bash
+python scripts/experiments/entry_ev_quantile_policy_selection.py \
+  --monthly-metrics data/reports/backtests/<quantile_policy_run>/monthly_policy_metrics.csv \
+  --validation-roles fresh2024_validation,refit2025_validation \
+  --fixed-diagnostic-roles cal2024_calibration_validation,fresh2024_fixed_diagnostic \
+  --min-role-trades 10 \
+  --max-side-trade-share 0.95
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash

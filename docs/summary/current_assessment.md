@@ -1,12 +1,12 @@
 # Current Assessment
 
-最終更新: 2026-06-30 15:36 JST
+最終更新: 2026-06-30 15:47 JST
 
 ## 結論
 
 現時点では、標準採用できる利益最大化トレードpolicyはない。
 
-ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、00210で `min_entry_rank` を明示したrank gate / support auditへ進めた。00211では追加refit foldで、support gateが十分なvalidation-positive候補を選んでも未来10ヶ月で大きく崩れることを確認した。00212でmulti-window selectorを実装し、単一2ヶ月validationではなく複数validation windowで候補を審査できるようにした。00213でside/regime/window gateの感度を振ったが、固定テストに耐える候補は出ていない。00214ではsparse high-rank fixed-positive rowもvalidation support不足と確認した。00215では既存artifactを棚卸しし、追加validationとして使える完全rank gridは `2024-03..04` と `2025-01..02` の2本だけだと確認した。00216で `2024-01..02` をfull rank化したが、これはcalibration-validationで、selectorの標準結論はNoTradeのまま。00217ではprediction入力側を診断し、cal2024はside margin supportがほぼなく、refit2025はlong EV scaleが極端に大きいというfold間scale driftを確認した。00218でquantile admission診断を追加し、side/regime/session-local quantileが候補数とside構成を比較可能にする有望軸だと確認した。00219でquantile列をstateful `timed_ev` backtestへ接続したが、cal2024のno-entry問題を解消する一方でfresh/refit validationのworst monthが負になり、標準採用には届かなかった。現在の主課題は「固定testをvalidationへ流用せずにmulti-window admission evidenceを増やすこと」と「side/regime-local quantile/rankを、より多いchronological validation windowでPnL汎化まで確認すること」。
+ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、00210で `min_entry_rank` を明示したrank gate / support auditへ進めた。00211では追加refit foldで、support gateが十分なvalidation-positive候補を選んでも未来10ヶ月で大きく崩れることを確認した。00212でmulti-window selectorを実装し、単一2ヶ月validationではなく複数validation windowで候補を審査できるようにした。00213でside/regime/window gateの感度を振ったが、固定テストに耐える候補は出ていない。00214ではsparse high-rank fixed-positive rowもvalidation support不足と確認した。00215では既存artifactを棚卸しし、追加validationとして使える完全rank gridは `2024-03..04` と `2025-01..02` の2本だけだと確認した。00216で `2024-01..02` をfull rank化したが、これはcalibration-validationで、selectorの標準結論はNoTradeのまま。00217ではprediction入力側を診断し、cal2024はside margin supportがほぼなく、refit2025はlong EV scaleが極端に大きいというfold間scale driftを確認した。00218でquantile admission診断を追加し、side/regime/session-local quantileが候補数とside構成を比較可能にする有望軸だと確認した。00219でquantile列をstateful `timed_ev` backtestへ接続したが、cal2024のno-entry問題を解消する一方でfresh/refit validationのworst monthが負になり、標準採用には届かなかった。00220でrole-level selectorを追加し、fixed diagnosticを使わずにstrict3/clean2ともNoTradeになることを機械的に確認した。現在の主課題は「固定testをvalidationへ流用せずにmulti-window admission evidenceを増やすこと」と「side/regime-local quantile/rankを、より多いchronological validation windowでPnL汎化まで確認すること」。
 
 採用判断は、全期間を見たbestではなく、prior-only / chronological / fresh apply で壊れないかを優先する。
 
@@ -28,6 +28,7 @@
 | Entry EV admission input diagnostics | prediction row側でEV scale、side gap、rank、holding validity、stateless entry countを診断 | cal2024は `56,077` rows中 `side_gap>=5` が `11` だけで、`entry10/short9/min_rank0.0` は0 entry。refit2025は同configで `29,567` entries、うち `29,522` long。`entry14/short9/min_rank0.6` はfresh2024 0 entry、refit2025 25 long-only | accepted infrastructure。絶対EV thresholdのscale driftが主因。標準policyはNoTrade |
 | Entry EV scale quantile diagnostics | raw/calibrated EV、side gap、rankをlocal quantile化し、fold間候補数を比較 | calibrated selected score q95は cal `11.16..11.22`, fresh `12.08..15.86`, refit `23.52..23.73`。`side_regime_session_month` q99/q95/rank90 gateは cal `41`, fresh `316`, refit `32` entries | accepted infrastructure。次はquantile列をstateful backtestへ接続。標準policyはNoTrade |
 | Entry EV quantile policy backtest | quantile admissionを `timed_ev` stateful backtestへ接続 | `side_regime_session_month` q99/q95/rank90は cal2024 `+6.2048`, worst `+1.8830`, trades `14`。fresh validationは total `+34.2940` だが worst `-12.4240`、refit validationは total `-27.9456`。q95はrefit `-23.2338`、rank0はfresh validation `-70.7894` | accepted infrastructure。候補数正規化は有効だがPnL汎化は未達。標準policyはNoTrade |
+| Entry EV quantile role selector | quantile monthly metricsをvalidation roleだけでNoTrade-first選択 | strict3はNoTrade。clean2もNoTrade。clean2の絶対閾値baselineは total `+254.7066`, min role `+16.1220`, min month `+1.0490` だが role trades low と side share `0.9595` で落ちる | accepted infrastructure。fixed diagnosticを選択に使わない。標準policyはNoTrade |
 | Side drift guard | prior-onlyで悪いshort contextを検出できるが、short-only抑制では残存riskがlongや良いshort削除へ移る | strict short p10 + admission margin10 は 2025-01..12 total `-90.1378`。00205では `2025-04..06` raw EV short bias `+0.27..+0.30` を確認。00207の全2024 OOFではsourceが相対最良でも total `-3.1736` | 診断baseline。side/EV calibration preflightとして使い、単独policy化しない |
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
@@ -85,6 +86,7 @@
 - entry EV admission input diagnostics
 - entry EV scale quantile diagnostics
 - entry EV quantile policy backtest infrastructure
+- entry EV quantile role selector
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -116,6 +118,7 @@
 - absolute calibrated EV thresholds as a sufficient cross-fold admission scale without side/regime-local normalization
 - quantile gates as standard policies before stateful backtest and fixed-window audit
 - tested quantile gates as standard policies after 00219, because validation roles still include negative worst months
+- absolute EV baseline after 00220 clean2, because role trades and side concentration fail despite positive PnL
 
 ## 中心的な失敗構造
 
@@ -146,6 +149,7 @@
 - 00217でprediction row入力側を診断すると、cal2024はholding validityではなく `side_gap>=5` が `11 / 56,077` しかないことで高threshold候補が消える。一方、refit2025はlong EV scaleが大きく `entry10/short9/min_rank0.0` で `29,522` long entriesを出す。したがって絶対EV閾値をそのままfold横断のadmission scaleにするのは危険
 - 00218でfold内quantileに変換するとcal2024のno-entry問題は解消し、`side_regime_session_month` q99/q95/rank90では cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesまで候補数が近づく。ただしこれはstateless候補数であり、PnL edgeではない
 - 00219でquantile列をstateful `timed_ev` へ接続した。`side_regime_session_month` q99/q95/rank90はcal2024では `+6.2048` と機能したが、fresh2024 validation worst `-12.4240`、refit2025 validation total `-27.9456` で標準採用不可。q95はfresh fixed diagnosticで強いがrefit validationで負け、rank0はrefitで強くてもfresh validationで大きく壊れる
+- 00220でrole-level selectorを追加した。strict3/clean2ともNoTradeで、clean2の絶対閾値baselineも `role_trades_low` と `side_share_high` で落ちる。fixed diagnostic PnLは選択に使わず、後段監査に分離する
 
 したがって、次の改善は「holding capの再探索」でも「2025系列へのshort hook追加」でもなく、entry EV calibration、rank/quantile admission control、NoTrade-first selectorを、より多いchronological validation window / purged walk-forward / regime別安定性評価へ拡張することを優先する。
 

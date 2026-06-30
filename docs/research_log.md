@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 15:47 Entry EV quantile role selector
+
+- 00219の次アクションとして、quantile policy結果をvalidation roleだけでNoTrade-first選択するselectorを追加した。
+- `scripts/experiments/entry_ev_quantile_policy_selection.py` を追加した。`monthly_policy_metrics.csv` を読み、validation roleでcandidateを審査し、fixed diagnostic roleは選択後の参考列として分離する。
+- 出力は `candidate_selection_summary.csv`, `blocker_summary.csv`, `selected_policy.json`, `config.json`。
+- gateは validation role数、positive role数、active role数、role total PnL、月別worst PnL、role trades、月別trades、drawdown、side concentrationを同時に見る。
+- strict3 (`cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`) はNoTrade。主blockerは `positive_roles_low` 7件、`role_total_pnl_below_floor` 6件、`month_pnl_below_floor` 6件。
+- clean2 (`fresh2024_validation`, `refit2025_validation`) もNoTrade。絶対閾値baselineは validation total `+254.7066`, min role total `+16.1220`, min month `+1.0490` だが、`role_trades_low` と `side_share_high` で落ちる。
+- 判断: role-level selectorはaccepted infrastructure。現quantile候補は標準採用しない。固定diagnostic PnLでvalidation-failing候補を救済しない。
+- report: `docs/reports/00220_2026-06-30_entry_ev_quantile_role_selector.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: quantile role selector unit tests OK; py_compile OK; strict3/clean2 selector runs OK
+
 ### 15:36 Entry EV quantile policy backtest
 
 - 00218のstateless quantile admissionを `timed_ev` stateful backtestへ接続した。
