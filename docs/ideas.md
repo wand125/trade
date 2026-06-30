@@ -86,6 +86,7 @@
 - 00215で既存entry EV/rank artifactを棚卸しした。full-rank validationとして使える既存windowは `2024-03..04` と `2025-01..02` の2本だけ。`2025-03..12` はfull rankでもfixed test、`2024-05..12` はpartial rank fixed test。次にvalidationを増やすなら、`2024-01..02` をfull rank sweepとして再生成するか、新しいchronological foldを作り、別のouter testを明示的に予約する。
 - 00216で `2024-01..02` をfull rank sweepとして再生成したが、calibration-validationでありclean holdoutではない。cal2024自体はtrade 8 / total `-70.3272` で、3-window selectorに入れてもstrictはNoTrade、relaxedは既存の `entry10/short9/min_rank0.0` のまま、side095でNoTrade。次はno-trade calibration windowを増やすより、新しいchronological foldと新outer test、またはEV scale/rank distributionの消失理由を診断する。
 - 00217でEV scale/rank distributionの入力診断を実施した。cal2024はholding validityではなく `side_gap>=5` が `11 / 56,077` しかないことで高threshold候補が消え、refit2025はlong EV scaleが大きく `entry10/short9/min_rank0.0` で `29,522` long entriesを出す。次は絶対EV thresholdではなく、side/regime-local EV quantile、side-gap quantile、rank quantileをadmission scaleとして比較する。
+- 00218でquantile admission診断を追加した。`side_regime_session_month` scopeの `score>=q99`, `side_gap>=q95`, `rank>=q90` は cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesとなり、絶対閾値よりfold間候補数が比較しやすい。次はこのquantile列をprediction/backtest inputに接続し、stateful timed-EV policyとしてNoTradeと比較する。
 
 ## 外部データ候補
 

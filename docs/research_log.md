@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 15:14 Entry EV scale quantile diagnostics
+
+- 00217の次アクションとして、絶対EV閾値ではなくfold内quantileでentry admission候補を比較する診断を追加した。
+- `scripts/experiments/entry_ev_scale_quantile_diagnostics.py` を追加した。raw/calibrated EV、selected side、side gap、entry rankを月別・regime/session別に集計し、`month`, `side_month`, `side_regime_session_month` のquantile gate countを出力する。
+- calibrated selected score q95は cal2024 `11.16..11.22`, fresh2024 `12.08..15.86`, refit2025 `23.52..23.73`。side gap q95は cal2024 `2.48..2.91`, fresh2024 `3.18..6.49`, refit2025 `10.03..10.28`。
+- calibrated `score>=q99`, `side_gap>=q95`, `rank>=q90` は `month` scopeで cal2024 `103`, fresh2024 `738`, refit2025 `50` entries。cal2024のno-entry問題は解消するが、freshはshort-only、refitはlong-onlyに近い。
+- 同条件を `side_regime_session_month` scopeにすると cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesで、side構成も cal `23/18`, fresh `59/257`, refit `26/6` まで改善する。
+- 判断: quantile admissionは次にstateful backtestへ接続する価値がある。ただし今回の出力はstateless入力診断であり、標準policyはNoTrade。
+- report: `docs/reports/00218_2026-06-30_entry_ev_scale_quantile_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: scale quantile diagnostics unit tests OK; py_compile OK; diagnostic run OK
+
 ### 15:01 Entry EV admission input diagnostics
 
 - 00216の次アクションとして、cal2024で高threshold/rank候補が消える理由をprediction row入力側で診断した。

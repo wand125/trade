@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 15:01 JST
+最終更新: 2026-06-30 15:14 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV scale quantile diagnosticsを追加した。raw/calibrated EV、selected side、side gap、entry rankを月別・regime/session別に集計し、`month`, `side_month`, `side_regime_session_month` のquantile gateでstateless entry countを比較できる。calibrated selected score q95は cal2024 `11.16..11.22`, fresh2024 `12.08..15.86`, refit2025 `23.52..23.73`、side gap q95は cal2024 `2.48..2.91`, refit2025 `10.03..10.28` と大きくズレる。`score>=q99`, `side_gap>=q95`, `rank>=q90` は `side_regime_session_month` scopeで cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesとなり、絶対閾値より比較可能なadmission surfaceを作れる。判断: quantile admissionは次のbacktest接続候補だが、現時点ではstateless診断であり標準policyはNoTrade。詳細は `docs/reports/00218_2026-06-30_entry_ev_scale_quantile_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV admission input diagnosticsを追加した。prediction row入力側で、calibrated EV、side gap、entry rank、MLP holding validity、stateless admission countをfamily/month/config単位で分解する。cal2024は `56,077` rows中 `side_gap>=5` が `11` しかなく、`entry10/short9/min_rank0.0` はstateless entry `0`。holding validityは全rowで通っており主因ではない。refit2025は逆にlong EV scaleが大きく、同configで `29,567` entries、うち `29,522` がlong。fixed-positiveに見えた `entry14/short9/min_rank0.6` もfresh2024では0 entry、refit2025では25 entriesすべてlong。判断: 絶対EV threshold + side margin + rank gateはfold間scale driftに弱く、標準policyはNoTrade。次はEV/rankのside-regime-local quantile化と新chronological foldを優先する。詳細は `docs/reports/00217_2026-06-30_entry_ev_admission_input_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
