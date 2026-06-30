@@ -4,6 +4,21 @@
 
 ## 2026-06-30 JST
 
+### 19:22 Entry EV side-balance downside interaction
+
+- 00234の次アクションとして、side-balance drift単体ではなく prior downside evidence との相互作用を診断する `scripts/experiments/entry_ev_side_balance_downside_interaction.py` を追加した。
+- 入力は `data/reports/backtests/20260630_100834_20260630_entry_ev_side_balance_feature_diagnostics_s1_clean/enriched_side_balance_trades.csv`。
+- 診断artifactは `data/reports/backtests/20260630_101914_20260630_entry_ev_side_balance_downside_interaction_s1/`。
+- 対象月より前の同一 `direction + combined_regime + session_regime` だけから `prior_loss_rate`, `prior_direction_error_rate`, `prior_large_exit_regret_rate`, `prior_avg_adjusted_pnl` を集計し、`prior_downside_risk_score` を作った。
+- `side_balance_downside_interaction_score = abs(side_balance_signed_drift_for_trade) * prior_downside_risk_score` を作り、`risk_only`, `risk_and_abs_drift`, `risk_and_overrepresented`, `risk_and_underrepresented`, `interaction_score` のpointwise screen effectsを比較した。
+- q99 floor5では `risk>=0.20` が7 trades / `-31.1784` を拾い、kept totalを `-10.2286 -> +20.9498` へ改善した。ただし kept min role `-30.9390`, kept min month `-33.4920` が残る。
+- q95 floor5では `risk_and_underrepresented >=0.20, drift>=0.02` が9 trades / `-11.7604` を拾うが、kept min role `-74.8268`。`risk_only >=0.20` でも kept min role `-42.7904` で、fresh tailを救えない。
+- 最大損失の `fresh2024 2024-04 long range_low_vol/london -33.4920` はprior support 0でrisk/intersection 0。`fresh2024 2024-03 short range_low_vol/london -32.0364` はrisk高だがdrift `0.0131` と低く、interaction scoreでは弱い。
+- refit勝ちroleにも高risk/high interactionがあり、risk-only hard blockも危険。判断: interaction diagnosticsはaccepted、hard gate/direct penaltyは採用しない。selector/ranking特徴、downside-weighted dense target、stateful replacement-aware診断へ回す。
+- report: `docs/reports/00235_2026-06-30_entry_ev_side_balance_downside_interaction.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: side-balance downside interaction unit tests OK; py_compile OK; diagnostics run OK
+
 ### 19:08 Entry EV side-balance feature diagnostics
 
 - 00233の反省に沿って、side-balance driftをdirect scoreではなくselected-trade featureとして診断する `scripts/experiments/entry_ev_side_balance_feature_diagnostics.py` を追加した。
