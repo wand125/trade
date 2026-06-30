@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 14:50 Entry EV cal2024 rank window
+
+- 00215の次アクションとして、既存non-rankだった `2024-01..02` validation artifactをfull rank gridで再生成した。
+- 生成先は `data/reports/backtests/20260630_entry_evcal_rank_calibration_2024_01_02_calibrated/`。各月 `72` rowsで、`entry=[8,10,12,14]`, `short_offset=[3,6,9]`, `min_entry_rank=[0.0,0.5,0.6,0.7,0.8,0.9]` を満たす。
+- cal2024は `2023-01..12` fitのvalidation期間なので、clean outer holdoutではなく `calibration-validation` として扱う。`entry_ev_validation_inventory.py` に `calibration_validation_rank` / `calibration_full_rank_not_clean_holdout` 分類を追加した。
+- cal2024 rank window全体は `144` rows, trade count `8`, total `-70.3272`。active rowsはすべてshort-side lossesで、非負上位はほぼno-trade row。
+- cal2024 + fresh2024 + refit2025の3-window selectorを実行した。strict support10/worst0 (`positive_windows=3`, `min_window_trades=10`) はNoTrade。cal2024を0-trade非負確認扱いにしたrelaxed gateは以前と同じ `entry10/short9/min_rank0.0` を選び、side share `0.9595`。`max_side_trade_share=0.95` を入れるとNoTradeへ戻る。
+- 判断: cal2024 full rank化はaccepted artifactだが、validation supportを増やしていない。relaxed rowは00212/00213と同じで、固定test崩壊済みなので標準採用しない。標準policyはNoTrade。
+- report: `docs/reports/00216_2026-06-30_entry_ev_cal2024_rank_window.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: inventory/admission py_compile OK; inventory/admission/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; cal2024 rank sweeps OK; 3-window selector runs OK; inventory v3 OK
+
 ### 14:42 Entry EV validation inventory
 
 - 00214の次アクションとして、既存entry EV / rank sweep artifactを、追加validation windowとして使えるか棚卸しした。

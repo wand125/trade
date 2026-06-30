@@ -138,6 +138,8 @@ def infer_role_hint(metric_path: Path) -> str:
         "20260630_entry_evcal_rank_refit2025_validation_calibrated",
     }:
         return "validation_candidate"
+    if "rank_calibration" in family:
+        return "calibration_validation_rank"
     if "validation" in family and "rank" not in family:
         return "calibration_validation_nonrank"
     if "fresh0304" in family and "rank" not in family:
@@ -157,6 +159,8 @@ def infer_protocol_hint(metric_path: Path) -> str:
         return "refit2025_rank_fixed_test"
     if "rank_test_2024_05_12" in family:
         return "chrono2024_rank_fixed_test"
+    if "rank_calibration" in family:
+        return "chrono2024_rank_calibration_validation"
     if "validation" in family:
         return "chrono2024_calibration_validation"
     return "unknown"
@@ -258,6 +262,8 @@ def summarize_inventory(inventory: pd.DataFrame) -> pd.DataFrame:
         nonrank_months = int((group["grid_class"] == "nonrank_grid").sum())
         if role == "validation_candidate" and grid_class == "full_rank_grid":
             reuse_status = "usable_full_rank_validation_window"
+        elif role == "calibration_validation_rank" and grid_class == "full_rank_grid":
+            reuse_status = "calibration_full_rank_not_clean_holdout"
         elif role == "fixed_test_or_holdout":
             reuse_status = "fixed_test_not_reusable_for_same_audit"
         elif grid_class == "partial_rank_grid":

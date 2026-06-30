@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 14:42 JST
+最終更新: 2026-06-30 14:50 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV cal2024 rank windowを追加した。00215でnon-rankだった `2024-01..02` をfull rank gridに再生成し、`144` rows、trade count `8`, total `-70.3272` を確認した。これは `2023-01..12` fitのvalidation期間なのでclean outer holdoutではなく `calibration-validation` として扱う。cal2024 + fresh2024 + refit2025の3-window selectorでは、strict support10/worst0はNoTrade、cal2024を0-trade非負確認扱いにしたrelaxed gateだけが以前と同じ `entry10/short9/min_rank0.0` を選び、side095ではNoTradeへ戻る。判断: cal2024 full rank化はaccepted artifactだが、採用候補は増えていない。標準policyはNoTrade。詳細は `docs/reports/00216_2026-06-30_entry_ev_cal2024_rank_window.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV validation inventoryを追加した。`entry_ev_validation_inventory.py` は既存entry EV/rank `metrics.csv` を棚卸しし、role、protocol、grid完全性、reference key一致をCSV化する。`39` metrics filesを検査した結果、完全rank gridとして追加validation候補に使える既存windowは fresh2024 `2024-03..04` と refit2025 `2025-01..02` の2本だけ。refit2025 `2025-03..12` は完全rank gridだが固定test、chrono2024 `2024-05..12` は固定testかつ部分rank grid、`2024-01..02` はnon-rank gridなので再生成が必要。判断: 固定testをvalidationへ流用せず、新しいchronological foldか明示的なrank sweep再生成を行う。詳細は `docs/reports/00215_2026-06-30_entry_ev_validation_inventory.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -1,12 +1,12 @@
 # Current Assessment
 
-最終更新: 2026-06-30 14:42 JST
+最終更新: 2026-06-30 14:50 JST
 
 ## 結論
 
 現時点では、標準採用できる利益最大化トレードpolicyはない。
 
-ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、00210で `min_entry_rank` を明示したrank gate / support auditへ進めた。00211では追加refit foldで、support gateが十分なvalidation-positive候補を選んでも未来10ヶ月で大きく崩れることを確認した。00212でmulti-window selectorを実装し、単一2ヶ月validationではなく複数validation windowで候補を審査できるようにした。00213でside/regime/window gateの感度を振ったが、固定テストに耐える候補は出ていない。00214ではsparse high-rank fixed-positive rowもvalidation support不足と確認した。00215では既存artifactを棚卸しし、追加validationとして使える完全rank gridは `2024-03..04` と `2025-01..02` の2本だけだと確認した。現在の主課題は「固定testをvalidationへ流用せずにmulti-window admission evidenceを増やすこと」と「guardで悪いtradeを消しても、空いた時間のreplacement tradeが別の損失を作ること」。
+ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、00210で `min_entry_rank` を明示したrank gate / support auditへ進めた。00211では追加refit foldで、support gateが十分なvalidation-positive候補を選んでも未来10ヶ月で大きく崩れることを確認した。00212でmulti-window selectorを実装し、単一2ヶ月validationではなく複数validation windowで候補を審査できるようにした。00213でside/regime/window gateの感度を振ったが、固定テストに耐える候補は出ていない。00214ではsparse high-rank fixed-positive rowもvalidation support不足と確認した。00215では既存artifactを棚卸しし、追加validationとして使える完全rank gridは `2024-03..04` と `2025-01..02` の2本だけだと確認した。00216で `2024-01..02` をfull rank化したが、これはcalibration-validationで、selectorの標準結論はNoTradeのまま。現在の主課題は「固定testをvalidationへ流用せずにmulti-window admission evidenceを増やすこと」と「guardで悪いtradeを消しても、空いた時間のreplacement tradeが別の損失を作ること」。
 
 採用判断は、全期間を見たbestではなく、prior-only / chronological / fresh apply で壊れないかを優先する。
 
@@ -24,6 +24,7 @@
 | Entry EV gate sensitivity | side/regime/window support gateをgrid評価した | `576` gate中 `568` はNoTrade、`8` は全て `entry10/short9/min_rank0.0` を選び fixed tests `-943.9322`。`max_side_trade_share<=0.95`, `min_window_trades=10`, `min_combined_regime_pnl>=-50` は全てNoTrade | accepted infrastructure。閾値調整だけでは汎化候補なし |
 | Entry EV sparse rank diagnostics | fixed-positive sparse high-rank rowをvalidation evidenceだけで診断した | `72` candidates中 validation eligible `0`。fixed-positiveは `entry14/short9/min_rank0.6` だけだが、validation total `-0.3844`, trades `3`, min window trades `0`, side share `1.0000`; fresh2024は0 trade | accepted infrastructure。sparse high-rank rowは現validationでは採用不可 |
 | Entry EV validation inventory | 既存rank sweep artifactのvalidation再利用可否を棚卸し | `39` metrics files中、full-rank validation candidateは fresh2024 `2024-03..04` と refit2025 `2025-01..02` の2本だけ。`2025-03..12` はfull rankだがfixed test、`2024-05..12` はfixed testかつpartial rank | accepted infrastructure。固定testをvalidationへ流用せず、新foldかrank sweep再生成が必要 |
+| Entry EV cal2024 rank window | `2024-01..02` をfull rank gridへ再生成し3-window selectorへ追加 | cal2024は `144` rows, trades `8`, total `-70.3272`。strict 3-window supportはNoTrade。relaxedでは同じ `entry10/short9/min_rank0.0`、side095ではNoTrade | accepted artifact。calibration-validationであり、support増加や標準採用にはならない |
 | Side drift guard | prior-onlyで悪いshort contextを検出できるが、short-only抑制では残存riskがlongや良いshort削除へ移る | strict short p10 + admission margin10 は 2025-01..12 total `-90.1378`。00205では `2025-04..06` raw EV short bias `+0.27..+0.30` を確認。00207の全2024 OOFではsourceが相対最良でも total `-3.1736` | 診断baseline。side/EV calibration preflightとして使い、単独policy化しない |
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
@@ -77,6 +78,7 @@
 - entry EV gate sensitivity infrastructure
 - sparse high-rank diagnostic infrastructure
 - entry EV validation inventory infrastructure
+- cal2024 full-rank calibration-validation artifact
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 

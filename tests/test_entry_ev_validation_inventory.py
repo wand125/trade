@@ -103,6 +103,32 @@ class EntryEvValidationInventoryTests(unittest.TestCase):
         self.assertEqual(row["grid_class"], "nonrank_grid")
         self.assertEqual(row["role_hint"], "calibration_validation_nonrank")
 
+    def test_classifies_rank_calibration_grid_as_not_clean_holdout(self):
+        frame = make_frame(
+            entries=[8, 10, 12, 14],
+            offsets=[3, 6, 9],
+            ranks=[0.0, 0.5, 0.6, 0.7, 0.8, 0.9],
+            month="2024-01",
+        )
+
+        row = entry_ev_validation_inventory.build_inventory_row(
+            Path(
+                "data/reports/backtests/"
+                "20260630_entry_evcal_rank_calibration_2024_01_02_calibrated/"
+                "run_2024-01/metrics.csv"
+            ),
+            frame,
+        )
+        summary = entry_ev_validation_inventory.summarize_inventory(pd.DataFrame([row]))
+
+        self.assertEqual(row["grid_class"], "full_rank_grid")
+        self.assertEqual(row["role_hint"], "calibration_validation_rank")
+        self.assertEqual(row["protocol_hint"], "chrono2024_rank_calibration_validation")
+        self.assertEqual(
+            summary.loc[0, "admission_reuse_status"],
+            "calibration_full_rank_not_clean_holdout",
+        )
+
     def test_reference_key_matches_use_common_policy_axes(self):
         frame = make_frame(
             entries=[8, 10],
