@@ -71,7 +71,8 @@
 - 00200でfocus entry signalをdynamic hook化した。00199のOR条件はreplacement込みで `+508.9838 -> +507.4968` と悪化し、side-gap onlyも悪化。rank-only `0.53` は `+511.5964` と小幅改善するが採用するほどではない。次は `model-trade-delta` の `only_candidate` shortをreplacement risk targetとして学習・診断し、削除後に悪いreplacementが入る局面を事前に避ける。
 - 00201で `only_candidate` shortをreplacement risk target化した。`profit_hit_lt0p5` はlate `gap5` replacement損失をほぼ覆うが全期間では良いreplacementを消すためglobal gate不可。`pred_ev_lt15` はsupportが少ないものの全期間/lateとも悪いreplacementに寄る。trigger限定dynamic hookは00202で検証済み。
 - 00202でtrigger限定replacement risk hookをdynamic backtestした。`min_prior_months=4` と `recent_short_losing_months>=1` の後だけ `pred_short_profit_barrier_hit=0` を止めると、`gap5/budget0` baseline `+508.9838 / worst -215.1172` から `+790.3634 / worst -46.0150` へ改善。low-EVはworstを止めない。次は同一familyの2024または追加未使用月へ、trigger条件とthresholdを再探索せず固定適用する。
-- 00203でtriggered profit-missを `2024-11,2024-12,2025-01..04` same-family smokeへ固定適用したところ、`gap5/budget0 +445.8266` に対して `+367.8768` へ悪化した。発火した2025-03/04で勝ちshortを削ったため、profit-miss hookは診断候補へ降格。次は `gap5/budget0` 単体を追加same-family windowへ固定適用する。純2024検証には2024前半の同一risk列生成が必要。
+- 00203でtriggered profit-missを `2024-11,2024-12,2025-01..04` same-family smokeへ固定適用したところ、`gap5/budget0 +445.8266` に対して `+367.8768` へ悪化した。発火した2025-03/04で勝ちshortを削ったため、profit-miss hookは診断候補へ降格。
+- 00204で `gap5/budget0` 単体を `2024-11..2025-08` same-familyへ拡張した。10ヶ月合計は `+384.6968` でsource `+219.9460` を上回るが、追加apply `2025-05..08` だけでは `+13.9434` でsource `+66.7730` とbaseline `+176.8236` に負けた。`gap5/budget0` も標準採用候補から外し、診断baselineにする。純2024検証には2024前半の同一risk列生成が必要。
 
 ## 外部データ候補
 

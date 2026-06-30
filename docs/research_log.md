@@ -4,6 +4,17 @@
 
 ## 2026-06-30 JST
 
+### 12:02 Gap5/budget0 same-family extension
+
+- 00203の次アクションとして、`gap5/budget0` 自体を追加same-family windowへ再探索なしで固定適用した。
+- 同一risk列を持つ `2024-11..2025-04` OOFと `2025-05..08` applyを結合し、`coststress_maxhold_260` baseline、p10/replm10 source、`gap0/budget0`、`gap5/budget0` を比較した。
+- 10ヶ月合計では baseline `+433.3572 / worst -26.2112`、source `+219.9460 / worst -102.2830`、`gap0/budget0 +273.3682 / worst -80.9772`、`gap5/budget0 +384.6968 / worst -90.5606`。
+- 追加apply `2025-05..08` だけでは baseline `+176.8236`、source `+66.7730`、`gap0/budget0 +57.1198`、`gap5/budget0 +13.9434`。`gap5` は2025-06の勝ちをsource比 `-86.2130` 削った。
+- 判断: `gap5/budget0` は強い時期があるが、追加same-family applyで安定しない。標準採用候補から外し、diagnostic baseline / intervention locatorへ降格する。これ以上同じ2025系列でshort hookを積むより、純2024または別regimeの同一risk列生成とside prediction calibration再評価を優先する。
+- report: `docs/reports/00204_2026-06-30_gap5_budget_samefamily_extension.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: holding max baseline / side drift p10+replm10 / short raw-gap budget artifact生成 OK; `python3 -m unittest tests.test_docs_reports`: OK
+
 ### 11:51 Triggered profit-miss same-family check
 
 - 00202の triggered profit-miss hookを条件再探索なしで、同一risk列が使える `2024-11, 2024-12, 2025-01..04` へ固定適用した。純2024だけで `min_prior_months=4` を満たすには2024前半の同一risk列が不足しているため、same-family smokeとして扱う。

@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 11:51 JST
+最終更新: 2026-06-30 12:02 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00203` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00203で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed checkを分解した。現時点ではtriggered profit-missより `gap5/budget0` 単体が強い。 |
+| `00186`..`00204` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00204で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed checkを分解した。triggered profit-missも `gap5/budget0` 単体も追加same-family固定チェックで不安定だったため、標準採用しない。 |
 
 ## テーマ別読む順
 
@@ -42,6 +42,7 @@
 15. `00201_2026-06-30_replacement_risk_target_diagnostics.md`
 16. `00202_2026-06-30_triggered_replacement_risk_hook.md`
 17. `00203_2026-06-30_triggered_profit_miss_samefamily_check.md`
+18. `00204_2026-06-30_gap5_budget_samefamily_extension.md`
 
 ### 現在の候補軸を知る
 
@@ -62,6 +63,7 @@
 15. `00201_2026-06-30_replacement_risk_target_diagnostics.md`
 16. `00202_2026-06-30_triggered_replacement_risk_hook.md`
 17. `00203_2026-06-30_triggered_profit_miss_samefamily_check.md`
+18. `00204_2026-06-30_gap5_budget_samefamily_extension.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -216,7 +218,7 @@ Next: dynamic hook was tested in 00202; validate fixed triggered profit-miss on 
 
 ```text
 Report: 00202 Triggered Replacement Risk Hook
-Status: strongest candidate / not standard
+Status: historical candidate / refuted later / not standard
 Question: prior deterioration trigger後だけreplacement risk hookを動的に重ねると、一玉制約とreplacement込みで改善するか
 Best evidence: gap5/budget0 baseline +508.9838 / worst -215.1172. triggered profit-miss min4 +790.3634 / worst -46.0150 / max DD 129.7364. low-EV only +540.5594 and leaves worst unchanged.
 Decision: triggered profit-miss was strongest candidate before 00203; low-EV is diagnostic only. Not standard until unseen same-family validation.
@@ -228,8 +230,17 @@ Report: 00203 Triggered Profit-Miss Same-Family Check
 Status: fixed-check refutation / not standard
 Question: 00202のtriggered profit-missを同一risk列の別期間へ再探索なしで固定適用すると汎化するか
 Best evidence: 2024-11..2025-04 same-family smoke: gap5/budget0 +445.8266 / worst -39.0766; triggered profit-miss +367.8768 / worst -39.0766. Trigger fired in 2025-03/04 and removed profitable short exposure.
-Decision: triggered profit-miss is downgraded to diagnostic candidate. gap5/budget0 is the current stronger candidate.
-Next: fixed-apply gap5/budget0 itself to additional same-family windows; generate wider same-risk 2024 columns for pure 2024 checks.
+Decision: triggered profit-miss is downgraded to diagnostic candidate. gap5/budget0 was checked next in 00204.
+Next: 00204 refuted promotion of gap5/budget0 on additional apply months; generate wider same-risk 2024 columns for pure 2024 checks.
+```
+
+```text
+Report: 00204 Gap5 Budget Same-Family Extension
+Status: fixed-check refutation / diagnostic baseline
+Question: 00203で残ったgap5/budget0単体を追加same-family windowへ再探索なしで固定適用すると安定するか
+Best evidence: 2024-11..2025-08 10ヶ月では gap5/budget0 +384.6968 vs source +219.9460。ただし追加apply 2025-05..08だけでは gap5 +13.9434, source +66.7730, baseline +176.8236。2025-06でsourceより -86.2130 悪い。
+Decision: gap5/budget0は標準採用候補から外し、diagnostic baseline / intervention locatorとして残す。
+Next: pure 2024 same-risk列を生成し、baseline / p10+replm10 / gap0 / gap5 を広いregimeで固定比較する。
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。
