@@ -4,6 +4,21 @@
 
 ## 2026-06-30 JST
 
+### 16:39 Entry EV quantile hold-cap sensitivity
+
+- 00223の次アクションとして、q95/q99 quantile/floor候補の hold-cap sensitivity をvalidation roleだけで実行した。
+- `scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py` を追加した。既存quantile policyと同じ `timed_ev` / MLP exit holding / profit `1.0` / loss `1.20` で、`max_predicted_hold_minutes=260,480,720,1440` をgrid評価する。
+- main出力は `data/reports/backtests/20260630_entry_ev_quantile_hold_cap_sensitivity/20260630_073350_entry_ev_quantile_hold_cap_sensitivity/`。
+- diagnostic guard support checkは `data/reports/backtests/20260630_entry_ev_quantile_hold_cap_sensitivity/20260630_073622_entry_ev_quantile_hold_cap_sensitivity_guardmin4/`。
+- no-guard `q95_floor5` は `260m -5.6974 / min role -23.2338 / min month -36.8342` から、`720m +117.0340 / min role +16.2628 / min month -9.1718` へ改善した。ただしNoTrade-first gateは通らない。
+- same-validation diagnostic inversion guardありでは `720m q95_floor5` が `+273.6662 / min role +27.7034 / min month -10.3748`。support>=4 guardでも `+235.0452 / min role +25.3464 / min month -10.3748` まで改善した。
+- 全候補が `month_pnl_below_floor` で落ち、selected policyはNoTrade。
+- 判断: hold-cap sensitivityはaccepted infrastructure。`720m` は次の診断capだが、blind cap延長やsame-validation inversion guardは標準採用しない。
+- 次は00224のdiagnostic inversion contextを、対象月より前だけで作る prior-only context-side inversion detectorへ置き換え、`720m` vs `260m` を再評価する。
+- report: `docs/reports/00224_2026-06-30_entry_ev_quantile_hold_cap_sensitivity.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: hold-cap sensitivity unit tests OK; py_compile OK; main run OK; guard_min_trade_count=4 support check OK
+
 ### 16:21 Entry EV quantile exit capture diagnostics
 
 - 00222で分けた課題のうち、q95/q99 validation tradesのexit captureを診断した。

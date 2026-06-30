@@ -805,6 +805,25 @@ python scripts/experiments/entry_ev_quantile_exit_capture_diagnostics.py \
   --max-policy-hold-minutes 260
 ```
 
+Then run a pre-registered hold-cap sensitivity over q95/q99 candidates. The
+optional `diagnostic_inversion` guard is derived from validation context
+outcomes, so treat it as a leakage-aware hypothesis generator, not a deployable
+rule:
+
+```bash
+python scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py \
+  --family-predictions cal2024=data/reports/backtests/<quantile_inputs>/enriched_predictions/cal2024_predictions_quantiles.parquet \
+  --family-predictions fresh2024=data/reports/backtests/<quantile_inputs>/enriched_predictions/fresh2024_predictions_quantiles.parquet \
+  --family-predictions refit2025=data/reports/backtests/<quantile_inputs>/enriched_predictions/refit2025_predictions_quantiles.parquet \
+  --role-months cal2024_calibration_validation=cal2024:2024-01,2024-02 \
+  --role-months fresh2024_validation=fresh2024:2024-03,2024-04 \
+  --role-months refit2025_validation=refit2025:2025-01,2025-02 \
+  --roles cal2024_calibration_validation,fresh2024_validation,refit2025_validation \
+  --guard-context-summary data/reports/backtests/<trade_diagnostics_run>/role_context_trade_summary.csv \
+  --max-predicted-hold-minutes 260,480,720,1440 \
+  --guard-modes none,diagnostic_inversion
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash

@@ -92,6 +92,7 @@
 - 00221でpositive EV floor候補を追加した。floor `5/10` を入れてもstrict3/clean2はNoTradeで、floor10はfresh validationを少し改善する一方refitの負けを解けない。同じrole上でfloor値を細かく探索せず、次はselected trade contextとEV calibrationをrole別に比較するか、chronological validation windowを増やす。
 - 00222でquantile/floor候補の実tradeをrole/context別に診断した。q95/q99系はrefitのdirection error / exit regret、q90系はfreshの悪いshort contextが主因。次はcontext-side inversion preflightとexit capture診断を分け、entry floorだけで救おうとしない。
 - 00223でq95/q99のexit captureを診断した。`max_predicted_hold=260m` が強くbindingし、oracle best holdingより早く出ているtradeが多い。ただしrefit側にはdirection/context errorも残るため、blind cap延長は危険。次は `260/480/720/1440` hold-cap sensitivityをvalidation roleだけで事前登録し、context-side inversion guardなし/ありを分けて評価する。
+- 00224でhold-cap sensitivityを実施した。`720m` はexit capture改善軸として有望で、same-validation diagnostic inversion guardありならrole totalsは全て正になる。ただし月別tailが残り、全候補が `month_pnl_below_floor` で落ちる。次は同月結果から作ったguardではなく、prior-only selected-trade context direction error / side PnL / prediction side bias で inversion detectorを作る。
 
 ## 外部データ候補
 

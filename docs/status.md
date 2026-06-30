@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 16:21 JST
+最終更新: 2026-06-30 16:39 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile hold-cap sensitivityを追加した。q95/q99候補に対して `max_predicted_hold_minutes=260/480/720/1440` をvalidation roleだけで比較し、context-side inversion guardなし/ありを同じstateful backtestで評価した。guardなしでは `q95_floor5` が `260m -5.6974 / min role -23.2338` から `720m +117.0340 / min role +16.2628` へ改善したが、min monthは `-9.1718` でNoTrade-first gateを通らない。same-validation diagnostic guardありでは `720m q95_floor5` が `+273.6662 / min role +27.7034`、support>=4 guardでも `+235.0452 / min role +25.3464` まで改善するが、どちらも `month_pnl_below_floor` で落ちる。判断: hold-cap sensitivityはaccepted infrastructure、`720m` は次の診断cap、same-validation guardと候補policyは標準採用しない。標準policyはNoTrade。詳細は `docs/reports/00224_2026-06-30_entry_ev_quantile_hold_cap_sensitivity.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile exit capture diagnosticsを追加した。00222のenriched tradeからq95/q99候補だけを読み、policyで使った `pred_mlp_*_exit_event_minutes`、実holding、oracle best holding、exit regretをrole/context別に比較した。q95/q99はraw MLP hold平均が `816..1410m` と長く、`max_predicted_hold=260m` capにほぼ張り付く。一方oracle best holding平均は `497..930m` で、early exit vs oracle rateは `0.75..1.00`。exit capture不足は明確だが、refit側にはdirection/context errorも残るため、capを盲目的に伸ばすのは危険。判断: exit capture diagnosticsはaccepted infrastructure、標準policyはNoTrade。次はcontext-side inversion guardとhold-cap sensitivityを分けてvalidationする。詳細は `docs/reports/00223_2026-06-30_entry_ev_quantile_exit_capture_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
