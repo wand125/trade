@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 19:54 Entry EV side-balance downside composite selector
+
+- 00237の次アクションとして、coverage/support、side-balance/downside pressure、direction error、exit regret、expected PnL overestimateを同じcandidate gateへ入れる `scripts/experiments/entry_ev_side_balance_downside_composite_selector.py` を追加した。
+- strict artifactは `data/reports/backtests/20260630_105344_20260630_entry_ev_side_balance_downside_composite_strict_s1/`。
+- relaxed artifactは `data/reports/backtests/20260630_105357_20260630_entry_ev_side_balance_downside_composite_relaxed_s1/`。
+- required rolesは `cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`。missing required roleはunknown/high riskとして composite risk `1.0`、direction/exit/EV overestimate component `1.0` にした。
+- strict composite gateでは全候補NoTrade。PnL床だけ `min required role total -15`, `min required month -10` に緩めても全候補NoTrade。
+- relaxed sensitivity 288行も全てNoTrade。q99/q95 floor10はfresh role欠損で落ち、q99/q95 floor5はfresh tail、cal2024 prior-zero、direction error、EV過大評価が重なって落ちる。
+- 判断: composite selector diagnosticsはaccepted。現候補は標準採用しない。EV overestimateと実PnL floorはvalidation calibration diagnosticであり、model-time input featureではない。
+- report: `docs/reports/00238_2026-06-30_entry_ev_side_balance_downside_composite_selector.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: composite selector unit tests OK; py_compile OK; strict/relaxed composite selector OK
+
 ### 19:41 Entry EV side-balance downside coverage audit
 
 - 00236の反省に沿って、candidate平均ではなく required role ごとのcoverage/supportを監査する `scripts/experiments/entry_ev_side_balance_downside_coverage_audit.py` を追加した。

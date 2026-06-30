@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 19:41 JST
+最終更新: 2026-06-30 19:54 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV side-balance downside composite selectorを追加した。coverage/support、side-balance/downside pressure、direction error、exit regret、expected PnL overestimateを同じcandidate gateへ入れ、missing required roleはunknown/high riskとしてcomposite risk `1.0` にした。strict composite gateも、PnL床だけ `min required role total -15`, `min required month -10` に緩めたrelaxed composite gateも全候補NoTrade。composite sensitivity 288条件も全てNoTradeだった。floor10系はfresh role欠損、floor5系はfresh tail、cal2024 prior-zero、direction error、EV過大評価で落ちる。判断: composite diagnosticsはaccepted、現候補は標準採用しない。EV overestimateと実PnL floorはvalidation calibration diagnosticであり、model-time input featureではない。詳細は `docs/reports/00238_2026-06-30_entry_ev_side_balance_downside_composite_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV side-balance downside coverage auditを追加した。00236で低pressureに見えたfloor10候補を、required role coverageとprior supportで監査した。required rolesは `cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`。strict coverage gateも、PnL床だけ緩めたrelaxed coverage gateも全候補NoTrade。coverage sensitivity 216条件も全てNoTradeだった。floor10系はfresh role欠損、active role不足、prior-zero/pressureで落ち、floor5系は3 role coverageを満たすがfresh tail、required role/month PnL、cal2024 prior-zero過多で落ちる。判断: coverage/support auditはaccepted、現候補は標準採用しない。詳細は `docs/reports/00237_2026-06-30_entry_ev_side_balance_downside_coverage_audit.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

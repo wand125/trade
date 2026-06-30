@@ -106,6 +106,7 @@
 - 00235でside-balance x prior downside interactionを試すと、q99 floor5では `risk>=0.20` が損失を拾うが、fresh最大損失やq95 tailは残り、refit勝ちroleにも高risk/high interactionが出た。interactionはhard gateにせず、q95/q99別のselector/ranking feature、downside-weighted dense target、stateful replacement-aware diagnosticへ回す。
 - 00236でcandidate-level pressureへ集約すると、floor5 fresh tailは高pressureとして見えるが、低pressure候補はfresh coverageやprior evidenceが薄いfloor10系に寄る。pressure scoreはsupport/coverage制約と一緒に使い、active role count、prior zero share、fresh-role coverageをselector featureに明示する。
 - 00237でrequired-role coverageを明示すると、coverage/support-aware gatesはstrict/relaxed/sensitivityすべてNoTradeだった。missing supportを低riskではなく未知riskとして扱い、early monthsやfresh role missingを別featureとしてmodel/selectorへ渡す。
+- 00238でcoverage/support、side-balance/downside、direction/exit、EV overestimateをcomposite gateへ入れてもstrict/relaxed/sensitivityすべてNoTradeだった。composite hard gateを増やすのではなく、missing-support indicator、direction-side inversion target、exit-capture target、executable EV calibration targetへ分解して学習側へ戻す。
 
 ## 外部データ候補
 
