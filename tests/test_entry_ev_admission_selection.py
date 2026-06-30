@@ -27,6 +27,7 @@ class EntryEvAdmissionSelectionTests(unittest.TestCase):
                 "validation_total": [-1.0, -20.0, -40.0],
                 "validation_worst": [-1.0, -15.0, -30.0],
                 "validation_trades": [7, 20, 60],
+                "validation_active_months": [2, 2, 2],
                 "validation_max_dd": [5.0, 15.0, 30.0],
             }
         )
@@ -36,6 +37,8 @@ class EntryEvAdmissionSelectionTests(unittest.TestCase):
             self.summary_frame(),
             min_positive_pnl=0.0,
             min_trades=1,
+            min_active_months=0,
+            min_worst_pnl=-float("inf"),
             max_drawdown=float("inf"),
         )
 
@@ -49,12 +52,30 @@ class EntryEvAdmissionSelectionTests(unittest.TestCase):
             frame,
             min_positive_pnl=0.0,
             min_trades=1,
+            min_active_months=0,
+            min_worst_pnl=-float("inf"),
             max_drawdown=float("inf"),
         )
 
         self.assertEqual(selected["selected"], "policy")
         self.assertEqual(float(selected["entry_threshold"]), 12.0)
         self.assertEqual(float(selected["short_entry_threshold_offset"]), 6.0)
+
+    def test_standard_selector_honors_support_and_worst_gates(self):
+        frame = self.summary_frame()
+        frame.loc[0, "validation_total"] = 5.0
+        frame.loc[0, "validation_active_months"] = 1
+
+        selected = entry_ev_admission_selection.select_standard_policy(
+            frame,
+            min_positive_pnl=0.0,
+            min_trades=1,
+            min_active_months=2,
+            min_worst_pnl=0.0,
+            max_drawdown=float("inf"),
+        )
+
+        self.assertEqual(selected["selected"], "no_trade")
 
     def test_diagnostic_near_notrade_prefers_conservative_thresholds(self):
         selected = entry_ev_admission_selection.select_near_notrade_diagnostic(
@@ -103,6 +124,7 @@ class EntryEvAdmissionSelectionTests(unittest.TestCase):
         self.assertEqual(len(summary), 1)
         self.assertAlmostEqual(float(summary.loc[0, "validation_total"]), -2.0)
         self.assertEqual(int(summary.loc[0, "validation_trades"]), 7)
+        self.assertEqual(int(summary.loc[0, "validation_active_months"]), 2)
         self.assertAlmostEqual(float(summary.loc[0, "validation_ev_over_realized"]), 18.0)
 
 

@@ -1,12 +1,12 @@
 # Current Assessment
 
-最終更新: 2026-06-30 13:20 JST
+最終更新: 2026-06-30 13:34 JST
 
 ## 結論
 
 現時点では、標準採用できる利益最大化トレードpolicyはない。
 
-ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、fresh `2024-03..04` validationでは標準selectorがNoTradeを選んだ。現在の主課題は「validationでNoTradeを明確に超えるentry admission信号を作ること」と「guardで悪いtradeを消しても、空いた時間のreplacement tradeが別の損失を作ること」。
+ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、00210で `min_entry_rank` を明示したrank gate / support auditへ進めた。rank gateはfixed testでpositiveだが、fresh validationのbestは4 tradesしかなく、promotion barではNoTradeになる。現在の主課題は「validationで十分なsupportを持ってNoTradeを超えるentry admission信号を作ること」と「guardで悪いtradeを消しても、空いた時間のreplacement tradeが別の損失を作ること」。
 
 採用判断は、全期間を見たbestではなく、prior-only / chronological / fresh apply で壊れないかを優先する。
 
@@ -17,7 +17,8 @@
 | Holding max cap | `250..260m` はholding安定化候補 | 2025-01..08 coststress `260m` は total `+458.9738`。fresh 2025-09..12 は `260m` でも `-839.2544` | 標準採用しない。fresh失敗はholdingではなくside drift |
 | Full-2024 chronological protocol | 00206の混合familyを解消したcanonical 2024 artifact | 2024-05..12 OOF比較で source p10/replm10 が最良だが total `-3.1736`。risk5 side `-10.4618`、risk0 side `-32.7828`、risk0 no-side `-141.8816` | 標準採用なし。NoTrade超えまでdiagnostic |
 | Entry EV calibrated admission | raw EV thresholdの過適合を診断し、calibrated EVの高threshold候補を固定testした | raw validation `entry12/short3` は `+22.7292` だが full 2024 test `-442.4662`。calibrated `entry10/short6` は test `+100.3612`, worst `-43.2296`, trades `60`; `entry12/short6` は `+74.0644`, worst `-37.8326`, trades `26` | 診断候補。validationではNoTrade tieなので標準採用しない |
-| Entry EV NoTrade selector | validation-positiveでなければ標準はNoTradeにするselectorを実装 | Fresh `2024-03..04` validation bestは calibrated `entry12/short6` の `-1.8610`。standard selectorはNoTrade。diagnostic `cal12/short6` の `2024-05..12` fixed testは `+65.4014`, worst `-37.8326`, trades `19` | selectorはaccepted infrastructure。`cal12/short6` は診断候補のみ |
+| Entry EV NoTrade selector | validation-positiveでなければ標準はNoTradeにするselectorを実装 | Fresh `2024-03..04` validation bestは calibrated `entry12/short6` の `-1.8610`。standard selectorはNoTrade。diagnostic fixed testは `+65.4014`, worst `-37.8326`, trades `19` だが、00210で `min_rank0.5` 入りと訂正 | selectorはaccepted infrastructure。`cal12/short6/min_rank0.5` は診断候補のみ |
+| Entry EV rank gate support | `min_entry_rank` を明示grid化し、support gateを追加 | Fresh `2024-03..04` bestは `entry10/short9/min_rank0.0` の `+17.0910`, worst `+0.7230`, trades `4`。`min_trades=10`, active2, worst0ではNoTrade。Fixed `2024-05..12` は同row `+87.8942`, worst `-2.2800`, trades `10`; `entry8/short9/min_rank0.6` は `+74.2970`, worst `-20.1600`, trades `11` | rankはdiagnostic admission axis。support不足で標準採用しない |
 | Side drift guard | prior-onlyで悪いshort contextを検出できるが、short-only抑制では残存riskがlongや良いshort削除へ移る | strict short p10 + admission margin10 は 2025-01..12 total `-90.1378`。00205では `2025-04..06` raw EV short bias `+0.27..+0.30` を確認。00207の全2024 OOFではsourceが相対最良でも total `-3.1736` | 診断baseline。side/EV calibration preflightとして使い、単独policy化しない |
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
@@ -61,7 +62,9 @@
 - full-2024 chronological HGB+MLP artifact as canonical 2024 comparison input
 - calibrated entry EV high-threshold candidates `entry10/short6` and `entry12/short6` as fresh-fold diagnostic candidates only
 - entry EV NoTrade-first selector as accepted infrastructure
-- calibrated `entry12/short6` as diagnostic low-frequency candidate only after fresh validation
+- calibrated `entry12/short6/min_rank0.5` as diagnostic low-frequency candidate only after 00209 correction
+- entry EV rank gate and support gates as diagnostic admission infrastructure
+- `entry10/short9/min_rank0.0` and `entry8/short9/min_rank0.6` as low-support diagnostic rows only
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -83,6 +86,7 @@
 - raw EV validation winners as direct admission policies
 - calibrated EV high-threshold candidates as standard policies before fresh-fold validation
 - diagnostic near-NoTrade candidate as standard policy when validation total is non-positive
+- low-support rank-gated candidate as standard policy when validation trades are below the support gate
 
 ## 中心的な失敗構造
 
@@ -103,15 +107,16 @@
 - 00206で早期2024のrisk OOFを `2024-05` まで前倒しし、00207で全2024を同一chronological protocolへ揃えた。全2024 OOFではsource p10/replm10が相対最良だが total `-3.1736` でNoTradeを超えず、side/risk hookの標準採用根拠にはならない
 - 00208でraw EV thresholdのvalidation過適合が明確になった。calibrated EV + 高いshort thresholdはfull 2024 testで positive PnLを出したが、validationではNoTrade tieだったため、test-set selectionを避けるにはfresh chronological foldとNoTrade tie selectorが必要
 - 00209でNoTrade-first selectorを実装した。fresh `2024-03..04` validationでは best calibrated `entry12/short6` も `-1.8610` でNoTrade未満なので、標準selectorはNoTradeを選ぶ。diagnostic fixed test `2024-05..12` は `+65.4014` だが、validation-negative候補なので標準採用しない
+- 00210で00209のfixed testは `min_entry_rank=0.5` 入りだったと訂正し、rank gateを明示grid化した。fresh validationでbest `entry10/short9/min_rank0.0` は positive だが4 tradesしかない。月10trades相当のsupport gateではNoTradeを返すため、rank gateは有望な診断軸であって標準policyではない
 
-したがって、次の改善は「holding capの再探索」でも「2025系列へのshort hook追加」でもなく、entry EV calibration、admission control、NoTrade-first selectorを使ったfresh fold検証、そしてより広いtrain history / purged walk-forwardでのentry品質改善を優先する。
+したがって、次の改善は「holding capの再探索」でも「2025系列へのshort hook追加」でもなく、entry EV calibration、rank/quantile admission control、NoTrade-first selectorを使ったsupport-aware fresh fold検証、そしてより広いtrain history / purged walk-forwardでのentry品質改善を優先する。
 
 ## 次に検証すべきこと
 
-1. Entry EV calibration / admission layerを追加chronological foldsで再評価する。`cal12/6` は診断候補だが、fresh validationでpositive edgeを示していないため、standard selectorではNoTradeを維持する。
+1. Entry EV calibration / rank admission layerを追加chronological foldsで再評価する。`cal12/6/min_rank0.5` や `entry10/short9/min_rank0.0` は診断候補だが、support gateを満たすまでstandard selectorではNoTradeを維持する。
 2. 2025系列でshort hookをさらに積む前に、source policy自体のside prediction calibrationとregime別崩れを再評価する。
 3. `pred_short_profit_barrier_hit` を0/1ではなく確率または校正済み確率に差し替えてから、profit-miss系hookを再評価する。
-4. raw EV絶対値ではなく、side/regime別のrank、calibrated EV quantile、support-aware thresholdをadmission特徴として評価し、validation totalがNoTradeを超えるかを見る。
+4. raw EV絶対値ではなく、side/regime別のrank、calibrated EV quantile、support-aware thresholdをadmission特徴として評価し、validation totalとtrade supportがNoTradeを超えるかを見る。
 5. side prior driftを、predicted side share vs dense label side share の prior window差分で補正する。
 6. 新しいcandidateは必ず NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、short PnLで比較する。
 
@@ -145,3 +150,4 @@
 - `00207`: full-2024 chronological protocol
 - `00208`: entry EV calibration admission
 - `00209`: entry EV NoTrade selector fresh fold
+- `00210`: entry EV rank gate support audit

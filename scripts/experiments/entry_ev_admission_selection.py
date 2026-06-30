@@ -103,6 +103,7 @@ def aggregate_validation(frame: pd.DataFrame) -> pd.DataFrame:
                 "family": family,
                 **key_values,
                 "months": int(group["month"].nunique()),
+                "validation_active_months": int((group["trade_count"] > 0).sum()),
                 "validation_total": float(group["total_adjusted_pnl"].sum()),
                 "validation_worst": float(group["total_adjusted_pnl"].min()),
                 "validation_trades": trade_count,
@@ -130,11 +131,15 @@ def select_standard_policy(
     *,
     min_positive_pnl: float,
     min_trades: int,
+    min_active_months: int,
+    min_worst_pnl: float,
     max_drawdown: float,
 ) -> dict[str, object]:
     eligible = summary[
         (summary["validation_total"] > min_positive_pnl)
         & (summary["validation_trades"] >= min_trades)
+        & (summary["validation_active_months"] >= min_active_months)
+        & (summary["validation_worst"] >= min_worst_pnl)
         & (summary["validation_max_dd"] <= max_drawdown)
     ].copy()
     if eligible.empty:
@@ -144,6 +149,10 @@ def select_standard_policy(
             "selected": "no_trade",
             "reason": "no validation row exceeded NoTrade threshold and robustness gates",
             "min_positive_pnl": min_positive_pnl,
+            "min_trades": min_trades,
+            "min_active_months": min_active_months,
+            "min_worst_pnl": min_worst_pnl,
+            "max_drawdown": max_drawdown,
             "best_validation_total": best_total,
         }
     selected = eligible.sort_values(
@@ -206,6 +215,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--min-positive-pnl", type=float, default=0.0)
     parser.add_argument("--min-trades", type=int, default=1)
+    parser.add_argument("--min-active-months", type=int, default=0)
+    parser.add_argument("--min-worst-pnl", type=float, default=-float("inf"))
     parser.add_argument("--max-drawdown", type=float, default=float("inf"))
     parser.add_argument("--near-notrade-tolerance", type=float, default=2.0)
     parser.add_argument("--diagnostic-max-trades", type=int, default=10)
@@ -223,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
         summary,
         min_positive_pnl=args.min_positive_pnl,
         min_trades=args.min_trades,
+        min_active_months=args.min_active_months,
+        min_worst_pnl=args.min_worst_pnl,
         max_drawdown=args.max_drawdown,
     )
     diagnostic = select_near_notrade_diagnostic(
@@ -239,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
         "families": {family: [str(path) for path in paths] for family, paths in families.items()},
         "min_positive_pnl": args.min_positive_pnl,
         "min_trades": args.min_trades,
+        "min_active_months": args.min_active_months,
+        "min_worst_pnl": args.min_worst_pnl,
         "max_drawdown": args.max_drawdown,
         "near_notrade_tolerance": args.near_notrade_tolerance,
         "diagnostic_max_trades": args.diagnostic_max_trades,

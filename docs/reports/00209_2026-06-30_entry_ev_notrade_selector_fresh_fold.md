@@ -1,7 +1,7 @@
 # Entry EV NoTrade Selector Fresh Fold
 
 日時: 2026-06-30 13:20 JST
-更新日時: 2026-06-30 13:20 JST
+更新日時: 2026-06-30 13:34 JST
 
 採番メモ: 通し番号、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、本文内の作成時刻 `日時` を参照する。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
@@ -14,6 +14,7 @@
 - Fresh foldとして `2024-03..04` をvalidation、`2024-05..12` をtestにした。標準selectorは best validation total `-1.8610` のためNoTradeを選んだ。
 - 診断selectorは calibrated `entry12/short6` を選び、fixed test `2024-05..12` では `+65.4014`, worst `-37.8326`, max DD `37.8326`, trades `19`。
 - 判断: 標準policyはNoTrade。`cal12/short6` は低頻度diagnostic candidateとして残すが、validation totalが負なので標準採用しない。
+- 訂正: 2026-06-30 13:34 JST時点で、上記fixed testは保存済みfixed config上の `min_entry_rank=0.5` を含んでいたことを確認した。fresh validation表の `cal12/short6` は `min_entry_rank=0.0` なので、fixed test `+65.4014` は pure absolute EV threshold ではなく `cal12/short6/min_rank0.5` と読む。詳細は `docs/reports/00210_2026-06-30_entry_ev_rank_gate_support_audit.md`。
 
 ## Artifacts
 
@@ -72,10 +73,12 @@ This is stricter than 00208. The same `cal12/short6` candidate is no longer a pu
 
 The diagnostic `calibrated entry12/short6` candidate was fixed to `2024-05..12`.
 
+Correction note, 2026-06-30 13:34 JST: this fixed test used the stored fixed config with `min_entry_rank=0.5`. The fresh validation row shown above used `min_entry_rank=0.0`. Therefore this fixed test should be read as rank-gated `cal12/short6/min_rank0.5`, not as a pure absolute EV threshold.
+
 | policy | selected by | test total | worst | max DD | trades | forced |
 |---|---|---:|---:|---:|---:|---:|
 | standard NoTrade | standard selector | `0.0000` | `0.0000` | `0.0000` | `0` | `0` |
-| calibrated `entry12/short6` | diagnostic selector | `+65.4014` | `-37.8326` | `37.8326` | `19` | `0` |
+| calibrated `entry12/short6/min_rank0.5` | diagnostic selector | `+65.4014` | `-37.8326` | `37.8326` | `19` | `0` |
 
 Monthly diagnostic PnL:
 

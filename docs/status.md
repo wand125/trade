@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 13:20 JST
+最終更新: 2026-06-30 13:34 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-Entry EV NoTrade selectorを追加し、fresh chronological subfoldを確認した。`entry_ev_admission_selection.py` はvalidation sweepだけを読み、standard NoTrade-first selectorとdiagnostic near-NoTrade selectorを分ける。`2024-03..04` validationでは best が calibrated `entry12/short6` の `-1.8610` で、標準selectorはNoTradeを選択した。診断selectorだけが `cal12/short6` を拾い、`2024-05..12` fixed testでは total `+65.4014`, worst `-37.8326`, max DD `37.8326`, trades `19`。判断: selectorはaccepted infrastructure。標準policyはNoTradeで、`cal12/short6` は診断候補に留める。詳細は `docs/reports/00209_2026-06-30_entry_ev_notrade_selector_fresh_fold.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+Entry EV rank gate support auditを追加した。00209の `cal12/short6` fixed test `+65.4014` は保存済みconfig上 `min_entry_rank=0.5` を含んでいたため、pure thresholdではなく rank-gated `cal12/short6/min_rank0.5` と訂正する。fresh `2024-03..04` validationで `min_entry_rank` gridを明示したところ、低support標準selectorは `entry10/short9/min_rank0.0` を validation total `+17.0910`, worst `+0.7230`, trades `4`, active months `2` で選んだ。しかし `min_trades=10`, `active_months>=2`, `worst>=0` のsupport gateでは標準selectorはNoTradeを返す。fixed `2024-05..12` では同rowが total `+87.8942`, worst `-2.2800`, trades `10`、`entry8/short9/min_rank0.6` が `+74.2970`, worst `-20.1600`, trades `11`。判断: rank gateはdiagnostic admission axisとして残すが、標準policyはNoTrade。詳細は `docs/reports/00210_2026-06-30_entry_ev_rank_gate_support_audit.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+Entry EV NoTrade selectorを追加し、fresh chronological subfoldを確認した。`entry_ev_admission_selection.py` はvalidation sweepだけを読み、standard NoTrade-first selectorとdiagnostic near-NoTrade selectorを分ける。`2024-03..04` validationでは best が calibrated `entry12/short6` の `-1.8610` で、標準selectorはNoTradeを選択した。診断selectorだけが `cal12/short6` を拾い、`2024-05..12` fixed testでは total `+65.4014`, worst `-37.8326`, max DD `37.8326`, trades `19`。ただしこのfixed testは `min_entry_rank=0.5` 入りだったため、00210で訂正済み。判断: selectorはaccepted infrastructure。標準policyはNoTradeで、`cal12/short6/min_rank0.5` は診断候補に留める。詳細は `docs/reports/00209_2026-06-30_entry_ev_notrade_selector_fresh_fold.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 entry EV calibration / admission layerを診断した。`2024-01..02` validation hybridを追加生成し、raw EVと `pred_calibrated_*_best_adjusted_pnl` を同じgridで比較した。raw validation winnersは full 2024 testで大きく崩れ、raw `entry12/short3` はvalidation `+22.7292` からtest `-442.4662`。calibrated EVはvalidationでは高thresholdがNoTrade tieになっただけだが、full 2024 test固定では `entry10/short6` が total `+100.3612`, worst `-43.2296`, max DD `51.5828`, trades `60`、`entry12/short6` が total `+74.0644`, worst `-37.8326`, max DD `37.8326`, trades `26`。判断: calibrated EV + 高いshort thresholdは診断候補だが、validationでpositive edgeを証明していないため標準採用しない。次はfresh chronological foldsとNoTrade tie selectorを事前固定する。詳細は `docs/reports/00208_2026-06-30_entry_ev_calibration_admission.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

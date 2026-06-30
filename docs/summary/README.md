@@ -1,6 +1,6 @@
 # Trade Research Summary
 
-最終更新: 2026-06-30 11:51 JST
+最終更新: 2026-06-30 13:34 JST
 
 このディレクトリは、`docs/reports/` の大量の実験レポートを俯瞰するための入口。
 
@@ -12,7 +12,7 @@
    現時点の研究評価、採用/保留/棄却の整理、次に検証すべき論点。
 
 2. [Report Map](report_map.md)
-   `00001` から `00203` までのレポート系列をテーマ別に圧縮した地図。
+   `00001` から `00210` までのレポート系列をテーマ別に圧縮した地図。
 
 3. 詳細確認が必要なときだけ `../reports/` の個別レポートを読む。
 
@@ -24,7 +24,8 @@
 
 直近で有望なのは以下の「risk-control / diagnostic axis」だが、いずれも標準policyではない。
 
-- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善し、fixed `gap5 -> gap0` triggerもmin4..6では改善する。00196..00203で、late common short、`gap5` replacement short、prior signal coverage、entry-level signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed checkを分解済み。triggered profit-missはsame-family smokeで勝ちを削ったため診断候補へ降格。次は `gap5/budget0` 自体を追加same-family windowへ固定適用する。
+- entry EV rank admission: calibrated EVに `min_entry_rank` を足すとfixed 2024 testではpositive rowが出るが、fresh validationのsupportが薄い。00210では `min_trades=10`, active2, worst0 gateでNoTradeを維持したため、rank gateはdiagnostic axisであって標準policyではない。
+- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善し、fixed `gap5 -> gap0` triggerもmin4..6では改善する。00196..00210で、late common short、`gap5` replacement short、prior signal coverage、entry-level signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、2024 chronological protocol、entry EV/rank admissionを分解済み。triggered profit-missやrank-gated sparse candidateは診断候補に留める。
 - online side-month drawdown guard: realized lossだけで発火する防御軸。`worst` objectiveならtailは削れるが利益policyではない。
 - side drift guard + admission margin: bad short contextを検出し、弱いreplacementを抑える診断baseline。損失は大きく縮むがまだ負。
 - `250..260m` holding max cap: holding側の安定化候補。ただし fresh failure はholdingではなくside driftが主因。
@@ -37,4 +38,4 @@
 2. `report_map.md` の該当テーマに、レポート番号と結論を1行で追加する。
 3. 標準採用、診断baseline、棄却、保留のいずれかを明記する。
 4. all-window best と prior-only / fresh-window の結果を混同しない。
-5. `docs/reports/` の最新判断は、ファイルmtimeや `更新日時:` ではなく本文内の作成時刻 `日時:` を基準にする。
+5. `docs/reports/` の最新判断は、ファイルmtimeや `更新日時:` ではなく本文内の作成時刻 `日時:` を基準にする。ここでいうファイル内の時刻は `日時:` であり、編集履歴用の `更新日時:` ではない。
