@@ -84,6 +84,57 @@ class EntryEvQuantileHoldCapSensitivityTests(unittest.TestCase):
         self.assertFalse(worst["selector_pass"])
         self.assertIn("role_total_pnl_below_floor", worst["blockers"])
 
+    def test_prior_inversion_uses_only_prior_months_and_deduplicates_trades(self):
+        trades = pd.DataFrame(
+            {
+                "role": ["fresh", "fresh", "fresh", "fresh"],
+                "candidate": ["q95", "q99", "q95", "q95"],
+                "month": ["2024-01", "2024-01", "2024-02", "2024-03"],
+                "direction": ["short", "short", "short", "short"],
+                "entry_decision_timestamp": [
+                    "2024-01-10T00:00:00Z",
+                    "2024-01-10T00:00:00Z",
+                    "2024-02-10T00:00:00Z",
+                    "2024-03-10T00:00:00Z",
+                ],
+                "combined_regime": [
+                    "range_low_vol",
+                    "range_low_vol",
+                    "range_low_vol",
+                    "range_low_vol",
+                ],
+                "session_regime": ["ny_overlap", "ny_overlap", "ny_overlap", "ny_overlap"],
+                "adjusted_pnl": [-5.0, -5.0, -4.0, -100.0],
+                "direction_error": [True, True, True, True],
+                "exit_regret": [1.0, 1.0, 2.0, 50.0],
+            }
+        )
+        prior_frame = entry_ev_quantile_hold_cap_sensitivity.prior_trade_context_frame(
+            trades,
+            roles={"fresh"},
+            candidates={"q95", "q99"},
+        )
+
+        self.assertEqual(len(prior_frame), 3)
+        rules, eligible = (
+            entry_ev_quantile_hold_cap_sensitivity.derive_prior_context_side_block_rules(
+                prior_frame,
+                target_month="2024-03",
+                min_prior_months=2,
+                recent_month_count=0,
+                min_trade_count=2,
+                min_direction_error_rate=1.0,
+                max_total_pnl=0.0,
+            )
+        )
+
+        self.assertEqual(
+            rules,
+            ["short:combined_regime=range_low_vol+session_regime=ny_overlap"],
+        )
+        self.assertEqual(eligible.iloc[0]["trade_count"], 2)
+        self.assertEqual(eligible.iloc[0]["total_adjusted_pnl"], -9.0)
+
 
 if __name__ == "__main__":
     unittest.main()

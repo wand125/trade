@@ -824,6 +824,28 @@ python scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py \
   --guard-modes none,diagnostic_inversion
 ```
 
+To convert that hypothesis into a prior-only diagnostic, use
+`--guard-modes prior_inversion` with enriched selected trades. This mode derives
+context-side block rules from months strictly before each target month and
+deduplicates duplicated floor/candidate evidence for the same entry timestamp:
+
+```bash
+python scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py \
+  --family-predictions cal2024=data/reports/backtests/<quantile_inputs>/enriched_predictions/cal2024_predictions_quantiles.parquet \
+  --family-predictions fresh2024=data/reports/backtests/<quantile_inputs>/enriched_predictions/fresh2024_predictions_quantiles.parquet \
+  --family-predictions refit2025=data/reports/backtests/<quantile_inputs>/enriched_predictions/refit2025_predictions_quantiles.parquet \
+  --role-months cal2024_calibration_validation=cal2024:2024-01,2024-02 \
+  --role-months fresh2024_validation=fresh2024:2024-03,2024-04 \
+  --role-months refit2025_validation=refit2025:2025-01,2025-02 \
+  --roles cal2024_calibration_validation,fresh2024_validation,refit2025_validation \
+  --prior-enriched-trades data/reports/backtests/<trade_diagnostics_run>/enriched_trades.csv \
+  --max-predicted-hold-minutes 260,720 \
+  --guard-modes none,prior_inversion \
+  --prior-min-months 1 \
+  --prior-min-trade-count 1 \
+  --prior-min-direction-error-rate 1.0
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash

@@ -135,6 +135,110 @@ def derive_context_side_block_rules(
     return rules, eligible
 
 
+def prior_trade_context_frame(
+    trades: pd.DataFrame,
+    *,
+    roles: set[str],
+    candidates: set[str],
+) -> pd.DataFrame:
+    required = {
+        "role",
+        "candidate",
+        "month",
+        "direction",
+        "entry_decision_timestamp",
+        "combined_regime",
+        "session_regime",
+        "adjusted_pnl",
+        "direction_error",
+    }
+    missing = sorted(required - set(trades.columns))
+    if missing:
+        raise ValueError(f"prior enriched trades missing columns: {', '.join(missing)}")
+    frame = trades.copy()
+    if roles:
+        frame = frame[frame["role"].astype(str).isin(roles)].copy()
+    if candidates:
+        frame = frame[frame["candidate"].astype(str).isin(candidates)].copy()
+    if frame.empty:
+        return frame
+    frame["month"] = frame["month"].astype(str).str.slice(0, 7)
+    frame["entry_decision_timestamp"] = pd.to_datetime(
+        frame["entry_decision_timestamp"],
+        utc=True,
+    )
+    frame["direction_error"] = frame["direction_error"].fillna(False).astype(bool)
+    frame["adjusted_pnl"] = frame["adjusted_pnl"].astype(float)
+    if "exit_regret" not in frame.columns:
+        frame["exit_regret"] = 0.0
+    frame["exit_regret"] = frame["exit_regret"].astype(float)
+    dedupe_columns = [
+        "month",
+        "entry_decision_timestamp",
+        "direction",
+        "combined_regime",
+        "session_regime",
+    ]
+    return frame.drop_duplicates(subset=dedupe_columns).reset_index(drop=True)
+
+
+def derive_prior_context_side_block_rules(
+    trades: pd.DataFrame,
+    *,
+    target_month: str,
+    min_prior_months: int,
+    recent_month_count: int,
+    min_trade_count: int,
+    min_direction_error_rate: float,
+    max_total_pnl: float,
+) -> tuple[list[str], pd.DataFrame]:
+    if trades.empty:
+        return [], pd.DataFrame()
+    target_period = pd.Period(target_month, freq="M")
+    trade_periods = pd.PeriodIndex(trades["month"].astype(str), freq="M")
+    prior_mask = trade_periods < target_period
+    if recent_month_count > 0:
+        prior_mask &= trade_periods >= (target_period - recent_month_count)
+    prior = trades[prior_mask].copy()
+    if prior.empty:
+        return [], pd.DataFrame()
+    prior_month_count = int(prior["month"].nunique())
+    if prior_month_count < min_prior_months:
+        return [], pd.DataFrame()
+
+    grouped = (
+        prior.groupby(["direction", "combined_regime", "session_regime"], dropna=False)
+        .agg(
+            trade_count=("adjusted_pnl", "size"),
+            total_adjusted_pnl=("adjusted_pnl", "sum"),
+            direction_error_count=("direction_error", "sum"),
+            exit_regret_sum=("exit_regret", "sum"),
+            prior_month_count=("month", "nunique"),
+        )
+        .reset_index()
+    )
+    grouped["target_month"] = target_month
+    grouped["direction_error_rate"] = np.where(
+        grouped["trade_count"] > 0,
+        grouped["direction_error_count"] / grouped["trade_count"],
+        0.0,
+    )
+    eligible = grouped[
+        (grouped["trade_count"] >= min_trade_count)
+        & (grouped["direction_error_rate"] >= min_direction_error_rate)
+        & (grouped["total_adjusted_pnl"] <= max_total_pnl)
+    ].copy()
+    eligible["side_block_rule"] = [
+        rule_for_context(str(row.direction), str(row.combined_regime), str(row.session_regime))
+        for row in eligible.itertuples(index=False)
+    ]
+    eligible = eligible.sort_values(
+        ["target_month", "direction_error_rate", "total_adjusted_pnl", "trade_count"],
+        ascending=[True, False, True, False],
+    ).reset_index(drop=True)
+    return eligible["side_block_rule"].drop_duplicates().astype(str).tolist(), eligible
+
+
 def summarize_candidates(monthly: pd.DataFrame) -> pd.DataFrame:
     role_summary = summarize_by_group(
         monthly,
@@ -219,7 +323,9 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
     guard_modes = parse_optional_csv(args.guard_modes)
     if not guard_modes:
         guard_modes = ["none"]
-    invalid_modes = sorted(set(guard_modes) - {"none", "diagnostic_inversion"})
+    invalid_modes = sorted(
+        set(guard_modes) - {"none", "diagnostic_inversion", "prior_inversion"}
+    )
     if invalid_modes:
         raise ValueError(f"unknown guard modes: {', '.join(invalid_modes)}")
     candidates = [policy_candidate_from_name(name) for name in candidate_names]
@@ -238,10 +344,20 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
             min_direction_error_rate=args.guard_min_direction_error_rate,
             max_total_pnl=args.guard_max_total_pnl,
         )
+    prior_trades = pd.DataFrame()
+    if "prior_inversion" in guard_modes:
+        if not args.prior_enriched_trades:
+            raise ValueError("--prior-enriched-trades is required for prior_inversion")
+        prior_trades = prior_trade_context_frame(
+            pd.read_csv(args.prior_enriched_trades),
+            roles=roles,
+            candidates=set(candidate_names),
+        )
 
     run_dir = make_run_dir(args.output_dir, args.label)
     price_data = read_ohlcv(args.data)
     monthly_rows: list[dict[str, Any]] = []
+    prior_guard_rows: list[pd.DataFrame] = []
 
     for family, prediction_path in family_predictions.items():
         predictions = pd.read_parquet(prediction_path)
@@ -260,15 +376,36 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
                     max_predicted_hold_minutes=max_hold,
                 )
                 for guard_mode in guard_modes:
-                    side_block_rules = tuple(guard_rules) if guard_mode == "diagnostic_inversion" else ()
-                    model_config = replace(
-                        base_model_config,
-                        side_block_rules=side_block_rules,
-                    )
                     for month in months:
                         role = role_lookup.get((family, month), family)
                         if roles and role not in roles:
                             continue
+                        if guard_mode == "diagnostic_inversion":
+                            side_block_rules = tuple(guard_rules)
+                        elif guard_mode == "prior_inversion":
+                            prior_rules, prior_contexts = derive_prior_context_side_block_rules(
+                                prior_trades,
+                                target_month=month,
+                                min_prior_months=args.prior_min_months,
+                                recent_month_count=args.prior_recent_month_count,
+                                min_trade_count=args.prior_min_trade_count,
+                                min_direction_error_rate=args.prior_min_direction_error_rate,
+                                max_total_pnl=args.prior_max_total_pnl,
+                            )
+                            side_block_rules = tuple(prior_rules)
+                            if not prior_contexts.empty:
+                                prior_contexts = prior_contexts.copy()
+                                prior_contexts["family"] = family
+                                prior_contexts["role"] = role
+                                prior_contexts["candidate"] = candidate.name
+                                prior_contexts["max_predicted_hold_minutes"] = max_hold
+                                prior_guard_rows.append(prior_contexts)
+                        else:
+                            side_block_rules = ()
+                        model_config = replace(
+                            base_model_config,
+                            side_block_rules=side_block_rules,
+                        )
                         backtest_config = build_backtest_config(
                             month=month,
                             max_hold_hours=args.max_hold_hours,
@@ -322,6 +459,11 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
     cap_summary.to_csv(run_dir / "hold_cap_summary.csv", index=False)
     if not guard_contexts.empty:
         guard_contexts.to_csv(run_dir / "diagnostic_inversion_guard_contexts.csv", index=False)
+    if prior_guard_rows:
+        pd.concat(prior_guard_rows, ignore_index=True).drop_duplicates().to_csv(
+            run_dir / "prior_inversion_guard_contexts.csv",
+            index=False,
+        )
     selected = select_policy(candidate_summary)
     (run_dir / "selected_policy.json").write_text(
         json.dumps(selected, indent=2, default=local_json_default),
@@ -339,6 +481,12 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
         "guard_max_total_pnl": args.guard_max_total_pnl,
         "guard_rule_count": len(guard_rules),
         "guard_rules": guard_rules,
+        "prior_enriched_trades": args.prior_enriched_trades,
+        "prior_min_months": args.prior_min_months,
+        "prior_recent_month_count": args.prior_recent_month_count,
+        "prior_min_trade_count": args.prior_min_trade_count,
+        "prior_min_direction_error_rate": args.prior_min_direction_error_rate,
+        "prior_max_total_pnl": args.prior_max_total_pnl,
         "max_predicted_hold_minutes": hold_caps,
         "data": args.data,
         "score_kind": args.score_kind,
@@ -407,6 +555,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--guard-min-trade-count", type=int, default=1)
     parser.add_argument("--guard-min-direction-error-rate", type=float, default=1.0)
     parser.add_argument("--guard-max-total-pnl", type=float, default=-1e-9)
+    parser.add_argument("--prior-enriched-trades", type=Path, default=None)
+    parser.add_argument("--prior-min-months", type=int, default=1)
+    parser.add_argument("--prior-recent-month-count", type=int, default=0)
+    parser.add_argument("--prior-min-trade-count", type=int, default=2)
+    parser.add_argument("--prior-min-direction-error-rate", type=float, default=0.75)
+    parser.add_argument("--prior-max-total-pnl", type=float, default=-1e-9)
     parser.add_argument("--max-predicted-hold-minutes", default="260,480,720,1440")
     parser.add_argument(
         "--data",

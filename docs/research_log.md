@@ -4,6 +4,21 @@
 
 ## 2026-06-30 JST
 
+### 16:55 Entry EV quantile prior inversion guard
+
+- 00224のsame-validation diagnostic inversion guardを、対象月より前のselected trade実績だけで作る `prior_inversion` guard modeへ置き換えた。
+- `scripts/experiments/entry_ev_quantile_hold_cap_sensitivity.py` に `prior_trade_context_frame` と `derive_prior_context_side_block_rules` を追加した。floor/candidate重複は `month + entry_decision_timestamp + direction + combined_regime + session_regime` でdedupeする。
+- strict prior runは `data/reports/backtests/20260630_entry_ev_quantile_prior_inversion_hold_cap/20260630_074726_entry_ev_quantile_prior_inversion_hold_cap_min2/`。
+- fast prior runは `data/reports/backtests/20260630_entry_ev_quantile_prior_inversion_hold_cap/20260630_074829_entry_ev_quantile_prior_inversion_hold_cap_min1_trade1_err1/`。
+- fresh fixed diagnosticは `data/reports/backtests/20260630_entry_ev_quantile_prior_inversion_hold_cap/20260630_075000_entry_ev_quantile_prior_inversion_hold_cap_fresh_fixed_min1_trade1_err1/`。
+- strict priorでは `720m q95_floor5` が no-guard `+117.0340 / min role +16.2628 / min month -9.1718` から `+126.0190 / min role +24.5508 / min month -9.1718` へ小幅改善した。
+- fast priorでは `720m q95_floor5` が `+139.0422 / min role +17.7308 / min month -0.4914` まで近づいたが、NoTrade-first gateはまだ通らない。
+- fresh fixed diagnosticでは no-guard `720m q95_floor5` が `+402.1118 / min role +76.2204`、prior guard `720m` は `+373.4814 / min role +2.0982`。guardは悪いcontextを拾う一方で良い取引も削る。
+- 判断: prior-only guard infrastructureはaccepted。現prior inversion guardはover-blocking気味なので標準採用しない。`720m` は診断capとして残す。標準policyはNoTrade。
+- report: `docs/reports/00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: hold-cap sensitivity unit tests OK; py_compile OK; strict prior-only run OK; fast prior-only run OK; fresh fixed diagnostic run OK
+
 ### 16:39 Entry EV quantile hold-cap sensitivity
 
 - 00223の次アクションとして、q95/q99 quantile/floor候補の hold-cap sensitivity をvalidation roleだけで実行した。

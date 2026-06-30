@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 16:39 JST
+最終更新: 2026-06-30 16:55 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile prior-only inversion guardを追加した。00224のsame-validation diagnostic guardを、対象月より前のselected trade実績だけで作る `prior_inversion` modeへ置き換え、floor/candidate重複tradeは `month + entry_decision_timestamp + direction + combined_regime + session_regime` でdedupeする。validationでは fast prior `720m q95_floor5` が `+139.0422 / min role +17.7308 / min month -0.4914` まで改善したが、NoTrade-first gateはまだ通らない。fresh fixed diagnosticでは no-guard `720m q95_floor5` が `+402.1118 / min role +76.2204`、prior guard `720m` が `+373.4814 / min role +2.0982` で、guardが良い取引も削る。判断: prior-only guard infrastructureはaccepted、現prior inversion guardは標準採用しない。`720m` は診断capとして残し、標準policyはNoTrade。詳細は `docs/reports/00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile hold-cap sensitivityを追加した。q95/q99候補に対して `max_predicted_hold_minutes=260/480/720/1440` をvalidation roleだけで比較し、context-side inversion guardなし/ありを同じstateful backtestで評価した。guardなしでは `q95_floor5` が `260m -5.6974 / min role -23.2338` から `720m +117.0340 / min role +16.2628` へ改善したが、min monthは `-9.1718` でNoTrade-first gateを通らない。same-validation diagnostic guardありでは `720m q95_floor5` が `+273.6662 / min role +27.7034`、support>=4 guardでも `+235.0452 / min role +25.3464` まで改善するが、どちらも `month_pnl_below_floor` で落ちる。判断: hold-cap sensitivityはaccepted infrastructure、`720m` は次の診断cap、same-validation guardと候補policyは標準採用しない。標準policyはNoTrade。詳細は `docs/reports/00224_2026-06-30_entry_ev_quantile_hold_cap_sensitivity.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
