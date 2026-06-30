@@ -1,12 +1,12 @@
 # Current Assessment
 
-最終更新: 2026-06-30 18:00 JST
+最終更新: 2026-06-30 18:19 JST
 
 ## 結論
 
 現時点では、標準採用できる利益最大化トレードpolicyはない。
 
-ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、00210で `min_entry_rank` を明示したrank gate / support auditへ進めた。00211では追加refit foldで、support gateが十分なvalidation-positive候補を選んでも未来10ヶ月で大きく崩れることを確認した。00212でmulti-window selectorを実装し、単一2ヶ月validationではなく複数validation windowで候補を審査できるようにした。00213でside/regime/window gateの感度を振ったが、固定テストに耐える候補は出ていない。00214ではsparse high-rank fixed-positive rowもvalidation support不足と確認した。00215では既存artifactを棚卸しし、追加validationとして使える完全rank gridは `2024-03..04` と `2025-01..02` の2本だけだと確認した。00216で `2024-01..02` をfull rank化したが、これはcalibration-validationで、selectorの標準結論はNoTradeのまま。00217ではprediction入力側を診断し、cal2024はside margin supportがほぼなく、refit2025はlong EV scaleが極端に大きいというfold間scale driftを確認した。00218でquantile admission診断を追加し、side/regime/session-local quantileが候補数とside構成を比較可能にする有望軸だと確認した。00219でquantile列をstateful `timed_ev` backtestへ接続したが、cal2024のno-entry問題を解消する一方でfresh/refit validationのworst monthが負になり、標準採用には届かなかった。00220でrole-level selectorを追加し、fixed diagnosticを使わずにstrict3/clean2ともNoTradeになることを機械的に確認した。00221でpositive EV floorを事前登録候補として実装したが、floor `5/10` でもstrict3/clean2はNoTradeだった。00222では実tradeをrole/context別に分解し、q95/q99系はrefit2025のdirection error / exit regret、q90系はfresh2024の悪いshort contextが主な崩れだと確認した。00223でexit captureを診断し、q95/q99では `max_predicted_hold=260m` が強くbindingしている一方、oracle best holdingはさらに長いことを確認した。00224でhold-cap sensitivityを実行し、`720m` はexit capture改善軸として有望だが、same-validation context-side guardなし/ありのどちらでもNoTrade-first gateは通らないと確認した。00225でprior-only inversion guardへ置き換えたところ、validationでは `720m q95_floor5` が `+139.0422 / min month -0.4914` まで改善したが、fresh fixed diagnosticでは guard が良い取引も削ったため標準採用しない。00226でprior context risk scoreを追加し、cal+fresh priorなら fresh fixed `720m q95_floor5` が `+402.1118 -> +427.6524` へ改善したが、min month `-9.1718` が残るため標準採用しない。00227で残った `2024-03` をtrade単位に分解し、同月の失敗はentry floor不足ではなく、direction-side inversion、exit capture、realized-executable EV calibration不足だと確認した。00228でexit-capture failureをtarget化し、prior exit risk hard blockはfresh q95/720 fixedで大きく利益を削ると確認した。00229でexecutable EV calibrationを追加し、raw EVの過大評価は大きく縮むがhard thresholdはwindow間で不安定だと確認した。00230でcandidate-level selector featureに戻してもNoTrade-firstの結論は変わらなかった。現在の主課題は「固定testをvalidationへ流用せずにmulti-window admission evidenceを増やすこと」と「post-trade selectorではなくstateful entry ranking / replacement choiceにexecutable EVを入れること」。
+ただし、研究は停滞していない。データ生成、backtest、OOF、walk-forward、candidate selection、trade delta、context guard、entry budget までの検証基盤は整っている。00207で全2024を同一chronological protocolへ揃え、混合family問題は解消した。00208では calibrated entry EV + 高いshort threshold が full 2024 testでNoTradeを超えたが、validationではNoTrade tieとしてしか選べていなかった。00209でNoTrade-first selectorを実装し、00210で `min_entry_rank` を明示したrank gate / support auditへ進めた。00211では追加refit foldで、support gateが十分なvalidation-positive候補を選んでも未来10ヶ月で大きく崩れることを確認した。00212でmulti-window selectorを実装し、単一2ヶ月validationではなく複数validation windowで候補を審査できるようにした。00213でside/regime/window gateの感度を振ったが、固定テストに耐える候補は出ていない。00214ではsparse high-rank fixed-positive rowもvalidation support不足と確認した。00215では既存artifactを棚卸しし、追加validationとして使える完全rank gridは `2024-03..04` と `2025-01..02` の2本だけだと確認した。00216で `2024-01..02` をfull rank化したが、これはcalibration-validationで、selectorの標準結論はNoTradeのまま。00217ではprediction入力側を診断し、cal2024はside margin supportがほぼなく、refit2025はlong EV scaleが極端に大きいというfold間scale driftを確認した。00218でquantile admission診断を追加し、side/regime/session-local quantileが候補数とside構成を比較可能にする有望軸だと確認した。00219でquantile列をstateful `timed_ev` backtestへ接続したが、cal2024のno-entry問題を解消する一方でfresh/refit validationのworst monthが負になり、標準採用には届かなかった。00220でrole-level selectorを追加し、fixed diagnosticを使わずにstrict3/clean2ともNoTradeになることを機械的に確認した。00221でpositive EV floorを事前登録候補として実装したが、floor `5/10` でもstrict3/clean2はNoTradeだった。00222では実tradeをrole/context別に分解し、q95/q99系はrefit2025のdirection error / exit regret、q90系はfresh2024の悪いshort contextが主な崩れだと確認した。00223でexit captureを診断し、q95/q99では `max_predicted_hold=260m` が強くbindingしている一方、oracle best holdingはさらに長いことを確認した。00224でhold-cap sensitivityを実行し、`720m` はexit capture改善軸として有望だが、same-validation context-side guardなし/ありのどちらでもNoTrade-first gateは通らないと確認した。00225でprior-only inversion guardへ置き換えたところ、validationでは `720m q95_floor5` が `+139.0422 / min month -0.4914` まで改善したが、fresh fixed diagnosticでは guard が良い取引も削ったため標準採用しない。00226でprior context risk scoreを追加し、cal+fresh priorなら fresh fixed `720m q95_floor5` が `+402.1118 -> +427.6524` へ改善したが、min month `-9.1718` が残るため標準採用しない。00227で残った `2024-03` をtrade単位に分解し、同月の失敗はentry floor不足ではなく、direction-side inversion、exit capture、realized-executable EV calibration不足だと確認した。00228でexit-capture failureをtarget化し、prior exit risk hard blockはfresh q95/720 fixedで大きく利益を削ると確認した。00229でexecutable EV calibrationを追加し、raw EVの過大評価は大きく縮むがhard thresholdはwindow間で不安定だと確認した。00230でcandidate-level selector featureに戻してもNoTrade-firstの結論は変わらなかった。00231でexecutable EVをstateful entry scoreへ直接入れたところ、refit2025のlong shareは `0.9169..0.9150` から `0.4367..0.4705` へ縮み、`720m q99 floor5` は validation total `+43.0418` まで改善したが、min month `-1.8000` とtrade support不足でNoTradeのまま。現在の主課題は「固定testをvalidationへ流用せずにmulti-window admission evidenceを増やすこと」と「executable EVをdense target/model featureとして強化し、粗いcontext平均factorから脱すること」。
 
 採用判断は、全期間を見たbestではなく、prior-only / chronological / fresh apply で壊れないかを優先する。
 
@@ -39,6 +39,7 @@
 | Entry EV exit capture target diagnostics | same-side oracle利益を実現できないtradeをtarget化し、prior-only context riskを診断 | validation q95/q99では exit_capture_failure rateが refit `0.8621..0.8929`, fresh q95 `0.8421`。`risk>=0.20` はvalidationで68 trades / `-23.1116` を拾うが、fresh q95/720 fixedでは77 trades / `+225.3034` を消す | target/feature infrastructureはaccepted。prior exit risk hard blockは標準採用しない |
 | Entry EV executable EV calibration | prior-only capture factorで raw predicted EV を現exit policyで実現可能なEVへ割り引く | validation q95/q99では refit MAE `20.8969..22.0208 -> 7.3980..7.6244`、fresh q95 `13.9256 -> 6.1870`。fresh q95/720でも validation `14.7507 -> 8.4237`, fixed `13.4582 -> 7.0417`。ただし threshold `2/3` はwindow間で符号反転 | accepted continuous feature。hard thresholdは標準採用しない |
 | Entry EV executable EV selector feature | executable EVをcandidate-level NoTrade-first selector featureとして評価 | validation q95/q99はq99が `capture_ev_mean > 5` だが refit/month floorsでNoTrade。fresh q95/720は validation total `+76.2204`, fixed total `+325.8914` でも validation min month `-9.1718` でNoTrade | accepted diagnostic。post-trade selectorでは昇格せず、stateful entry rankingへ移す |
+| Entry EV executable EV stateful score | prediction全行にprior-only executable capture factorを付け、`timed_ev` のlong/short scoreを置換 | refit2025 long shareは `0.9169..0.9150 -> 0.4367..0.4705`。`720m q99 floor5` は validation total `+43.0418`, min role `+2.4158`, min month `-1.8000`, trades `19`。floorなしは q99 validation `-51.2934`、floor `2/3/4` もtail悪化 | accepted infrastructure。tested policiesはNoTrade-first gate未達 |
 | Side drift guard | prior-onlyで悪いshort contextを検出できるが、short-only抑制では残存riskがlongや良いshort削除へ移る | strict short p10 + admission margin10 は 2025-01..12 total `-90.1378`。00205では `2025-04..06` raw EV short bias `+0.27..+0.30` を確認。00207の全2024 OOFではsourceが相対最良でも total `-3.1736` | 診断baseline。side/EV calibration preflightとして使い、単独policy化しない |
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
@@ -108,6 +109,7 @@
 - entry EV exit-capture target diagnostics
 - entry EV executable EV calibration diagnostics
 - entry EV executable EV selector feature diagnostics
+- entry EV executable EV stateful score inputs / diagnostics
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -150,6 +152,7 @@
 - hard blocking by `prior_exit_capture_risk_score` after 00228, because validation gains do not survive the fresh q95/720 fixed window and the score deletes large positive realized PnL
 - hard thresholding on `pred_capture_calibrated_ev` after 00229, because threshold `2/3/5` is not stable between validation q95/q99 and fresh q95/720 fixed
 - promoting candidates from executable EV feature cleanliness after 00230, because NoTrade-first role/month PnL gates still fail
+- promoting executable-EV stateful q99 floor5 after 00231, because it still fails validation month floor and trade support
 
 ## 中心的な失敗構造
 
@@ -191,8 +194,9 @@
 - 00228でexit-capture failureをtarget化した。target prevalenceは高く、refit負けroleでもfresh勝ちroleでも頻出する。prior exit riskはvalidation q95/q99では `risk>=0.20` が損失を拾うが、fresh q95/720 fixedでは同じthresholdが `+225.3034` の利益を消す。よってtargetは学習・校正に使い、hard blockにはしない
 - 00229でexecutable EV calibrationを行うと、raw EVの過大評価は一貫して縮む。fresh q95/720 fixedでもMAEは `13.4582 -> 7.0417`。しかし低calibrated EV thresholdはwindow間で符号が反転するため、calibrated EVはcontinuous featureとして使い、単独thresholdにしない
 - 00230でcandidate-level selector featureとして戻しても、NoTrade-first gatesは通らない。q99はexecutable EV featureが相対的に良いがrefit/month floorsで落ち、q95/720はfixedでは強いがvalidation `2024-03` が負。次はpost-trade candidate selectorではなく、entry時点のranking/replacement choiceで使う必要がある
+- 00231でentry時点のlong/short scoreそのものをexecutable EVへ差し替えると、refit2025のlong過剰は大きく改善した。ただし最良の `720m q99 floor5` でも validation min month `-1.8000`、0-trade月、fresh fixed `2024-10 -10.3560` が残る。floorなしとfloor `2/3/4` はtailを再導入し、細密floor探索に安定台地はない
 
-したがって、次の改善は「holding capの再探索」でも「floor閾値の細密探索」でもなく、entry EV calibration、rank/quantile admission control、prior-only context-side inversion、exit captureを、より多いchronological validation window / purged walk-forward / regime別安定性評価へ分解して進めることを優先する。
+したがって、次の改善は「holding capの再探索」でも「floor閾値の細密探索」でもなく、entry EV calibration、rank/quantile admission control、prior-only context-side inversion、exit captureを、より多いchronological validation window / purged walk-forward / regime別安定性評価へ分解して進めることを優先する。executable EVは採用候補ではなく、dense target / model feature / calibration layerとして強化する。
 
 ## 次に検証すべきこと
 
@@ -200,7 +204,7 @@
 2. 2025系列でshort hookをさらに積む前に、source policy自体のside prediction calibrationとregime別崩れを再評価する。
 3. `pred_short_profit_barrier_hit` を0/1ではなく確率または校正済み確率に差し替えてから、profit-miss系hookを再評価する。
 4. raw EVやcalibrated EVの絶対値ではなく、side/regime別のrank、calibrated EV quantile、side gap quantile、support-aware thresholdをadmission特徴として評価し、より多いvalidation windowでtotal、worst、trade support、side balance、regime worst bucketがNoTradeを超えるかを見る。00219/00221のquantile/floor候補は標準採用せず、00222のcontext診断を使ってside inversionとexit captureを分離する。
-5. 00226..00229の prior risk / executable EV系はインフラとして残すが、現blocking ruleと局所threshold低下は標準採用しない。次はprior rolesを事前固定した複数chronological windowで、risk scoreやcapture-calibrated EVをhard blockではなくrank特徴やselector featureとして評価する。
+5. 00226..00231の prior risk / executable EV系はインフラとして残すが、現blocking rule、局所threshold低下、q99 sparse near-missは標準採用しない。次はprior rolesを事前固定した複数chronological windowで、risk scoreやcapture-calibrated EVをhard blockではなくdense target、rank特徴、selector featureとして評価する。
 6. side prior driftを、predicted side share vs dense label side share の prior window差分で補正する。
 7. 新しいcandidateは必ず NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、short PnLで比較する。
 
@@ -251,3 +255,8 @@
 - `00224`: entry EV quantile hold-cap sensitivity
 - `00225`: entry EV quantile prior inversion guard
 - `00226`: entry EV prior context risk score
+- `00227`: entry EV residual 2024-03 loss diagnostics
+- `00228`: entry EV exit capture target diagnostics
+- `00229`: entry EV executable EV calibration
+- `00230`: entry EV executable EV selector feature
+- `00231`: entry EV executable EV stateful score

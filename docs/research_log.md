@@ -4,6 +4,21 @@
 
 ## 2026-06-30 JST
 
+### 18:19 Entry EV executable EV stateful score
+
+- 00230の次アクションとして、post-trade selector featureではなく、実際の `timed_ev` stateful policyのentry scoreをexecutable EVへ差し替える `scripts/experiments/entry_ev_executable_ev_policy_inputs.py` を追加した。
+- executable EV prediction inputsは `data/reports/backtests/20260630_091330_20260630_entry_ev_executable_ev_policy_inputs/`。
+- `720m` floor `5/10` backtestは `data/reports/backtests/20260630_091445_20260630_entry_ev_executable_ev_policy_backtest_720/`、selectorは `data/reports/backtests/20260630_091525_20260630_entry_ev_executable_ev_policy_selector_720_relaxed_trades/`。
+- `260m` floor `5/10` backtestは `data/reports/backtests/20260630_091543_20260630_entry_ev_executable_ev_policy_backtest_260/`。
+- `720m` floorなしは `data/reports/backtests/20260630_091635_20260630_entry_ev_executable_ev_policy_backtest_720_nofloor/`、floor `2/3/4/5` sweepは `data/reports/backtests/20260630_091745_20260630_entry_ev_executable_ev_policy_backtest_720_floor_sweep/`。
+- prediction inputでは、refit2025のlong shareが base `0.9169..0.9150` から executable `0.4367..0.4705` へ縮み、side switch shareは `0.4996..0.5390`。EV scale driftの一部をentry score側で補正できた。
+- `720m q99 floor5` は validation total `+43.0418`, min role `+2.4158`, validation trades `19` まで改善したが、validation min month `-1.8000` と0-trade月でNoTrade。fresh fixedにも `2024-10 -10.3560` が残る。
+- `260m` は `q99 floor5` validation total `+33.4638` で720mに負ける。floorなしは q99 validation `-51.2934`、q95 validation `-36.5868` と悪化。floor `2/3/4` に安定台地はない。
+- 判断: executable EV stateful score infrastructureはaccepted。tested policiesはNoTrade-first gateを通らないため標準policyはNoTrade。
+- report: `docs/reports/00231_2026-06-30_entry_ev_executable_ev_stateful_score.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: executable EV policy input / calibration / scale quantile / policy backtest / selector / docs report tests OK; py_compile OK
+
 ### 18:00 Entry EV executable EV selector feature
 
 - 00229の `pred_capture_calibrated_ev` を、単独thresholdではなくNoTrade-first selectorのcandidate-level featureとして評価する `scripts/experiments/entry_ev_executable_ev_selector_diagnostics.py` を追加した。

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 18:00 JST
+最終更新: 2026-06-30 18:19 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV executable EV stateful score診断を追加した。00230の次アクションとして、post-trade featureではなく、prediction parquet全行に prior-only executable capture factorを付け、`pred_executable_calibrated_long_best_adjusted_pnl` / `short` を `timed_ev` の実entry scoreへ差し替えた。refit2025のlong shareは `0.9169..0.9150` から `0.4367..0.4705` まで縮み、`720m q99 floor5` は validation total `+43.0418`, min role `+2.4158` まで改善した。一方、validation min month `-1.8000` と `month_trades_low`、fresh fixed `2024-10 -10.3560` が残りNoTrade-first gateは通らない。floorなしはvalidation `-51.2934` などで悪化し、floor `2/3/4` に安定台地はない。判断: executable EV stateful score infrastructureはaccepted、標準policyはNoTrade。詳細は `docs/reports/00231_2026-06-30_entry_ev_executable_ev_stateful_score.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV executable EV selector feature診断を追加した。00229の `pred_capture_calibrated_ev` を、単独thresholdではなくcandidate-level selector featureとして再集計した。validation q95/q99ではq99候補が `capture_ev_mean > 5` と `capture_ev_low2_share < 0.10` を満たすが、refit role totalと月次floorが負でNoTrade。fresh q95/720は validation total `+76.2204`、fixed total `+325.8914` だが、validation min month `-9.1718` でNoTrade。判断: executable EV featureは説明・ranking候補としてacceptedだが、promotion gateは超えない。次はpost-trade selectorではなくstateful entry ranking / replacement choiceへ入れる。詳細は `docs/reports/00230_2026-06-30_entry_ev_executable_ev_selector_feature.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

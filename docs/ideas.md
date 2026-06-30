@@ -99,6 +99,7 @@
 - 00228でexit-capture targetを実装した。`exit_capture_failure` は失敗説明として強いが、勝ちroleにも多いためhard blockには使えない。次は `same_side_missed_loss` をrisk target、`low_exit_capture` や `exit_capture_shortfall` をexit timing / capture improvement targetへ分け、predicted oracle EVに expected capture ratio を掛けた executable EV calibration を試す。
 - 00229でexecutable EV calibrationを試した。raw EVの過大評価は大きく縮むが、低calibrated EV hard thresholdはwindow間で符号反転する。次は `pred_capture_calibrated_ev`, `executable_capture_factor`, `raw_ev - executable_ev` をselector/ranking featureにし、NoTrade-first monthly gateで評価する。
 - 00230でcandidate-level selector featureへ戻してもNoTrade-first gateは超えなかった。次はpost-trade candidate selectorではなく、stateful policy内で competing entry / replacement entry のscoreを `pred_capture_calibrated_ev` に差し替え、同じ一玉制約で実際の経路が変わるかを見る。
+- 00231でstateful policyのlong/short scoreをexecutable EVへ差し替えるとrefit2025のlong過剰は大きく改善したが、best near-missの `720m q99 floor5` もvalidation min month `-1.8000` とtrade support不足でNoTrade。floorなしとfloor `2/3/4` はtailを戻すため、floor細密探索は本流にしない。次はexecutable EVを粗いcontext平均factorではなく、dense target / model feature / calibration layerとして学習させ、追加chronological validationでsupportを増やす。
 
 ## 外部データ候補
 
