@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 19:32 Entry EV side-balance downside selector
+
+- 00235の次アクションとして、side-balance/downside interactionを個別trade hard gateではなくcandidate-level selector featureとして集約する `scripts/experiments/entry_ev_side_balance_downside_selector.py` を追加した。
+- strict artifactは `data/reports/backtests/20260630_103209_20260630_entry_ev_side_balance_downside_selector_strict_s1/`。
+- relaxed diagnostic artifactは `data/reports/backtests/20260630_103224_20260630_entry_ev_side_balance_downside_selector_relaxed_s1/`。
+- `risk_high_share`, `interaction_high_share`, `prior_zero_share`, `feature_pressure_score`, `uncovered_loss_pnl` をrole/month/candidate単位で出す。`uncovered_loss_pnl` はrealized PnLを使う診断列なのでentry featureにはしない。
+- strict NoTrade-first gateでは全候補が不合格。q95 floor5は total `+14.6138` でも min role `-82.2428`, min month `-46.5308`。q99 floor5も total `-10.2286`。
+- 診断用の緩和gateでは q99/q95 floor10 がeligibleになり、feature grid 320行中128行が q99 floor10 を選んだ。ただし floor10系はactive roleが2、prior zero shareが `0.9000..0.9130` で、fresh role coverage不足とprior evidence不足を伴う薄い候補。
+- q95 floor5は `risk_high_share 0.2642`, `interaction_high_share 0.3396`, `feature_pressure 0.3116`, `uncovered_loss_pnl -153.0528`。fresh tailの説明には効くが、pressureが低い候補を選ぶだけではcoverage不足候補を拾う。
+- 判断: candidate-level aggregationはaccepted。feature pressure単独selectorは標準採用しない。次はsupport/coverage constraints、executable EV、exit capture、direction-side inversionと組み合わせる。
+- report: `docs/reports/00236_2026-06-30_entry_ev_side_balance_downside_selector.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: side-balance downside selector unit tests OK; py_compile OK; strict/relaxed diagnostics OK
+
 ### 19:22 Entry EV side-balance downside interaction
 
 - 00234の次アクションとして、side-balance drift単体ではなく prior downside evidence との相互作用を診断する `scripts/experiments/entry_ev_side_balance_downside_interaction.py` を追加した。

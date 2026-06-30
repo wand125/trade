@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 19:22 JST
+最終更新: 2026-06-30 19:32 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV side-balance downside selector診断を追加した。00235のinteractionを個別trade hard gateではなくcandidate-level selector featureとして集約し、`risk_high_share`, `interaction_high_share`, `prior_zero_share`, `feature_pressure_score`, `uncovered_loss_pnl` をrole/month/candidate単位で出した。strict NoTrade-first gateでは全候補が不合格。診断用の緩和gateでは q99/q95 floor10 が残るが、active rolesは2、prior zero shareは約 `0.90` で、fresh role coverage不足とprior evidence不足を伴う薄い候補だった。q95 floor5は pressure `0.3116`, uncovered loss `-153.0528` でfresh tailを説明する一方、pressureだけで選ぶとcoverage不足候補を拾う。判断: candidate-level aggregationはaccepted、side-balance/downside selector feature単独は標準採用しない。詳細は `docs/reports/00236_2026-06-30_entry_ev_side_balance_downside_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV side-balance downside interaction診断を追加した。00234でside-balance drift単体はgeneric blockerにならないと分かったため、対象月より前の同一 `direction + combined_regime + session_regime` から `prior_downside_risk_score` を作り、`side_balance_downside_interaction_score = abs(side_balance_signed_drift_for_trade) * prior_downside_risk_score` を診断した。q99 floor5では `risk>=0.20` が7 trades / `-31.1784` を拾い、pointwise kept totalを `-10.2286 -> +20.9498` に改善したが、kept min role `-30.9390`、kept min month `-33.4920` が残る。q95 floor5でもbest-looking screenは kept min role `-74.8268` や `-42.7904` が残り、fresh tailを救えない。最大損失の一部はprior support 0またはlow driftでinteraction scoreが低く、逆にrefit勝ちroleにも高risk/high interactionが出る。判断: diagnosticsはaccepted、hard gate/direct penaltyは採用しない。prior downsideはside-balance補助特徴、selector/ranking特徴、downside-weighted dense target候補にする。詳細は `docs/reports/00235_2026-06-30_entry_ev_side_balance_downside_interaction.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

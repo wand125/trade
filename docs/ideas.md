@@ -104,6 +104,7 @@
 - 00233でprior-only side-balance penaltyをdirect scoreへ掛けると、refit long過剰は縮むがfresh tailが悪化した。次は `pred_side_balance_long_share_drift`、prior predicted/target side share、side scaleを無条件multiplierではなく、prior side PnL、direction error、exit capture failure、realized executable EVと組み合わせたdownside-conditioned selector/ranking featureにする。
 - 00234でside-balanceをselected-trade featureとして見ても、high drift / selected overrepresented はgeneric blockerにならなかった。q99では一部post-hoc改善するがq95では利益を削るため、次は q95/q99 を分け、side-balance driftと prior downside evidence の相互作用だけを低容量featureとして試す。
 - 00235でside-balance x prior downside interactionを試すと、q99 floor5では `risk>=0.20` が損失を拾うが、fresh最大損失やq95 tailは残り、refit勝ちroleにも高risk/high interactionが出た。interactionはhard gateにせず、q95/q99別のselector/ranking feature、downside-weighted dense target、stateful replacement-aware diagnosticへ回す。
+- 00236でcandidate-level pressureへ集約すると、floor5 fresh tailは高pressureとして見えるが、低pressure候補はfresh coverageやprior evidenceが薄いfloor10系に寄る。pressure scoreはsupport/coverage制約と一緒に使い、active role count、prior zero share、fresh-role coverageをselector featureに明示する。
 
 ## 外部データ候補
 
