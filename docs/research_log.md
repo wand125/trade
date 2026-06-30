@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 23:56 Entry EV composite target decomposition
+
+- 00238の反省に沿って、composite gateを増やすのではなく、trade単位で model-time feature と training/evaluation target に分解する `scripts/experiments/entry_ev_composite_target_decomposition.py` を追加した。
+- artifactは `data/reports/backtests/20260630_145606_20260630_entry_ev_composite_target_decomposition_s1/`。
+- 対象は00235/00238と同じ selected trades 115件、4 candidates、3 roles、6 months。
+- 出力は `component_trade_targets.csv`, `component_candidate_summary.csv`, `component_role_summary.csv`, `component_month_summary.csv`, `component_feature_bucket_summary.csv`, `component_target_overlap_summary.csv`。
+- 各candidateの `composite_failure_target_rate` は `0.8621..0.9130` と高いが、targetが立っても利益になるoverlapがある。`none` overlapは 14 trades / `+176.8770`、large exit + low captureだけのoverlapは 13 trades / `+72.4700`。
+- 損失overlapは realized loss と EV overestimate がdirection/exit targetと重なる部分に集中する。direction + large exit + low capture + EV overestimate + realized lossは 11 trades / `-96.4764`、direction + large exit + EV overestimate + realized lossは 8 trades / `-146.2824`。
+- 判断: target decompositionはaccepted。`composite_failure_target` は単一no-trade labelにせず、direction-side inversion、exit capture、executable EV overestimate、realized lossを別target headとして扱う。
+- report: `docs/reports/00239_2026-06-30_entry_ev_composite_target_decomposition.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: target decomposition unit tests OK; py_compile OK; diagnostic run OK
+
 ### 19:54 Entry EV side-balance downside composite selector
 
 - 00237の次アクションとして、coverage/support、side-balance/downside pressure、direction error、exit regret、expected PnL overestimateを同じcandidate gateへ入れる `scripts/experiments/entry_ev_side_balance_downside_composite_selector.py` を追加した。

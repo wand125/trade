@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 19:54 JST
+最終更新: 2026-06-30 23:56 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV composite target decompositionを追加した。00238のcomposite hard gateを増やすのではなく、selected trade 115件を model-time feature と training/evaluation target に分解した。出力は `component_trade_targets.csv`, candidate/role/month summary, feature bucket summary, target overlap summary。各候補の `composite_failure_target_rate` は `0.8621..0.9130` と高いが、targetが立っても利益になるoverlapがあり、hard blockには戻さない。`none` overlapは 14 trades / `+176.8770`、direction + exit + EV overestimate + realized lossが重なるoverlapは 11 trades / `-96.4764`、direction + large exit + EV overestimate + realized lossは 8 trades / `-146.2824`。判断: target decompositionはaccepted。次はdirection-side inversion、exit capture、executable EV overestimate、realized lossを別target headとして扱う。詳細は `docs/reports/00239_2026-06-30_entry_ev_composite_target_decomposition.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV side-balance downside composite selectorを追加した。coverage/support、side-balance/downside pressure、direction error、exit regret、expected PnL overestimateを同じcandidate gateへ入れ、missing required roleはunknown/high riskとしてcomposite risk `1.0` にした。strict composite gateも、PnL床だけ `min required role total -15`, `min required month -10` に緩めたrelaxed composite gateも全候補NoTrade。composite sensitivity 288条件も全てNoTradeだった。floor10系はfresh role欠損、floor5系はfresh tail、cal2024 prior-zero、direction error、EV過大評価で落ちる。判断: composite diagnosticsはaccepted、現候補は標準採用しない。EV overestimateと実PnL floorはvalidation calibration diagnosticであり、model-time input featureではない。詳細は `docs/reports/00238_2026-06-30_entry_ev_side_balance_downside_composite_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
