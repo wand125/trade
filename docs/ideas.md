@@ -79,6 +79,7 @@
 - 00208でraw EV thresholdのvalidation過適合を確認した。raw `entry12/short3` はvalidation `+22.7292` からfull 2024 test `-442.4662` へ崩れた。一方、calibrated `entry10/short6` と `entry12/short6` はtestでNoTradeを超えたが、validationでは `0` tradeのNoTrade tieとしてしか選ばれていない。次はNoTrade tie selectorを事前固定し、fresh chronological foldsでcalibrated high-threshold candidateを再評価する。
 - 00209でNoTrade-first selectorを実装し、fresh `2024-03..04` validationでは best calibrated `entry12/short6` も `-1.8610` でNoTrade未満だった。diagnostic fixed test `2024-05..12` は `+65.4014` だが、validation-negative候補なので標準採用しない。次は追加chronological model-refit folds、side/regime別calibrated EV quantile/rank、support-aware admission特徴で validation total がNoTradeを超えるかを確認する。
 - 00210で00209のfixed testが `min_entry_rank=0.5` 入りだったと訂正し、rank gateを明示grid化した。fresh validation best `entry10/short9/min_rank0.0` は `+17.0910` だが4 tradesしかなく、`min_trades=10`, active2, worst0 gateではNoTrade。rank gateはdiagnostic admission axisとして残し、side/regime別rank・quantile校正・追加chronological model-refit foldsでsupportを増やせるかを検証する。
+- 00211で追加2025-refit foldを確認したところ、support gateを十分満たす `entry12/short3/min_rank0.0` が validation `+209.4234`, trades `170` から test `-1002.1534` へ崩れた。これはsupport不足ではなく、2ヶ月validationだけでは未来10ヶ月のregimeを代表できない問題。次は複数validation window、side/regime worst bucket、side balance、trade frequency制約をselectorへ入れる。test hindsight topの `entry14/short9/min_rank0.7` はvalidation 0 tradesなので採用不可だが、高rank short-only sparse entryの診断軸として残す。
 
 ## 外部データ候補
 

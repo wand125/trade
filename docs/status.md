@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 13:34 JST
+最終更新: 2026-06-30 13:58 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV rank gateを2025-refit foldで検証した。train `2024-01..12`、validation `2025-01..02`、test `2025-03..12` のchronological model-refit。support gateは validation total `+209.4234`, worst `+71.1950`, trades `170` の `entry12/short3/min_rank0.0` を選んだが、固定testでは total `-1002.1534`, worst `-294.1980`, trades `1147`, max DD `332.4446` へ崩れ、NoTrade `0` に大きく負けた。test hindsight topの `entry14/short9/min_rank0.7` は total `+324.5040`, trades `17` だが、validationでは取引ゼロなので採用不可。判断: rank gateの前に、2ヶ月validationだけで未来10ヶ月を代表させる設計が弱い。標準policyはNoTradeのまま。詳細は `docs/reports/00211_2026-06-30_entry_ev_rank_refit_2025_fold.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV rank gate support auditを追加した。00209の `cal12/short6` fixed test `+65.4014` は保存済みconfig上 `min_entry_rank=0.5` を含んでいたため、pure thresholdではなく rank-gated `cal12/short6/min_rank0.5` と訂正する。fresh `2024-03..04` validationで `min_entry_rank` gridを明示したところ、低support標準selectorは `entry10/short9/min_rank0.0` を validation total `+17.0910`, worst `+0.7230`, trades `4`, active months `2` で選んだ。しかし `min_trades=10`, `active_months>=2`, `worst>=0` のsupport gateでは標準selectorはNoTradeを返す。fixed `2024-05..12` では同rowが total `+87.8942`, worst `-2.2800`, trades `10`、`entry8/short9/min_rank0.6` が `+74.2970`, worst `-20.1600`, trades `11`。判断: rank gateはdiagnostic admission axisとして残すが、標準policyはNoTrade。詳細は `docs/reports/00210_2026-06-30_entry_ev_rank_gate_support_audit.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

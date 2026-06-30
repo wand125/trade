@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 13:58 Entry EV rank refit 2025 fold
+
+- 00210の次アクションとして、calibrated entry EV + MLP exit timing + `min_entry_rank` gridを追加chronological model-refit foldへ適用した。foldは train `2024-01..12`, validation `2025-01..02`, test `2025-03..12`。
+- HGB entry EVはvalidationで薄く見えたがtestで崩れた。HGB validation R2は long EV `0.0219`, short EV `-0.0304`、test R2は long EV `-0.2772`, short EV `-0.0240`。MLP exit timingはtestでも long `0.2771`, short `0.2649` と一定の汎化があった。
+- support gateは validation total `+209.4234`, worst `+71.1950`, trades `170` の `entry12/short3/min_rank0.0` を選んだ。00210と違い、support不足ではなく、validation上はかなり強い候補だった。
+- 固定test `2025-03..12` では同rowが total `-1002.1534`, worst `-294.1980`, trades `1147`, max DD `332.4446`、long PnL `-424.4576`, short PnL `-577.6958` へ崩れた。NoTrade `0` に大きく負ける。
+- Test hindsight topは `entry14/short9/min_rank0.7` の total `+324.5040`, worst `-38.0640`, trades `17` だが、validationでは取引ゼロなので採用できない。これを選ぶとtest leakageになる。
+- 判断: rank gateの閾値調整より、2ヶ月validationだけで未来10ヶ月を代表させる設計が弱い。次は複数chronological validation window、side/regime worst bucket、side balance、trade frequency制約をselectorに入れる。
+- report: `docs/reports/00211_2026-06-30_entry_ev_rank_refit_2025_fold.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: HGB/MLP train OK; hybrid merge OK; validation/test rank sweeps OK; selector support gate OK; aggregation OK
+
 ### 13:34 Entry EV rank gate support audit
 
 - 00209のfixed testを監査し、診断 `cal12/short6` の `2024-05..12` total `+65.4014` は保存済みfixed config上の `min_entry_rank=0.5` を含む結果だったと訂正した。fresh validation表の `cal12/short6` は `min_entry_rank=0.0` なので、00209のfixed testは `cal12/short6/min_rank0.5` と読む。
