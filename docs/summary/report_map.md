@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 17:28 JST
+最終更新: 2026-06-30 17:40 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00227` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00227で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断、scale quantile診断、quantile policy backtest、role selector、positive EV floor、trade context診断、exit capture診断、hold-cap sensitivity、prior-only inversion guard、prior context risk score、residual losing month診断を分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。cal2024はprediction入力側ではside margin supportがほぼなく、refit2025はlong EV scaleが大きすぎる。00218でside/regime/session-local quantileが候補数を比較可能にする軸だと確認し、00219でstateful backtestへ接続したが、fresh/refit validationのworstが負。00220のrole selectorでもstrict3/clean2ともNoTrade。00221のEV floor候補も全てNoTrade。00222で失敗はentry floorだけでなくcontext-side inversionとexit captureに分かれると確認し、00223でq95/q99は `260m` capがbindingしているがdirection/context errorも残るためblind hold延長は不可とした。00224で `720m` capは有望だが、same-validation guard込みでもmonth floorを通らないため標準はNoTrade。00225でprior-only guardへ置き換えてもvalidationは近似pass止まり、fresh fixedではover-blockingが出た。00226でrisk score化しcal+fresh prior fixedは改善したが、月次floor未達。00227で残差月はentry floor不足ではなくdirection-side inversion、exit capture、realized EV calibration不足だと確認した。 |
+| `00186`..`00228` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00228で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断、scale quantile診断、quantile policy backtest、role selector、positive EV floor、trade context診断、exit capture診断、hold-cap sensitivity、prior-only inversion guard、prior context risk score、residual losing month診断、exit-capture target診断を分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。cal2024はprediction入力側ではside margin supportがほぼなく、refit2025はlong EV scaleが大きすぎる。00218でside/regime/session-local quantileが候補数を比較可能にする軸だと確認し、00219でstateful backtestへ接続したが、fresh/refit validationのworstが負。00220のrole selectorでもstrict3/clean2ともNoTrade。00221のEV floor候補も全てNoTrade。00222で失敗はentry floorだけでなくcontext-side inversionとexit captureに分かれると確認し、00223でq95/q99は `260m` capがbindingしているがdirection/context errorも残るためblind hold延長は不可とした。00224で `720m` capは有望だが、same-validation guard込みでもmonth floorを通らないため標準はNoTrade。00225でprior-only guardへ置き換えてもvalidationは近似pass止まり、fresh fixedではover-blockingが出た。00226でrisk score化しcal+fresh prior fixedは改善したが、月次floor未達。00227で残差月はentry floor不足ではなくdirection-side inversion、exit capture、realized EV calibration不足だと確認した。00228でexit-capture targetは有用だがprior risk hard blockはfresh fixed利益を削ると確認した。 |
 
 ## テーマ別読む順
 
@@ -66,6 +66,7 @@
 39. `00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`
 40. `00226_2026-06-30_entry_ev_prior_context_risk_score.md`
 41. `00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`
+42. `00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`
 
 ### 現在の候補軸を知る
 
@@ -110,6 +111,7 @@
 39. `00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`
 40. `00226_2026-06-30_entry_ev_prior_context_risk_score.md`
 41. `00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`
+42. `00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -125,6 +127,7 @@
 10. `00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`
 11. `00226_2026-06-30_entry_ev_prior_context_risk_score.md`
 12. `00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`
+13. `00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`
 
 ### 過去に棄却した罠を確認する
 

@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 17:40 Entry EV exit capture target diagnostics
+
+- 00227の反省として、entryを消すのではなく、同方向oracle利益余地を実現できないtradeをtarget化する `scripts/experiments/entry_ev_exit_capture_target_diagnostics.py` を追加した。
+- targetは `same_side_missed_loss`, `low_exit_capture`, `large_exit_regret`, `exit_capture_failure`。対象月より前の同一 `direction + combined_regime + session_regime` だけで `prior_exit_capture_risk_score` も作る。
+- validation q95/q99診断は `data/reports/backtests/20260630_entry_ev_exit_capture_target_diagnostics/20260630_083912_entry_ev_exit_capture_targets_validation_q95q99/`、`0.20` threshold感度は `data/reports/backtests/20260630_entry_ev_exit_capture_target_diagnostics/20260630_084006_entry_ev_exit_capture_targets_validation_q95q99_thr020/`。
+- fresh q95_floor5 / 720m診断は `data/reports/backtests/20260630_entry_ev_exit_capture_target_diagnostics/20260630_083924_entry_ev_exit_capture_targets_fresh_q95_720/`、`0.20` threshold感度は `data/reports/backtests/20260630_entry_ev_exit_capture_target_diagnostics/20260630_084006_entry_ev_exit_capture_targets_fresh_q95_720_thr020/`。
+- validation q95/q99では、exit_capture_failure rateが refit q95/q99で `0.8621..0.8929`、fresh q95で `0.8421`。targetは多くの失敗を説明する。
+- prior exit risk thresholdはvalidation横断では `>=0.20` が68 trades / `-23.1116` を拾うが、`>=0.25` は42 trades / `+62.7204` を消して悪化する。
+- fresh q95/720 fixedでは `>=0.20` が77 trades / `+225.3034`、`>=0.25` が60 trades / `+218.1610`、`>=0.50` が32 trades / `+26.4952` を消す。hard blockとしては不採用。
+- 判断: exit-capture targetはaccepted diagnostic/training label。`prior_exit_capture_risk_score` はhard blockではなくselector/ranking/calibration feature候補。標準policyはNoTrade。
+- report: `docs/reports/00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: exit capture target unit tests OK; py_compile OK; validation/fresh diagnostic runs OK
+
 ### 17:28 Entry EV residual 2024-03 loss diagnostics
 
 - 00226で残った fresh `2024-03` の `q95_floor5 / 720m` 月次損失 `-9.1718` を、trade単位で方向ミス、exit capture不足、prior risk coverageに分解する `scripts/experiments/entry_ev_residual_month_loss_diagnostics.py` を追加した。

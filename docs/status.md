@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 17:28 JST
+最終更新: 2026-06-30 17:40 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV exit capture target diagnosticsを追加した。00227で確認した「同方向oracle利益余地をexitで取り逃がす」失敗を、`same_side_missed_loss`, `low_exit_capture`, `large_exit_regret`, `exit_capture_failure` としてtarget化し、対象月より前の同一 `direction + combined_regime + session_regime` だけから `prior_exit_capture_risk_score` を作った。validation q95/q99では exit_capture_failure rateが refit q95/q99で `0.8621..0.8929`、fresh q95で `0.8421` と高く、targetとしては有用。ただし prior risk hard blockは不採用。validation横断では `risk>=0.20` が68 trades / `-23.1116` を拾う一方、fresh q95/720 fixedでは同thresholdが77 trades / `+225.3034` を消す。判断: exit-capture targetとprior scoreはaccepted diagnostics/training labels/features、標準policyはNoTrade。詳細は `docs/reports/00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV residual 2024-03 loss diagnosticsを追加した。00226で残った fresh `2024-03` の `q95_floor5 / 720m` 月次損失 `-9.1718` をtrade単位で分解したところ、18 tradesすべてに同方向oracle利益余地があり、same-side oracle totalは `+327.9840`、actual best totalは `+485.5670`。`no_edge_entry` は0件で、loss trades 7件 / `-52.0548` は全てsame-side oracle edgeを持つ。direction errorは7件 / `-46.3626`、large exit regretは13件 / `-30.5188`、large best-side regretは15件 / `-34.7518`。`prior_context_risk>=0.50` は0件で残差損失を拾えず、後付け感度の `>=0.20` は4件 / `-31.2560` を拾うが採用しない。判断: 残差月はentry floor不足ではなく、direction-side inversion、exit capture、realized-executable EV calibration不足として扱う。標準policyはNoTrade。詳細は `docs/reports/00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
