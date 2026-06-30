@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 12:38 Early-2024 chronological risk OOF
+
+- 00205の次アクションとして、早期2024のHGB+MLP hybrid predictionを生成した。HGB/MLPは `2023-01..12` だけでfitし、`2024-01..02` をvalidation、`2024-03..06` をtestにした。既存same-familyより保守的なchronological bridge artifactとして扱う。
+- hybrid predictionは `2024-03..06` で `116,918` rows、MLP merge missing `0`、forced target欠損 `0`。
+- early side-penalty delta examplesを生成した。side penalty candidateは `2024-03` では no-side base比 `+52.2212` 改善したが、`2024-04 -80.6696`, `2024-05 -87.4032`, `2024-06 -24.6586` と悪化した。主な悪化は `long/down_low_vol` replacement。
+- early examplesを既存stateful examplesへ足し、session context walk-forward stressを12ヶ月へ拡張した。stateful risk OOFは `2024-05, 2024-06, 2024-07, 2024-09, 2024-11, 2024-12, 2025-01..04` に出力でき、OOF AUC `0.6800`。
+- 純2024の利用可能6ヶ月固定比較では source p10/replm10 `+21.6688`, no-side `+12.0322`, risk5 side `+2.1998`, risk0 side `-20.0128`。sourceは合計最良だが、no-sideの worst `-74.9020` / max DD `112.0964` が最も防御的。
+- 判断: source/side penaltyは標準採用しない。early risk OOFを診断artifactとして残し、`gap0/gap5/budget0` pure-2024へ進む前に、全2024を同一chronological protocolで再生成するか判断する。
+- report: `docs/reports/00206_2026-06-30_early2024_chrono_risk_oof.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: HGB/MLP train OK; hybrid merge OK; walk-forward stress OK; stateful risk OOF OK; fixed comparison OK
+
 ### 12:14 Same-family side calibration diagnostics
 
 - 00204で `gap5/budget0` が追加apply `2025-05..08` に外挿しなかったため、同じ10ヶ月窓でbaseline / source p10+replm10 / gap5のside drift診断を実施した。
