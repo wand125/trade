@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 09:23 Prediction side drift trigger
+
+- `short_budget_drift_trigger_selection.py` に `--prediction-month-summaries` を追加し、prediction month summary から prior window の side drift metricをtriggerに使えるようにした。
+- 追加metricは `recent_pred_short_bias_mean/max`, `recent_pred_short_share_mean`, `recent_actual_short_share_mean`, `recent_pred_match_rate_mean`, `recent_pred_side_score_mean`。
+- min4では `recent_actual_short_share_mean < 0.45` が bestで total `+210.3068`, worst `-46.0150`, max DD `129.7364`, short PnL `+132.8174`。
+- ただし 00191 の realized trigger `gap5/budget0 -> gap0/budget0` は total `+232.2466`, short PnL `+154.7572` で、今回のprediction/label-share triggerを上回る。
+- `recent_pred_short_bias_mean >= 0.15` や `recent_pred_match_rate_mean < 0.55` は早すぎて全target月でdefensive `gap0/budget0` に倒れ、min4 total `+150.3206` まで落ちた。
+- min8はどのprediction系triggerもほぼ `gap0/budget0` に潰れ、total `-15.0104`, worst `-45.4774` のまま。
+- 判断: prediction-share月次平均triggerは標準採用しない。実装は残し、次は context/session単位のside drift alert、または realized first-lossとのAND条件で試す。
+- report: `docs/reports/00192_2026-06-30_prediction_side_drift_trigger.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/short_budget_drift_trigger_selection.py tests/test_short_budget_drift_trigger_selection.py`: OK; `python3 -m unittest tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 123 tests; `git diff --check`: OK
+
 ### 09:14 Short budget drift trigger
 
 - `scripts/experiments/short_budget_drift_trigger_selection.py` を追加した。primary candidateからdefensive `gap0/budget0` へ切り替えるtriggerを、対象月より前のrecent metricsだけで評価する。

@@ -135,6 +135,47 @@ class ShortBudgetDriftTriggerSelectionTests(unittest.TestCase):
         self.assertEqual(int(summary.iloc[0]["triggered_months"]), 2)
         self.assertEqual(float(summary.iloc[0]["total_pnl"]), 165.0)
 
+    def test_prediction_summary_metric_can_trigger_from_prior_months(self):
+        prediction_summary = pd.DataFrame(
+            {
+                "dataset_month": ["2025-01", "2025-02", "2025-03", "2025-04"],
+                "pred_ev_short_share": [0.4, 0.5, 0.9, 0.9],
+                "actual_label_short_share": [0.3, 0.3, 0.3, 0.3],
+                "pred_short_minus_actual_label_short_share": [0.1, 0.2, 0.6, 0.6],
+                "pred_ev_matches_nonflat_label_rate": [0.7, 0.6, 0.4, 0.4],
+                "pred_side_score_mean": [1.0, 0.0, -5.0, -5.0],
+            }
+        )
+        rule = RuleSpec(
+            name="prediction_trigger",
+            primary=Candidate(5.0, 0.0),
+            defensive=Candidate(0.0, 0.0),
+            trigger_metric="recent_pred_short_bias_mean",
+            operator="ge",
+            threshold=0.5,
+        )
+
+        selected = short_budget_drift_trigger_selection.walkforward_trigger_selection(
+            base_frame(),
+            rules=[rule],
+            min_train_months=3,
+            train_window_months=0,
+            recent_month_count=2,
+            prediction_summary=(
+                short_budget_drift_trigger_selection.normalize_prediction_summary(
+                    prediction_summary
+                )
+            ),
+        )
+
+        first = selected[selected["target_month"] == "2025-04"].iloc[0]
+        second = selected[selected["target_month"] == "2025-05"].iloc[0]
+        self.assertEqual(first["selected_candidate"], "short_gap_threshold=5|context_entry_budget=0")
+        self.assertFalse(bool(first["triggered"]))
+        self.assertEqual(second["selected_candidate"], "short_gap_threshold=0|context_entry_budget=0")
+        self.assertTrue(bool(second["triggered"]))
+        self.assertAlmostEqual(float(second["recent_pred_short_bias_mean"]), 0.6)
+
 
 if __name__ == "__main__":
     unittest.main()

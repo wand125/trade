@@ -21,6 +21,12 @@ METRIC_DIRECTIONS = {
     "recent_short_worst_month_pnl": "lt",
     "recent_short_losing_months": "ge",
     "recent_total_losing_months": "ge",
+    "recent_pred_short_bias_mean": "ge",
+    "recent_pred_short_bias_max": "ge",
+    "recent_pred_short_share_mean": "ge",
+    "recent_actual_short_share_mean": "lt",
+    "recent_pred_match_rate_mean": "lt",
+    "recent_pred_side_score_mean": "lt",
 }
 DEFAULT_THRESHOLDS = {
     "recent_short_pnl": (-100.0, -50.0, 0.0, 50.0, 100.0, 150.0),
@@ -29,6 +35,19 @@ DEFAULT_THRESHOLDS = {
     "recent_short_worst_month_pnl": (-200.0, -100.0, -50.0, 0.0, 50.0),
     "recent_short_losing_months": (1.0, 2.0, 3.0),
     "recent_total_losing_months": (1.0, 2.0, 3.0),
+    "recent_pred_short_bias_mean": (0.15, 0.18, 0.20, 0.22, 0.25, 0.30, 0.35, 0.40),
+    "recent_pred_short_bias_max": (0.20, 0.25, 0.30, 0.35, 0.40),
+    "recent_pred_short_share_mean": (0.55, 0.60, 0.65, 0.70, 0.75),
+    "recent_actual_short_share_mean": (0.30, 0.35, 0.40, 0.45),
+    "recent_pred_match_rate_mean": (0.45, 0.48, 0.50, 0.52, 0.55),
+    "recent_pred_side_score_mean": (-5.0, -4.0, -3.0, -2.0, -1.0, 0.0),
+}
+PREDICTION_SUMMARY_COLUMNS = {
+    "pred_ev_short_share",
+    "actual_label_short_share",
+    "pred_short_minus_actual_label_short_share",
+    "pred_ev_matches_nonflat_label_rate",
+    "pred_side_score_mean",
 }
 
 
@@ -74,6 +93,10 @@ def parse_thresholds(value: str) -> tuple[float, ...]:
         return tuple(float(part.strip()) for part in value.split(",") if part.strip())
     except ValueError as exc:
         raise argparse.ArgumentTypeError("thresholds must be numeric") from exc
+
+
+def parse_csv_paths(value: str) -> list[Path]:
+    return [Path(part) for part in parse_csv_strings(value)]
 
 
 def local_json_default(value: Any) -> Any:
@@ -136,6 +159,37 @@ def normalize_summary(frame: pd.DataFrame) -> pd.DataFrame:
     return output.sort_values(["month", *DEFAULT_CANDIDATE_COLUMNS]).reset_index(drop=True)
 
 
+def normalize_prediction_summary(frame: pd.DataFrame) -> pd.DataFrame:
+    output = frame.copy()
+    if "month" not in output.columns:
+        if "dataset_month" not in output.columns:
+            raise ValueError("prediction summary missing month or dataset_month")
+        output = output.rename(columns={"dataset_month": "month"})
+    missing = sorted(PREDICTION_SUMMARY_COLUMNS - set(output.columns))
+    if missing:
+        raise ValueError(
+            "prediction summary missing columns: " + ", ".join(missing)
+        )
+    output["month"] = output["month"].astype(str)
+    for column in PREDICTION_SUMMARY_COLUMNS:
+        output[column] = pd.to_numeric(output[column], errors="raise")
+    return output.sort_values("month").reset_index(drop=True)
+
+
+def read_prediction_summaries(paths: list[Path]) -> pd.DataFrame | None:
+    if not paths:
+        return None
+    frames = []
+    for path in paths:
+        frames.append(normalize_prediction_summary(pd.read_csv(path)))
+    output = pd.concat(frames, ignore_index=True, sort=False)
+    return (
+        output.drop_duplicates("month", keep="last")
+        .sort_values("month")
+        .reset_index(drop=True)
+    )
+
+
 def candidate_mask(frame: pd.DataFrame, candidate: Candidate) -> pd.Series:
     return (
         frame["short_gap_threshold"].eq(candidate.short_gap_threshold)
@@ -150,13 +204,45 @@ def candidate_label(candidate: Candidate) -> str:
     )
 
 
-def metric_bundle(prior: pd.DataFrame, candidate: Candidate, recent_month_count: int) -> dict[str, float]:
+def prediction_metric_bundle(
+    prediction_summary: pd.DataFrame | None,
+    recent_months: list[str],
+) -> dict[str, float]:
+    if prediction_summary is None:
+        return {}
+    recent = prediction_summary[prediction_summary["month"].isin(recent_months)]
+    if recent.empty:
+        raise ValueError("prediction summary has no rows for recent prior months")
+    return {
+        "recent_pred_short_bias_mean": float(
+            recent["pred_short_minus_actual_label_short_share"].mean()
+        ),
+        "recent_pred_short_bias_max": float(
+            recent["pred_short_minus_actual_label_short_share"].max()
+        ),
+        "recent_pred_short_share_mean": float(recent["pred_ev_short_share"].mean()),
+        "recent_actual_short_share_mean": float(
+            recent["actual_label_short_share"].mean()
+        ),
+        "recent_pred_match_rate_mean": float(
+            recent["pred_ev_matches_nonflat_label_rate"].mean()
+        ),
+        "recent_pred_side_score_mean": float(recent["pred_side_score_mean"].mean()),
+    }
+
+
+def metric_bundle(
+    prior: pd.DataFrame,
+    candidate: Candidate,
+    recent_month_count: int,
+    prediction_summary: pd.DataFrame | None = None,
+) -> dict[str, float]:
     months = sorted(prior["month"].unique())
     recent_months = months[-recent_month_count:] if recent_month_count > 0 else months
     recent = prior[prior["month"].isin(recent_months) & candidate_mask(prior, candidate)]
     if recent.empty:
         raise ValueError(f"candidate not found in recent prior frame: {candidate_label(candidate)}")
-    return {
+    output = {
         "recent_months": float(len(recent_months)),
         "recent_total_pnl": float(recent["total_adjusted_pnl"].sum()),
         "recent_short_pnl": float(recent["short_adjusted_pnl"].sum()),
@@ -165,6 +251,8 @@ def metric_bundle(prior: pd.DataFrame, candidate: Candidate, recent_month_count:
         "recent_short_losing_months": float((recent["short_adjusted_pnl"] < 0).sum()),
         "recent_total_losing_months": float((recent["total_adjusted_pnl"] < 0).sum()),
     }
+    output.update(prediction_metric_bundle(prediction_summary, recent_months))
+    return output
 
 
 def should_trigger(value: float, operator: str, threshold: float) -> bool:
@@ -242,6 +330,7 @@ def walkforward_trigger_selection(
     min_train_months: int,
     train_window_months: int,
     recent_month_count: int,
+    prediction_summary: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     if min_train_months <= 0:
         raise ValueError("min_train_months must be positive")
@@ -259,7 +348,12 @@ def walkforward_trigger_selection(
         prior = data[data["month"].isin(prior_months)]
         target_rows = data[data["month"] == target_month]
         for rule in rules:
-            metrics = metric_bundle(prior, rule.primary, recent_month_count)
+            metrics = metric_bundle(
+                prior,
+                rule.primary,
+                recent_month_count,
+                prediction_summary=prediction_summary,
+            )
             trigger_value = metrics[rule.trigger_metric]
             triggered = should_trigger(trigger_value, rule.operator, rule.threshold)
             selected = rule.defensive if triggered else rule.primary
@@ -346,6 +440,7 @@ def parse_threshold_overrides(values: list[str]) -> dict[str, tuple[float, ...]]
 
 def run_selection(args: argparse.Namespace) -> Path:
     source = normalize_summary(pd.read_csv(args.summary_by_run))
+    prediction_summary = read_prediction_summaries(args.prediction_month_summaries)
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     run_dir = output_dir / args.label
@@ -371,6 +466,7 @@ def run_selection(args: argparse.Namespace) -> Path:
         min_train_months=args.min_train_months,
         train_window_months=args.train_window_months,
         recent_month_count=args.recent_month_count,
+        prediction_summary=prediction_summary,
     )
     summary = summarize_walkforward(selection)
     selection.to_csv(run_dir / "walkforward_selection.csv", index=False)
@@ -382,6 +478,9 @@ def run_selection(args: argparse.Namespace) -> Path:
         "defensive_candidate": defensive_candidate,
         "trigger_metrics": metrics,
         "threshold_overrides": threshold_overrides,
+        "prediction_month_summaries": [
+            str(path) for path in args.prediction_month_summaries
+        ],
         "min_train_months": args.min_train_months,
         "train_window_months": args.train_window_months,
         "recent_month_count": args.recent_month_count,
@@ -402,6 +501,12 @@ def run_selection(args: argparse.Namespace) -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary-by-run", type=Path, required=True)
+    parser.add_argument(
+        "--prediction-month-summaries",
+        type=parse_csv_paths,
+        default=[],
+        help="Optional comma-separated prediction_month_summary.csv paths",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     parser.add_argument("--label", default="short_budget_drift_trigger_selection")
     parser.add_argument("--primary-candidates", default="5:0,5:1,0:1")

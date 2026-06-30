@@ -315,6 +315,22 @@ python scripts/experiments/short_budget_drift_trigger_selection.py \
   --recent-month-count 3
 ```
 
+To include prior-only prediction side drift metrics, add prediction month
+summaries and explicitly request those trigger metrics:
+
+```bash
+python scripts/experiments/short_budget_drift_trigger_selection.py \
+  --summary-by-run data/reports/backtests/<short_entry_budget_sweep>/summary_by_run.csv \
+  --prediction-month-summaries data/reports/modeling/<reference>/prediction_month_summary.csv,data/reports/modeling/<fresh>/prediction_month_summary.csv \
+  --output-dir data/reports/backtests \
+  --label short_budget_prediction_drift_trigger_selection \
+  --primary-candidates 5:0,5:1,0:1,10:0 \
+  --defensive-candidate 0:0 \
+  --trigger-metrics recent_pred_short_bias_mean,recent_pred_short_bias_max,recent_pred_short_share_mean,recent_actual_short_share_mean,recent_pred_match_rate_mean,recent_pred_side_score_mean \
+  --min-train-months 4 \
+  --recent-month-count 3
+```
+
 This is a diagnostic selector. It should be read as "can prior deterioration
 turn on budget0 before the bad target month?", not as a free parameter search
 for the best-looking rule.
