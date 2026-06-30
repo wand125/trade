@@ -82,6 +82,7 @@
 - 00211で追加2025-refit foldを確認したところ、support gateを十分満たす `entry12/short3/min_rank0.0` が validation `+209.4234`, trades `170` から test `-1002.1534` へ崩れた。これはsupport不足ではなく、2ヶ月validationだけでは未来10ヶ月のregimeを代表できない問題。次は複数validation window、side/regime worst bucket、side balance、trade frequency制約をselectorへ入れる。test hindsight topの `entry14/short9/min_rank0.7` はvalidation 0 tradesなので採用不可だが、高rank short-only sparse entryの診断軸として残す。
 - 00212でmulti-window selectorを実装した。fresh2024 + refit2025のstrict gateはNoTrade、relaxed gateは `entry10/short9/min_rank0.0` を選ぶが fixed tests `-943.9322`。`max_side_trade_share<=0.95` ではNoTradeになるため、side-balanceは有効なrejection axis候補。ただし `0.95` を固定閾値にせず、`0.90/0.95/0.98` とregime worst bucket floorを追加validation windowsで評価する。
 - 00213で `0.90/0.95/0.98/inf` side share、window support、regime floorを576通り評価した。選ばれた8 gateは全て同じ `entry10/short9/min_rank0.0` でfixed `-943.9322`。したがって閾値チューニングではなく、validation window追加、side/regime別rank・calibrated EV quantile、sparse high-rank rowをtest PnLなしで説明する診断へ進む。
+- 00214でsparse high-rank fixed-positive rowをvalidation evidenceだけで診断した。`entry14/short9/min_rank0.6` はfixed `+98.9868` だが、fresh2024は0 trade、refit2025は3 long-only tradesで `-0.3844`。sparse rowを採用するには、固定test PnLではなく追加validation windowsかside/regime-aware rank・calibrated EV quantileで支持される必要がある。
 
 ## 外部データ候補
 

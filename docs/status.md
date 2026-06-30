@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 14:21 JST
+最終更新: 2026-06-30 14:31 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV sparse high-rank診断を追加した。`entry_ev_sparse_rank_diagnostics.py` はmulti-window validation summary、window-level summary、fixed-test summaryを読み、fixed-test PnLを選択に使わず、validation evidenceだけでcandidate blockerを列挙する。`min_trades=20`, active months `4`, `validation_worst>=0`, `worst_window>=0`, `min_window_trades>=1`, `max_side_trade_share<=0.95` で `72` candidatesを診断すると、validation eligibleは `0`。fixed-positive audit rowは `entry14/short9/min_rank0.6` 1件だけだが、validation total `-0.3844`, trades `3`, active months `2`, min window trades `0`, side share `1.0000`。fresh2024は0 trade、refit2025は3 long-only tradesで `-0.3844`。判断: sparse high-rank rowは現validationでは採用根拠なし。標準policyはNoTrade。詳細は `docs/reports/00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV admission gate sensitivityを追加した。`entry_ev_admission_gate_sensitivity.py` は既存のmulti-window `validation_summary.csv` と fixed-test summaryを読み、`max_side_trade_share`, `min_window_trades`, direction/session・combined regime worst bucket floorsをgrid評価する。fresh2024 + refit2025のbase gate (`min_trades=20`, active months `4`, `validation_worst>=0`, `windows=2`, positive windows `2`, worst window `0`) で `576` gateを評価すると、`568` gateがNoTrade、`8` gateだけがpolicyを選んだ。選ばれたpolicyは全て `entry10/short9/min_rank0.0` で、validation total `+190.4544` に対し fixed tests total `-943.9322`。`max_side_trade_share<=0.95`, `min_window_trades=10`, `min_combined_regime_pnl>=-50` は全てNoTrade。判断: gate sensitivityはaccepted infrastructureだが、単純なgate閾値調整では汎化候補は出ていない。標準policyはNoTrade。詳細は `docs/reports/00213_2026-06-30_entry_ev_gate_sensitivity.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

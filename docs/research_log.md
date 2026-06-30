@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 14:31 Entry EV sparse rank diagnostics
+
+- 00213の次アクションとして、fixed-test-positiveに見えた sparse high-rank rowを、fixed-test PnLで採用せず、validation evidenceだけで診断した。
+- `scripts/experiments/entry_ev_sparse_rank_diagnostics.py` を追加した。multi-window `validation_summary.csv`、`window_validation_summary.csv`、fixed-test summaryを読み、candidateごとのvalidation blockerを列挙する。fixed PnLは `fixed_positive_audit` として横に置くだけで、`promotion_eligible_by_validation` には使わない。
+- 仮gateは `min_trades=20`, `active_months>=4`, `validation_worst>=0`, `worst_window>=0`, `min_window_trades>=1`, `max_side_trade_share<=0.95`。
+- `72` candidates中、validation eligibleは `0`。fixed-positive audit rowは1件だけで `entry14/short9/min_rank0.6`。
+- 同rowは fixed total `+98.9868` だが、validation total `-0.3844`, trades `3`, active months `2`, min window trades `0`, side share `1.0000`。fresh2024 windowは0 trade、refit2025 windowは3 long-only tradesで `-0.3844`。
+- blockerは `validation_total_not_positive`, `validation_trades_low`, `validation_active_months_low`, `validation_worst_below_floor`, `validation_worst_window_below_floor`, `validation_window_trades_low`, `validation_side_share_high` の複合。これは「薄いが良いvalidation signal」ではなく「validationでは観測できていない候補」。
+- 判断: sparse high-rank rowを現2-window validationから標準採用する根拠はない。fixed-positive rowはhindsight clueとして残すが、採用には追加validation windowsかside/regime-aware rank calibrationが必要。標準policyはNoTrade。
+- report: `docs/reports/00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: sparse rank diagnostics/admission scripts py_compile OK; sparse/gate/selector/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; diagnostic run OK
+
 ### 14:21 Entry EV gate sensitivity
 
 - 00212の次アクションとして、`max_side_trade_share=0.95` を単点で固定せず、side balance / regime floor / window support gateの感度をgrid評価した。
