@@ -492,6 +492,42 @@ This writes `replacement_risk_examples.csv` with `replacement_pnl`,
 summaries for causal prediction columns. It is still a preflight: blocking a
 covered replacement may admit a further replacement trade.
 
+To apply replacement-risk conditions inside the one-position dynamic backtest
+only after a prior deterioration trigger, use the triggered replacement match
+modes:
+
+```bash
+python scripts/experiments/side_context_interaction_guard_apply.py \
+  --runs data/reports/backtests/<monthly_model_policy_runs> \
+  --data data/processed/histdata/xauusd/xauusd_m1.parquet \
+  --output-dir data/reports/backtests \
+  --label triggered_replacement_risk_hook \
+  --thresholds inf \
+  --min-entry-margins inf \
+  --recover-after-pnl-recovery-values false \
+  --context-columns dataset_month,combined_regime \
+  --match-modes signal_short_raw_gap_or_triggered_profit_miss \
+  --short-gap-thresholds 5 \
+  --entry-budgets 0 \
+  --active-min-entry-margins=-inf \
+  --replacement-trigger-summary data/reports/backtests/<short_raw_gap_budget_sweep>/summary_by_run.csv \
+  --replacement-trigger-match-mode signal_short_raw_gap \
+  --replacement-trigger-short-gap-threshold 5 \
+  --replacement-trigger-entry-budget 0 \
+  --replacement-trigger-min-prior-months 4 \
+  --replacement-trigger-recent-month-count 3 \
+  --replacement-trigger-min-short-losing-months 1 \
+  --replacement-profit-barrier-threshold 0.5
+```
+
+`signal_short_raw_gap_or_triggered_low_ev` uses
+`pred_short_best_adjusted_pnl < --replacement-pred-ev-threshold`.
+`signal_short_raw_gap_or_triggered_profit_miss` uses
+`pred_short_profit_barrier_hit < --replacement-profit-barrier-threshold`.
+The trigger summary is read by its `month` column and only months earlier than
+the target month are used. `--replacement-trigger-min-prior-months 4` avoids
+early overreaction from too little prior evidence.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 

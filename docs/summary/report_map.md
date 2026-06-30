@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 11:23 JST
+最終更新: 2026-06-30 11:38 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00201` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00201で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk targetを分解した。次はtrigger限定replacement low-EV hook。 |
+| `00186`..`00202` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00202で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hookを分解した。triggered profit-miss min4は強い候補だが未使用期間検証が必要。 |
 
 ## テーマ別読む順
 
@@ -40,6 +40,7 @@
 13. `00199_2026-06-30_entry_signal_residual_context_audit.md`
 14. `00200_2026-06-30_focus_entry_dynamic_hook.md`
 15. `00201_2026-06-30_replacement_risk_target_diagnostics.md`
+16. `00202_2026-06-30_triggered_replacement_risk_hook.md`
 
 ### 現在の候補軸を知る
 
@@ -58,6 +59,7 @@
 13. `00199_2026-06-30_entry_signal_residual_context_audit.md`
 14. `00200_2026-06-30_focus_entry_dynamic_hook.md`
 15. `00201_2026-06-30_replacement_risk_target_diagnostics.md`
+16. `00202_2026-06-30_triggered_replacement_risk_hook.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -207,7 +209,16 @@ Status: diagnostic infrastructure / not standard
 Question: only_candidate shortをreplacement risk target化すると、悪いreplacementを事前評価できるか
 Best evidence: global_gap5 replacement is +210.5324 over all 2025 but -286.9878 in late 2025-08..12. profit_hit<0.5 covers -291.8810 late but +144.2660 over all year; pred_ev<15 is smaller but negative in both all-year (-87.9540) and late (-83.8596).
 Decision: target化は採用。global profit_hit gateは棄却。pred_ev<15は低容量candidate
-Next: dynamic backtest trigger-limited replacement low-EV hook
+Next: dynamic hook was tested in 00202; validate fixed triggered profit-miss on unseen same-family data
+```
+
+```text
+Report: 00202 Triggered Replacement Risk Hook
+Status: strongest candidate / not standard
+Question: prior deterioration trigger後だけreplacement risk hookを動的に重ねると、一玉制約とreplacement込みで改善するか
+Best evidence: gap5/budget0 baseline +508.9838 / worst -215.1172. triggered profit-miss min4 +790.3634 / worst -46.0150 / max DD 129.7364. low-EV only +540.5594 and leaves worst unchanged.
+Decision: triggered profit-miss is strongest candidate; low-EV is diagnostic only. Not standard until unseen same-family validation.
+Next: apply fixed triggered profit-miss to 2024 same-family or additional unseen months without re-search
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

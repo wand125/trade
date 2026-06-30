@@ -69,7 +69,8 @@
 - 00198で、`gap5` replacement shortのprior signal coverageを監査した。prior alert単体は弱く、prior alert OR prediction short biasなら損失上限を大きく削れるが、`range_low_vol/ny_overlap` はprior context signalでほぼ拾えない。次はentry-level EV overestimate、NY-overlap固有のside inversion、またはcurrent-month first-loss controlでこの未検知contextを狙う。
 - 00199で、`range_low_vol/ny_overlap` replacement shortはentry時点の `side_gap <= 0` または `candidate_entry_rank >= 0.52` をprior signalに足すと大半を覆えると分かった。first-loss controlは月初の初回損失を拾えないため弱い。次は `gap5` / primary branch限定のdynamic hookに入れ、one-position replacement込みで改善するか確認する。`gap0` へ広げるのは良いreplacementを消す可能性があるため避ける。
 - 00200でfocus entry signalをdynamic hook化した。00199のOR条件はreplacement込みで `+508.9838 -> +507.4968` と悪化し、side-gap onlyも悪化。rank-only `0.53` は `+511.5964` と小幅改善するが採用するほどではない。次は `model-trade-delta` の `only_candidate` shortをreplacement risk targetとして学習・診断し、削除後に悪いreplacementが入る局面を事前に避ける。
-- 00201で `only_candidate` shortをreplacement risk target化した。`profit_hit_lt0p5` はlate `gap5` replacement損失をほぼ覆うが全期間では良いreplacementを消すためglobal gate不可。`pred_ev_lt15` はsupportが少ないものの全期間/lateとも悪いreplacementに寄る。次はprior deterioration trigger後だけ `pred_ev_lt15`、またはtrigger限定 `profit_hit_lt0p5` をdynamic hookとして検証する。
+- 00201で `only_candidate` shortをreplacement risk target化した。`profit_hit_lt0p5` はlate `gap5` replacement損失をほぼ覆うが全期間では良いreplacementを消すためglobal gate不可。`pred_ev_lt15` はsupportが少ないものの全期間/lateとも悪いreplacementに寄る。trigger限定dynamic hookは00202で検証済み。
+- 00202でtrigger限定replacement risk hookをdynamic backtestした。`min_prior_months=4` と `recent_short_losing_months>=1` の後だけ `pred_short_profit_barrier_hit=0` を止めると、`gap5/budget0` baseline `+508.9838 / worst -215.1172` から `+790.3634 / worst -46.0150` へ改善。low-EVはworstを止めない。次は同一familyの2024または追加未使用月へ、trigger条件とthresholdを再探索せず固定適用する。
 
 ## 外部データ候補
 

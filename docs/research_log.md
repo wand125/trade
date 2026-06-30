@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 11:38 Triggered replacement risk hook
+
+- 00201のreplacement risk targetをdynamic hook化し、`side_context_interaction_guard_apply.py` に `signal_short_raw_gap_or_triggered_low_ev` と `signal_short_raw_gap_or_triggered_profit_miss` を追加した。
+- triggerはtarget月より前の `summary_by_run.csv` だけを見て、source candidate `gap5/budget0` の直近3ヶ月short負け月数が1以上なら発火する。少数履歴の過剰反応を避けるため `replacement_trigger_min_prior_months=4` をCLI defaultにした。
+- baseline `gap5/budget0` は 2025-01..12 total `+508.9838`, worst `-215.1172`, max DD `215.1172`。triggered low-EV min4は total `+540.5594` だがworstは改善しない。
+- triggered profit-miss min4は total `+790.3634`, worst `-46.0150`, max DD `129.7364`, short PnL `+446.1074`。2025-09を `-215.1172 -> -12.7028`、2025-11を `-36.4850 -> +33.3790` に改善した。
+- min_priorなしだと total `+660.4748`。2025-02..04の少数履歴で発火し、勝ちを削るため、min4が必要。
+- `pred_short_profit_barrier_hit` は0/1列。threshold 0.40/0.45/0.55/0.60 はすべて `+790.3634` で、微小な閾値最適化ではない。
+- 判断: triggered profit-missは最有力candidateに昇格。ただし同じ2025系列で作ったルールなので標準採用はしない。次はcoststress 260 + stateful risk5 + replacement margin10の2024同一familyを生成し、再探索なしで固定適用する。
+- report: `docs/reports/00202_2026-06-30_triggered_replacement_risk_hook.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_side_context_interaction_guard_apply`: OK, 9 tests; `python3 -m unittest tests.test_side_context_interaction_guard_apply tests.test_docs_reports tests.test_backtest`: OK, 112 tests; `git diff --check`: OK; dynamic hook / threshold stability artifact生成 OK
+
 ### 11:19 Replacement risk target diagnostics
 
 - 00200の結論を受け、`model-trade-delta` の `only_candidate` shortをreplacement risk targetとして扱う `short_replacement_risk_target_diagnostics.py` を追加した。

@@ -60,9 +60,34 @@ MODEL_POLICY_TUPLE_FIELDS = {
 }
 SIDE_NAME_TO_VALUE = {"short": -1, "long": 1}
 SIDE_DRIFT_ALERT_REQUIRED_COLUMNS = {"month", "side", "is_alert"}
+REPLACEMENT_TRIGGER_SUMMARY_REQUIRED_COLUMNS = {
+    "month",
+    "match_mode",
+    "short_gap_threshold",
+    "context_entry_budget",
+    "short_adjusted_pnl",
+}
+FOCUS_ENTRY_MATCH_MODES = {
+    "focus_short_entry_signal",
+    "signal_short_raw_gap_or_focus_short_entry",
+}
+TRIGGERED_REPLACEMENT_MATCH_MODES = {
+    "signal_short_raw_gap_or_triggered_low_ev",
+    "signal_short_raw_gap_or_triggered_profit_miss",
+}
 MATCH_MODES_WITH_SHORT_GAP = {
     "signal_short_raw_gap",
     "signal_short_raw_gap_or_focus_short_entry",
+    *TRIGGERED_REPLACEMENT_MATCH_MODES,
+}
+VALID_MATCH_MODES = {
+    "any_rule",
+    "selected_side_rule",
+    "signal_short_raw_gap",
+    "focus_short_entry_signal",
+    "signal_short_raw_gap_or_focus_short_entry",
+    "prior_side_drift_alert",
+    *TRIGGERED_REPLACEMENT_MATCH_MODES,
 }
 
 
@@ -158,6 +183,112 @@ def read_side_drift_alerts(paths: list[Path]) -> pd.DataFrame | None:
     return pd.concat(frames, ignore_index=True, sort=False).reset_index(drop=True)
 
 
+def normalize_replacement_trigger_summary(
+    frame: pd.DataFrame,
+    *,
+    source_label: str = "replacement trigger summary",
+) -> pd.DataFrame:
+    missing = sorted(REPLACEMENT_TRIGGER_SUMMARY_REQUIRED_COLUMNS - set(frame.columns))
+    if missing:
+        raise ValueError(f"{source_label} missing columns: {', '.join(missing)}")
+    output = frame.copy()
+    output["month"] = output["month"].astype(str)
+    output["match_mode"] = output["match_mode"].astype(str)
+    for column in [
+        "short_gap_threshold",
+        "context_entry_budget",
+        "short_adjusted_pnl",
+        "total_adjusted_pnl",
+    ]:
+        if column in output.columns:
+            output[column] = pd.to_numeric(output[column], errors="coerce")
+    return output
+
+
+def read_replacement_trigger_summary(path: Path | None) -> pd.DataFrame | None:
+    if path is None:
+        return None
+    return normalize_replacement_trigger_summary(
+        pd.read_csv(path),
+        source_label=f"replacement trigger summary in {path}",
+    )
+
+
+def numeric_match(series: pd.Series, value: float) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce")
+    if np.isnan(value):
+        return values.isna()
+    return pd.Series(
+        np.isclose(values.to_numpy(dtype=float), value, equal_nan=False),
+        index=series.index,
+    )
+
+
+def replacement_trigger_metrics(
+    summary: pd.DataFrame | None,
+    *,
+    target_month: str,
+    trigger_match_mode: str,
+    trigger_short_gap_threshold: float,
+    trigger_entry_budget: float,
+    min_prior_months: int,
+    recent_month_count: int,
+    min_short_losing_months: float,
+) -> dict[str, Any]:
+    if min_prior_months < 0:
+        raise ValueError("min_prior_months must be non-negative")
+    if summary is None:
+        return {
+            "replacement_trigger_active": False,
+            "replacement_trigger_prior_months": 0,
+            "replacement_trigger_recent_months": 0,
+            "replacement_trigger_prior_start_month": "",
+            "replacement_trigger_prior_end_month": "",
+            "replacement_trigger_short_losing_months": 0.0,
+            "replacement_trigger_short_pnl": 0.0,
+        }
+    candidate = summary[
+        summary["match_mode"].eq(trigger_match_mode)
+        & numeric_match(summary["short_gap_threshold"], trigger_short_gap_threshold)
+        & numeric_match(summary["context_entry_budget"], trigger_entry_budget)
+    ].copy()
+    if candidate.empty:
+        raise ValueError(
+            "replacement trigger candidate not found: "
+            f"match_mode={trigger_match_mode}, "
+            f"short_gap_threshold={trigger_short_gap_threshold}, "
+            f"context_entry_budget={trigger_entry_budget}"
+        )
+    candidate = (
+        candidate.groupby("month", as_index=False)
+        .agg(short_adjusted_pnl=("short_adjusted_pnl", "sum"))
+        .sort_values("month")
+    )
+    prior_months = [
+        month
+        for month in candidate["month"].astype(str).tolist()
+        if month < target_month
+    ]
+    recent_months = (
+        prior_months[-recent_month_count:] if recent_month_count > 0 else prior_months
+    )
+    recent = candidate[candidate["month"].isin(recent_months)]
+    short_losing_months = float((recent["short_adjusted_pnl"] < 0).sum())
+    short_pnl = float(recent["short_adjusted_pnl"].sum()) if not recent.empty else 0.0
+    enough_prior = len(prior_months) >= min_prior_months
+    return {
+        "replacement_trigger_active": bool(
+            enough_prior and short_losing_months >= min_short_losing_months
+        ),
+        "replacement_trigger_prior_months": len(prior_months),
+        "replacement_trigger_recent_months": len(recent_months),
+        "replacement_trigger_prior_start_month": recent_months[0] if recent_months else "",
+        "replacement_trigger_prior_end_month": recent_months[-1] if recent_months else "",
+        "replacement_trigger_short_losing_months": short_losing_months,
+        "replacement_trigger_short_pnl": short_pnl,
+    }
+
+
 def load_run_config(path: Path) -> dict[str, Any]:
     return json.loads((path / "config.json").read_text(encoding="utf-8"))
 
@@ -240,19 +371,17 @@ def side_rule_match_mask(
     focus_session_regime: str = "ny_overlap",
     focus_side_gap_threshold: float = 0.0,
     focus_entry_rank_threshold: float = 0.52,
+    replacement_trigger_active: bool = False,
+    replacement_pred_ev_threshold: float = 15.0,
+    replacement_profit_barrier_threshold: float = 0.5,
 ) -> pd.Series:
-    if match_mode not in {
-        "any_rule",
-        "selected_side_rule",
-        "signal_short_raw_gap",
-        "focus_short_entry_signal",
-        "signal_short_raw_gap_or_focus_short_entry",
-        "prior_side_drift_alert",
-    }:
+    if match_mode not in VALID_MATCH_MODES:
         raise ValueError(
             "match_mode must be any_rule, selected_side_rule, "
             "signal_short_raw_gap, focus_short_entry_signal, "
-            "signal_short_raw_gap_or_focus_short_entry, or prior_side_drift_alert"
+            "signal_short_raw_gap_or_focus_short_entry, prior_side_drift_alert, "
+            "signal_short_raw_gap_or_triggered_low_ev, or "
+            "signal_short_raw_gap_or_triggered_profit_miss"
         )
     if match_mode == "prior_side_drift_alert":
         if side_drift_alerts is None:
@@ -320,9 +449,12 @@ def side_rule_match_mask(
             policy_config.short_side_confidence_column,
             policy_config.short_entry_rank_column,
         ]
-        required_columns = short_gap_columns
-        if match_mode != "signal_short_raw_gap":
+        required_columns = list(short_gap_columns)
+        if match_mode in FOCUS_ENTRY_MATCH_MODES:
             required_columns = [*short_gap_columns, *focus_columns]
+        if match_mode == "signal_short_raw_gap_or_triggered_profit_miss":
+            required_columns.append(policy_config.short_profit_barrier_column)
+        required_columns = list(dict.fromkeys(required_columns))
         missing_prediction_columns = sorted(set(required_columns) - set(prediction_index.columns))
         if missing_prediction_columns:
             raise ValueError(
@@ -341,6 +473,29 @@ def side_rule_match_mask(
         ).fillna(False).astype(bool)
         if match_mode == "signal_short_raw_gap":
             return raw_gap_active
+        if match_mode in TRIGGERED_REPLACEMENT_MATCH_MODES:
+            replacement_active = pd.Series(False, index=df.index)
+            if replacement_trigger_active:
+                if match_mode == "signal_short_raw_gap_or_triggered_low_ev":
+                    replacement_active = (
+                        signal.eq(-1)
+                        & short_score.notna()
+                        & np.isfinite(short_score)
+                        & short_score.lt(replacement_pred_ev_threshold)
+                    ).fillna(False).astype(bool)
+                else:
+                    short_profit_barrier = (
+                        aligned[policy_config.short_profit_barrier_column]
+                        .reset_index(drop=True)
+                        .astype(float)
+                    )
+                    replacement_active = (
+                        signal.eq(-1)
+                        & short_profit_barrier.notna()
+                        & np.isfinite(short_profit_barrier)
+                        & short_profit_barrier.lt(replacement_profit_barrier_threshold)
+                    ).fillna(False).astype(bool)
+            return (raw_gap_active | replacement_active).fillna(False).astype(bool)
         combined_regime = aligned["combined_regime"].reset_index(drop=True).astype("string")
         session_regime = aligned["session_regime"].reset_index(drop=True).astype("string")
         short_confidence = (
@@ -403,6 +558,9 @@ def interaction_entry_context(
     focus_session_regime: str = "ny_overlap",
     focus_side_gap_threshold: float = 0.0,
     focus_entry_rank_threshold: float = 0.52,
+    replacement_trigger_active: bool = False,
+    replacement_pred_ev_threshold: float = 15.0,
+    replacement_profit_barrier_threshold: float = 0.5,
 ) -> tuple[pd.Series, pd.Series]:
     active = side_rule_match_mask(
         df,
@@ -420,6 +578,9 @@ def interaction_entry_context(
         focus_session_regime=focus_session_regime,
         focus_side_gap_threshold=focus_side_gap_threshold,
         focus_entry_rank_threshold=focus_entry_rank_threshold,
+        replacement_trigger_active=replacement_trigger_active,
+        replacement_pred_ev_threshold=replacement_pred_ev_threshold,
+        replacement_profit_barrier_threshold=replacement_profit_barrier_threshold,
     )
     base_context = base_context_series(df, predictions, context_columns)
     timestamps = pd.to_datetime(df["timestamp"], utc=True).dt.strftime("%Y%m%d%H%M%S")
@@ -482,6 +643,14 @@ def aggregate_summary(summary: pd.DataFrame) -> pd.DataFrame:
                 "focus_session_regime",
                 "focus_side_gap_threshold",
                 "focus_entry_rank_threshold",
+                "replacement_trigger_match_mode",
+                "replacement_trigger_short_gap_threshold",
+                "replacement_trigger_entry_budget",
+                "replacement_trigger_min_prior_months",
+                "replacement_trigger_recent_month_count",
+                "replacement_trigger_min_short_losing_months",
+                "replacement_pred_ev_threshold",
+                "replacement_profit_barrier_threshold",
             ],
             dropna=False,
         )
@@ -499,6 +668,12 @@ def aggregate_summary(summary: pd.DataFrame) -> pd.DataFrame:
             active_trade_pnl=("active_trade_pnl", "sum"),
             inactive_trade_pnl=("inactive_trade_pnl", "sum"),
             guard_rule_count=("guard_rule_count", "sum"),
+            replacement_triggered_months=("replacement_trigger_active", "sum"),
+            replacement_trigger_short_losing_months=(
+                "replacement_trigger_short_losing_months",
+                "sum",
+            ),
+            replacement_trigger_short_pnl=("replacement_trigger_short_pnl", "sum"),
         )
         .reset_index()
         .sort_values(["total_adjusted_pnl", "worst_month_pnl"], ascending=[False, False])
@@ -526,9 +701,23 @@ def apply_interaction_guard(
     focus_session_regime: str,
     focus_side_gap_threshold: float,
     focus_entry_rank_threshold: float,
+    replacement_trigger_summary: pd.DataFrame | None,
+    replacement_trigger_summary_path: Path | None,
+    replacement_trigger_match_mode: str,
+    replacement_trigger_short_gap_threshold: float,
+    replacement_trigger_entry_budget: float,
+    replacement_trigger_min_prior_months: int,
+    replacement_trigger_recent_month_count: int,
+    replacement_trigger_min_short_losing_months: float,
+    replacement_pred_ev_threshold: float,
+    replacement_profit_barrier_threshold: float,
     warmup_days: int,
     post_days: int,
 ) -> Path:
+    if TRIGGERED_REPLACEMENT_MATCH_MODES & set(match_modes) and replacement_trigger_summary is None:
+        raise ValueError(
+            "triggered replacement match modes require --replacement-trigger-summary"
+        )
     root = make_run_dir(output_dir, label)
     ohlcv = read_ohlcv(data_path)
     rows: list[dict[str, Any]] = []
@@ -550,6 +739,16 @@ def apply_interaction_guard(
         signal = model_signal_from_predictions(df, predictions, base_policy_config)
         entry_margin = model_policy_entry_margin(df, predictions, base_policy_config)
         guard_rule_count = len(base_policy_config.side_ev_penalty_rules)
+        trigger_metrics = replacement_trigger_metrics(
+            replacement_trigger_summary,
+            target_month=month,
+            trigger_match_mode=replacement_trigger_match_mode,
+            trigger_short_gap_threshold=replacement_trigger_short_gap_threshold,
+            trigger_entry_budget=replacement_trigger_entry_budget,
+            min_prior_months=replacement_trigger_min_prior_months,
+            recent_month_count=replacement_trigger_recent_month_count,
+            min_short_losing_months=replacement_trigger_min_short_losing_months,
+        )
 
         for match_mode in match_modes:
             active_short_gap_thresholds = (
@@ -576,6 +775,13 @@ def apply_interaction_guard(
                     focus_session_regime=focus_session_regime,
                     focus_side_gap_threshold=focus_side_gap_threshold,
                     focus_entry_rank_threshold=focus_entry_rank_threshold,
+                    replacement_trigger_active=bool(
+                        trigger_metrics["replacement_trigger_active"]
+                    ),
+                    replacement_pred_ev_threshold=replacement_pred_ev_threshold,
+                    replacement_profit_barrier_threshold=(
+                        replacement_profit_barrier_threshold
+                    ),
                 )
                 entry_budget_context = active_only_budget_context(entry_context, active_mask)
                 for threshold in thresholds:
@@ -680,6 +886,9 @@ def apply_interaction_guard(
                                             "desired_position": filtered_signal,
                                             "raw_desired_position": signal,
                                             "side_rule_active": active_mask,
+                                            "replacement_trigger_active": bool(
+                                                trigger_metrics["replacement_trigger_active"]
+                                            ),
                                             "entry_context": entry_context,
                                             "entry_margin": entry_margin,
                                         }
@@ -706,6 +915,31 @@ def apply_interaction_guard(
                                             "focus_session_regime": focus_session_regime,
                                             "focus_side_gap_threshold": focus_side_gap_threshold,
                                             "focus_entry_rank_threshold": focus_entry_rank_threshold,
+                                            "replacement_trigger_match_mode": (
+                                                replacement_trigger_match_mode
+                                            ),
+                                            "replacement_trigger_short_gap_threshold": (
+                                                replacement_trigger_short_gap_threshold
+                                            ),
+                                            "replacement_trigger_entry_budget": (
+                                                replacement_trigger_entry_budget
+                                            ),
+                                            "replacement_trigger_min_prior_months": (
+                                                replacement_trigger_min_prior_months
+                                            ),
+                                            "replacement_trigger_recent_month_count": (
+                                                replacement_trigger_recent_month_count
+                                            ),
+                                            "replacement_trigger_min_short_losing_months": (
+                                                replacement_trigger_min_short_losing_months
+                                            ),
+                                            "replacement_pred_ev_threshold": (
+                                                replacement_pred_ev_threshold
+                                            ),
+                                            "replacement_profit_barrier_threshold": (
+                                                replacement_profit_barrier_threshold
+                                            ),
+                                            **trigger_metrics,
                                             "interaction_context_columns": ",".join(
                                                 context_columns
                                             ),
@@ -757,6 +991,17 @@ def apply_interaction_guard(
         "focus_session_regime": focus_session_regime,
         "focus_side_gap_threshold": focus_side_gap_threshold,
         "focus_entry_rank_threshold": focus_entry_rank_threshold,
+        "replacement_trigger_summary": replacement_trigger_summary_path,
+        "replacement_trigger_match_mode": replacement_trigger_match_mode,
+        "replacement_trigger_short_gap_threshold": replacement_trigger_short_gap_threshold,
+        "replacement_trigger_entry_budget": replacement_trigger_entry_budget,
+        "replacement_trigger_min_prior_months": replacement_trigger_min_prior_months,
+        "replacement_trigger_recent_month_count": replacement_trigger_recent_month_count,
+        "replacement_trigger_min_short_losing_months": (
+            replacement_trigger_min_short_losing_months
+        ),
+        "replacement_pred_ev_threshold": replacement_pred_ev_threshold,
+        "replacement_profit_barrier_threshold": replacement_profit_barrier_threshold,
         "warmup_days": warmup_days,
         "post_days": post_days,
         "rows": int(len(summary)),
@@ -807,6 +1052,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--focus-session-regime", default="ny_overlap")
     parser.add_argument("--focus-side-gap-threshold", type=float, default=0.0)
     parser.add_argument("--focus-entry-rank-threshold", type=float, default=0.52)
+    parser.add_argument("--replacement-trigger-summary", type=Path)
+    parser.add_argument("--replacement-trigger-match-mode", default="signal_short_raw_gap")
+    parser.add_argument("--replacement-trigger-short-gap-threshold", type=float, default=5.0)
+    parser.add_argument("--replacement-trigger-entry-budget", type=float, default=0.0)
+    parser.add_argument("--replacement-trigger-min-prior-months", type=int, default=4)
+    parser.add_argument("--replacement-trigger-recent-month-count", type=int, default=3)
+    parser.add_argument("--replacement-trigger-min-short-losing-months", type=float, default=1.0)
+    parser.add_argument("--replacement-pred-ev-threshold", type=float, default=15.0)
+    parser.add_argument("--replacement-profit-barrier-threshold", type=float, default=0.5)
     parser.add_argument("--warmup-days", type=int, default=7)
     parser.add_argument("--post-days", type=int, default=4)
     return parser
@@ -834,6 +1088,20 @@ def main(argv: list[str] | None = None) -> int:
         focus_session_regime=args.focus_session_regime,
         focus_side_gap_threshold=args.focus_side_gap_threshold,
         focus_entry_rank_threshold=args.focus_entry_rank_threshold,
+        replacement_trigger_summary=read_replacement_trigger_summary(
+            args.replacement_trigger_summary
+        ),
+        replacement_trigger_summary_path=args.replacement_trigger_summary,
+        replacement_trigger_match_mode=args.replacement_trigger_match_mode,
+        replacement_trigger_short_gap_threshold=args.replacement_trigger_short_gap_threshold,
+        replacement_trigger_entry_budget=args.replacement_trigger_entry_budget,
+        replacement_trigger_min_prior_months=args.replacement_trigger_min_prior_months,
+        replacement_trigger_recent_month_count=args.replacement_trigger_recent_month_count,
+        replacement_trigger_min_short_losing_months=(
+            args.replacement_trigger_min_short_losing_months
+        ),
+        replacement_pred_ev_threshold=args.replacement_pred_ev_threshold,
+        replacement_profit_barrier_threshold=args.replacement_profit_barrier_threshold,
         warmup_days=args.warmup_days,
         post_days=args.post_days,
     )

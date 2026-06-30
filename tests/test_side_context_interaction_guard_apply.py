@@ -212,6 +212,118 @@ class SideContextInteractionGuardApplyTests(unittest.TestCase):
 
         self.assertEqual(active.tolist(), [True, True, False])
 
+    def test_replacement_trigger_metrics_use_only_prior_months(self):
+        summary = side_context_interaction_guard_apply.normalize_replacement_trigger_summary(
+            pd.DataFrame(
+                {
+                    "month": ["2025-01", "2025-02", "2025-03"],
+                    "match_mode": ["signal_short_raw_gap"] * 3,
+                    "short_gap_threshold": [5.0, 5.0, 5.0],
+                    "context_entry_budget": [0.0, 0.0, 0.0],
+                    "short_adjusted_pnl": [10.0, -2.0, -50.0],
+                }
+            )
+        )
+
+        february = side_context_interaction_guard_apply.replacement_trigger_metrics(
+            summary,
+            target_month="2025-02",
+            trigger_match_mode="signal_short_raw_gap",
+            trigger_short_gap_threshold=5.0,
+            trigger_entry_budget=0.0,
+            min_prior_months=1,
+            recent_month_count=3,
+            min_short_losing_months=1.0,
+        )
+        march = side_context_interaction_guard_apply.replacement_trigger_metrics(
+            summary,
+            target_month="2025-03",
+            trigger_match_mode="signal_short_raw_gap",
+            trigger_short_gap_threshold=5.0,
+            trigger_entry_budget=0.0,
+            min_prior_months=1,
+            recent_month_count=3,
+            min_short_losing_months=1.0,
+        )
+        march_min4 = side_context_interaction_guard_apply.replacement_trigger_metrics(
+            summary,
+            target_month="2025-03",
+            trigger_match_mode="signal_short_raw_gap",
+            trigger_short_gap_threshold=5.0,
+            trigger_entry_budget=0.0,
+            min_prior_months=4,
+            recent_month_count=3,
+            min_short_losing_months=1.0,
+        )
+
+        self.assertFalse(february["replacement_trigger_active"])
+        self.assertEqual(february["replacement_trigger_short_losing_months"], 0.0)
+        self.assertTrue(march["replacement_trigger_active"])
+        self.assertEqual(march["replacement_trigger_short_losing_months"], 1.0)
+        self.assertEqual(march["replacement_trigger_short_pnl"], 8.0)
+        self.assertFalse(march_min4["replacement_trigger_active"])
+        self.assertEqual(march_min4["replacement_trigger_prior_months"], 2)
+
+    def test_triggered_replacement_modes_union_raw_gap_with_triggered_risk(self):
+        timestamps = pd.to_datetime(
+            [
+                "2025-03-01T00:00:00Z",
+                "2025-03-01T00:01:00Z",
+                "2025-03-01T00:02:00Z",
+                "2025-03-01T00:03:00Z",
+            ]
+        )
+        df = pd.DataFrame({"timestamp": timestamps})
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "dataset_month": ["2025-03"] * 4,
+                "pred_long_best_adjusted_pnl": [10.0, 13.0, 19.0, 18.0],
+                "pred_short_best_adjusted_pnl": [17.0, 14.0, 20.0, 22.0],
+                "pred_short_profit_barrier_hit": [0.8, 0.8, 0.4, 0.8],
+            }
+        )
+        config = ModelPolicyConfig(predictions=Path("predictions.parquet"))
+        signal = pd.Series([-1, -1, -1, -1], index=df.index)
+
+        _, low_ev_active = side_context_interaction_guard_apply.interaction_entry_context(
+            df,
+            predictions,
+            config,
+            signal,
+            context_columns=("dataset_month",),
+            match_mode="signal_short_raw_gap_or_triggered_low_ev",
+            short_gap_threshold=5.0,
+            replacement_trigger_active=True,
+            replacement_pred_ev_threshold=15.0,
+        )
+        _, profit_miss_active = side_context_interaction_guard_apply.interaction_entry_context(
+            df,
+            predictions,
+            config,
+            signal,
+            context_columns=("dataset_month",),
+            match_mode="signal_short_raw_gap_or_triggered_profit_miss",
+            short_gap_threshold=5.0,
+            replacement_trigger_active=True,
+            replacement_profit_barrier_threshold=0.5,
+        )
+        _, inactive_trigger = side_context_interaction_guard_apply.interaction_entry_context(
+            df,
+            predictions,
+            config,
+            signal,
+            context_columns=("dataset_month",),
+            match_mode="signal_short_raw_gap_or_triggered_low_ev",
+            short_gap_threshold=5.0,
+            replacement_trigger_active=False,
+            replacement_pred_ev_threshold=15.0,
+        )
+
+        self.assertEqual(low_ev_active.tolist(), [True, True, False, False])
+        self.assertEqual(profit_miss_active.tolist(), [True, False, True, False])
+        self.assertEqual(inactive_trigger.tolist(), [True, False, False, False])
+
     def test_prior_side_drift_alert_mode_uses_only_prior_matching_contexts(self):
         timestamps = pd.to_datetime(
             [
