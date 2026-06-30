@@ -77,6 +77,7 @@
 - 00206で早期2024のchronological HGB+MLP predictionとstateful risk OOFを生成した。risk OOFは `2024-05` から出せたが、2024-03..06は2023-only model、2024-07以降は既存familyなのでbridge artifact。純2024利用可能6ヶ月ではsource p10/replm10が合計 `+21.6688` で最良、no-sideは `+12.0322` だが worst/DD が最良。次は混合familyのままgap0/gap5比較へ進むか、全2024を同一chronological protocolで再生成するかを決める。
 - 00207で全2024を同一chronological protocolへ再生成し、混合family問題を解消した。OOF 8ヶ月ではsource p10/replm10が相対最良でも total `-3.1736` でNoTradeを超えない。HGB validationではcalibrated selectionが `0` rowなのにtestでは大量選択されるため、次はside hookではなくentry EV scale drift、validation-time calibration、NoTrade first admission layerを主軸にする。`gap0/gap5/budget0` をこのfamilyで試す場合も、標準採用ではなく診断stress testとして扱う。
 - 00208でraw EV thresholdのvalidation過適合を確認した。raw `entry12/short3` はvalidation `+22.7292` からfull 2024 test `-442.4662` へ崩れた。一方、calibrated `entry10/short6` と `entry12/short6` はtestでNoTradeを超えたが、validationでは `0` tradeのNoTrade tieとしてしか選ばれていない。次はNoTrade tie selectorを事前固定し、fresh chronological foldsでcalibrated high-threshold candidateを再評価する。
+- 00209でNoTrade-first selectorを実装し、fresh `2024-03..04` validationでは best calibrated `entry12/short6` も `-1.8610` でNoTrade未満だった。diagnostic fixed test `2024-05..12` は `+65.4014` だが、validation-negative候補なので標準採用しない。次は追加chronological model-refit folds、side/regime別calibrated EV quantile/rank、support-aware admission特徴で validation total がNoTradeを超えるかを確認する。
 
 ## 外部データ候補
 
