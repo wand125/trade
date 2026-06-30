@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 09:14 Short budget drift trigger
+
+- `scripts/experiments/short_budget_drift_trigger_selection.py` を追加した。primary candidateからdefensive `gap0/budget0` へ切り替えるtriggerを、対象月より前のrecent metricsだけで評価する。
+- 代表ルールは `primary=gap5/budget0`、`defensive=gap0/budget0`、`recent_short_losing_months >= 1`。min4では2025-05..08だけ `gap5/budget0`、2025-09..12は `gap0/budget0` を選んだ。
+- min4は total `+232.2466`, worst `-46.0150`, max DD `129.7364`, short PnL `+154.7572`。`00190` の defensive_budget と同水準。
+- min8は直近prior deteriorationがすでに見えるため、ほぼ常時 `gap0/budget0` へ落ち、total `-15.0104`, worst `-45.4774`。tailは小さいがNoTrade未満。
+- wide primary候補に `gap10/budget0` を入れても、min4 total `+223.1380`, worst `-79.0794` で `gap5/budget0 -> gap0/budget0` に負けた。
+- 判断: trigger scriptは残す。標準採用はしない。これは性能改善ではなく、budget0発火をtarget-month-independentに説明する診断。次はprediction-share / label-share side drift featuresを足す。
+- report: `docs/reports/00191_2026-06-30_short_budget_drift_trigger.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/short_budget_drift_trigger_selection.py tests/test_short_budget_drift_trigger_selection.py`: OK; `python3 -m unittest tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 122 tests; `git diff --check`: OK
+
 ### 09:05 Context entry budget zero
 
 - `context_entry_budget=0` を許可し、`entry_budget_context` が欠損しているrowはbudget対象外にした。`side_context_interaction_guard_apply.py` は active context だけをbudget対象にし、inactive rowは欠損budget contextとして渡す。

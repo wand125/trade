@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00190` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` によりprior-onlyは大きく改善したが、min8ではまだNoTradeを超えない。 |
+| `00186`..`00191` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior triggerによりtailは大きく縮んだが、min8ではまだNoTradeを超えない。 |
 
 ## テーマ別読む順
 
@@ -29,6 +29,7 @@
 2. `00175_2026-06-29_side_drift_diagnostics.md`
 3. `00179_2026-06-29_side_drift_guard_residual_diagnostics.md`
 4. `00190_2026-06-30_context_entry_budget_zero.md`
+5. `00191_2026-06-30_short_budget_drift_trigger.md`
 
 ### 現在の候補軸を知る
 
@@ -36,6 +37,7 @@
 2. `00182_2026-06-30_context_drawdown_guard_margin_sweep.md`
 3. `00188_2026-06-30_short_entry_budget_guard.md`
 4. `00190_2026-06-30_context_entry_budget_zero.md`
+5. `00191_2026-06-30_short_budget_drift_trigger.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -87,6 +89,15 @@ Question: active short contextをbudget0で完全stay-flat化するとprior-only
 Best evidence: defensive_budget min4 total +232.2466, worst -46.0150; min8 total -15.0104, worst -45.4774
 Decision: hookとselectorは残す。標準採用しない
 Next: gap0/budget0固定、prior side-drift detector、low-trade residual rule
+```
+
+```text
+Report: 00191 Short Budget Drift Trigger
+Status: diagnostic baseline / not standard
+Question: prior recent deteriorationだけでgap5/budget0からgap0/budget0へ切り替えられるか
+Best evidence: min4 total +232.2466, worst -46.0150; min8 total -15.0104, worst -45.4774
+Decision: trigger scriptは残す。00190を上回らないため標準採用しない
+Next: prediction-share / label-share side drift featuresをtriggerに追加
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 09:05 JST
+最終更新: 2026-06-30 09:14 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+short budget drift trigger診断を追加した。`short_budget_drift_trigger_selection.py` は、通常candidateからdefensive `gap0/budget0` へ落とす条件を、対象月より前のrecent metricsだけで評価する。代表ルール `gap5/budget0 -> gap0/budget0` with `recent_short_losing_months >= 1` は min4 total `+232.2466`, worst `-46.0150` で、2025-05..08は `gap5/budget0`、2025-09..12は `gap0/budget0` を選ぶ。min8はほぼ常時 `gap0/budget0` で total `-15.0104`, worst `-45.4774`。`00190` を上回る性能改善ではなく、budget0発火をtarget-month-independentに説明する診断。標準採用せず、次は prediction-share / label-share side drift features をtriggerへ足す。詳細は `docs/reports/00191_2026-06-30_short_budget_drift_trigger.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 context entry budgetに `0` を許可し、budget context欠損rowは制限対象外にした。`side_context_interaction_guard_apply.py` は active short contextだけをbudget対象にするため、`signal_short_raw_gap` active contextを完全にstay-flat化できる。budget-zero sweepでは all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`, max DD `126.7826`。prior-onlyでは min4 `defensive_budget` が total `+232.2466`, worst `-46.0150`、min8 `defensive_budget` が `gap0/budget0` を選び total `-15.0104`, worst `-45.4774`。`00189` より大幅改善したが、min8はまだNoTrade未満なので標準採用せず、次は prior side-drift deterioration から budget0 を発火させる検知器を作る。詳細は `docs/reports/00190_2026-06-30_context_entry_budget_zero.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

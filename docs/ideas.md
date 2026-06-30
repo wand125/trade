@@ -62,6 +62,7 @@
 - `context_entry_budget` はall-windowで強いが、total/worstだけのprior-only selectionではNoTrade超えに届かない。次は prior short active PnL、short losing-month count、late-regime short deteriorationを使って `gap0/budget1`, `gap0/budget2`, `gap5/budget1` のような防御候補を選ぶ。
 - short budget selectorではactive/short PnL最大化より `defensive_budget` が有効。次は固定 `gap0/budget1` を追加未使用月で確認し、budget=1でも残る初回short大損を fast stop、per-regime first-loss cap、または prior side-label inversion による budget0 で抑える。
 - `context_entry_budget=0` は `gap0/budget0` でlate short regimeのworstを大きく縮める。常時固定ではなく、prior side-drift deterioration、short label/prediction share inversion、recent short losing-month countから budget0 を発火する低容量detectorを作る。
+- realized PnLだけのshort budget drift triggerは `gap5/budget0 -> gap0/budget0` を説明できるが、`00190` を上回らない。次は `pred_ev_short_share - actual_label_short_share`、`pred_ev_matches_nonflat_label_rate`、prior alert countをtrigger特徴に加え、PnL悪化前にbudget0へ落とせるか確認する。
 
 ## 外部データ候補
 

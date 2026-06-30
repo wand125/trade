@@ -301,6 +301,24 @@ python scripts/experiments/short_budget_guard_selection.py \
   --recent-month-count 3
 ```
 
+To test an explicit prior-only drift trigger that switches from an aggressive
+short-budget candidate to defensive `budget0`, use:
+
+```bash
+python scripts/experiments/short_budget_drift_trigger_selection.py \
+  --summary-by-run data/reports/backtests/<short_entry_budget_sweep>/summary_by_run.csv \
+  --output-dir data/reports/backtests \
+  --label short_budget_drift_trigger_selection \
+  --primary-candidates 5:0,5:1,0:1 \
+  --defensive-candidate 0:0 \
+  --min-train-months 4 \
+  --recent-month-count 3
+```
+
+This is a diagnostic selector. It should be read as "can prior deterioration
+turn on budget0 before the bad target month?", not as a free parameter search
+for the best-looking rule.
+
 Rows outside the side-drift guarded prediction context are assigned unique
 inactive contexts, so ordinary trades do not share drawdown state. This is a
 dynamic backtest diagnostic and should still be judged by worst month,

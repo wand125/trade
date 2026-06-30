@@ -12,7 +12,7 @@
    現時点の研究評価、採用/保留/棄却の整理、次に検証すべき論点。
 
 2. [Report Map](report_map.md)
-   `00001` から `00190` までのレポート系列をテーマ別に圧縮した地図。
+   `00001` から `00191` までのレポート系列をテーマ別に圧縮した地図。
 
 3. 詳細確認が必要なときだけ `../reports/` の個別レポートを読む。
 
@@ -24,7 +24,7 @@
 
 直近で有望なのは以下の「risk-control / diagnostic axis」だが、いずれも標準policyではない。
 
-- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善したが、min8 はまだNoTrade未満。
+- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善し、drift triggerで発火条件も説明できたが、min8 はまだNoTrade未満。
 - online side-month drawdown guard: realized lossだけで発火する防御軸。`worst` objectiveならtailは削れるが利益policyではない。
 - side drift guard + admission margin: bad short contextを検出し、弱いreplacementを抑える診断baseline。損失は大きく縮むがまだ負。
 - `250..260m` holding max cap: holding側の安定化候補。ただし fresh failure はholdingではなくside driftが主因。
