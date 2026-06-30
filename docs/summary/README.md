@@ -1,6 +1,6 @@
 # Trade Research Summary
 
-最終更新: 2026-06-30 10:07 JST
+最終更新: 2026-06-30 10:18 JST
 
 このディレクトリは、`docs/reports/` の大量の実験レポートを俯瞰するための入口。
 
@@ -12,7 +12,7 @@
    現時点の研究評価、採用/保留/棄却の整理、次に検証すべき論点。
 
 2. [Report Map](report_map.md)
-   `00001` から `00195` までのレポート系列をテーマ別に圧縮した地図。
+   `00001` から `00196` までのレポート系列をテーマ別に圧縮した地図。
 
 3. 詳細確認が必要なときだけ `../reports/` の個別レポートを読む。
 
@@ -24,7 +24,7 @@
 
 直近で有望なのは以下の「risk-control / diagnostic axis」だが、いずれも標準policyではない。
 
-- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善し、realized/context-alert composite triggerで発火条件も説明できたが、min8 はまだNoTrade未満。alert context限定budget/admissionやfirst-loss capはglobal budget0系に届かず、月次prediction-shareやalert単独triggerも直接採用しない。
+- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善し、realized/context-alert composite triggerで発火条件も説明できたが、min8 はまだNoTrade未満。alert context限定budget/admissionやfirst-loss capはglobal budget0系に届かない。00196で、late windowのcommon shortとreplacement shortが主因だと分解済み。
 - online side-month drawdown guard: realized lossだけで発火する防御軸。`worst` objectiveならtailは削れるが利益policyではない。
 - side drift guard + admission margin: bad short contextを検出し、弱いreplacementを抑える診断baseline。損失は大きく縮むがまだ負。
 - `250..260m` holding max cap: holding側の安定化候補。ただし fresh failure はholdingではなくside driftが主因。

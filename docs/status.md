@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 10:07 JST
+最終更新: 2026-06-30 10:18 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+budget0後のreplacement path診断を追加した。alert context `budget0` は all-windowで baseline `-90.1378` を `+6.0170` へ改善するが、global `gap0/budget0` `+418.2596`、global `gap5/budget0` `+508.9838` に届かない。late 2025-08..12では alert context `budget0` が base short `-333.9178` を除去しても、common short `-382.7524` と replacement short `-293.7604` が残る。一方 global `gap0/budget0` は late base short `-716.6702` を全て消し、replacement shortを `-38.6214` に抑える。alert context限定gateを本流として増やさず、次は `gap5/budget0` から `gap0/budget0` へ落とすdeterioration triggerを追加未使用月・追加データで再探索なし検証する。詳細は `docs/reports/00196_2026-06-30_budget0_replacement_path_diagnostics.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 alert context限定のfirst-loss / fast-stop診断を追加した。`prior_side_drift_alert` contextだけに `context_drawdown_guard_loss_threshold` を掛け、near first-loss capとして `0.01` も試した。全12ヶ月bestは `threshold=5` の total `-71.8598` でbaseline `-90.1378` より小改善だが、00194のalert-context `budget0` `+6.0170` には届かない。prior-only selectionは min4 total `-396.3152`, min8 total `-609.1884`。標準採用せず、次はalert contextだけに閉じず、非alert short exposure、global `gap0/budget0` の再探索なし検証、budget0後のreplacement path診断へ戻る。詳細は `docs/reports/00195_2026-06-30_alert_context_first_loss_cap.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

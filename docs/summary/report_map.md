@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 10:07 JST
+最終更新: 2026-06-30 10:18 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00195` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossも狭すぎて、min8ではまだNoTradeを超えない。 |
+| `00186`..`00196` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196で、global budget0との差はlate common shortとreplacement shortの残存だと分解した。 |
 
 ## テーマ別読む順
 
@@ -34,6 +34,7 @@
 7. `00193_2026-06-30_context_alert_budget_trigger.md`
 8. `00194_2026-06-30_alert_context_budget_admission.md`
 9. `00195_2026-06-30_alert_context_first_loss_cap.md`
+10. `00196_2026-06-30_budget0_replacement_path_diagnostics.md`
 
 ### 現在の候補軸を知る
 
@@ -46,6 +47,7 @@
 7. `00193_2026-06-30_context_alert_budget_trigger.md`
 8. `00194_2026-06-30_alert_context_budget_admission.md`
 9. `00195_2026-06-30_alert_context_first_loss_cap.md`
+10. `00196_2026-06-30_budget0_replacement_path_diagnostics.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -142,6 +144,15 @@ Question: prior side-drift alert context内でrealized loss後だけ止めれば
 Best evidence: all-window best threshold5 improves baseline -90.1378 to -71.8598, but alert-context budget0 is +6.0170; prior-only min4 is -396.3152 and min8 is -609.1884
 Decision: alert-context first-loss / fast-stopは採用しない
 Next: non-alert short exposure and replacement-path diagnostics after budget0
+```
+
+```text
+Report: 00196 Budget0 Replacement Path Diagnostics
+Status: diagnostic preflight / not standard
+Question: alert context budget0がglobal gap0/gap5 budget0に届かない理由は何か
+Best evidence: late alert-context budget0 removes base short -333.9178 but leaves common short -382.7524 and replacement short -293.7604; global gap0 removes late base short -716.6702 and admits only -38.6214 replacement short
+Decision: alert-context-only gateを本流として増やさない。gap0 is defensive baseline; gap5 needs deterioration trigger
+Next: fixed fresh verification of gap0, gap5, and gap5 -> gap0 trigger without re-search
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

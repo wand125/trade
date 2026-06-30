@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 10:18 Budget0 replacement path diagnostics
+
+- alert context限定 `budget0` が global `gap0/budget0` / `gap5/budget0` に届かない理由を、`model-trade-delta` の `only_base`, `only_candidate`, `common` short exposureで分解した。
+- all-windowでは alert context `budget0` が `-90.1378 -> +6.0170` へ改善する一方、global `gap0/budget0` は `+418.2596`、global `gap5/budget0` は `+508.9838`。
+- late 2025-08..12では alert context `budget0` が base short `-333.9178` を除去しても、common short `-382.7524` と replacement short `-293.7604` が残り、candidate short PnL は `-676.5128`。
+- global `gap0/budget0` は late base short `-716.6702` を全て消し、replacement shortを `-38.6214` に抑える。これがalert context限定との差分。
+- global `gap5/budget0` は early windowを `+832.6886` まで伸ばしall-window topだが、late replacement short `-286.9878` が残る。
+- 判断: alert context限定gateを本流として増やさない。次は `gap5/budget0` をearlyで使い、deterioration後に `gap0/budget0` へ落とすtriggerを追加未使用月・追加データで再探索なし検証する。
+- report: `docs/reports/00196_2026-06-30_budget0_replacement_path_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `model-trade-delta` 3系統 OK; comparison artifact OK
+
 ### 10:07 Alert context first loss cap
 
 - 00194の次ステップとして、prior side-drift alert context内だけに current-month realized loss fast stopを掛けた。
