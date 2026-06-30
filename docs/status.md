@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 14:50 JST
+最終更新: 2026-06-30 15:01 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV admission input diagnosticsを追加した。prediction row入力側で、calibrated EV、side gap、entry rank、MLP holding validity、stateless admission countをfamily/month/config単位で分解する。cal2024は `56,077` rows中 `side_gap>=5` が `11` しかなく、`entry10/short9/min_rank0.0` はstateless entry `0`。holding validityは全rowで通っており主因ではない。refit2025は逆にlong EV scaleが大きく、同configで `29,567` entries、うち `29,522` がlong。fixed-positiveに見えた `entry14/short9/min_rank0.6` もfresh2024では0 entry、refit2025では25 entriesすべてlong。判断: 絶対EV threshold + side margin + rank gateはfold間scale driftに弱く、標準policyはNoTrade。次はEV/rankのside-regime-local quantile化と新chronological foldを優先する。詳細は `docs/reports/00217_2026-06-30_entry_ev_admission_input_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV cal2024 rank windowを追加した。00215でnon-rankだった `2024-01..02` をfull rank gridに再生成し、`144` rows、trade count `8`, total `-70.3272` を確認した。これは `2023-01..12` fitのvalidation期間なのでclean outer holdoutではなく `calibration-validation` として扱う。cal2024 + fresh2024 + refit2025の3-window selectorでは、strict support10/worst0はNoTrade、cal2024を0-trade非負確認扱いにしたrelaxed gateだけが以前と同じ `entry10/short9/min_rank0.0` を選び、side095ではNoTradeへ戻る。判断: cal2024 full rank化はaccepted artifactだが、採用候補は増えていない。標準policyはNoTrade。詳細は `docs/reports/00216_2026-06-30_entry_ev_cal2024_rank_window.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

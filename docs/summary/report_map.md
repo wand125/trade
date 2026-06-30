@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 14:50 JST
+最終更新: 2026-06-30 15:01 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00216` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00216で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank windowを分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。side/regime/window gateを振っても固定テストに耐える候補は出ていない。sparse high-rank fixed-positive rowもvalidation未観測/negativeで、採用するとhindsightになる。既存artifactでclean full-rank validationとして使えるのは2本だけで、cal2024はfull-rank化してもcalibration-validationであり、fixed testをvalidationへ流用しない。 |
+| `00186`..`00217` | short-specific interaction / entry budget / side calibration / chronological 2024 OOF / entry EV admission selector | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossは狭すぎる。00196..00217で、global budget0との差、`gap5` replacement short、prior signal coverage、entry-level residual signal、dynamic hook、replacement risk target、triggered profit-miss hook、same-family fixed check、side calibration、早期2024 risk列生成、全2024同一chronological protocol、entry EV calibration/admission、NoTrade-first selector、rank gate support、追加2025-refit fold、multi-window selector、gate sensitivity、sparse rank診断、validation inventory、cal2024 rank window、entry EV admission入力診断を分解した。rank-gated admissionは2024 fresh validationではsupport不足、2025 refitではsupport gate通過後にtest崩壊、multi-window relaxed selectionもfixed testsで崩壊したため標準採用しない。side/regime/window gateを振っても固定テストに耐える候補は出ていない。sparse high-rank fixed-positive rowもvalidation未観測/negativeで、採用するとhindsightになる。cal2024はfull-rank化してもcalibration-validationであり、prediction入力側ではside margin supportがほぼない。refit2025はlong EV scaleが大きすぎるため、絶対EV thresholdをそのままfold横断のadmission scaleにはしない。 |
 
 ## テーマ別読む順
 
@@ -55,6 +55,7 @@
 28. `00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`
 29. `00215_2026-06-30_entry_ev_validation_inventory.md`
 30. `00216_2026-06-30_entry_ev_cal2024_rank_window.md`
+31. `00217_2026-06-30_entry_ev_admission_input_diagnostics.md`
 
 ### 現在の候補軸を知る
 
@@ -88,6 +89,7 @@
 28. `00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`
 29. `00215_2026-06-30_entry_ev_validation_inventory.md`
 30. `00216_2026-06-30_entry_ev_cal2024_rank_window.md`
+31. `00217_2026-06-30_entry_ev_admission_input_diagnostics.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -355,6 +357,33 @@ Question: fixed-test-positive sparse high-rank rowをfixed PnLで選ばず、val
 Best evidence: 72 candidates, validation eligible 0. The only fixed-positive audit row is entry14/short9/min_rank0.6, but validation total is -0.3844, trades 3, min window trades 0, side share 1.0000. fresh2024 is 0 trades; refit2025 is 3 long-only trades and negative.
 Decision: sparse high-rank row is not selectable. It is a hindsight clue, not validation-supported edge.
 Next: add validation windows and side/regime-aware rank or calibrated EV quantile before any sparse-row promotion.
+```
+
+```text
+Report: 00215 Entry EV Validation Inventory
+Status: accepted inventory infrastructure / not standard
+Question: 既存entry EV/rank artifactsを追加validation windowとして安全に使えるか。
+Best evidence: 39 metrics files inspected. Full-rank validation candidates are only fresh2024 2024-03..04 and refit2025 2025-01..02. 2025-03..12 is fixed test; 2024-05..12 is fixed test and partial rank.
+Decision: fixed-test artifactsをvalidationへ流用しない。新foldか明示的なrank sweep再生成が必要。
+Next: regenerate 2024-01..02 full-rank as calibration-validation, then create new chronological fold for true evidence.
+```
+
+```text
+Report: 00216 Entry EV Cal2024 Rank Window
+Status: accepted calibration-validation artifact / not standard
+Question: 2024-01..02をfull-rank grid化するとmulti-window admission evidenceは増えるか。
+Best evidence: cal2024 full-rank has 144 rows, 8 trades, total -70.3272. 3-window strict selector returns NoTrade. Relaxed selector repeats entry10/short9/min_rank0.0, but side095 returns NoTrade.
+Decision: cal2024 is not a clean holdout and adds no active support. Standard remains NoTrade.
+Next: diagnose why high-threshold rows vanish and avoid treating no-trade calibration months as positive evidence.
+```
+
+```text
+Report: 00217 Entry EV Admission Input Diagnostics
+Status: accepted diagnostic infrastructure / not standard
+Question: cal2024で高threshold/rank候補が消え、refit2025で候補が過剰に出る理由はprediction入力側で説明できるか。
+Best evidence: cal2024 side_gap>=5 is only 11 / 56,077 and entry10/short9/min_rank0.0 has 0 stateless entries, while holding validity is complete. Refit2025 same config has 29,567 entries, 29,522 long. entry14/short9/min_rank0.6 has fresh2024 0 entries and refit2025 25 long-only entries.
+Decision: absolute EV thresholds are not stable cross-fold admission scale. Use side/regime-local quantile/rank diagnostics before policy promotion.
+Next: compare raw EV, calibrated EV, EV quantile, side-gap quantile, and entry-rank quantile across new chronological folds.
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

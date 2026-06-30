@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 15:01 Entry EV admission input diagnostics
+
+- 00216の次アクションとして、cal2024で高threshold/rank候補が消える理由をprediction row入力側で診断した。
+- `scripts/experiments/entry_ev_admission_input_diagnostics.py` を追加した。calibrated EV、side gap、entry rank、MLP holding validity、stateless admission countを `monthly_base_summary.csv`, `monthly_config_summary.csv`, `family_config_summary.csv` に保存する。
+- cal2024は `56,077` rows中 `side_gap>=5` が `11` しかなく、`entry10/short9/min_rank0.0` はstateless entry `0`。holding validityは `56,077 / 56,077` なので主因ではない。
+- fresh2024は同configで `323` entries、うちshort `301`。ただし月別では0 entry月もあり、supportは薄い。
+- refit2025は同configで `29,567` entries、うちlong `29,522`。long EV q95が `23.52..23.71` とcal/freshの約2倍で、fold間scale driftが強い。
+- sparse fixed-positiveの `entry14/short9/min_rank0.6` はfresh2024で0 entry、refit2025で25 long-only entries。validation入力側でもshort-positiveの根拠はない。
+- 判断: 絶対EV threshold + side margin + rank gateはfold間scale driftに弱い。標準policyはNoTrade。次はside/regime-local EV quantile / rank quantileと新chronological foldを優先する。
+- report: `docs/reports/00217_2026-06-30_entry_ev_admission_input_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: admission input diagnostics unit tests OK; py_compile OK; diagnostic run OK
+
 ### 14:50 Entry EV cal2024 rank window
 
 - 00215の次アクションとして、既存non-rankだった `2024-01..02` validation artifactをfull rank gridで再生成した。
