@@ -428,6 +428,24 @@ This is a causal-availability diagnostic: condition summaries use only months
 before the replacement trade month. Same-month alert columns are attribution
 context only and should not be used to promote a live rule.
 
+To test whether a specific residual context has entry-time warning signs or a
+current-month first-loss state, add chronological context state to the
+replacement rows:
+
+```bash
+python scripts/experiments/short_budget_entry_signal_audit.py \
+  --replacement-rows data/reports/backtests/<replacement_signal_audit>/replacement_signal_rows.csv \
+  --output-dir data/reports/backtests \
+  --label short_budget_entry_signal_audit \
+  --focus-combined-regime range_low_vol \
+  --focus-session-regime ny_overlap
+```
+
+This is still a replacement-row preflight. It uses only earlier replacement
+trades in the same candidate/window/month/context for current-month state, but
+it does not simulate the next replacement trade that would appear after a
+dynamic block.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 

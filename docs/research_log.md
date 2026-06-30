@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 10:51 Entry signal residual context audit
+
+- 00198でprior context signalが拾えなかった `range_low_vol/ny_overlap` replacement shortを、entry-level予測特徴と同月first-loss状態で監査した。
+- `short_budget_entry_signal_audit.py` を追加し、同じ `candidate/window/month/combined_regime/session_regime` の過去replacement tradeだけで `prior_context_pnl` / `prior_context_loss_count` を作るようにした。
+- `gap5/budget0` late 2025-08..12 replacement short `-286.9878` に対し、focus context after first lossは `-37.9120` しか覆えず、`-249.0758` が残る。
+- `range_low_vol/ny_overlap` 限定の `pred_side_confidence_gap <= 0 OR pred_taken_entry_local_rank >= 0.52` は同context `-86.5792` のうち `-80.9316` を覆う。
+- 00198の `prior alert OR prior pred-bias` にfocus entry signalを足すと、`gap5` late replacement shortの残存は `-94.5582` から `-34.8906` まで縮む。
+- 判断: dynamic policy候補として残す。ただし実行済みreplacement row削除の上限診断であり、標準採用しない。次は `side_context_interaction_guard_apply.py` にfocus context + entry-level conditionのbudget/admission hookを入れて再replacement込みで確認する。
+- report: `docs/reports/00199_2026-06-30_entry_signal_residual_context_audit.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/short_budget_entry_signal_audit.py tests/test_short_budget_entry_signal_audit.py`: OK; `python3 -m unittest tests.test_short_budget_entry_signal_audit tests.test_short_budget_replacement_signal_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_fixed_rule_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 20 tests; `git diff --check`: OK
+
 ### 10:42 Replacement prior signal audit
 
 - 2024側同一family固定適用の可用性を確認した。既存の2025 `predictions_side_guard_input.parquet` は2025-01..12のみで、2024の `guard_fixed_standard_validation_base` はcostなし・max hold 480・risk penalty 0の別familyだったため、同一条件検証には追加生成が必要。

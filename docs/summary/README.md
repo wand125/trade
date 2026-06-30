@@ -1,6 +1,6 @@
 # Trade Research Summary
 
-最終更新: 2026-06-30 10:42 JST
+最終更新: 2026-06-30 10:54 JST
 
 このディレクトリは、`docs/reports/` の大量の実験レポートを俯瞰するための入口。
 
@@ -12,7 +12,7 @@
    現時点の研究評価、採用/保留/棄却の整理、次に検証すべき論点。
 
 2. [Report Map](report_map.md)
-   `00001` から `00198` までのレポート系列をテーマ別に圧縮した地図。
+   `00001` から `00199` までのレポート系列をテーマ別に圧縮した地図。
 
 3. 詳細確認が必要なときだけ `../reports/` の個別レポートを読む。
 
@@ -24,7 +24,7 @@
 
 直近で有望なのは以下の「risk-control / diagnostic axis」だが、いずれも標準policyではない。
 
-- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善し、fixed `gap5 -> gap0` triggerもmin4..6では改善する。ただしmin8はNoTrade未満。00196..00198で、late common short、`gap5` replacement short、prior signal coverageを分解済み。context alertだけでは不足し、`range_low_vol/ny_overlap` のentry-level検知が次の焦点。
+- `short` entry budget: repeated active short を制限する軸。`budget0` 追加で prior-only が大きく改善し、fixed `gap5 -> gap0` triggerもmin4..6では改善する。ただしmin8はNoTrade未満。00196..00199で、late common short、`gap5` replacement short、prior signal coverage、`range_low_vol/ny_overlap` のentry-level signalを分解済み。次は `gap5` / primary branch 限定のdynamic hookで検証する。
 - online side-month drawdown guard: realized lossだけで発火する防御軸。`worst` objectiveならtailは削れるが利益policyではない。
 - side drift guard + admission margin: bad short contextを検出し、弱いreplacementを抑える診断baseline。損失は大きく縮むがまだ負。
 - `250..260m` holding max cap: holding側の安定化候補。ただし fresh failure はholdingではなくside driftが主因。
