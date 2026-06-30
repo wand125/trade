@@ -347,6 +347,25 @@ python scripts/experiments/short_budget_drift_trigger_selection.py \
   --recent-month-count 3
 ```
 
+To apply budget or admission margin only to the prior alert contexts themselves
+instead of switching the whole month, use `prior_side_drift_alert` in the
+dynamic interaction backtest:
+
+```bash
+python scripts/experiments/side_context_interaction_guard_apply.py \
+  --runs data/reports/backtests/<side_drift_guard_runs> \
+  --data data/processed/histdata/xauusd/xauusd_m1.parquet \
+  --context-columns combined_regime,session_regime \
+  --match-modes prior_side_drift_alert \
+  --side-drift-alerts data/reports/modeling/<reference>/side_drift_alerts.csv,data/reports/modeling/<fresh>/side_drift_alerts.csv \
+  --alert-recent-month-count 3 \
+  --alert-sides short \
+  --thresholds inf \
+  --min-entry-margins inf \
+  --active-min-entry-margins=-inf,10,20 \
+  --entry-budgets 0,1,inf
+```
+
 This is a diagnostic selector. It should be read as "can prior deterioration
 turn on budget0 before the bad target month?", not as a free parameter search
 for the best-looking rule.

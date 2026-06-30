@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 09:32 JST
+最終更新: 2026-06-30 09:57 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00193` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできず、min8ではまだNoTradeを超えない。 |
+| `00186`..`00194` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admissionも狭すぎて、min8ではまだNoTradeを超えない。 |
 
 ## テーマ別読む順
 
@@ -32,6 +32,7 @@
 5. `00191_2026-06-30_short_budget_drift_trigger.md`
 6. `00192_2026-06-30_prediction_side_drift_trigger.md`
 7. `00193_2026-06-30_context_alert_budget_trigger.md`
+8. `00194_2026-06-30_alert_context_budget_admission.md`
 
 ### 現在の候補軸を知る
 
@@ -42,6 +43,7 @@
 5. `00191_2026-06-30_short_budget_drift_trigger.md`
 6. `00192_2026-06-30_prediction_side_drift_trigger.md`
 7. `00193_2026-06-30_context_alert_budget_trigger.md`
+8. `00194_2026-06-30_alert_context_budget_admission.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -120,6 +122,15 @@ Question: context/session side drift alertでglobal budget0発火を改善でき
 Best evidence: alert-only over-triggers to +150.3206; alert AND short losing month matches 00191 at +232.2466; min8 remains -15.0104
 Decision: global context-alert triggerは採用しない
 Next: apply budget/admission only to alert contexts, not entire months
+```
+
+```text
+Report: 00194 Alert Context Budget Admission
+Status: diagnostic infrastructure / not standard
+Question: prior side-drift alert contextだけにbudget0や追加entry marginを掛けるとglobal month switchより堅牢になるか
+Best evidence: alert-context budget0 improves baseline -90.1378 to +6.0170, but prior-only min4 best is -316.4554 and min8 best is -542.9034
+Decision: hookは残すが標準採用しない
+Next: context-specific first-loss cap or current-month realized context loss fast stop
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

@@ -111,6 +111,84 @@ class SideContextInteractionGuardApplyTests(unittest.TestCase):
         self.assertTrue(context.iloc[1].startswith("inactive|"))
         self.assertTrue(context.iloc[2].startswith("inactive|"))
 
+    def test_prior_side_drift_alert_mode_uses_only_prior_matching_contexts(self):
+        timestamps = pd.to_datetime(
+            [
+                "2025-02-01T00:00:00Z",
+                "2025-02-01T00:01:00Z",
+                "2025-02-01T00:02:00Z",
+                "2025-02-01T00:03:00Z",
+            ]
+        )
+        df = pd.DataFrame({"timestamp": timestamps})
+        predictions = pd.DataFrame(
+            {
+                "decision_timestamp": timestamps,
+                "combined_regime": [
+                    "range_low_vol",
+                    "up_normal_vol",
+                    "down_normal_vol",
+                    "late_only",
+                ],
+                "session_regime": ["london", "asia", "london", "rollover"],
+            }
+        )
+        alerts = side_context_interaction_guard_apply.read_side_drift_alerts(
+            []
+        )
+        self.assertIsNone(alerts)
+        alerts = pd.DataFrame(
+            {
+                "month": ["2025-01", "2025-01", "2025-02"],
+                "side": ["short", "long", "short"],
+                "combined_regime": ["range_low_vol", "up_normal_vol", "late_only"],
+                "session_regime": ["london", "asia", "rollover"],
+                "is_alert": [True, True, True],
+            }
+        )
+        alerts = side_context_interaction_guard_apply.read_side_drift_alerts_from_frame(
+            alerts
+        )
+        config = ModelPolicyConfig(predictions=Path("predictions.parquet"))
+        signal = pd.Series([-1, 1, -1, -1], index=df.index)
+
+        context, active = side_context_interaction_guard_apply.interaction_entry_context(
+            df,
+            predictions,
+            config,
+            signal,
+            context_columns=("combined_regime", "session_regime"),
+            match_mode="prior_side_drift_alert",
+            side_drift_alerts=alerts,
+            target_month="2025-02",
+            alert_sides=("short", "long"),
+        )
+
+        self.assertEqual(active.tolist(), [True, True, False, False])
+        self.assertEqual(
+            context.iloc[0],
+            "guarded|combined_regime=range_low_vol|session_regime=london",
+        )
+        self.assertEqual(
+            context.iloc[1],
+            "guarded|combined_regime=up_normal_vol|session_regime=asia",
+        )
+        self.assertTrue(context.iloc[3].startswith("inactive|"))
+
+    def test_filter_active_signal_by_entry_margin_blocks_weak_active_rows(self):
+        signal = pd.Series([-1, -1, 1, -1])
+        active = pd.Series([True, True, True, False])
+        entry_margin = pd.Series([4.0, 12.0, float("nan"), 1.0])
+
+        filtered = side_context_interaction_guard_apply.filter_active_signal_by_entry_margin(
+            signal,
+            active,
+            entry_margin,
+            active_min_entry_margin=10.0,
+        )
+
+        self.assertEqual(filtered.tolist(), [0, -1, 0, -1])
+
     def test_active_only_budget_context_drops_inactive_rows(self):
         entry_context = pd.Series(
             [

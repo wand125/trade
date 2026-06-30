@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 09:57 Alert context budget admission
+
+- `side_context_interaction_guard_apply.py` に `match_mode=prior_side_drift_alert` を追加し、対象月より前の `side_drift_alerts.csv` でalertになった `combined_regime + session_regime` のshort contextだけへ介入できるようにした。
+- `--side-drift-alerts`, `--alert-recent-month-count`, `--alert-sides`, `--active-min-entry-margins` を追加した。`active_min_entry_margin` はalert context内だけに追加entry marginを掛ける診断。
+- 2025-01..12のbaselineは `-90.1378`。alert context限定 `budget0` は `+6.0170`, worst `-268.9572`, short PnL `-338.2390` まで改善したが、00190/00191のglobal `gap0/budget0` / drift trigger min4 `+232.2466` には届かない。
+- active margin filterはreplacement tradeを増やして悪化した。`active_min_entry_margin=10,budget=inf` は total `-299.3786`、`20,budget=inf` は `-132.9616`。
+- prior-only selectionも失敗。min4 best `worst` は target 8ヶ月 total `-316.4554`、min8 best `worst` は target 4ヶ月 total `-542.9034`。
+- 判断: hookは診断infraとして残すが標準採用しない。alert contextだけへの単純budget/admissionは狭すぎる。次は context-specific first-loss cap、または現在月realized context lossを使ったfast stopへ進む。
+- report: `docs/reports/00194_2026-06-30_alert_context_budget_admission.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_side_context_interaction_guard_apply tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_docs_reports tests.test_short_budget_drift_trigger_selection`: OK, 119 tests; `git diff --check`: OK
+
 ### 09:32 Context alert budget trigger
 
 - `short_budget_drift_trigger_selection.py` に `--side-drift-alerts` を追加し、`side_drift_alerts.csv` の context/session alertをprior trigger metricとして使えるようにした。

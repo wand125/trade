@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 09:32 JST
+最終更新: 2026-06-30 09:57 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-context alert budget trigger診断を追加した。`short_budget_drift_trigger_selection.py` は `--side-drift-alerts` を受け取り、`side_drift_alerts.csv` の context/session alertをprior trigger metricとして使える。alert単独では早すぎて常時 `gap0/budget0` に倒れ、min4 total `+150.3206` 止まり。一方 `recent_short_alert_and_short_losing_months >= 1` は min4 total `+232.2466`, worst `-46.0150` で00191と同一成績。min8は total `-15.0104` のまま。標準採用せず、次は月全体ではなくalert contextだけのbudget/admission marginを試す。詳細は `docs/reports/00193_2026-06-30_context_alert_budget_trigger.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+alert context限定のbudget/admission診断を追加した。`side_context_interaction_guard_apply.py` は `match_mode=prior_side_drift_alert` を受け取り、対象月より前の `side_drift_alerts.csv` に出たshort alert contextだけをactiveにできる。baseline `-90.1378` に対し、alert context限定 `budget0` は `+6.0170` まで改善したが、global `gap0/budget0` / drift trigger min4 `+232.2466` には届かない。active margin filterはreplacement tradeを増やして悪化し、prior-only selectionも min4 best `-316.4554`, min8 best `-542.9034`。標準採用せず、次はcontext-specific first-loss capまたは現在月realized context lossによるfast stopへ進む。詳細は `docs/reports/00194_2026-06-30_alert_context_budget_admission.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+context alert budget trigger診断を追加した。`short_budget_drift_trigger_selection.py` は `--side-drift-alerts` を受け取り、`side_drift_alerts.csv` の context/session alertをprior trigger metricとして使える。alert単独では早すぎて常時 `gap0/budget0` に倒れ、min4 total `+150.3206` 止まり。一方 `recent_short_alert_and_short_losing_months >= 1` は min4 total `+232.2466`, worst `-46.0150` で00191と同一成績。min8は total `-15.0104` のまま。標準採用せず、alert contextだけのbudget/admission marginは00194で検証した。詳細は `docs/reports/00193_2026-06-30_context_alert_budget_trigger.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 prediction side drift trigger診断を追加した。`short_budget_drift_trigger_selection.py` は `--prediction-month-summaries` を受け取り、prior windowの `pred_short_bias`, `pred_short_share`, `actual_short_share`, `pred_match_rate`, `pred_side_score` をtrigger metricとして使える。min4では `recent_actual_short_share_mean < 0.45` が total `+210.3068`, worst `-46.0150` まで出たが、00191 の realized trigger `+232.2466` には届かない。純prediction-share系は早すぎて常時 `gap0/budget0` に倒れ、min4 total `+150.3206`。min8はどのprediction系triggerも total `-15.0104` のまま。標準採用せず、次は context/session単位のside drift alertか realized first-lossとのAND条件を試す。詳細は `docs/reports/00192_2026-06-30_prediction_side_drift_trigger.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
