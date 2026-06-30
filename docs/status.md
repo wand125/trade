@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 19:32 JST
+最終更新: 2026-06-30 19:41 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV side-balance downside coverage auditを追加した。00236で低pressureに見えたfloor10候補を、required role coverageとprior supportで監査した。required rolesは `cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`。strict coverage gateも、PnL床だけ緩めたrelaxed coverage gateも全候補NoTrade。coverage sensitivity 216条件も全てNoTradeだった。floor10系はfresh role欠損、active role不足、prior-zero/pressureで落ち、floor5系は3 role coverageを満たすがfresh tail、required role/month PnL、cal2024 prior-zero過多で落ちる。判断: coverage/support auditはaccepted、現候補は標準採用しない。詳細は `docs/reports/00237_2026-06-30_entry_ev_side_balance_downside_coverage_audit.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV side-balance downside selector診断を追加した。00235のinteractionを個別trade hard gateではなくcandidate-level selector featureとして集約し、`risk_high_share`, `interaction_high_share`, `prior_zero_share`, `feature_pressure_score`, `uncovered_loss_pnl` をrole/month/candidate単位で出した。strict NoTrade-first gateでは全候補が不合格。診断用の緩和gateでは q99/q95 floor10 が残るが、active rolesは2、prior zero shareは約 `0.90` で、fresh role coverage不足とprior evidence不足を伴う薄い候補だった。q95 floor5は pressure `0.3116`, uncovered loss `-153.0528` でfresh tailを説明する一方、pressureだけで選ぶとcoverage不足候補を拾う。判断: candidate-level aggregationはaccepted、side-balance/downside selector feature単独は標準採用しない。詳細は `docs/reports/00236_2026-06-30_entry_ev_side_balance_downside_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

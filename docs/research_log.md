@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 19:41 Entry EV side-balance downside coverage audit
+
+- 00236の反省に沿って、candidate平均ではなく required role ごとのcoverage/supportを監査する `scripts/experiments/entry_ev_side_balance_downside_coverage_audit.py` を追加した。
+- strict artifactは `data/reports/backtests/20260630_104105_20260630_entry_ev_side_balance_downside_coverage_strict_s1/`。
+- relaxed artifactは `data/reports/backtests/20260630_104115_20260630_entry_ev_side_balance_downside_coverage_relaxed_s1/`。
+- required rolesは `cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`。role present/active/trades/PnL/prior-zero/support/pressureをcandidateごとに集計した。
+- strict coverage gateでは全候補NoTrade。floor10系はfresh role欠損、active role不足、prior-zero/pressureで落ちる。floor5系は3 role coverageを満たすがrequired role/month PnLとcal2024 prior-zeroで落ちる。
+- PnL床だけ `min required role total -15`, `min required month -10` に緩めても全候補NoTrade。coverage sensitivity 216行も全てNoTradeだった。
+- 低pressure floor10候補は「安全」ではなく、fresh role未観測とprior support欠損が原因。covered floor5候補はfresh tailが解けていない。
+- 判断: coverage/support auditはaccepted。pressure/risk featuresはsupport/coverage preflight後にだけ使う。現候補は標準採用しない。
+- report: `docs/reports/00237_2026-06-30_entry_ev_side_balance_downside_coverage_audit.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: coverage audit unit tests OK; py_compile OK; strict/relaxed coverage audit OK
+
 ### 19:32 Entry EV side-balance downside selector
 
 - 00235の次アクションとして、side-balance/downside interactionを個別trade hard gateではなくcandidate-level selector featureとして集約する `scripts/experiments/entry_ev_side_balance_downside_selector.py` を追加した。
