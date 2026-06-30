@@ -409,6 +409,25 @@ This reads `trade_delta_rows.csv`, filters `delta_status=only_candidate` and
 `direction=short`, then writes replacement summaries by month,
 regime/session, exit reason, and worst individual trades.
 
+To check whether those replacement trades were detectable from prior context
+signals, join them with side-drift alerts, prediction group summaries, and
+selected-trade group summaries:
+
+```bash
+python scripts/experiments/short_budget_replacement_signal_audit.py \
+  --replacement-rows data/reports/backtests/<replacement_trade_audit>/replacement_rows.csv \
+  --side-drift-alerts data/reports/modeling/<reference>/side_drift_alerts.csv,data/reports/modeling/<fresh>/side_drift_alerts.csv \
+  --prediction-group-summaries data/reports/modeling/<reference>/prediction_group_summary.csv,data/reports/modeling/<fresh>/prediction_group_summary.csv \
+  --selected-trade-group-summaries data/reports/modeling/<reference>/selected_trade_group_summary.csv,data/reports/modeling/<fresh>/selected_trade_group_summary.csv \
+  --output-dir data/reports/backtests \
+  --label short_budget_replacement_signal_audit \
+  --recent-month-count 3
+```
+
+This is a causal-availability diagnostic: condition summaries use only months
+before the replacement trade month. Same-month alert columns are attribution
+context only and should not be used to promote a live rule.
+
 Calibrate OOF trade-failure probabilities by side/regime without refitting the
 failure classifier:
 

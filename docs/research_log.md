@@ -4,6 +4,18 @@
 
 ## 2026-06-30 JST
 
+### 10:42 Replacement prior signal audit
+
+- 2024側同一family固定適用の可用性を確認した。既存の2025 `predictions_side_guard_input.parquet` は2025-01..12のみで、2024の `guard_fixed_standard_validation_base` はcostなし・max hold 480・risk penalty 0の別familyだったため、同一条件検証には追加生成が必要。
+- `short_budget_replacement_signal_audit.py` を追加し、00197のreplacement short rowsを、対象月より前のside-drift alerts / prediction group summary / selected trade group summaryへ結合した。
+- `gap5/budget0` late 2025-08..12 replacement short `-286.9878` に対し、prior alert単体は `-133.9066` だけを覆い、`-153.0812` が残る。
+- prior alert OR prior max prediction short bias `>= 0.30` は `-192.4296` を覆い、残存を `-94.5582` まで縮める。ただしこれは実行済みreplacement row削除の上限診断で、dynamic policyではない。
+- context別では `up_low_vol/ny_overlap -103.5756` は prior prediction biasで拾えるが、`range_low_vol/ny_overlap -86.5792` は prior alert 0、prior biasも弱く、既存prior context signalではほぼ拾えない。
+- 判断: context alert強化だけでは不足。次は `range_low_vol/ny_overlap` のentry-level EV overestimate、NY overlap固有side inversion、またはcurrent-month first-loss controlを調べる。
+- report: `docs/reports/00198_2026-06-30_replacement_prior_signal_audit.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: `python3 -m py_compile scripts/experiments/short_budget_replacement_signal_audit.py tests/test_short_budget_replacement_signal_audit.py`: OK; `python3 -m unittest tests.test_short_budget_replacement_signal_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_fixed_rule_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 18 tests; `git diff --check`: OK
+
 ### 10:31 Fixed short budget trigger audit
 
 - `gap5/budget0 -> gap0/budget0` triggerを、primary/defensive/trigger条件固定で再探索なし監査する `short_budget_fixed_rule_audit.py` を追加した。

@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-06-30 10:31 JST
+最終更新: 2026-06-30 10:42 JST
 
 ## 結論
 
@@ -19,7 +19,7 @@
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
 | Short raw gap guard | 介入対象の発見には有効 | all-window bestは total `+18.5106` だが prior-only min4 `-274.9360` | 単独採用しない |
-| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。fixed trigger min4 `+232.2466`, min6 `+26.3116`, min8 `-15.0104`。late replacement shortは `gap5` 67件 `-286.9878`、`gap0` 16件 `-38.6214` | 現在最有望な防御軸。ただしlate-onlyでは利益policyにならない。追加未使用月/2024側へ固定適用が必要 |
+| Short entry budget / budget0 | active short contextを完全stay-flat化でき、fixed `gap5 -> gap0` triggerも対象月前だけで説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。fixed trigger min4 `+232.2466`, min6 `+26.3116`, min8 `-15.0104`。`gap5` late replacement short `-286.9878` のうち prior alert OR pred-biasで `-192.4296` は覆えるが `range_low_vol/ny_overlap` が残る | 現在最有望な防御軸。ただしlate-onlyでは利益policyにならない。context alert強化だけでは不足 |
 | Online context feature | post-filterでは損失説明力あり | context特徴追加はOOF AUCを改善せず。min8 large_loss AUC `0.5523 -> 0.5364` | raw feature昇格なし |
 | Cooldown / recovery | hard blockの緩和 | cooldown/recoveryはprior-onlyで既存hard block系に負ける | 採用しない |
 
@@ -47,6 +47,7 @@
 - alert-context budget/admission hook as diagnostics only
 - alert-context first-loss / fast-stop as diagnostics only
 - budget0 replacement-path decomposition as candidate adoption preflight
+- replacement prior signal audit as preflight, not dynamic policy
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -77,13 +78,14 @@
 - confidenceやside gapだけでは除外できない
 - guard後も replacement short が残り、損失の尾部を作る
 - alert contextだけを止めても late common short `-382.7524` と replacement short `-293.7604` が残る
+- `gap5` replacement shortのうち `up_low_vol/ny_overlap` は prior prediction biasで拾えるが、`range_low_vol/ny_overlap` は prior context signalでほぼ拾えない
 
 したがって、次の改善は「holding capの再探索」ではなく、short side admission / first-loss control / replacement-risk control を優先する。
 
 ## 次に検証すべきこと
 
-1. `gap0/budget0`, `gap5/budget0`, `gap5 -> gap0` deterioration triggerを、追加未使用月または2024側の同一familyへ再探索なしで適用する。
-2. `gap5` replacement shortの主因である `up_low_vol/ny_overlap`, `range_low_vol/ny_overlap`, `range_low_vol/asia` を、target-monthを見ない prior side drift / realized first-loss / EV calibration で検知できるか調べる。
+1. `range_low_vol/ny_overlap` の未検知replacement shortを、entry-level EV overestimate、NY overlap固有side inversion、またはcurrent-month first-loss controlで検出できるか調べる。
+2. `gap0/budget0`, `gap5/budget0`, `gap5 -> gap0` deterioration triggerを、追加未使用月または2024側の同一familyへ再探索なしで適用する。2024側はcoststress 260 + stateful risk5 + replacement margin10のprediction/backtest生成が先に必要。
 3. side drift guard後の replacement trade を、削除tradeと追加tradeに分けて評価する。
 4. short/range_low_vol の context drawdownを、現在月のrealized PnLだけで発火させる低容量hookとして評価する。
 5. side prior driftを、predicted side share vs dense label side share の prior window差分で補正する。
@@ -107,3 +109,4 @@
 - `00195`: alert context first loss cap
 - `00196`: budget0 replacement path diagnostics
 - `00197`: fixed short budget trigger audit
+- `00198`: replacement prior signal audit
