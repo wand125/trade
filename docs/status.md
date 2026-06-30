@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 09:57 JST
+最終更新: 2026-06-30 10:07 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-alert context限定のbudget/admission診断を追加した。`side_context_interaction_guard_apply.py` は `match_mode=prior_side_drift_alert` を受け取り、対象月より前の `side_drift_alerts.csv` に出たshort alert contextだけをactiveにできる。baseline `-90.1378` に対し、alert context限定 `budget0` は `+6.0170` まで改善したが、global `gap0/budget0` / drift trigger min4 `+232.2466` には届かない。active margin filterはreplacement tradeを増やして悪化し、prior-only selectionも min4 best `-316.4554`, min8 best `-542.9034`。標準採用せず、次はcontext-specific first-loss capまたは現在月realized context lossによるfast stopへ進む。詳細は `docs/reports/00194_2026-06-30_alert_context_budget_admission.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+alert context限定のfirst-loss / fast-stop診断を追加した。`prior_side_drift_alert` contextだけに `context_drawdown_guard_loss_threshold` を掛け、near first-loss capとして `0.01` も試した。全12ヶ月bestは `threshold=5` の total `-71.8598` でbaseline `-90.1378` より小改善だが、00194のalert-context `budget0` `+6.0170` には届かない。prior-only selectionは min4 total `-396.3152`, min8 total `-609.1884`。標準採用せず、次はalert contextだけに閉じず、非alert short exposure、global `gap0/budget0` の再探索なし検証、budget0後のreplacement path診断へ戻る。詳細は `docs/reports/00195_2026-06-30_alert_context_first_loss_cap.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+alert context限定のbudget/admission診断を追加した。`side_context_interaction_guard_apply.py` は `match_mode=prior_side_drift_alert` を受け取り、対象月より前の `side_drift_alerts.csv` に出たshort alert contextだけをactiveにできる。baseline `-90.1378` に対し、alert context限定 `budget0` は `+6.0170` まで改善したが、global `gap0/budget0` / drift trigger min4 `+232.2466` には届かない。active margin filterはreplacement tradeを増やして悪化し、prior-only selectionも min4 best `-316.4554`, min8 best `-542.9034`。標準採用しない。context-specific first-loss capは00195で検証済み。詳細は `docs/reports/00194_2026-06-30_alert_context_budget_admission.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 context alert budget trigger診断を追加した。`short_budget_drift_trigger_selection.py` は `--side-drift-alerts` を受け取り、`side_drift_alerts.csv` の context/session alertをprior trigger metricとして使える。alert単独では早すぎて常時 `gap0/budget0` に倒れ、min4 total `+150.3206` 止まり。一方 `recent_short_alert_and_short_losing_months >= 1` は min4 total `+232.2466`, worst `-46.0150` で00191と同一成績。min8は total `-15.0104` のまま。標準採用せず、alert contextだけのbudget/admission marginは00194で検証した。詳細は `docs/reports/00193_2026-06-30_context_alert_budget_trigger.md`。採番と最新判断はファイル更新時刻や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

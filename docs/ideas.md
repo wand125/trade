@@ -64,8 +64,8 @@
 - `context_entry_budget=0` は `gap0/budget0` でlate short regimeのworstを大きく縮める。常時固定ではなく、prior side-drift deterioration、short label/prediction share inversion、recent short losing-month countから budget0 を発火する低容量detectorを作る。
 - realized PnLだけのshort budget drift triggerは `gap5/budget0 -> gap0/budget0` を説明できるが、`00190` を上回らない。
 - 月次平均の prediction-share / label-share drift trigger は発火が早すぎ、00191のrealized triggerを上回らなかった。次は `dataset_month + combined_regime + session_regime` などのcontext/session単位alert、または `prediction short bias high AND recent short losing month >= 1` のAND条件で、PnL悪化前のbudget0発火を再評価する。
-- context/session alertとshort losing monthのANDは00191と同じ成績で、global month-level budget0 triggerの上積みにはならなかった。alert contextだけの `context_entry_budget=0/1` や追加entry marginは00194で検証したため、context-specific first-loss capへ進む。
-- alert contextだけへの `context_entry_budget=0/1` と追加entry marginはbaselineを改善したがglobal budget0系に届かず、prior-onlyでも崩れた。次は同じalert context内で、最初のrealized loss後だけを止める first-loss cap、または現在月のrealized context PnL / active loss breach を使うfast stopを試す。
+- context/session alertとshort losing monthのANDは00191と同じ成績で、global month-level budget0 triggerの上積みにはならなかった。alert contextだけの `context_entry_budget=0/1` や追加entry marginは00194、context-specific first-loss capは00195で検証済み。
+- alert contextだけへの `context_entry_budget=0/1` と追加entry marginはbaselineを改善したがglobal budget0系に届かず、prior-onlyでも崩れた。同じalert context内のfirst-loss / fast-stopも全期間小改善止まりでprior-onlyでは崩れた。次はalert contextだけに閉じず、budget0後に残る非alert short exposureとreplacement pathを分解する。
 
 ## 外部データ候補
 

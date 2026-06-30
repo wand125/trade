@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-06-30 09:57 JST
+最終更新: 2026-06-30 10:07 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -19,7 +19,7 @@
 | `00157`..`00174` | holding overlay / holding shortening / max hold cap | holding capは強い改善軸だが、fresh 2025-09..12ではside driftが主因で救えない。`250..260m`は感度候補止まり。 |
 | `00175`..`00179` | side drift diagnostics and guard | fresh failureはshort過剰選択。side drift guard + admission marginは損失を縮めるが、replacement shortが残る。 |
 | `00180`..`00185` | online context drawdown/state | realized PnLだけを使うonline guardとstate診断を追加。hard block/worst objectiveはtail制御に有効だがprofit policyではない。 |
-| `00186`..`00194` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admissionも狭すぎて、min8ではまだNoTradeを超えない。 |
+| `00186`..`00195` | short-specific interaction / entry budget | short raw gapは介入箇所を示す。`budget0` とprior realized/context-alert composite triggerによりtailは大きく縮んだが、prediction/alert単独triggerは上積みできない。alert context限定budget/admission/first-lossも狭すぎて、min8ではまだNoTradeを超えない。 |
 
 ## テーマ別読む順
 
@@ -33,6 +33,7 @@
 6. `00192_2026-06-30_prediction_side_drift_trigger.md`
 7. `00193_2026-06-30_context_alert_budget_trigger.md`
 8. `00194_2026-06-30_alert_context_budget_admission.md`
+9. `00195_2026-06-30_alert_context_first_loss_cap.md`
 
 ### 現在の候補軸を知る
 
@@ -44,6 +45,7 @@
 6. `00192_2026-06-30_prediction_side_drift_trigger.md`
 7. `00193_2026-06-30_context_alert_budget_trigger.md`
 8. `00194_2026-06-30_alert_context_budget_admission.md`
+9. `00195_2026-06-30_alert_context_first_loss_cap.md`
 
 ### holding / exit 系の経緯を知る
 
@@ -130,7 +132,16 @@ Status: diagnostic infrastructure / not standard
 Question: prior side-drift alert contextだけにbudget0や追加entry marginを掛けるとglobal month switchより堅牢になるか
 Best evidence: alert-context budget0 improves baseline -90.1378 to +6.0170, but prior-only min4 best is -316.4554 and min8 best is -542.9034
 Decision: hookは残すが標準採用しない
-Next: context-specific first-loss cap or current-month realized context loss fast stop
+Next: context-specific first-loss cap was tested in 00195; then move to non-alert short exposure
+```
+
+```text
+Report: 00195 Alert Context First Loss Cap
+Status: diagnostic only / not standard
+Question: prior side-drift alert context内でrealized loss後だけ止めればbudget0より堅牢になるか
+Best evidence: all-window best threshold5 improves baseline -90.1378 to -71.8598, but alert-context budget0 is +6.0170; prior-only min4 is -396.3152 and min8 is -609.1884
+Decision: alert-context first-loss / fast-stopは採用しない
+Next: non-alert short exposure and replacement-path diagnostics after budget0
 ```
 
 この型により、各レポートの数値を「採用判断」とセットで読めるようにする。

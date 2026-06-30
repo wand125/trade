@@ -4,6 +4,19 @@
 
 ## 2026-06-30 JST
 
+### 10:07 Alert context first loss cap
+
+- 00194の次ステップとして、prior side-drift alert context内だけに current-month realized loss fast stopを掛けた。
+- 既存 `context_drawdown_guard_loss_threshold` を `prior_side_drift_alert` contextへ限定して使った。`0` はbacktestで禁止されているため、near first-loss capとして `0.01` も試した。
+- Clean gridは `threshold=0.01,1,5,10,20,40,60,inf`、`context_drawdown_guard_min_entry_margin=inf`、`context_entry_budget=inf`。
+- 全12ヶ月bestは `threshold=5` で total `-71.8598`, worst `-286.9232`, short PnL `-416.1158`。baseline `-90.1378` より小改善だが、00194のalert-context `budget0` `+6.0170` に届かない。
+- `threshold=0.01` は total `-155.3242`, short PnL `-499.5802` で悪化。即時first-loss blockは有益なalert-context tradeも消し、replacement exposureを悪化させる。
+- prior-only selectionは min4 total `-396.3152`, min8 total `-609.1884` と明確に失敗。
+- 判断: alert-context first-loss / fast-stopは標準採用しない。次はalert contextだけに閉じず、非alert short exposure、global `gap0/budget0` の再探索なし検証、budget0後のreplacement path診断へ戻る。
+- report: `docs/reports/00195_2026-06-30_alert_context_first_loss_cap.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: clean sweep OK; min4/min8 selection OK
+
 ### 09:57 Alert context budget admission
 
 - `side_context_interaction_guard_apply.py` に `match_mode=prior_side_drift_alert` を追加し、対象月より前の `side_drift_alerts.csv` でalertになった `combined_regime + session_regime` のshort contextだけへ介入できるようにした。

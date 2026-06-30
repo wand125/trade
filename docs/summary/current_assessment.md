@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-06-30 09:57 JST
+最終更新: 2026-06-30 10:07 JST
 
 ## 結論
 
@@ -19,7 +19,7 @@
 | Residual short failure | 残存損失はほぼshort | p10 + margin10 の負け月で short `-716.6702`、long `-8.4414` | 次はshort側のreplacement riskと初回損失制御 |
 | Online context drawdown | realized lossだけで発火できる | prior-only `worst` + margin-aware は min4 total `+69.9374`、min8 total `-199.4438` | risk mandate候補。利益最大化policyではない |
 | Short raw gap guard | 介入対象の発見には有効 | all-window bestは total `+18.5106` だが prior-only min4 `-274.9360` | 単独採用しない |
-| Short entry budget / budget0 | active short contextを完全stay-flat化でき、prior realized/context-alert composite triggerで発火条件も説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。realized trigger and context-alert composite min4 `+232.2466`、prediction/label-share trigger best `+210.3068`、alert context限定budget0 `+6.0170`、min8 `-15.0104` | 現在最有望な防御軸。ただしalert context限定budget/admissionは狭すぎて採用せず、次はfirst-loss cap / current-month realized context loss |
+| Short entry budget / budget0 | active short contextを完全stay-flat化でき、prior realized/context-alert composite triggerで発火条件も説明可能 | all-window `gap5/budget0` total `+508.9838`、防御寄り `gap0/budget0` total `+418.2596`, worst `-45.4774`。realized trigger and context-alert composite min4 `+232.2466`、prediction/label-share trigger best `+210.3068`、alert context限定budget0 `+6.0170`、alert context first-loss best `-71.8598`、min8 `-15.0104` | 現在最有望な防御軸。ただしalert context限定のbudget/admission/first-lossは狭すぎて採用しない |
 | Online context feature | post-filterでは損失説明力あり | context特徴追加はOOF AUCを改善せず。min8 large_loss AUC `0.5523 -> 0.5364` | raw feature昇格なし |
 | Cooldown / recovery | hard blockの緩和 | cooldown/recoveryはprior-onlyで既存hard block系に負ける | 採用しない |
 
@@ -44,6 +44,7 @@
 - prediction side drift trigger metrics as diagnostics only
 - context alert composite trigger as explanation of 00191
 - alert-context budget/admission hook as diagnostics only
+- alert-context first-loss / fast-stop as diagnostics only
 - holding max `250..260m` sensitivity
 - `signal_short_raw_gap` as intervention locator
 
@@ -60,6 +61,7 @@
 - monthly prediction-share triggerの直接採用
 - context alert count / loss-bias triggerの直接採用
 - alert context限定budget/admissionの標準採用
+- alert context限定first-loss / fast-stopの標準採用
 
 ## 中心的な失敗構造
 
@@ -78,7 +80,7 @@
 ## 次に検証すべきこと
 
 1. `gap0/budget0` と `gap0/budget1` を、追加未使用月または追加データへ再探索なしで適用する。
-2. alert contextだけへの単純budget/admissionは狭すぎたため、同じcontext内のfirst-loss capまたは現在月realized context lossによるfast stopを試す。
+2. alert context限定のbudget/admission/first-lossは狭すぎたため、非alert short exposureとreplacement pathを分解する。
 3. side drift guard後の replacement trade を、削除tradeと追加tradeに分けて評価する。
 4. short/range_low_vol の context drawdownを、現在月のrealized PnLだけで発火させる低容量hookとして評価する。
 5. side prior driftを、predicted side share vs dense label side share の prior window差分で補正する。
@@ -99,3 +101,4 @@
 - `00192`: prediction side drift trigger
 - `00193`: context alert budget trigger
 - `00194`: alert context budget admission
+- `00195`: alert context first loss cap
