@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 17:51 Entry EV executable EV calibration
+
+- 00228のexit-capture targetを使い、oracle EVを「現exit policyで実現できるcapture factor」で割り引く `scripts/experiments/entry_ev_executable_ev_calibration_diagnostics.py` を追加した。
+- validation q95/q99の主runは `data/reports/backtests/20260630_entry_ev_executable_ev_calibration_diagnostics/20260630_085034_entry_ev_executable_ev_validation_q95q99_nonnegative/`。
+- fresh q95_floor5 / 720mの主runは `data/reports/backtests/20260630_entry_ev_executable_ev_calibration_diagnostics/20260630_085034_entry_ev_executable_ev_fresh_q95_720_nonnegative/`。
+- low threshold sensitivityは `data/reports/backtests/20260630_entry_ev_executable_ev_calibration_diagnostics/20260630_085054_entry_ev_executable_ev_validation_q95q99_nonnegative_lowthr/` と `data/reports/backtests/20260630_entry_ev_executable_ev_calibration_diagnostics/20260630_085054_entry_ev_executable_ev_fresh_q95_720_nonnegative_lowthr/`。
+- non-negative capture factor `[0,1]` で、validation q95/q99のMAEは refit q95/q99で `20.8969..22.0208 -> 7.3980..7.6244`、fresh q95で `13.9256 -> 6.1870` へ改善した。
+- fresh q95/720でも、validation `14.7507 -> 8.4237`、fixed `13.4582 -> 7.0417` とMAE改善は一貫した。
+- 一方、低calibrated EV hard thresholdは不安定。`EV<3` はvalidation横断で `+87.4464` 改善するがfresh q95/720では `-31.9218` 悪化。`EV<2` はfresh q95/720で `+49.6632` 改善するがvalidation横断では `-5.3592` 悪化。
+- 判断: executable EV calibrationはaccepted diagnostic/continuous feature。hard thresholdは標準採用しない。標準policyはNoTrade。
+- report: `docs/reports/00229_2026-06-30_entry_ev_executable_ev_calibration.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: executable EV calibration unit tests OK; py_compile OK; validation/fresh diagnostic runs OK
+
 ### 17:40 Entry EV exit capture target diagnostics
 
 - 00227の反省として、entryを消すのではなく、同方向oracle利益余地を実現できないtradeをtarget化する `scripts/experiments/entry_ev_exit_capture_target_diagnostics.py` を追加した。

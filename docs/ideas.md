@@ -97,6 +97,7 @@
 - 00226でprior context risk scoreを実装した。`risk_score>=0.50` は広いhard blockより副作用が小さく、cal+fresh priorならfresh fixed q95_floor5/720mを改善したが、月次floorは通らない。次はprior role protocolを事前固定した複数windowで評価し、hard blockではなくselector feature、candidate rank、exit cap selectionの説明変数へ移す。
 - 00227でfresh `2024-03` 残差を分解した。18 tradesすべてにsame-side oracle edgeがあり、`no_edge_entry=0`。lossはdirection-side inversionとexit capture不足が主因なので、次は同方向oracle利益余地をrealizedで逃すtradeをexit timing targetにし、actual best sideが逆側へ大きく寄るtradeをdirection-side inversion targetとして分ける。予測EVはoracle基準ではなく、現exit policyで実現可能なEVへcalibrationする。
 - 00228でexit-capture targetを実装した。`exit_capture_failure` は失敗説明として強いが、勝ちroleにも多いためhard blockには使えない。次は `same_side_missed_loss` をrisk target、`low_exit_capture` や `exit_capture_shortfall` をexit timing / capture improvement targetへ分け、predicted oracle EVに expected capture ratio を掛けた executable EV calibration を試す。
+- 00229でexecutable EV calibrationを試した。raw EVの過大評価は大きく縮むが、低calibrated EV hard thresholdはwindow間で符号反転する。次は `pred_capture_calibrated_ev`, `executable_capture_factor`, `raw_ev - executable_ev` をselector/ranking featureにし、NoTrade-first monthly gateで評価する。
 
 ## 外部データ候補
 

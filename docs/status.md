@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 17:40 JST
+最終更新: 2026-06-30 17:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV executable EV calibrationを追加した。00228のexit-capture targetを使い、対象月より前のselected tradeだけからglobal + context-local capture factorを作り、`pred_capture_calibrated_ev = pred_taken_ev * executable_capture_factor` を診断した。non-negative capture factor `[0,1]` では、validation q95/q99のMAEが refit q95/q99で `20.8969..22.0208 -> 7.3980..7.6244`、fresh q95で `13.9256 -> 6.1870` へ改善。fresh q95/720でも validation `14.7507 -> 8.4237`、fixed `13.4582 -> 7.0417` と一貫して改善した。一方、hard thresholdは不安定で、`EV<3` はvalidation横断で `+87.4464` 改善するがfresh q95/720では `-31.9218` 悪化、`EV<2` はfresh q95/720で `+49.6632` 改善するがvalidation横断では `-5.3592` 悪化。判断: executable EVはaccepted continuous feature、hard thresholdは標準採用しない。詳細は `docs/reports/00229_2026-06-30_entry_ev_executable_ev_calibration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV exit capture target diagnosticsを追加した。00227で確認した「同方向oracle利益余地をexitで取り逃がす」失敗を、`same_side_missed_loss`, `low_exit_capture`, `large_exit_regret`, `exit_capture_failure` としてtarget化し、対象月より前の同一 `direction + combined_regime + session_regime` だけから `prior_exit_capture_risk_score` を作った。validation q95/q99では exit_capture_failure rateが refit q95/q99で `0.8621..0.8929`、fresh q95で `0.8421` と高く、targetとしては有用。ただし prior risk hard blockは不採用。validation横断では `risk>=0.20` が68 trades / `-23.1116` を拾う一方、fresh q95/720 fixedでは同thresholdが77 trades / `+225.3034` を消す。判断: exit-capture targetとprior scoreはaccepted diagnostics/training labels/features、標準policyはNoTrade。詳細は `docs/reports/00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
