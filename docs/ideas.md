@@ -111,6 +111,7 @@
 - 00240でsupport/pressure bucketだけの低容量calibrationを試すと、EV overestimate targetだけがchronological / role holdoutの両方で相対的に残った。direction/exit/lossは同じbucketでは弱いか逆向きなので、EV overestimateを先にcalibration headとして伸ばし、direction/exitはside/context/holding/capture特徴を足して別headで診断する。
 - 00241でEV overestimate riskを候補selectorへ戻すと、fresh損失はpointwiseに拾えるが、refit勝ちroleの高risk利益も削る。EV overestimateはhard blockではなく、side/context付きranking、entry score calibration、downside-weighted targetとして使う。
 - 00242でhigh-riskをside/context分解すると、`long/missing/low/negative drift` は大きく悪い一方、`short/missing/low/negative drift` はrefitで大きく勝つ。`missing/low` やhigh-riskを一律に削らず、directionとside driftを含む低容量interactionでranking/calibrationする。
+- 00243でcontext calibration sweepを行うと、`side_prior_pressure = direction + support_bucket + pressure_bucket + prior_support_bucket + feature_pressure_bucket` はbaseよりchronological/role holdout AUCが改善したが、`side_drift` や `full_context` は過細分化で悪化した。次はside_driftをbucket keyへ直入れせず、`side_prior_pressure` riskをprediction rowへ接続してrank/score penaltyとしてstateful replayする。
 
 ## 外部データ候補
 

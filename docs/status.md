@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 08:04 JST
+最終更新: 2026-07-01 08:16 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV context calibration sweepを追加した。00242のside/context分解を受け、`base`, `side`, `side_drift`, `side_prior_pressure`, `full_context` の低容量EV-overestimate calibration specを chronological month / role holdout で比較した。最良は `side_prior_pressure = direction + support_bucket + pressure_bucket + prior_support_bucket + feature_pressure_bucket` で、chronological AUC `0.7261`, role holdout AUC `0.7015`。`base` は chronological AUC `0.6741`, role holdout AUC `0.6401`。一方、`side_drift` と `full_context` はbucketが細かすぎてAUCが大きく悪化した。判断: `side_prior_pressure` を次のEV-overestimate calibration/ranking head候補にする。`side_drift_bucket` 直入れとpointwise screenのpolicy採用はしない。詳細は `docs/reports/00243_2026-07-01_entry_ev_context_calibration_sweep.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV overestimate context diagnosticsを追加した。00241で「EV overestimate riskはfresh損失を拾うがrefit勝ちも削る」と分かったため、high-risk rowsを `direction + support/pressure + prior support + feature pressure + side drift` で分解した。最悪contextは `long / missing / low / missing / low / negative` で 6 rows / `-83.0680`、全てhigh-risk。一方、`short / missing / low / missing / low / negative` は high-riskで `+89.2040` と強く勝っている。判断: EV overestimate riskはside/context付きfeatureとして有用だが、削除gateではなくside/context別ranking/calibration headへ回す。詳細は `docs/reports/00242_2026-07-01_entry_ev_overestimate_context_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

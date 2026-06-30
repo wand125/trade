@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-01 08:04 JST
+最終更新: 2026-07-01 08:16 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00242` | Component targets / EV overestimate | EV overestimateだけが相対的に残るtarget。selector featureとしてはNoTrade。context分解でhigh-riskの良し悪しがside/contextで反転するため、side/context付きranking/calibration headへ移す。 |
+| `00240`..`00243` | Component targets / EV overestimate | EV overestimateだけが相対的に残るtarget。selector featureとしてはNoTrade。context分解後、`side_prior_pressure` がbaseよりAUC改善したため、prediction row側のranking/calibration headへ移す。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00242` | composite hard gateからcomponent targetへ分解。EV overestimateは有望だが、hard selectorでは全候補NoTrade。high-riskはside/contextで反転する。 |
+| Latest decision | `00239`..`00243` | composite hard gateからcomponent targetへ分解。EV overestimateは有望だが、hard selectorでは全候補NoTrade。`side_prior_pressure` はAUC改善、`side_drift` 直入れは過細分化。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -41,6 +41,7 @@
 2. `00240_2026-07-01_entry_ev_component_target_calibration.md`
 3. `00241_2026-07-01_entry_ev_overestimate_risk_selector.md`
 4. `00242_2026-07-01_entry_ev_overestimate_context_diagnostics.md`
+5. `00243_2026-07-01_entry_ev_context_calibration_sweep.md`
 
 entry EV admissionを追う:
 
@@ -94,10 +95,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00242 Entry EV Overestimate Context Diagnostics
+Report: 00243 Entry EV Context Calibration Sweep
 Status: accepted diagnostics / not standard
-Question: EV-overestimate high-risk rowsは一律に悪いのか
-Best evidence: long/missing/low/missing/low/negative is -83.0680, while short/missing/low/missing/low/negative is +89.2040
-Decision: high-riskを一律blockしない。side/context付きfeatureにする
-Next: side/context ranking/calibration headを作り、stateful replayで確認する
+Question: side/context列を足したEV-overestimate calibrationはbaseより良いか
+Best evidence: side_prior_pressure AUC is 0.7261 chronological / 0.7015 role holdout, while side_drift falls to 0.3102 / 0.3883
+Decision: side_prior_pressureを次のcalibration/ranking head候補にする。side_drift直入れはしない
+Next: prediction rowへ接続し、rank/score penaltyをstateful replayで確認する
 ```

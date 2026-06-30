@@ -4,6 +4,19 @@
 
 ## 2026-07-01 JST
 
+### 08:16 Entry EV context calibration sweep
+
+- 00242の次アクションとして、EV overestimate targetの低容量context calibration specを比較する `scripts/experiments/entry_ev_context_calibration_sweep.py` を追加した。
+- artifactは `data/reports/backtests/20260630_231603_20260701_entry_ev_context_calibration_sweep_s2/`。
+- 比較specは `base`, `side`, `side_drift`, `side_prior_pressure`, `full_context`。
+- `side_prior_pressure = direction + support_bucket + pressure_bucket + prior_support_bucket + feature_pressure_bucket` が最良で、chronological AUC `0.7261`, role holdout AUC `0.7015`。`base` は chronological AUC `0.6741`, role holdout AUC `0.6401`。
+- `side_drift` は chronological AUC `0.3102`, role holdout AUC `0.3883`、`full_context` は chronological AUC `0.3489`, role holdout AUC `0.4903`。現データ量ではbucket直入れが過細分化している。
+- pointwiseでは `side_prior_pressure` q99/floor5 threshold `0.50` が 14 trades / `-60.0334` を除去し、kept total `+49.8048`, kept min role `+0.1230`, zero-filled kept min month `0.0000` まで改善する。ただしreplacement未評価なのでpolicyではない。
+- 判断: context calibration sweepはaccepted。`side_prior_pressure` を次のEV-overestimate ranking/calibration head候補にし、`side_drift_bucket` 直入れとpointwise screen採用はしない。
+- report: `docs/reports/00243_2026-07-01_entry_ev_context_calibration_sweep.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: context calibration sweep unit tests OK; py_compile OK; diagnostic run OK
+
 ### 08:04 Entry EV overestimate context diagnostics
 
 - 00241でEV overestimate high-riskがfresh損失とrefit勝ちの両方に出ると分かったため、high-risk rowsをside/contextで分解する `scripts/experiments/entry_ev_overestimate_context_diagnostics.py` を追加した。

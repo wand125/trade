@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-01 08:04 JST
+最終更新: 2026-07-01 08:16 JST
 
 ## 結論
 
@@ -15,7 +15,7 @@
 | 項目 | 状態 | 判断 |
 |---|---|---|
 | Standard policy | なし | NoTrade-firstを維持 |
-| Best current evidence | `00240` で EV overestimate target だけが低容量bucketでも相対的に残り、`00242` でside/context分解が必要と確認 | calibration / ranking head候補 |
+| Best current evidence | `00243` で `side_prior_pressure` がbaseよりchronological/role holdout AUCを改善 | 次の calibration / ranking head候補 |
 | Latest selector result | `00241` の strict / relaxed / sensitivity は全てNoTrade | 現候補を昇格しない |
 | Pointwise screens | q95 floor5 の high EV-overestimate risk rows は損失を拾うが、contextによって勝ちも削る | replacement未評価なのでpolicyではない |
 | Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement | hard blockではなく分解targetで扱う |
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00221` | raw / calibrated EV threshold、rank gate、quantile admission、positive floorを検証。候補数やscaleは改善するが、NoTrade-first selectorは通らない。 |
 | Exit capture / hold cap | `00222`..`00232` | `720m` や executable EV calibration は診断上有効。ただし月次tail、support不足、fresh/refit反転が残る。direct score標準化はしない。 |
 | Side balance / downside | `00233`..`00239` | side-balance単独、downside interaction、coverage gate、composite gateはいずれも標準候補を生まない。component targetへ分解する方針に転換。 |
-| Component target / EV overestimate | `00240`..`00242` | EV overestimateが相対的に最も使えるtarget。hard selectorではNoTradeのまま。context分解により、side/context付き ranking / calibration headへ移す。 |
+| Component target / EV overestimate | `00240`..`00243` | EV overestimateが相対的に最も使えるtarget。`side_prior_pressure` はbaseよりAUC改善。hard selectorではなく、prediction row側のranking/calibration headへ移す。 |
 
 ## 採用済みインフラ
 
@@ -43,6 +43,7 @@
 - component target calibration
 - EV-overestimate risk selector diagnostics
 - EV-overestimate context diagnostics
+- EV-overestimate context calibration sweep
 
 ## 採用しないもの
 
@@ -59,10 +60,11 @@
 - composite hard gate
 - component targetを単一binary no-trade labelへ潰すこと
 - EV-overestimate high-risk rowsのpointwise削除をstateful policy結果として扱うこと
+- `side_drift_bucket` や `full_context` を小データのbucket keyへ直入れすること
 
 ## 次にやること
 
-1. EV-overestimate riskを hard gate ではなく、side/context付き entry ranking / calibration head / downside-weighted targetとして使う。
+1. `side_prior_pressure` EV-overestimate riskをprediction rowへ接続し、hard gateではなく entry ranking / score calibration / downside-weighted targetとして使う。
 2. direction-side inversion targetは、selected side、actual best side、prior side PnL、prediction side drift、side margin/rankを足した別headで診断する。
 3. exit-capture targetは、holding cap、exit event prediction、oracle best holding、capture shortfallを足したexit-specific headへ進める。
 4. component targetsをより多いchronological windowsで生成し、early monthのno-prior問題を下げる。
@@ -77,6 +79,7 @@
 2. `00240_2026-07-01_entry_ev_component_target_calibration.md`
 3. `00241_2026-07-01_entry_ev_overestimate_risk_selector.md`
 4. `00242_2026-07-01_entry_ev_overestimate_context_diagnostics.md`
+5. `00243_2026-07-01_entry_ev_context_calibration_sweep.md`
 
 entry EV admissionの流れを見る:
 
