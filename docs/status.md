@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 00:27 JST
+最終更新: 2026-07-01 03:11 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV overestimate risk selectorを追加した。00240で相対的に残った `executable_ev_overestimate_target` を、対象月より前の `support_bucket + pressure_bucket` target率から `predicted_ev_overestimate_risk` に変換し、candidate / role / month単位のNoTrade-first selector featureとして評価した。strict gateも、PnL床を `min role -15`, `min month -10` へ緩めたrelaxed gateも全候補NoTrade。risk sensitivity 480条件も全てNoTradeだった。pointwiseには q95 floor5 の high-risk rows が 24 trades / `-35.7612` を拾い kept totalを `+14.6138 -> +50.3750` へ改善するが、refit勝ちroleにも high-risk rows `+46.1476` があり、hard blockは利益を削る。判断: EV-overestimate risk selector diagnosticsはaccepted、候補昇格はしない。次はranking/calibration headへ移す。詳細は `docs/reports/00241_2026-07-01_entry_ev_overestimate_risk_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV component target calibrationを追加した。00239の `component_trade_targets.csv` を使い、`support_bucket + pressure_bucket` の低容量bucket calibrationで chronological month / role holdout のtarget別診断を実施した。chronological mean AUCは `executable_ev_overestimate_target 0.6741`, `realized_loss_target 0.4819`, `exit_capture_failure_target 0.4457`, `direction_side_inversion_target 0.2644`。role holdoutでも `executable_ev_overestimate_target 0.6401` だけが相対的に残り、direction/exitは逆相関気味。判断: target calibration infrastructureはaccepted。`support+pressure` だけを十分なtarget modelとは扱わず、EV overestimateはcalibration head候補、direction/exitはside/context/holding/capture特徴を追加する。詳細は `docs/reports/00240_2026-07-01_entry_ev_component_target_calibration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

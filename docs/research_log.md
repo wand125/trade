@@ -4,6 +4,19 @@
 
 ## 2026-07-01 JST
 
+### 03:11 Entry EV overestimate risk selector
+
+- 00240で相対的に残った `executable_ev_overestimate_target` を、candidate selector featureとして評価する `scripts/experiments/entry_ev_overestimate_risk_selector.py` を追加した。
+- strict artifactは `data/reports/backtests/20260630_173608_20260701_entry_ev_overestimate_risk_selector_strict_s1/`。
+- relaxed artifactは `data/reports/backtests/20260630_173608_20260701_entry_ev_overestimate_risk_selector_relaxed_s1/`。
+- `support_bucket + pressure_bucket` から対象月より前だけで `predicted_ev_overestimate_risk` を作り、candidate / role / monthに集約した。
+- strict gateは全候補NoTrade。PnL床だけ `min role -15`, `min month -10` へ緩め、risk coverage条件も入れたrelaxed gateでも全候補NoTrade。risk sensitivity 480行も全てNoTradeだった。
+- pointwiseには q95 floor5 の high-risk rows が 24 trades / `-35.7612` を拾い、kept totalを `+14.6138 -> +50.3750` へ改善する。ただし q95 floor5のrefit勝ちroleにも high-risk rows `+46.1476` があり、hard blockは利益も削る。
+- 判断: EV-overestimate risk selector diagnosticsはaccepted。候補昇格はしない。EV overestimateはrisk blockerではなく、entry ranking / calibration head / downside-weighted targetへ移す。
+- report: `docs/reports/00241_2026-07-01_entry_ev_overestimate_risk_selector.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: overestimate risk selector unit tests OK; py_compile OK; strict/relaxed diagnostic runs OK
+
 ### 00:27 Entry EV component target calibration
 
 - 00239の `component_trade_targets.csv` を使い、target別の低容量calibration診断 `scripts/experiments/entry_ev_component_target_calibration.py` を追加した。
