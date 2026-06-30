@@ -112,6 +112,7 @@
 - 00241でEV overestimate riskを候補selectorへ戻すと、fresh損失はpointwiseに拾えるが、refit勝ちroleの高risk利益も削る。EV overestimateはhard blockではなく、side/context付きranking、entry score calibration、downside-weighted targetとして使う。
 - 00242でhigh-riskをside/context分解すると、`long/missing/low/negative drift` は大きく悪い一方、`short/missing/low/negative drift` はrefitで大きく勝つ。`missing/low` やhigh-riskを一律に削らず、directionとside driftを含む低容量interactionでranking/calibrationする。
 - 00243でcontext calibration sweepを行うと、`side_prior_pressure = direction + support_bucket + pressure_bucket + prior_support_bucket + feature_pressure_bucket` はbaseよりchronological/role holdout AUCが改善したが、`side_drift` や `full_context` は過細分化で悪化した。次はside_driftをbucket keyへ直入れせず、`side_prior_pressure` riskをprediction rowへ接続してrank/score penaltyとしてstateful replayする。
+- 00244で`side_prior_pressure` riskをprediction rowへ接続すると、s0.5はvalidation q95/floor5 `+68.0000`, q99/floor5 `+35.0014` まで改善したが、fixed 2025-03..12で q99/floor5 `-177.3790` と崩れた。次はpenalty強度調整ではなく、fixed 2025の崩れをside/context/replacement pathに分解し、追加chronological component-target windowを増やす。
 
 ## 外部データ候補
 

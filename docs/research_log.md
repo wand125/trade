@@ -4,6 +4,19 @@
 
 ## 2026-07-01 JST
 
+### 08:31 Entry EV side prior pressure policy inputs
+
+- 00243で有望だった `side_prior_pressure` EV-overestimate riskをprediction rowへ接続する `scripts/experiments/entry_ev_side_prior_pressure_policy_inputs.py` を追加した。
+- 入力生成artifactは `data/reports/backtests/20260630_232706_20260701_entry_ev_side_prior_pressure_policy_inputs_s1/`。
+- `side_prior_pressure_s0p5` validationは q95/floor5 total `+68.0000`, min role `-1.6986`, min month `-1.8000`, trades `30`。q99/floor5は total `+35.0014`, min role `+2.4158`, min month `-1.8000`, trades `17`。
+- strict selectorはNoTrade。relaxed selectorなら q99/floor5 が選ばれるが、これは `min_month_pnl=-2`, `min_role_trades=1`, `min_month_trades=0` の診断緩和。
+- fixed 2024-05..12では q99/floor5 0 trade、q95/floor5 2 trades / `+8.6980` とsupportが薄い。
+- fixed 2025-03..12では q99/floor5 `-177.3790`, q95/floor5 `-160.8606` と大きく崩れた。
+- 判断: prediction-row side-prior-pressure risk generation and stateful replayはaccepted。s0.5はvalidation改善のdiagnostic baselineに留め、標準policyにはしない。
+- report: `docs/reports/00244_2026-07-01_entry_ev_side_prior_pressure_policy_inputs.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: side-prior-pressure input unit tests OK; py_compile OK; input generation OK; validation/fixed stateful backtests OK
+
 ### 08:16 Entry EV context calibration sweep
 
 - 00242の次アクションとして、EV overestimate targetの低容量context calibration specを比較する `scripts/experiments/entry_ev_context_calibration_sweep.py` を追加した。

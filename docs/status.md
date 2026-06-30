@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 08:16 JST
+最終更新: 2026-07-01 08:31 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV side prior pressure policy inputsを追加した。00243で有望だった `side_prior_pressure` EV-overestimate riskをprediction rowへ接続し、side-balanced dense executable scoreをriskで割り引いた `side_prior_pressure_s0p5` / `s1` を生成した。s0.5のvalidationは q95/floor5 total `+68.0000`, q99/floor5 total `+35.0014` まで改善したが、strict selectorはNoTrade。relaxed selectorなら q99/floor5 が残るものの、fixed 2025-03..12で q99/floor5 `-177.3790`, q95/floor5 `-160.8606` と崩れた。判断: prediction-row risk generation/stateful replay infrastructureはaccepted。s0.5はdiagnostic baseline、標準policyにはしない。詳細は `docs/reports/00244_2026-07-01_entry_ev_side_prior_pressure_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV context calibration sweepを追加した。00242のside/context分解を受け、`base`, `side`, `side_drift`, `side_prior_pressure`, `full_context` の低容量EV-overestimate calibration specを chronological month / role holdout で比較した。最良は `side_prior_pressure = direction + support_bucket + pressure_bucket + prior_support_bucket + feature_pressure_bucket` で、chronological AUC `0.7261`, role holdout AUC `0.7015`。`base` は chronological AUC `0.6741`, role holdout AUC `0.6401`。一方、`side_drift` と `full_context` はbucketが細かすぎてAUCが大きく悪化した。判断: `side_prior_pressure` を次のEV-overestimate calibration/ranking head候補にする。`side_drift_bucket` 直入れとpointwise screenのpolicy採用はしない。詳細は `docs/reports/00243_2026-07-01_entry_ev_context_calibration_sweep.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
