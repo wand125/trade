@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-06-30 16:12 JST
+最終更新: 2026-06-30 16:21 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile exit capture diagnosticsを追加した。00222のenriched tradeからq95/q99候補だけを読み、policyで使った `pred_mlp_*_exit_event_minutes`、実holding、oracle best holding、exit regretをrole/context別に比較した。q95/q99はraw MLP hold平均が `816..1410m` と長く、`max_predicted_hold=260m` capにほぼ張り付く。一方oracle best holding平均は `497..930m` で、early exit vs oracle rateは `0.75..1.00`。exit capture不足は明確だが、refit側にはdirection/context errorも残るため、capを盲目的に伸ばすのは危険。判断: exit capture diagnosticsはaccepted infrastructure、標準policyはNoTrade。次はcontext-side inversion guardとhold-cap sensitivityを分けてvalidationする。詳細は `docs/reports/00223_2026-06-30_entry_ev_quantile_exit_capture_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile trade context diagnosticsを追加した。00221のfloor候補を `--write-trades` 付きで再実行し、実tradeをprediction/label列へ再結合してrole/candidate/context別に診断した。validation roleだけでは、q95/q99系は `refit2025_validation` が主な負けrole、q90系は `fresh2024_validation` が主な負けrole。q95/q99 refitの負けはno-edge率が低い一方、direction errorとexit regretが大きい。fresh q95は平均ではoracle EVを過大評価していないが、realizedとの差が大きく、entry floorだけでは解けない。判断: trade diagnosticsはaccepted infrastructure、現floor候補は標準採用しない。次はcontext-side inversionとexit captureを分けて診断する。詳細は `docs/reports/00222_2026-06-30_entry_ev_quantile_trade_context_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

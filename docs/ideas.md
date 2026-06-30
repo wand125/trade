@@ -91,6 +91,7 @@
 - 00220でrole-level selectorを追加した。strict3/clean2ともNoTradeで、clean2の絶対閾値baselineもrole trades不足とside concentrationで落ちる。今後のquantile候補はこのselectorを通してからfixed diagnostic/cost stressを見る。
 - 00221でpositive EV floor候補を追加した。floor `5/10` を入れてもstrict3/clean2はNoTradeで、floor10はfresh validationを少し改善する一方refitの負けを解けない。同じrole上でfloor値を細かく探索せず、次はselected trade contextとEV calibrationをrole別に比較するか、chronological validation windowを増やす。
 - 00222でquantile/floor候補の実tradeをrole/context別に診断した。q95/q99系はrefitのdirection error / exit regret、q90系はfreshの悪いshort contextが主因。次はcontext-side inversion preflightとexit capture診断を分け、entry floorだけで救おうとしない。
+- 00223でq95/q99のexit captureを診断した。`max_predicted_hold=260m` が強くbindingし、oracle best holdingより早く出ているtradeが多い。ただしrefit側にはdirection/context errorも残るため、blind cap延長は危険。次は `260/480/720/1440` hold-cap sensitivityをvalidation roleだけで事前登録し、context-side inversion guardなし/ありを分けて評価する。
 
 ## 外部データ候補
 

@@ -4,6 +4,20 @@
 
 ## 2026-06-30 JST
 
+### 16:21 Entry EV quantile exit capture diagnostics
+
+- 00222で分けた課題のうち、q95/q99 validation tradesのexit captureを診断した。
+- `scripts/experiments/entry_ev_quantile_exit_capture_diagnostics.py` を追加した。00222の `enriched_trades.csv` を読み、policyで使った `pred_mlp_*_exit_event_minutes`、実holding、oracle best holding、exit regretをrole/candidate/context別に集計する。
+- 診断出力は `data/reports/backtests/20260630_entry_ev_quantile_exit_capture_diagnostics/20260630_072113_entry_ev_quantile_exit_capture_diagnostics/`。
+- q95/q99 raw MLP hold平均は `816..1410m` と長いが、実行policyでは `max_predicted_hold=260m` に強くcapされる。oracle best holding平均は `497..930m` で、260mよりさらに長い。
+- q95 freshは early exit `0.7895`, cap hit `0.9474`, policy hold - oracle `-412.0192`。q95 refitは early exit `0.7857..0.7931`, cap hit `0.9286..0.9310`, policy hold - oracle `-593.6399..-675.9972`。
+- top exit-regret contextにはfresh short `up_normal_vol/london`, fresh long `range_low_vol/london`, refit short `down_low_vol/rollover` などが出る。loss-with-oracle-edge率も高く、entry潜在値をexitで取り逃しているtradeが多い。
+- 判断: exit capture diagnosticsはaccepted infrastructure。`260m` capがbindingしていることは明確だが、refit負けにはdirection/context errorも混ざるため、blind hold cap延長は採用しない。標準policyはNoTrade。
+- 次はq95/q99について `260/480/720/1440` hold-cap sensitivityをvalidation roleだけで事前登録し、context-side inversion guardなし/ありを分けて確認する。
+- report: `docs/reports/00223_2026-06-30_entry_ev_quantile_exit_capture_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: exit capture diagnostics unit tests OK; py_compile OK; diagnostic run OK
+
 ### 16:12 Entry EV quantile trade context diagnostics
 
 - 00221の次アクションとして、positive EV floor候補の実tradeをrole/context別に分解した。

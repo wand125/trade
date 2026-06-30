@@ -792,6 +792,19 @@ python scripts/experiments/entry_ev_quantile_trade_diagnostics.py \
   --roles fresh2024_validation,refit2025_validation
 ```
 
+To isolate exit capture from entry admission and side/context errors, run the
+holding diagnostic on the enriched trade output. This compares the side-specific
+MLP holding prediction, the effective policy hold cap, realized holding, oracle
+best holding, and exit regret:
+
+```bash
+python scripts/experiments/entry_ev_quantile_exit_capture_diagnostics.py \
+  --enriched-trades data/reports/backtests/<trade_diagnostics_run>/enriched_trades.csv \
+  --roles cal2024_calibration_validation,fresh2024_validation,refit2025_validation \
+  --candidates q95_sg95_rank90_floor5_side_regime_session_month,q95_sg95_rank90_floor10_side_regime_session_month,q99_sg95_rank90_floor5_side_regime_session_month,q99_sg95_rank90_floor10_side_regime_session_month \
+  --max-policy-hold-minutes 260
+```
+
 Sweep policy thresholds on a validation month:
 
 ```bash
