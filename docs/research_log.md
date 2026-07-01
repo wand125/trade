@@ -4,6 +4,20 @@
 
 ## 2026-07-02 JST
 
+### 01:06 Entry EV forced exit validation selector check
+
+- 00253で有望だった `exit_risk bucket t0.10..t0.20` hard selectorをchronological validation familyへ戻した。
+- 既存validation runは `cal2024`, `fresh2024`, `refit2025` ごとに別prediction parquetを使うため、`scripts/experiments/entry_ev_multifamily_policy_trade_enrichment.py` を追加した。
+- artifactは `data/reports/backtests/20260701_155806_20260702_entry_ev_side_prior_pressure_s0p5_validation_trade_enrichment_s1/`。prediction match shareは全非空trade groupで `1.0`。
+- validation selected trades 77 rowsでは `forced_exit_loss_target` は3件 / target PnL `-8.4240`。`exit_risk` calibrationは mean AUC `0.9167`, pooled AUC `0.9444` と強いがsupportが薄い。
+- selector replay 7 score kindsでは baseline `side_prior_pressure_s0p5` q95/floor5 total `+68.0000` を上回る設定なし。
+- `exitrisk_t0p02/t0p04` は q95/floor5 total `+41.4470`, trades `28`。`exitrisk_t0p01` は q95/floor5 `-5.3622`。`evexit_t0p01` は q95/floor5 `+54.8862`。
+- 低閾値selectorはfresh2024の1勝ちtradeやrefit2025の勝ちtradeを削り、00253 fixed 2025の改善はvalidationで再現しなかった。
+- 判断: multi-family enrichment infrastructureはaccepted。validation forced-exit selectorは標準採用しない。標準policyはNoTrade。
+- report: `docs/reports/00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: multifamily enrichment unit test OK; validation trade enrichment OK; forced-exit target diagnostics OK; forced-exit policy/selector input generation OK; validation selector replay 7 settings OK
+
 ### 00:45 Entry EV forced exit selector inputs
 
 - 00252の反省として、forced-exit riskをsmooth score penaltyではなく side candidate hard selector に変換する `scripts/experiments/entry_ev_forced_exit_selector_inputs.py` を追加した。

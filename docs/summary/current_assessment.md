@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 00:45 JST
+最終更新: 2026-07-02 01:06 JST
 
 ## 結論
 
@@ -15,8 +15,8 @@
 | 項目 | 状態 | 判断 |
 |---|---|---|
 | Standard policy | なし | NoTrade-firstを維持 |
-| Best current evidence | `00253` で `exit_risk bucket t0.10..t0.20` hard selectorがfixed 2025でpositive total/worst month改善 | fixed-window candidate止まり |
-| Latest diagnostic result | `00253` でforced-exit riskをhard side selectorへ変更。fixed 2025では `exit_risk bucket t0.10..t0.20` が大幅改善するが、同一window発見なので標準化せずvalidationへ戻す | candidate infrastructure accepted / not standard |
+| Best current evidence | `00253` で `exit_risk bucket t0.10..t0.20` hard selectorがfixed 2025でpositive total/worst month改善したが、`00254` のchronological validationではbaseline超えなし | fixed-window candidate rejected for now |
+| Latest diagnostic result | `00254` でmulti-family validation enrichmentを追加し、forced-exit selectorをvalidation familyへ戻した。`exit_risk` AUCは高いがtargetは3件のみで、selector replayはbaseline `+68.0000` を超えない | enrichment accepted / selector not standard |
 | Pointwise screens | q95 floor5 の high EV-overestimate risk rows は損失を拾うが、contextによって勝ちも削る | replacement未評価なのでpolicyではない |
 | Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement、common-entry loss | hard blockではなく分解targetで扱う |
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00221` | raw / calibrated EV threshold、rank gate、quantile admission、positive floorを検証。候補数やscaleは改善するが、NoTrade-first selectorは通らない。 |
 | Exit capture / hold cap | `00222`..`00232` | `720m` や executable EV calibration は診断上有効。ただし月次tail、support不足、fresh/refit反転が残る。direct score標準化はしない。 |
 | Side balance / downside | `00233`..`00239` | side-balance単独、downside interaction、coverage gate、composite gateはいずれも標準候補を生まない。component targetへ分解する方針に転換。 |
-| Component target / EV overestimate / direction / replacement / exit | `00240`..`00253` | EV overestimateは有効だがfixed 2025で残差が出た。direction-side inversionはdiagnostic featureとして有効だが、単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。forced-exit riskはdirect penaltyでは失敗したが、bucket-only hard selectorとしては有望。 |
+| Component target / EV overestimate / direction / replacement / exit | `00240`..`00254` | EV overestimateは有効だがfixed 2025で残差が出た。direction-side inversionはdiagnostic featureとして有効だが、単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。forced-exit riskはdirect penaltyでは失敗し、bucket-only hard selectorもvalidationでbaseline超えなし。 |
 
 ## 採用済みインフラ
 
@@ -55,6 +55,7 @@
 - exit-shortening residual target diagnostics and chronological OOF calibration
 - forced-exit-loss prediction-row input generation and stateful replay
 - forced-exit hard selector input generation and stateful replay
+- multi-family policy trade enrichment for validation diagnostics
 
 ## 採用しないもの
 
@@ -86,14 +87,15 @@
 - global fallback forced-exit riskをdirect score penaltyに使うこと
 - fixed 2025で見つけた `exitrisk_bucket_t0p10..t0p20` をそのまま標準policyへ昇格すること
 - `ev_exit` selectorを総損益最大化のprimary policyとして使うこと
+- validation forced-exit selectorの低閾値再探索を続けること
 
 ## 次にやること
 
-1. `exitrisk_bucket_t0p10..t0p20` をchronological validationへ戻し、threshold bandを事前登録して未知windowで確認する。
-2. `evexit_bucket_t0p10` はtail-risk diagnosticとして扱い、総損益policyとは分けて評価する。
-3. May 2025残差はforced-exitではなくdirection/exit-capture問題として、same-side oracle edgeとlarge exit regretを使うtargetへ進める。
-4. `late_exit_regret_loss_target` を broad hard block ではなくranking/calibration featureとして確認する。
-5. 新候補は NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、side PnL、trade supportで比較する。
+1. forced-exit selectorの閾値チューニングは一旦止める。validation target supportが3件しかなく、低閾値は勝ちtradeを削る。
+2. `late_exit_regret_loss_target`, `hold_too_long_loss_target`, direction-side inversion, same-side oracle edge / large exit regretを、より広いresidual targetとして扱う。
+3. multi-family enrichmentを使い、次のtargetもchronological validation familyで必ず先に確認する。
+4. 新候補は NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、side PnL、trade supportで比較する。
+5. validation月を増やすまでは、少数positive targetをentry blockerへ直接変換しない。
 
 ## 代表的な読む順
 
@@ -114,6 +116,7 @@
 13. `00251_2026-07-01_entry_ev_exit_shortening_target_diagnostics.md`
 14. `00252_2026-07-02_entry_ev_forced_exit_policy_inputs.md`
 15. `00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`
+16. `00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
 
 entry EV admissionの流れを見る:
 

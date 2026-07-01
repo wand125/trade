@@ -27,6 +27,7 @@
 - `forced_exit_loss_target` は q99で4 trades / `-152.5164` と少ないが、chronological OOF pooled AUCが `exit_risk 0.7561`, `ev_exit 0.6870` と相対的に良い。entry suppression / hold-cap adjustmentとしてstateful replayに接続する。
 - forced-exit riskはprediction rowでAUCが高く、`exitrisk_bucket_s0p5` q95を `-60.7862` まで改善するが、direct scoreではworst monthが悪化し標準化できない。candidate-level selector / tail-risk objectiveへ移す。
 - forced-exit hard selectorでは `exit_risk bucket t0.10..t0.20` がfixed 2025で大きく改善した。次はこの閾値帯を事前登録してvalidationへ戻す。`ev_exit t0.10` はtail縮小専用featureとして扱う。
+- forced-exit hard selectorをvalidationへ戻すとbaselineを超えず、低閾値はfresh/refitの勝ちtradeを削った。forced-exit threshold探索は一旦止め、multi-family enrichmentを使ってより広いdirection/exit-capture residual targetへ戻す。
 - forced-exit selector後のMay 2025残差は、forced-exit bucketではなくdirection error / same-side oracle edge / large exit regretに残る。次targetはdirection/exit-capture連動で作る。
 
 ## モデル
@@ -63,6 +64,7 @@
 - `hold_too_long_loss_target` は q99 direction s0.1で 11 trades / loss PnL `-322.7892` を覆うが、chronological OOF pooled AUCは最良でも `0.5016`。現featureのままdirect scoreにせず、auxiliary labelとして残す。
 - target AUCが高いだけではpolicyに変換できない。00252 forced-exit riskのように、tailを縮める設定とtotalを改善する設定が分かれる場合は、direct scoreではなくNoTrade-first selector/tail objectiveで扱う。
 - fixed 2025で `exitrisk_bucket_t0p10..t0p20` が良く見えても、同一window発見の候補なので標準policyへ直行しない。threshold bandを狭く事前登録し、別chronological windowでNoTrade比較する。
+- validation target positiveが3件のような少数targetは、AUCが高くてもentry blockerに直結しない。policy接続前にpositive count、bucket share、勝ちtrade削除率、replacement path悪化を必ず見る。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。
