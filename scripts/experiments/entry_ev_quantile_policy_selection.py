@@ -261,6 +261,8 @@ def build_blocker_summary(gated: pd.DataFrame) -> pd.DataFrame:
     for blockers in gated["blockers"].fillna("").astype(str):
         for blocker in [part for part in blockers.split(";") if part]:
             counts[blocker] = counts.get(blocker, 0) + 1
+    if not counts:
+        return pd.DataFrame(columns=["blocker", "candidate_count"])
     return pd.DataFrame(
         [{"blocker": blocker, "candidate_count": count} for blocker, count in counts.items()]
     ).sort_values(["candidate_count", "blocker"], ascending=[False, True])

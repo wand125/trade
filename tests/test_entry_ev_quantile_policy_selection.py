@@ -159,6 +159,14 @@ class EntryEvQuantilePolicySelectionTests(unittest.TestCase):
         self.assertEqual(counts["side_share_high"], 2)
         self.assertEqual(counts["role_trades_low"], 1)
 
+    def test_build_blocker_summary_handles_no_blockers(self):
+        gated = pd.DataFrame({"blockers": ["", ""]})
+
+        summary = entry_ev_quantile_policy_selection.build_blocker_summary(gated)
+
+        self.assertEqual(summary.columns.tolist(), ["blocker", "candidate_count"])
+        self.assertTrue(summary.empty)
+
 
 if __name__ == "__main__":
     unittest.main()

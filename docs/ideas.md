@@ -95,6 +95,7 @@
 - scoreやside gapが高い大損rowがあるため、pre-block後の追加admissionは `score > X` の強化ではなく、prior-only tail evidenceとone-position replacement costで二段階化する。
 - prior context guardでは、sessionまで含む `context_id` より coarse な `direction_regime` が有効。q99/floor5で `min_prior_count=1`, threshold `20..60` をstateful replayへ接続し、削除後のreplacement pathを確認する。
 - q95/floor5はprior context guard後もno-replacement kept pnlが負なので、本命ではなくstress比較に留める。
+- 00267でq99/floor5 prior guardはstateful replay上も改善した。次は q99/floor5 + pre-block support + prior `direction_regime` guardを固定し、threshold/scopeを変えず外部chronologyへ適用する。fresh support不足はデータ/window追加で解く。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。

@@ -94,6 +94,7 @@ class EntryEvQuantilePolicyBacktestTests(unittest.TestCase):
             short_holding_column="short_hold",
             min_valid_predicted_hold_minutes=30.0,
             max_predicted_hold_minutes=260.0,
+            side_block_rules=("short:guard=1",),
         )
 
         self.assertEqual(config.entry_score_quantile_column, "pred_calibrated_selected_score_pct_side_month")
@@ -104,6 +105,7 @@ class EntryEvQuantilePolicyBacktestTests(unittest.TestCase):
         )
         self.assertEqual(config.min_valid_predicted_hold_minutes, 30.0)
         self.assertEqual(config.max_predicted_hold_minutes, 260.0)
+        self.assertEqual(config.side_block_rules, ("short:guard=1",))
 
     def test_summarize_by_group_tracks_worst_month_and_side_share(self):
         monthly = pd.DataFrame(

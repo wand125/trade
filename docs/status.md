@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 03:24 JST
+最終更新: 2026-07-02 03:38 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV pre-block prior guard stateful replayを追加した。00266のno-replacement estimateを実際のstateful replayへ接続するため、`scripts/experiments/entry_ev_prior_context_guard_prediction_inputs.py` を追加し、pre-block追加候補だけをprior `direction_regime` 損失でside blockする列を生成した。`entry_ev_quantile_policy_backtest.py` には `--side-block-rules` を追加。q99/floor5は pre-block no-guard `-23.5882` から prior guard `+55.6750` へ改善し、refit2025は `-50.0440 -> +29.2192`、worst monthは `-128.3504 -> -26.4120`。q95も `+52.8696` まで改善したがtailが大きくq99未満。strict/relaxed admissionはNoTrade、support-relaxedではq99選択。判断: stateful replay evidenceはaccepted、q99 prior guardはdiagnostic candidateへ昇格。ただし標準policyはNoTrade。詳細は `docs/reports/00267_2026-07-02_entry_ev_preblock_prior_guard_stateful_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV pre-block prior context guard診断を追加した。00265で見つけたpre-block追加only-candidate tailを、前月までの同context損失だけで止められるかを `scripts/experiments/entry_ev_delta_prior_context_guard_diagnostics.py` で診断した。`context_id=direction/combined/session` は細かすぎて改善せず、`direction_regime=direction/combined_regime` が有効。全候補行では `min_prior_count=1`, `threshold=60` が flagged 14 rows / `-134.1100`、q99/floor5では `threshold=20` が flagged 6 rows / `-110.6212`, kept `+19.6780`。q95は改善してもkept `-105.0980` で弱い。判断: prior-context guard診断インフラはaccepted、q99を次のstateful replay候補にする。ただしno-replacement estimateなので標準policyはNoTrade。詳細は `docs/reports/00266_2026-07-02_entry_ev_preblock_prior_context_guard.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

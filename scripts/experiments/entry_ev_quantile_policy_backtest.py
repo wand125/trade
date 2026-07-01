@@ -202,6 +202,7 @@ def build_model_policy_config(
     short_holding_column: str,
     min_valid_predicted_hold_minutes: float,
     max_predicted_hold_minutes: float,
+    side_block_rules: tuple[str, ...] = (),
 ) -> ModelPolicyConfig:
     return ModelPolicyConfig(
         predictions=prediction_path,
@@ -219,6 +220,7 @@ def build_model_policy_config(
         min_entry_score_quantile=candidate.score_quantile,
         min_side_gap_quantile=candidate.side_gap_quantile,
         min_entry_rank_quantile=candidate.rank_quantile,
+        side_block_rules=side_block_rules,
         entry_score_quantile_column=(
             quantile_column(score_kind, "selected_score", candidate.scope)
             if candidate.score_quantile > 0
@@ -335,6 +337,7 @@ def run_quantile_policy_backtests(args: argparse.Namespace) -> Path:
                 short_holding_column=args.short_holding_column,
                 min_valid_predicted_hold_minutes=args.min_valid_predicted_hold_minutes,
                 max_predicted_hold_minutes=args.max_predicted_hold_minutes,
+                side_block_rules=tuple(parse_optional_csv(args.side_block_rules)),
             )
             for month in months:
                 backtest_config = build_backtest_config(
@@ -412,6 +415,7 @@ def run_quantile_policy_backtests(args: argparse.Namespace) -> Path:
         "post_days": args.post_days,
         "months": sorted(requested_months),
         "write_trades": args.write_trades,
+        "side_block_rules": parse_optional_csv(args.side_block_rules),
     }
     (run_dir / "config.json").write_text(
         json.dumps(config, indent=2, default=local_json_default),
@@ -504,6 +508,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmup-days", type=int, default=7)
     parser.add_argument("--post-days", type=int, default=4)
     parser.add_argument("--write-trades", action="store_true")
+    parser.add_argument(
+        "--side-block-rules",
+        default="",
+        help="comma-separated side block rules, e.g. short:column=value",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,

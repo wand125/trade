@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 03:24 JST
+最終更新: 2026-07-02 03:38 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00266` | Exit-regret / replacement guard | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装したがrefit tailが戻る。00265で追加refit rowsの悪化context、00266でprior direction_regime guardの余地を分解。diagnostic candidate止まり。 |
+| `00258`..`00267` | Exit-regret / replacement guard | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。diagnostic candidate止まり。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00266` | exit-regret selector + replacement guardは最有望だが、post-block sg95ではfresh2024 0-trade、pre-block sg95ではrefit tail過大。00266でq99向けprior direction_regime guardの余地を確認したがstateful未検証。標準はNoTrade。 |
+| Latest decision | `00258`..`00267` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -42,6 +42,7 @@
 7. `00264_2026-07-02_entry_ev_preblock_side_gap_quantile.md`
 8. `00265_2026-07-02_entry_ev_preblock_delta_context_diagnostics.md`
 9. `00266_2026-07-02_entry_ev_preblock_prior_context_guard.md`
+10. `00267_2026-07-02_entry_ev_preblock_prior_guard_stateful_replay.md`
 
 component targetの流れを読む:
 
@@ -88,10 +89,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00266 Entry EV Pre-Block Prior Context Guard
+Report: 00267 Entry EV Pre-Block Prior Guard Stateful Replay
 Status: accepted infrastructure / policy rejected
-Question: pre-block追加rowsを前月までのcontext損失だけで止められるか
-Best evidence: q99/floor5は direction_regime min_count1 / threshold20 で flagged 6 rows / -110.6212, kept +19.6780。q95はkept -105.0980
+Question: prior direction_regime guardはstateful replacement込みでも効くか
+Best evidence: q99/floor5は -23.5882 -> +55.6750、refit worst -128.3504 -> -26.4120。ただしstrict/relaxed admissionはNoTrade
 Decision: 標準policyはNoTrade
-Next: q99/floor5でtrue stateful replayし、replacement pathを確認
+Next: q99/floor5 + prior guardを固定して外部chronologyへ適用
 ```

@@ -4,6 +4,48 @@
 
 ## 2026-07-02 JST
 
+### 03:38 Entry EV pre-block prior guard stateful replay
+
+作業:
+
+- `scripts/experiments/entry_ev_prior_context_guard_prediction_inputs.py` を追加した。
+- pre-block候補で通り、post-block候補では通らないrowのうち、prior `direction_regime` 損失が閾値を超えたshortだけをside blockするguard列を生成した。
+- `scripts/experiments/entry_ev_quantile_policy_backtest.py` に `--side-block-rules` を追加した。
+- q99/floor5 loss20を本命、q95/floor5 loss60をstressとしてstateful replayした。
+- strict / relaxed / support-relaxed admissionを実行した。
+- pre-block no-guard q99 vs prior guard q99のtrade deltaを作った。
+- report: `docs/reports/00267_2026-07-02_entry_ev_preblock_prior_guard_stateful_replay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- q99/floor5: overall `+55.6750`, refit2025 `+29.2192`, worst month `-26.4120`, trades `67`, max DD `83.1360`。
+- q95/floor5: overall `+52.8696`, refit2025 `+21.8302`, worst month `-55.4316`, trades `114`, max DD `110.4772`。
+- q99 delta vs pre-block no-guard: `-23.5882 -> +55.6750`, delta `+79.2632`。
+- q99 guardは2025-05を `-128.3504 -> -15.5072` に改善し、2025-11を `+74.4778 -> +40.8978` に悪化させた。
+- removed negative `-145.8000`, removed positive `+56.2100`, added negative `-32.9568`, added positive `+22.6300`。
+
+Admission:
+
+- strict: NoTrade。q99 blockers `month_pnl_below_floor;role_trades_low;month_trades_low`。
+- relaxed: NoTrade。q99/q95とも `role_trades_low`。
+- support-relaxed: q99 eligible and selected。q95もeligibleだがq99がtotal/worst/DDで上。
+
+判断:
+
+- q99 prior guardはdiagnostic stateful replay candidateへ昇格。
+- ただしfresh2024が1 tradeしかなく、標準strict/relaxed gateではNoTradeのまま。
+- thresholdやscopeを同じrefit windowでさらに探索しない。次はq99/floor5 + prior guardを固定して外部chronologyへ適用する。
+
+検証:
+
+- `python3 -m unittest tests.test_entry_ev_prior_context_guard_prediction_inputs tests.test_entry_ev_quantile_policy_backtest`: OK, 9 tests
+- `python3 -m unittest tests.test_entry_ev_quantile_policy_selection`: OK, 6 tests
+- prediction guard input generation: OK
+- q99/q95 replay: OK
+- admission selector: OK
+- trade delta: OK
+
 ### 03:24 Entry EV pre-block prior context guard
 
 作業:
