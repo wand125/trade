@@ -89,6 +89,7 @@ class EntryEvForcedExitSelectorInputsTests(unittest.TestCase):
                 short_rank_column="pred_short_entry_local_rank",
                 blocked_score=-999.0,
                 quantile_scopes="month",
+                replacement_guard_conf_gap_buckets="",
                 output_dir=tmp_path,
                 label="unit_forced_exit_selector",
             )
@@ -114,6 +115,117 @@ class EntryEvForcedExitSelectorInputsTests(unittest.TestCase):
         self.assertAlmostEqual(summary["long_block_share"].iloc[0], 2.0 / 3.0)
         self.assertAlmostEqual(summary["both_side_block_share"].iloc[0], 1.0 / 3.0)
         self.assertAlmostEqual(summary["selected_side_changed_share"].iloc[0], 1.0 / 3.0)
+
+    def test_replacement_guard_blocks_unblocked_opposite_side_with_extreme_conf_gap(self):
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2024-03", "2024-03", "2024-03"],
+                "decision_timestamp": pd.to_datetime(
+                    [
+                        "2024-03-01 00:00:00Z",
+                        "2024-03-01 00:01:00Z",
+                        "2024-03-01 00:02:00Z",
+                    ],
+                    utc=True,
+                ),
+                "pred_direction_inversion_bucket_s0p1_long_best_adjusted_pnl": [
+                    10.0,
+                    10.0,
+                    10.0,
+                ],
+                "pred_direction_inversion_bucket_s0p1_short_best_adjusted_pnl": [
+                    8.0,
+                    8.0,
+                    8.0,
+                ],
+                "pred_long_entry_local_rank": [0.9, 0.9, 0.9],
+                "pred_short_entry_local_rank": [0.8, 0.8, 0.8],
+                "pred_forced_exit_loss_exit_risk_long_predicted_forced_exit_loss_risk": [
+                    0.60,
+                    0.10,
+                    0.10,
+                ],
+                "pred_forced_exit_loss_exit_risk_short_predicted_forced_exit_loss_risk": [
+                    0.10,
+                    0.60,
+                    0.10,
+                ],
+                "pred_forced_exit_loss_exit_risk_long_forced_exit_loss_prediction_source": [
+                    "bucket",
+                    "bucket",
+                    "bucket",
+                ],
+                "pred_forced_exit_loss_exit_risk_short_forced_exit_loss_prediction_source": [
+                    "bucket",
+                    "bucket",
+                    "bucket",
+                ],
+                "pred_forced_exit_loss_exit_risk_long_side_confidence_gap_bucket": [
+                    "weak",
+                    "strong",
+                    "strong",
+                ],
+                "pred_forced_exit_loss_exit_risk_short_side_confidence_gap_bucket": [
+                    "strong",
+                    "weak",
+                    "strong",
+                ],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            prediction_path = tmp_path / "pred.parquet"
+            predictions.to_parquet(prediction_path, index=False)
+            args = argparse.Namespace(
+                family_predictions=[f"toy={prediction_path}"],
+                risk_name="forced_exit_loss",
+                risk_specs="exit_risk",
+                score_kind_prefix="forced_exit_selector",
+                source_modes="bucket",
+                risk_thresholds="0.5",
+                long_column="pred_direction_inversion_bucket_s0p1_long_best_adjusted_pnl",
+                short_column="pred_direction_inversion_bucket_s0p1_short_best_adjusted_pnl",
+                long_rank_column="pred_long_entry_local_rank",
+                short_rank_column="pred_short_entry_local_rank",
+                blocked_score=-999.0,
+                quantile_scopes="month",
+                replacement_guard_conf_gap_buckets="strong,nonpositive",
+                output_dir=tmp_path,
+                label="unit_forced_exit_selector_guard",
+            )
+
+            run_dir = entry_ev_forced_exit_selector_inputs.build_selector_inputs(args)
+            enriched = pd.read_parquet(
+                run_dir
+                / "enriched_predictions"
+                / "toy_predictions_forced_exit_selector.parquet"
+            )
+            summary = pd.read_csv(run_dir / "selector_block_summary.csv")
+
+        score_kind = "forced_exit_selector_exitrisk_bucket_t0p5"
+        long_score = f"pred_{score_kind}_long_best_adjusted_pnl"
+        short_score = f"pred_{score_kind}_short_best_adjusted_pnl"
+
+        self.assertEqual(enriched[long_score].iloc[0], -999.0)
+        self.assertEqual(enriched[short_score].iloc[0], -999.0)
+        self.assertEqual(enriched[long_score].iloc[1], -999.0)
+        self.assertEqual(enriched[short_score].iloc[1], -999.0)
+        self.assertEqual(enriched[long_score].iloc[2], 10.0)
+        self.assertEqual(enriched[short_score].iloc[2], 8.0)
+        self.assertTrue(
+            enriched[f"pred_{score_kind}_short_replacement_guard_blocked"].iloc[0]
+        )
+        self.assertTrue(
+            enriched[f"pred_{score_kind}_long_replacement_guard_blocked"].iloc[1]
+        )
+        self.assertFalse(
+            enriched[f"pred_{score_kind}_long_replacement_guard_blocked"].iloc[2]
+        )
+        self.assertAlmostEqual(
+            summary["any_replacement_guard_block_share"].iloc[0],
+            2.0 / 3.0,
+        )
 
 
 if __name__ == "__main__":

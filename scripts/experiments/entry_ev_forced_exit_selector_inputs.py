@@ -141,11 +141,16 @@ def validate_columns(
     short_column: str,
     long_rank_column: str,
     short_rank_column: str,
+    replacement_guard_conf_gap_buckets: list[str],
 ) -> None:
     required = {long_column, short_column, long_rank_column, short_rank_column}
     for risk_spec in risk_specs:
         for side in ["long", "short"]:
             required.update(risk_columns(risk_name=risk_name, risk_spec=risk_spec, side=side))
+            if replacement_guard_conf_gap_buckets:
+                required.add(
+                    f"pred_{risk_name}_{risk_spec}_{side}_side_confidence_gap_bucket"
+                )
     missing = sorted(required - set(frame.columns))
     if missing:
         raise ValueError(f"predictions missing columns: {', '.join(missing)}")
@@ -170,6 +175,20 @@ def side_block_mask(
     return source_mask(source, source_mode) & risk.notna() & risk.ge(threshold)
 
 
+def side_conf_gap_mask(
+    frame: pd.DataFrame,
+    *,
+    risk_name: str,
+    risk_spec: str,
+    side: str,
+    buckets: list[str],
+) -> pd.Series:
+    if not buckets:
+        return pd.Series(False, index=frame.index)
+    column = f"pred_{risk_name}_{risk_spec}_{side}_side_confidence_gap_bucket"
+    return text_series(frame, column).isin(set(buckets))
+
+
 def add_selector_scores(
     predictions: pd.DataFrame,
     *,
@@ -185,6 +204,7 @@ def add_selector_scores(
     short_rank_column: str,
     blocked_score: float,
     quantile_scopes: list[str],
+    replacement_guard_conf_gap_buckets: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     output = predictions.copy()
     long_base = numeric_series(output, long_column, default=np.nan)
@@ -217,12 +237,46 @@ def add_selector_scores(
                     source_mode=source_mode,
                     threshold=threshold,
                 )
+                long_risk_blocked = long_blocked.copy()
+                short_risk_blocked = short_blocked.copy()
+                long_replacement_guard_blocked = (
+                    side_conf_gap_mask(
+                        output,
+                        risk_name=risk_name,
+                        risk_spec=risk_spec,
+                        side="long",
+                        buckets=replacement_guard_conf_gap_buckets,
+                    )
+                    & short_risk_blocked
+                    & ~long_risk_blocked
+                )
+                short_replacement_guard_blocked = (
+                    side_conf_gap_mask(
+                        output,
+                        risk_name=risk_name,
+                        risk_spec=risk_spec,
+                        side="short",
+                        buckets=replacement_guard_conf_gap_buckets,
+                    )
+                    & long_risk_blocked
+                    & ~short_risk_blocked
+                )
+                long_blocked = long_risk_blocked | long_replacement_guard_blocked
+                short_blocked = short_risk_blocked | short_replacement_guard_blocked
                 long_output_column = f"pred_{score_kind}_long_best_adjusted_pnl"
                 short_output_column = f"pred_{score_kind}_short_best_adjusted_pnl"
                 output[long_output_column] = long_base.where(~long_blocked, blocked_score)
                 output[short_output_column] = short_base.where(~short_blocked, blocked_score)
                 output[f"pred_{score_kind}_long_forced_exit_blocked"] = long_blocked
                 output[f"pred_{score_kind}_short_forced_exit_blocked"] = short_blocked
+                output[f"pred_{score_kind}_long_risk_blocked"] = long_risk_blocked
+                output[f"pred_{score_kind}_short_risk_blocked"] = short_risk_blocked
+                output[f"pred_{score_kind}_long_replacement_guard_blocked"] = (
+                    long_replacement_guard_blocked
+                )
+                output[f"pred_{score_kind}_short_replacement_guard_blocked"] = (
+                    short_replacement_guard_blocked
+                )
                 output = add_executable_quantile_columns(
                     output,
                     family=family,
@@ -254,6 +308,23 @@ def add_selector_scores(
                         "risk_spec": risk_spec,
                         "source_mode": source_mode,
                         "risk_threshold": threshold,
+                        "replacement_guard_conf_gap_buckets": ",".join(
+                            replacement_guard_conf_gap_buckets
+                        ),
+                        "long_risk_block_share": float(long_risk_blocked.mean()),
+                        "short_risk_block_share": float(short_risk_blocked.mean()),
+                        "long_replacement_guard_block_share": float(
+                            long_replacement_guard_blocked.mean()
+                        ),
+                        "short_replacement_guard_block_share": float(
+                            short_replacement_guard_blocked.mean()
+                        ),
+                        "any_replacement_guard_block_share": float(
+                            (
+                                long_replacement_guard_blocked
+                                | short_replacement_guard_blocked
+                            ).mean()
+                        ),
                         "long_block_share": float(long_blocked.mean()),
                         "short_block_share": float(short_blocked.mean()),
                         "any_side_block_share": float((long_blocked | short_blocked).mean()),
@@ -278,6 +349,7 @@ def build_selector_inputs(args: argparse.Namespace) -> Path:
     source_modes = parse_csv(args.source_modes)
     risk_thresholds = parse_float_csv(args.risk_thresholds)
     quantile_scopes = parse_scope_csv(args.quantile_scopes)
+    replacement_guard_conf_gap_buckets = parse_csv(args.replacement_guard_conf_gap_buckets)
     if not risk_specs:
         raise ValueError("--risk-specs must not be empty")
     if not source_modes:
@@ -300,6 +372,7 @@ def build_selector_inputs(args: argparse.Namespace) -> Path:
             short_column=args.short_column,
             long_rank_column=args.long_rank_column,
             short_rank_column=args.short_rank_column,
+            replacement_guard_conf_gap_buckets=replacement_guard_conf_gap_buckets,
         )
         enriched, summary = add_selector_scores(
             predictions,
@@ -315,6 +388,7 @@ def build_selector_inputs(args: argparse.Namespace) -> Path:
             short_rank_column=args.short_rank_column,
             blocked_score=args.blocked_score,
             quantile_scopes=quantile_scopes,
+            replacement_guard_conf_gap_buckets=replacement_guard_conf_gap_buckets,
         )
         output_path = enriched_dir / f"{family}_predictions_forced_exit_selector.parquet"
         enriched.to_parquet(output_path, index=False)
@@ -335,6 +409,7 @@ def build_selector_inputs(args: argparse.Namespace) -> Path:
         "short_rank_column": args.short_rank_column,
         "blocked_score": args.blocked_score,
         "quantile_scopes": quantile_scopes,
+        "replacement_guard_conf_gap_buckets": replacement_guard_conf_gap_buckets,
     }
     (run_dir / "config.json").write_text(
         json.dumps(config, indent=2, default=local_json_default),
@@ -366,6 +441,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--short-rank-column", default="pred_short_entry_local_rank")
     parser.add_argument("--blocked-score", type=float, default=-1000000000.0)
     parser.add_argument("--quantile-scopes", default=DEFAULT_QUANTILE_SCOPES)
+    parser.add_argument(
+        "--replacement-guard-conf-gap-buckets",
+        default="",
+        help=(
+            "comma-separated side_confidence_gap_bucket values that block an "
+            "otherwise unblocked side when the opposite side is risk-blocked"
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     parser.add_argument("--label", default="entry_ev_forced_exit_selector_inputs")
     return parser

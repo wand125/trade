@@ -4,6 +4,26 @@
 
 ## 2026-07-02 JST
 
+### 02:28 Entry EV exit regret replacement guard replay
+
+- 00260の `conf_gap_extreme` replacement-risk screenを、実際のselector inputへ接続してstateful replayした。
+- `scripts/experiments/entry_ev_forced_exit_selector_inputs.py` に `--replacement-guard-conf-gap-buckets` を追加した。
+- unit test `tests/test_entry_ev_forced_exit_selector_inputs.py` に、反対側risk-block時だけ extreme confidence gap の残存側をblockするケースを追加した。
+- guard input artifactは `data/reports/backtests/20260701_172323_20260702_entry_ev_exit_regret_selector_replguard_confextreme_t0p4_inputs_s1/`。
+- broad replay artifactは `data/reports/backtests/20260701_172413_20260702_entry_ev_exit_regret_selector_replguard_confextreme_t0p4_broad_backtest_s1/`。
+- fixed 2025 replay artifactは `data/reports/backtests/20260701_172413_20260702_entry_ev_exit_regret_selector_replguard_confextreme_t0p4_fixed2025_backtest_s1/`。
+- broad guard vs no-guard delta artifactは `data/reports/backtests/20260701_172752_20260702_entry_ev_exit_regret_selector_replguard_vs_noguard_broad_delta_s1/`。
+- fixed guard vs no-guard delta artifactは `data/reports/backtests/20260701_172803_20260702_entry_ev_exit_regret_selector_replguard_vs_noguard_fixed2025_delta_s1/`。
+- guardは exit-regret threshold `t0.4` を変えず、片側がrisk-blockされた時だけ残った反対側の `side_confidence_gap_bucket in {strong, nonpositive}` を追加blockする。
+- broad replayでは q99/floor5 `+18.9072 -> +27.1222`, q95/floor5 `-30.2972 -> +63.5468`。q95/floor5は worst `-59.8792`, trades `71`, max side share `0.7324`。
+- fixed 2025-03..12では q99/floor5 `+19.1218 -> +27.3368`, q95/floor5 `-67.8612 -> +25.9828`。q95/floor5は worst `-59.8792`, trades `42`, max side share `0.7619`。
+- guard vs no-guard deltaは broad/fixedとも q99/floor5 `+8.2150`, q95/floor5 `+93.8440`。q95は removed negative `-91.0920` が大きい。
+- 一方、q99/floor5は 2025-11 `-20.6930`, 2025-12 `-4.1300` と勝ちtrade削除も発生。May tailは残る。
+- 判断: replacement guard stateful replayはaccepted。`exit_regret_selector_replguard_confidenceexit_bucket_t0p4` はdiagnostic replay candidate。ただしguardは00260のsame-window診断から作ったため、標準policyにはしない。標準policyはNoTrade。
+- report: `docs/reports/00261_2026-07-02_entry_ev_exit_regret_replacement_guard_replay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: forced-exit selector input unit tests OK; replacement-risk unit test OK; policy trade delta unit test OK; docs report test OK; py_compile OK; guard input generation OK; broad/fixed replay OK; broad/fixed guard delta OK
+
 ### 02:17 Entry EV exit regret replacement risk
 
 - 00259の次アクションとして、exit-regret selectorのonly-candidate replacement悪化を診断した。
