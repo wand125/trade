@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 08:36 JST
+最終更新: 2026-07-02 08:53 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV exit timing loss exit thresholdを追加した。tail-risk gate探索を止めてexit timing / exit regret reductionへ戻し、`scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` を追加した。高いdynamic exit threshold `0.75/0.90` はhybrid/HGBとも実行経路をほぼ変えず、holding shrinkは損失を少し縮めるだけだった。一方で低い `loss_first_exit_threshold` は強く、HGB単体では q95 + `loss_exit20` が total `+54.0206`, month min `+2.6780`, 233 tradesでNoTrade-first gateを通過した。ただしhybridでは最良帯が `loss_exit35` 付近へずれ、HGB+hybrid統合では q95 + `loss_exit30` が total `+44.5308`, role min `+2.6780`, positive roles `3/3` まで改善する一方、month min `-4.1460` が残った。判断: low loss-first dynamic exitは有力診断候補だが、同window threshold sweep由来なので標準採用しない。次は q95 + `loss_exit30` を追加chronologyへ再探索なしで固定適用し、absolute thresholdではなくvalidation分布ベースのquantile/calibrated thresholdへ置き換える。詳細は `docs/reports/00276_2026-07-02_entry_ev_exit_timing_loss_exit_threshold.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV external HGB side regime tail checkを追加した。00274のcoarse `direction_regime` tail-risk headを00269 external HGB preflightへ固定適用した。途中で、tail-risk score生成時に既存pre-block side-gap quantileが引き継がれず、priorなしのHGB 2024側までtrade pathが変わる不整合を発見したため、`scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py` に `--side-gap-source-score-kind` を追加した。修正後、HGB 2024-03..06はno-priorで完全にno-opとなり、00269 baselineと同じ `-36.1556`, 31 tradesに戻った。HGB 2025-08ではexit-cap s0.1が `+26.5800 -> +26.9600` と小幅改善しただけで、overallは baseline `-9.5756` に対して `-9.1956`。admissionはNoTrade。判断: 00274のtail-risk headは外部HGB chronologyで再現的な改善を示さない。tail-risk gate追加探索を止め、exit timing / exit regret reductionへ戻す。詳細は `docs/reports/00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

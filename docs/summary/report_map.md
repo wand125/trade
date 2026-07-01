@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 08:36 JST
+最終更新: 2026-07-02 08:53 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00275` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。 |
+| `00258`..`00276` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。00276でlow loss-first dynamic exitが強く改善し、q95 + loss_exit30は統合全role positiveだがmonth floor未達。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00275` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。外部HGBと外部full-hybridでもNoTrade未満。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99を同一foldでプラス化したが、00275の外部HGB固定適用ではbest `-9.1956` でNoTrade。tail-risk headはdiagnostic featureへ降格。 |
+| Latest decision | `00258`..`00276` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。外部HGBと外部full-hybridでもNoTrade未満。00274のcoarse `direction_regime` tail-riskは00275の外部HGB固定適用で再現せずdiagnosticへ降格。00276のlow loss-first dynamic exitはHGB単体でgate通過、統合では q95 + `loss_exit30` が total +44.5308 / positive roles 3/3 まで改善したが、month min -4.1460 が残りNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -51,6 +51,7 @@
 16. `00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`
 17. `00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`
 18. `00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`
+19. `00276_2026-07-02_entry_ev_exit_timing_loss_exit_threshold.md`
 
 component targetの流れを読む:
 
@@ -97,10 +98,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00275 Entry EV External HGB Side Regime Tail Check
-Status: diagnostic branch / policy rejected
-Question: 00274のcoarse side/regime tail-risk headは別chronologyの外部HGBでも再現するか
-Best evidence: HGB 2025-08は +0.3800 の小幅改善だけで、overallは -9.1956、HGB 2024 lossを消せずNoTrade
+Report: 00276 Entry EV Exit Timing Loss Exit Threshold
+Status: diagnostic candidate / policy not standardized
+Question: exit-capture failureに対してlow loss-first dynamic exitは外部HGB/hybridで再現的に効くか
+Best evidence: combined q95 + loss_exit30 は total +44.5308、role min +2.6780、positive roles 3/3 だが month min -4.1460
 Decision: 標準policyはNoTrade
-Next: tail-risk gate追加探索を止め、exit timing / exit regret reductionへ戻す
+Next: q95 + loss_exit30を追加chronologyへ再探索なしで固定適用し、absolute thresholdをquantile/calibrated thresholdへ置き換える
 ```

@@ -6762,3 +6762,37 @@ Policy結果:
 - `python3 -m trade_data.meta_model oof-trade-failure-model ... --apply-months 2025-06,2025-07,2025-08`: OK
 - `python3 -m trade_data.backtest model-policy ...`: OK, 18 runs
 - `python3 -m trade_data.backtest model-trade-delta ...`: OK, 2 delta runs
+
+### 2026-07-02 08:53 JST Entry EV exit timing loss exit threshold
+
+作業:
+
+- `00275` でtail-risk headをdiagnosticへ降格したため、exit timing / exit regret reductionへ戻した。
+- `scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` を追加し、既存quantile replayへ `time_exit_holding_shrink`, `loss_first_holding_shrink`, `time_exit_exit_threshold`, `loss_first_exit_threshold` をvariantとして差し込めるようにした。
+- HGB external 2024-03..06 / 2025-08 と hybrid 2025-09..12 の q99/q95 `sg95/rank90/floor5` で、holding shrink、高いdynamic exit threshold、低いloss-first exit thresholdを比較した。
+- report: `docs/reports/00276_2026-07-02_entry_ev_exit_timing_loss_exit_threshold.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| scope | candidate | variant | total pnl | role min | month min | trades |
+|---|---|---|---:|---:|---:|---:|
+| HGB | q95 | loss_exit20 | `+54.0206` | `+2.6780` | `+2.6780` | `233` |
+| HGB | q95 | loss_exit25 | `+37.9012` | `+2.6780` | `+2.6780` | `170` |
+| hybrid | q95 | loss_exit35 | `+19.9900` | `+19.9900` | `-0.7200` | `6` |
+| combined | q95 | loss_exit30 | `+44.5308` | `+2.6780` | `-4.1460` | `141` |
+| combined | q95 | base | `-60.3066` | `-72.0826` | `-55.4548` | `79` |
+
+判断:
+
+- low loss-first dynamic exitは、これまでのexit-capture failureに対する有力な直接対策。
+- HGB単体では `loss_exit20/25` がgateを通るが、hybridでは最良帯が `0.35` 付近へずれる。
+- 統合では q95 + `loss_exit30` が全role positiveまで改善するが、active losing monthが残る。
+- 同じ外部window上のthreshold sweep結果なので標準採用しない。
+- 次は q95 + `loss_exit30` をpre-registerし、追加chronologyへ再探索なしで固定適用する。あわせてabsolute thresholdをvalidation分布ベースのquantile/calibrated thresholdへ置き換える。
+
+検証:
+
+- `python3 -m py_compile scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py tests/test_entry_ev_quantile_exit_timing_sensitivity.py`: OK
+- `python3 -m unittest tests.test_entry_ev_quantile_exit_timing_sensitivity`: OK
+- hybrid/HGB exit timing replay and threshold sweeps: OK
