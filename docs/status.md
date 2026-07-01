@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 03:38 JST
+最終更新: 2026-07-02 03:50 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV fresh support episode diagnosticsを追加した。00267で残ったfresh2024 support不足をcandidate rows、episode、stateful tradeへ分解するため、`scripts/experiments/entry_ev_candidate_episode_support_diagnostics.py` を追加した。q99/floor5/rank90はfreshで26 rowsあるが6 episodes、1 active monthに集中し、実行では1 trade `+24.0400` のみ。q95/floor5/rank90は34 rows、9 episodes、3 months、3 trades `+32.7380` まで増えるが、00267ではq99よりtail/DDが悪い。q99 rank0はfresh supportを61 rows、23 episodes、5 months、8 trades `+73.6226` へ増やす一方、cal2024 `-26.9300`、refit2025 `-106.8816`、overall `-60.1890` へ崩れ、strict admissionはNoTrade。判断: episode診断はaccepted、rank0 support緩和はreject、標準policyはNoTrade。詳細は `docs/reports/00268_2026-07-02_entry_ev_fresh_support_episode_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV pre-block prior guard stateful replayを追加した。00266のno-replacement estimateを実際のstateful replayへ接続するため、`scripts/experiments/entry_ev_prior_context_guard_prediction_inputs.py` を追加し、pre-block追加候補だけをprior `direction_regime` 損失でside blockする列を生成した。`entry_ev_quantile_policy_backtest.py` には `--side-block-rules` を追加。q99/floor5は pre-block no-guard `-23.5882` から prior guard `+55.6750` へ改善し、refit2025は `-50.0440 -> +29.2192`、worst monthは `-128.3504 -> -26.4120`。q95も `+52.8696` まで改善したがtailが大きくq99未満。strict/relaxed admissionはNoTrade、support-relaxedではq99選択。判断: stateful replay evidenceはaccepted、q99 prior guardはdiagnostic candidateへ昇格。ただし標準policyはNoTrade。詳細は `docs/reports/00267_2026-07-02_entry_ev_preblock_prior_guard_stateful_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

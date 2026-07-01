@@ -4,6 +4,42 @@
 
 ## 2026-07-02 JST
 
+### 03:50 Entry EV fresh support episode diagnostics
+
+作業:
+
+- 独立した外部chronologyとしてそのまま使える別pre-block / exit-regret familyを探したが、ローカルartifact上では現行のcal/fresh/refit familyが中心だった。
+- 00267の標準admission blockerであるfresh2024 support不足を、candidate row、episode、stateful tradeへ分解した。
+- `scripts/experiments/entry_ev_candidate_episode_support_diagnostics.py` を追加した。
+- q99/rank90/floor5、q95/rank90/floor5、q99/rank0/floor5のfresh supportを比較した。
+- q99/rank0/floor5をcal/fresh/refitへstress replayし、strict admissionへ通した。
+- report: `docs/reports/00268_2026-07-02_entry_ev_fresh_support_episode_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- q99/rank90/floor5: fresh candidate 26 rows、6 episodes、1 active month、stateful 1 trade `+24.0400`。
+- q95/rank90/floor5: fresh candidate 34 rows、9 episodes、3 active months、stateful 3 trades `+32.7380`。
+- q99/rank0/floor5: fresh candidate 61 rows、23 episodes、5 active months、stateful 8 trades `+73.6226`。
+- q99/rank0/floor5 stressは cal2024 `-26.9300`, refit2025 `-106.8816`, overall `-60.1890`。
+- strict admissionはNoTrade。blockersは `positive_roles_low;total_pnl_below_floor;role_total_pnl_below_floor;month_pnl_below_floor;role_trades_low;month_trades_low`。
+
+判断:
+
+- episode support diagnosticsはaccepted。
+- rank0緩和はfresh supportだけを改善し、cal/refitのrole PnLを壊すためreject。
+- q99 prior guardは固定diagnostic candidateに留める。support不足は同一windowのrank/floor緩和ではなく、外部chronology、再生成family、データ/window追加で解く。
+- 標準policyはNoTrade。
+
+検証:
+
+- `python3 -m unittest tests.test_entry_ev_candidate_episode_support_diagnostics`: OK, 2 tests
+- `python3 -m py_compile scripts/experiments/entry_ev_candidate_episode_support_diagnostics.py tests/test_entry_ev_candidate_episode_support_diagnostics.py`: OK
+- fresh support funnel: OK
+- episode support diagnostic run: OK
+- rank0 stress replay: OK
+- rank0 admission selector: OK
+
 ### 03:38 Entry EV pre-block prior guard stateful replay
 
 作業:
