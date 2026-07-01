@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 03:03 JST
+最終更新: 2026-07-02 03:14 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV pre-block delta context診断を追加した。00264でpre-block side-gap quantileがfresh supportを戻す一方でrefit tailを戻したため、post-block replacement guard vs pre-block guardのrefit2025 trade deltaをprediction contextへjoinする `scripts/experiments/entry_ev_policy_delta_context_diagnostics.py` を追加した。pre-block追加only-candidateは q99/floor5 37 rows / `-90.9432`, q95/floor5 57 rows / `-149.6180`。悪化の中心は `short/down_normal_vol` で、候補行合計17 rows / `-276.7060`。2025-05 `short/down_normal_vol/london` は単発 `-77.0520` だが平均score `9.047970`, side gap `5.291377` と高く、score/gap-only tighteningでは防げない。判断: delta-context診断インフラはaccepted、pre-block `sg95` policyはreject、標準policyはNoTrade。詳細は `docs/reports/00265_2026-07-02_entry_ev_preblock_delta_context_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV pre-block side-gap quantileを追加した。00263のpost-block `side_gap_pct` 汚染に対応するため、`entry_ev_forced_exit_selector_inputs.py` に `--side-gap-quantile-mode {post_block,pre_block}` を追加した。既定は従来通り `post_block`。`pre_block` では selector scoreはpost-blockのまま、`side_gap_pct` だけbase long/short score由来で上書きする。fresh supportは復活し、q99/floor5 `0 -> 26` rows、q95/floor5 `0 -> 34` rows。ただしreplayでは refit tailが戻り、q99/floor5 total `-23.5882`, q95/floor5 total `-14.6536`。strict/relaxed admissionはNoTrade。判断: infrastructureはaccepted、policyはreject。標準policyはNoTrade。詳細は `docs/reports/00264_2026-07-02_entry_ev_preblock_side_gap_quantile.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

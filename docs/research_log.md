@@ -4,6 +4,43 @@
 
 ## 2026-07-02 JST
 
+### 03:14 Entry EV pre-block delta context diagnostics
+
+作業:
+
+- `scripts/experiments/entry_ev_policy_delta_context_diagnostics.py` を追加した。
+- `trade_delta_rows.csv` をprediction parquetへ戻し、`direction/combined_regime/session_regime` 単位でonly-candidate悪化を見られるようにした。
+- 実delta artifactは `entry_decision_timestamp` 共通列を持つため、候補/ベース別timestamp列がない場合は共通列へfallbackするようにした。
+- post-block replacement guard vs pre-block side-gap guardのrefit2025 deltaを診断した。
+- report: `docs/reports/00265_2026-07-02_entry_ev_preblock_delta_context_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+結果:
+
+| candidate | only-candidate rows | only-candidate pnl |
+|---|---:|---:|
+| q99/floor5 | `37` | `-90.9432` |
+| q95/floor5 | `57` | `-149.6180` |
+
+悪化の中心:
+
+- `short/down_normal_vol`: 17 candidate rows / `-276.7060`
+- 2025-05 q99/floor5 only-candidate: 5 rows / `-107.0804`
+- 2025-05 q95/floor5 only-candidate: 8 rows / `-114.2640`
+- 2025-04 q99/q95 both: 1 row / `-70.1280`
+
+判断:
+
+- pre-block side-gapはsupport normalizationとして有効だが、単独policyではrefit tailを戻す。
+- worst rowsには高score・高side gapのものがあるため、単純なscore/gap閾値強化では不十分。
+- 同じrefit windowから `short/down_normal_vol` を静的blacklist化しない。
+- 次はpre-block support normalization後の newly admitted rows だけを、prior-only candidate-downside / replacement-stateful-net / tail riskで二段階審査する。
+
+検証:
+
+- `python3 -m unittest tests.test_entry_ev_policy_delta_context_diagnostics`: OK, 3 tests
+- delta context diagnostic run: OK
+
 ### 03:03 Entry EV pre-block side-gap quantile
 
 - 00263で見つけた post-block `side_gap_pct` 汚染に対応した。
