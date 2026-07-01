@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 08:10 Entry EV external hybrid base executable selector
+
+作業:
+
+- 00272の反省を受け、capture factorをpost-selector scoreではなくselector前のbase calibrated scoreへ掛けた。
+- base executable score上でexit-regret riskとpre-block side-gap selectorを再生成した。
+- q99/q95 floor5/rank90をstateful replayし、support、admission、trade enrichmentを実行した。
+- report: `docs/reports/00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- base executable score q95は、base q95 `31.8511..37.7722` から executable q95 `10.4232..12.4578` へ縮んだ。
+- q99/floor5/rank90は total `-27.4800`, worst month `-26.7600`, trades `2`。
+- q95/floor5/rank90は total `-12.1040`, worst month `-26.7600`, trades `4`。
+- supportは q99 2 candidate rows、q95 13 candidate rows。
+- admissionは両候補NoTrade。
+- trade enrichmentでは q95 win rate `0.2500`, q99 win rate `0.0000`。残存tradeはexit regretが大きい。
+
+判断:
+
+- selector前capture補正はpost-selector補正より筋が良いが、単独ではNoTradeを超えない。
+- 2025-12 short tailが残るため、capture-adjusted scoreにside/regime tail riskまたはdirection-side robustness headを併用する。
+- このfoldでq95/q99 thresholdを追加調整しない。
+- 標準policyはNoTrade。
+
+検証:
+
+- base executable input / exit-regret risk / pre-block selector: OK
+- q99/q95 stateful replay: OK
+- support/admission/trade enrichment: OK
+
 ### 08:04 Entry EV external hybrid executable EV preflight
 
 作業:

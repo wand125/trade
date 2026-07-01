@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 08:04 JST
+最終更新: 2026-07-02 08:10 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV external hybrid base executable selectorを追加した。00272の反省を受け、capture factorをselector前のbase calibrated scoreへ掛け、そのbase executable score上でexit-regret riskとpre-block side-gap selectorを再生成した。post-selector補正よりは改善したがNoTrade未満。q99/floor5/rank90は `-27.4800`, 2 trades。q95/floor5/rank90は `-12.1040`, 4 trades。q95は00272の `-29.5080` より改善したが、00270の `+0.0820` には届かない。supportはq99 2 candidate rows、q95 13 candidate rows。admissionは両方NoTrade。判断: selector前capture補正は配置としては妥当だが、単独score化では2025-12 short tailを止められない。次はcapture-adjusted scoreにside/regime tail riskまたはdirection-side robustness headを併用する。詳細は `docs/reports/00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV external hybrid executable EV preflightを追加した。00271のEV過大評価 / exit-capture failureに対し、既存prior-only executable EV補正を外部hybrid `2025-09..12` に固定適用した。post-selector scoreへcapture factorを掛けるとbase q95 scoreは `31.6282..37.7288` から executable q95 `9.1734..12.4031` へ縮んだが、stateful replayは q99 `-27.5640` / 3 trades、q95 `-29.5080` / 4 tradesでNoTrade未満。補正後tradeは両候補ともwin rate `0.0`。判断: executable EV補正方向は有効だが、post-selector / blocked-side scoreへの後段適用は採用しない。次はselector前のbase calibrated scoreへcapture factorを入れ、その後にexit-regret selector / side-gap quantileを再計算する。詳細は `docs/reports/00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

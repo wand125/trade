@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 08:04 JST
+最終更新: 2026-07-02 08:10 JST
 
 ## 結論
 
@@ -8,14 +8,14 @@
 
 現在の標準判断は NoTrade-first。候補policyは、複数chronological window、role/month PnL floor、trade support、side balance、NoTrade比較を通らない限り標準化しない。
 
-直近で最も進んだ候補は exit-regret系。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00268` ではfresh support不足をepisode単位で分解し、rank0緩和はfresh supportを増やすがcal/refitを壊すことを確認した。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたが、q99 `-27.5640`, q95 `-29.5080` でNoTrade未満だった。
+直近で最も進んだ候補は exit-regret系。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00268` ではfresh support不足をepisode単位で分解し、rank0緩和はfresh supportを増やすがcal/refitを壊すことを確認した。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたがNoTrade未満。`00273` ではselector前base scoreへ移してq95 `-12.1040` まで戻したが、まだNoTrade未満だった。
 
 ## 現在の判断
 
 | 項目 | 判断 |
 |---|---|
 | Standard policy | なし。NoTrade-firstを維持 |
-| Current diagnostic candidate | policy candidateなし。00271/00272のexit-capture / executable-EV teacher insightを次の学習設計に使う |
+| Current diagnostic candidate | policy candidateなし。capture-adjusted base score + side/regime tail-risk headを次に検証 |
 | Why not standard | strict/relaxed admissionで `role_trades_low`。外部HGBと外部full-hybrid preflightでもNoTrade未満 |
 | Useful signal | exit-regret / loss-first / replacement-stateful-net / same-side missed loss / low-capture loss / profit-barrier miss |
 | Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足 |
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00272` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。 |
+| Component / exit-regret | `00240`..`00273` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。 |
 
 ## 採用済みインフラ
 
@@ -70,7 +70,7 @@
 ## 次にやること
 
 1. q99 prior guard branchは閉じ、以後はdiagnostic baselineとしてだけ参照する。
-2. 次はcapture factorをselector前のbase calibrated scoreへ入れ、その後にexit-regret selector / side-gap quantileを再計算する。
+2. 次はcapture-adjusted scoreにside/regime tail riskまたはdirection-side robustness headを重ねる。
 3. `00270` の2025-09/12損失はfeature/target insightとしてのみ分解し、blacklist tuningには使わない。
 4. fresh2024 support不足は、同一windowのrank/floor緩和ではなく、データ/window追加または別chronologyで解く。
 5. threshold/scopeを同じrefit windowで追加探索しない。
@@ -93,3 +93,4 @@
 13. `00270_2026-07-02_entry_ev_external_hybrid_2025_09_12_replay.md`
 14. `00271_2026-07-02_entry_ev_external_hybrid_loss_target_insight.md`
 15. `00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`
+16. `00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`
