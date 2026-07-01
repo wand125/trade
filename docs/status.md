@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 03:14 JST
+最終更新: 2026-07-02 03:24 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV pre-block prior context guard診断を追加した。00265で見つけたpre-block追加only-candidate tailを、前月までの同context損失だけで止められるかを `scripts/experiments/entry_ev_delta_prior_context_guard_diagnostics.py` で診断した。`context_id=direction/combined/session` は細かすぎて改善せず、`direction_regime=direction/combined_regime` が有効。全候補行では `min_prior_count=1`, `threshold=60` が flagged 14 rows / `-134.1100`、q99/floor5では `threshold=20` が flagged 6 rows / `-110.6212`, kept `+19.6780`。q95は改善してもkept `-105.0980` で弱い。判断: prior-context guard診断インフラはaccepted、q99を次のstateful replay候補にする。ただしno-replacement estimateなので標準policyはNoTrade。詳細は `docs/reports/00266_2026-07-02_entry_ev_preblock_prior_context_guard.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV pre-block delta context診断を追加した。00264でpre-block side-gap quantileがfresh supportを戻す一方でrefit tailを戻したため、post-block replacement guard vs pre-block guardのrefit2025 trade deltaをprediction contextへjoinする `scripts/experiments/entry_ev_policy_delta_context_diagnostics.py` を追加した。pre-block追加only-candidateは q99/floor5 37 rows / `-90.9432`, q95/floor5 57 rows / `-149.6180`。悪化の中心は `short/down_normal_vol` で、候補行合計17 rows / `-276.7060`。2025-05 `short/down_normal_vol/london` は単発 `-77.0520` だが平均score `9.047970`, side gap `5.291377` と高く、score/gap-only tighteningでは防げない。判断: delta-context診断インフラはaccepted、pre-block `sg95` policyはreject、標準policyはNoTrade。詳細は `docs/reports/00265_2026-07-02_entry_ev_preblock_delta_context_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

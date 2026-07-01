@@ -4,6 +4,42 @@
 
 ## 2026-07-02 JST
 
+### 03:24 Entry EV pre-block prior context guard
+
+作業:
+
+- `scripts/experiments/entry_ev_delta_prior_context_guard_diagnostics.py` を追加した。
+- pre-block追加only-candidate rowsに対し、前月までの同context損失だけでflagするprior-only診断を作った。
+- 同じ月の先行rowはpriorに含めず、current monthより前だけを見るようにした。
+- `direction_regime` と `context_id` のscopeを比較した。
+- report: `docs/reports/00266_2026-07-02_entry_ev_preblock_prior_context_guard.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+| scope | setting | flagged rows | flagged pnl | kept pnl |
+|---|---|---:|---:|---:|
+| direction_regime | min_count1 / threshold60 | `14` | `-134.1100` | `-106.4512` |
+| context_id | min_count1 / threshold100 | `0` | `0.0000` | `-240.5612` |
+
+候補別:
+
+- q99/floor5は direction_regime min_count1 / threshold20 で flagged 6 rows / `-110.6212`, kept `+19.6780`。
+- q95/floor5は direction_regime threshold60 で flagged 9 rows / `-44.5200`, kept `-105.0980`。
+- flagged contextは主に `short/down_normal_vol`。2025-05の損失を拾うが、2025-11の勝ちrowも一部削る。
+
+判断:
+
+- prior context guard診断インフラはaccepted。
+- q99/floor5を次のstateful replay候補にする。
+- no-replacement estimateであり、one-position replacement pathをまだ再実行していないため標準policyにはしない。標準policyはNoTrade。
+
+検証:
+
+- `python3 -m unittest tests.test_entry_ev_delta_prior_context_guard_diagnostics`: OK, 2 tests
+- py_compile: OK
+- prior-context diagnostic run: OK
+
 ### 03:14 Entry EV pre-block delta context diagnostics
 
 作業:
