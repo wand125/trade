@@ -4,6 +4,20 @@
 
 ## 2026-07-01 JST
 
+### 23:49 Entry EV exit shortening target diagnostics
+
+- 00250の次アクションとして、exit capture failureを狭いexit timing targetへ分解する `scripts/experiments/entry_ev_exit_shortening_target_diagnostics.py` を追加した。
+- artifactは `data/reports/backtests/20260701_144816_20260701_entry_ev_exit_shortening_target_diagnostics_s1/` と `data/reports/backtests/20260701_144830_20260701_entry_ev_exit_shortening_target_diagnostics_q99_s1/`。
+- target定義には実現後情報を使うが、chronological OOF calibrationのgroup featureにはdecision-timeで見えるregime、予測hold、exit確率、loss-first確率、pred fixed PnL slope、direction risk bucket、EV overestimate bucketだけを使った。
+- q99では `hold_too_long_loss_target` が 11 trades / target PnL `-322.7892`、`hold_prediction_too_long_loss_target` が 13 trades / `-353.0376` を覆う。
+- 狭い `exit_shortening_residual_target` は q99で 5 trades / `-125.9172` に縮み、support不足。
+- q99 chronological OOFでは、`hold_too_long_loss_target` の最良 pooled AUCは `exit_risk 0.5016`、`exit_shortening_residual_target` の最良 pooled AUCは `exit_plan 0.4487`。現featureだけでは標準化できるheadではない。
+- `forced_exit_loss_target` は q99で 4 trades / `-152.5164` と小さいが、pooled AUCは `exit_risk 0.7561`, `ev_exit 0.6870` と最も良い。
+- 判断: exit-shortening target generationとOOF calibrationはaccepted。hold-too-longはauxiliary labelに留め、次はforced-exit loss / late-exit-regretをentry suppressionまたはhold-cap adjustmentとしてstateful replayする。
+- report: `docs/reports/00251_2026-07-01_entry_ev_exit_shortening_target_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: exit shortening target unit tests OK; py_compile OK; q95/q99 and q99-only chronological OOF diagnostic runs OK
+
 ### 23:36 Entry EV direction s0.1 residual loss diagnostics
 
 - 00249の次アクションとして、q99 direction s0.1に残った損失を分解する `scripts/experiments/entry_ev_direction_residual_loss_diagnostics.py` を追加した。

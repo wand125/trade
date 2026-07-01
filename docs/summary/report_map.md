@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-01 23:36 JST
+最終更新: 2026-07-01 23:49 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00250` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed 2025残差ではdirection-side inversionとexit capture failureが主target候補。replacement positive-qualityとのcombined replayもNoTrade未満で、次はexit capture細分化。 |
+| `00240`..`00251` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed 2025残差ではdirection-side inversionとexit capture failureが主target候補。replacement positive-qualityとのcombined replayもNoTrade未満。exit-shorteningは説明力があるがOOF予測は弱く、forced-exit lossが次候補。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00250` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed 2025で崩壊。direction inversionはdiagnostic featureとして残る。replacement quality併用は弱く、q99残差はexit capture/hold-too-longへ進む。標準はNoTrade。 |
+| Latest decision | `00239`..`00251` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed 2025で崩壊。direction inversionはdiagnostic featureとして残る。replacement quality併用は弱い。hold-too-longはauxiliary label、forced-exit lossは次のstateful検証候補。標準はNoTrade。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -49,6 +49,7 @@
 10. `00248_2026-07-01_entry_ev_direction_inversion_selector_diagnostics.md`
 11. `00249_2026-07-01_entry_ev_replacement_quality_policy_inputs.md`
 12. `00250_2026-07-01_entry_ev_direction_s0p1_residual_loss_diagnostics.md`
+13. `00251_2026-07-01_entry_ev_exit_shortening_target_diagnostics.md`
 
 entry EV admissionを追う:
 
@@ -102,10 +103,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00250 Entry EV Direction s0.1 Residual Loss Diagnostics
+Report: 00251 Entry EV Exit Shortening Target Diagnostics
 Status: accepted diagnostics / not standard
-Question: q99 direction s0.1に残る損失は何で説明できるか
-Best evidence: large losses are all direction error + exit capture failure; hold-too-long covers major loss PnL
-Decision: residual diagnosticsはaccepted。pointwise deletion policyにはしない
-Next: hold-too-long / low-capture / forced-exit lossを分けたexit targetへ進む
+Question: q99 residualのexit capture failureは予測可能な狭いtargetへ分解できるか
+Best evidence: hold-too-long covers loss but OOF pooled AUC is weak; forced-exit loss has the best pooled AUC
+Decision: exit-shortening target generationはaccepted。hold-too-longはdirect scoreにしない
+Next: forced-exit loss / late-exit-regretをstateful replayへ接続する
 ```
