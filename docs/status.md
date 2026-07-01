@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 23:49 JST
+最終更新: 2026-07-02 00:15 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV forced exit policy inputsを追加した。00251の次アクションとして `forced_exit_loss_target` をprediction rowへ接続し、`direction_inversion_bucket_s0p1` scoreへsoft penaltyをかけるstateful replayを実施した。all q95/q99 selected-trade target 123 rowsでは chronological mean AUCが `ev_exit 0.9500`, `exit_risk 0.8667` と強い。fixed 2025-03..12では総損益ベストが `forced_exit_loss_exitrisk_bucket_s0p5` q95 `-60.7862` だが worst month `-223.3346`。q99総損益ベストは `exitrisk_bucket_s0p25` `-93.3284`、q99 worst monthベストは `evexit_bucket_s1` worst `-86.6640` だが total `-185.0306`。判断: forced-exit input/replay infrastructureはaccepted。現penalty scoreは標準policyにせず、candidate selector / tail-risk objective / hold-cap adjustment featureへ回す。詳細は `docs/reports/00252_2026-07-02_entry_ev_forced_exit_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV exit shortening target diagnosticsを追加した。00250の次アクションとして、q99 direction s0.1残差のexit capture failureを `hold_too_long_loss_target`, `exit_shortening_residual_target`, `hold_prediction_too_long_loss_target`, `same_side_missed_loss_target`, `low_capture_loss_target`, `late_exit_regret_loss_target`, `forced_exit_loss_target` に分解し、decision-time feature bucketだけでchronological OOF calibrationした。q99では `hold_too_long_loss_target` が 11 trades / `-322.7892`, `hold_prediction_too_long_loss_target` が 13 trades / `-353.0376` を覆うが、pooled AUCは `hold_too_long` の最良 `exit_risk 0.5016`, `exit_shortening_residual` の最良 `exit_plan 0.4487` と弱い。一方、`forced_exit_loss_target` は4 trades / `-152.5164` と小さいが q99 OOF pooled AUC `exit_risk 0.7561`, `ev_exit 0.6870`。判断: exit-shortening target generationとOOF calibrationはaccepted。hold-too-longはauxiliary labelに留め、次はforced-exit loss / late-exit-regretをentry suppressionまたはhold-cap adjustmentとしてstateful replayする。詳細は `docs/reports/00251_2026-07-01_entry_ev_exit_shortening_target_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -2,6 +2,22 @@
 
 時系列の作業記録。判断、実験、失敗、次の行動を追記する。
 
+## 2026-07-02 JST
+
+### 00:15 Entry EV forced exit policy inputs
+
+- 00251の次アクションとして、`forced_exit_loss_target` をprediction rowへ接続する `scripts/experiments/entry_ev_forced_exit_policy_inputs.py` を追加した。
+- artifactは `data/reports/backtests/20260701_145909_20260701_entry_ev_forced_exit_policy_inputs_s1/`。
+- 00251の `exit_shortening_targets.csv` から、対象月より前だけで `exit_risk` / `ev_exit` bucket rateを作り、long/short side rowへ `predicted_forced_exit_loss_risk` を付与した。
+- all q95/q99 target 123 rowsでは chronological mean AUCが `ev_exit 0.9500`, `exit_risk 0.8667`。
+- fixed 2025-03..12 stateful replay 12設定では、総損益ベストが `forced_exit_loss_exitrisk_bucket_s0p5` q95 `-60.7862`、ただし worst month `-223.3346`。
+- q99総損益ベストは `forced_exit_loss_exitrisk_bucket_s0p25` `-93.3284`。baseline q99 `-147.3314` から改善するが worst month `-162.0092` が残る。
+- q99 worst monthベストは `forced_exit_loss_evexit_bucket_s1` の `-86.6640` だが、total `-185.0306` で4月・11月の勝ちを削りすぎる。
+- 判断: forced-exit prediction-row inputとstateful replay infrastructureはaccepted。現penalty scoreは標準policyにしない。forced-exit riskはdirect scoreよりcandidate selector / tail-risk objective / hold-cap adjustmentのfeatureへ回す。
+- report: `docs/reports/00252_2026-07-02_entry_ev_forced_exit_policy_inputs.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: forced-exit input unit test OK; py_compile OK; prediction-row input generation OK; fixed 2025 replay 12 settings OK; representative trade-output replays OK
+
 ## 2026-07-01 JST
 
 ### 23:49 Entry EV exit shortening target diagnostics
