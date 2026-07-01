@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-01 08:31 JST
+最終更新: 2026-07-01 22:29 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00244` | Component targets / EV overestimate | EV overestimateだけが相対的に残るtarget。`side_prior_pressure` はAUCとvalidationを改善したが、fixed 2025で崩れた。prediction row接続はaccepted、policyはNoTrade。 |
+| `00240`..`00245` | Component targets / EV overestimate | EV overestimateだけが相対的に残るtarget。`side_prior_pressure` はAUCとvalidationを改善したが、fixed 2025で崩れた。00245でcommon-entry lossとreplacement lossを分離し、policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00244` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだが、fixed 2025で崩壊。標準はNoTrade。 |
+| Latest decision | `00239`..`00245` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだが、fixed 2025で崩壊。00245でq95はcommon-entryとreplacementが両方悪く、q99はreplacementだけ改善すると判明。標準はNoTrade。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -43,6 +43,7 @@
 4. `00242_2026-07-01_entry_ev_overestimate_context_diagnostics.md`
 5. `00243_2026-07-01_entry_ev_context_calibration_sweep.md`
 6. `00244_2026-07-01_entry_ev_side_prior_pressure_policy_inputs.md`
+7. `00245_2026-07-01_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics.md`
 
 entry EV admissionを追う:
 
@@ -96,10 +97,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00244 Entry EV Side Prior Pressure Policy Inputs
+Report: 00245 Entry EV Side Prior Pressure Fixed 2025 Failure Diagnostics
 Status: accepted diagnostics / not standard
-Question: side_prior_pressure riskをprediction rowへ接続するとstateful validationは改善するか
-Best evidence: s0.5 q95/floor5 validation +68.0000, q99/floor5 +35.0014, but fixed 2025 q99/floor5 -177.3790
-Decision: input generationはaccepted。s0.5はdiagnostic baselineで、標準policyにはしない
-Next: fixed 2025 collapseをside/context/replacement pathに分解する
+Question: side_prior_pressure_s0p5 fixed 2025崩壊はcommon-entry lossかreplacement lossか
+Best evidence: q95 total delta -105.2866 = common-entry -46.6146 + replacement -58.6720。q99 total delta +52.3592 = common-entry -8.3400 + replacement +60.6992
+Decision: path diagnosticsはaccepted。s0.5はdiagnostic baselineで、標準policyにはしない
+Next: common loss向け direction/exit/replacement-aware targetを作る
 ```

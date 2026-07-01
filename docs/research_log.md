@@ -4,6 +4,19 @@
 
 ## 2026-07-01 JST
 
+### 22:29 Entry EV side-prior-pressure fixed 2025 failure diagnostics
+
+- 00244で崩れた `side_prior_pressure_s0p5` fixed 2025-03..12を、base side-balanced dense720とのtrade path差分に分解する `scripts/experiments/entry_ev_side_prior_pressure_failure_diagnostics.py` を追加した。
+- artifactは `data/reports/backtests/20260701_132922_20260701_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics_s2/`。
+- `path_delta_summary.csv` で common-entry delta と replacement delta を分離した。
+- q95/floor5は base `-55.5740` から side-prior `-160.8606` へ悪化。common-entry delta `-46.6146`、replacement delta `-58.6720`。
+- q99/floor5は base `-229.7382` から side-prior `-177.3790` へ改善。common-entry delta `-8.3400`、replacement delta `+60.6992`。
+- worst contextは common側の `long/down_normal_vol/rollover`, `long/range_normal_vol/ny_overlap`, `short/down_normal_vol/ny_overlap`。`range_normal_vol/ny_overlap` は selected risk `0.173913` と低く、EV-overestimate riskだけでは拾えない。
+- 判断: path diagnosticsはaccepted。`side_prior_pressure_s0p5` は標準policyにしない。次はcommon lossを抑える direction/exit/replacement-aware targetへ進む。
+- report: `docs/reports/00245_2026-07-01_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: failure diagnostics unit tests OK; py_compile OK; fixed 2025 diagnostic run OK
+
 ### 08:31 Entry EV side prior pressure policy inputs
 
 - 00243で有望だった `side_prior_pressure` EV-overestimate riskをprediction rowへ接続する `scripts/experiments/entry_ev_side_prior_pressure_policy_inputs.py` を追加した。

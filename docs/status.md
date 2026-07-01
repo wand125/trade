@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 08:31 JST
+最終更新: 2026-07-01 22:29 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV side-prior-pressure fixed 2025 failure diagnosticsを追加した。00244で崩れた `side_prior_pressure_s0p5` をbase side-balanced dense720とtrade path単位で比較し、common-entry deltaとreplacement deltaを分けた。q95/floor5は base `-55.5740` から side-prior `-160.8606` へ悪化し、共通entry差 `-46.6146` と置換差 `-58.6720` が両方悪い。q99/floor5は base `-229.7382` から side-prior `-177.3790` へ改善し、置換差 `+60.6992` が効いたが、絶対損益はNoTrade未満。`range_normal_vol/ny_overlap` などselected riskが低いまま大きく負ける共通contextがあり、EV-overestimate riskだけでは足りない。判断: path diagnosticsはaccepted。s0.5は標準policyにせず、次はcommon loss向けのdirection/exit/replacement-aware targetへ進む。詳細は `docs/reports/00245_2026-07-01_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV side prior pressure policy inputsを追加した。00243で有望だった `side_prior_pressure` EV-overestimate riskをprediction rowへ接続し、side-balanced dense executable scoreをriskで割り引いた `side_prior_pressure_s0p5` / `s1` を生成した。s0.5のvalidationは q95/floor5 total `+68.0000`, q99/floor5 total `+35.0014` まで改善したが、strict selectorはNoTrade。relaxed selectorなら q99/floor5 が残るものの、fixed 2025-03..12で q99/floor5 `-177.3790`, q95/floor5 `-160.8606` と崩れた。判断: prediction-row risk generation/stateful replay infrastructureはaccepted。s0.5はdiagnostic baseline、標準policyにはしない。詳細は `docs/reports/00244_2026-07-01_entry_ev_side_prior_pressure_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
