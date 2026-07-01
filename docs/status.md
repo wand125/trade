@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 22:40 JST
+最終更新: 2026-07-01 22:57 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV direction inversion policy inputsを追加した。00246の `direction_side_inversion_target` をprediction rowへ接続し、bucket-supported riskだけをscore penaltyに使う `direction_inversion_bucket` scoreを生成した。fixed 2025-03..12では s0.1 が q99/floor5 `-177.3790 -> -147.3314` に改善、q95/floor5は `-160.8606 -> -163.3410` とほぼ横ばい。s0.25/s0.5は過剰penaltyで、特にq95を壊す。path診断ではs0.1 q99の改善はreplacement差 `+33.5480` が主で、common-entry差は `-3.5004`。判断: direction inversion risk input generationはaccepted。direct score penaltyは標準policyにせず、s0.1をdiagnostic baselineに留める。次はselector/ranking feature化とreplacement quality併用へ進む。詳細は `docs/reports/00247_2026-07-01_entry_ev_direction_inversion_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV common loss target diagnosticsを追加した。00245のcommon-entry損失をtarget化し、base/side-priorの同一entryをペア化した。common 90 rowsのside-prior totalは `-202.1978`。`direction_side_inversion_target` は 50 rows / target PnL `-592.5618` を拾い、selected risk単体AUC `0.6755`、chronological `risk_pressure` spec AUC `0.6865` と相対的に良い。`common_large_loss_target` は target PnL `-573.1764` だがchronological AUC `0.3639` で弱く、`exit_capture_failure_target` はtarget rate `0.8000` と広すぎる。判断: common/replacement target generationはaccepted。次の本流はdirection-side inversion headをprediction rowへ戻すこと。詳細は `docs/reports/00246_2026-07-01_entry_ev_common_loss_target_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

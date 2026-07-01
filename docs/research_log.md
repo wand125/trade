@@ -4,6 +4,20 @@
 
 ## 2026-07-01 JST
 
+### 22:57 Entry EV direction inversion policy inputs
+
+- 00246で有望だった `direction_side_inversion_target` をprediction rowへ接続する `scripts/experiments/entry_ev_direction_inversion_policy_inputs.py` を追加した。
+- input artifactは `data/reports/backtests/20260701_134903_20260701_entry_ev_direction_inversion_policy_inputs_s1/` と `data/reports/backtests/20260701_135325_20260701_entry_ev_direction_inversion_policy_inputs_s0p1_s1/`。
+- 00246 common-entry targetから、対象月より前だけで `direction + selected_risk_bucket + support_bucket + pressure_bucket` のbucket rateをfitし、long/short side rowへdirection inversion riskを付与した。
+- 00246でglobal fallback high-risk rowsが利益側にも出ていたため、score penaltyはbucket-supported riskだけに適用した。
+- fixed 2025-03..12では、s0.1が q99/floor5 `-177.3790 -> -147.3314` に改善。q95/floor5は `-160.8606 -> -163.3410` とほぼ横ばい。
+- s0.25は q99/floor5 `-159.2316` まで改善するが、q95/floor5 `-292.1924` と大きく悪化。s0.5はq99/floor5 `-204.4412` と過剰penalty。
+- path診断では、s0.1 q99の改善はreplacement delta `+33.5480` が主で、common-entry deltaは `-3.5004`。s0.25はreplacement delta `+76.2274` だがcommon-entry delta `-58.0800` が大きく悪化。
+- 判断: direction inversion risk input generationはaccepted。direct score penaltyは標準policyにせず、s0.1をdiagnostic baselineに留める。
+- report: `docs/reports/00247_2026-07-01_entry_ev_direction_inversion_policy_inputs.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: direction inversion input unit tests OK; py_compile OK; input generation OK; fixed 2025 backtests OK; path diagnostics OK
+
 ### 22:40 Entry EV common loss target diagnostics
 
 - 00245の次アクションとして、common-entry損失をtarget化する `scripts/experiments/entry_ev_common_loss_target_diagnostics.py` を追加した。

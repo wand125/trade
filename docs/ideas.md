@@ -115,6 +115,7 @@
 - 00244で`side_prior_pressure` riskをprediction rowへ接続すると、s0.5はvalidation q95/floor5 `+68.0000`, q99/floor5 `+35.0014` まで改善したが、fixed 2025-03..12で q99/floor5 `-177.3790` と崩れた。次はpenalty強度調整ではなく、fixed 2025の崩れをside/context/replacement pathに分解し、追加chronological component-target windowを増やす。
 - 00245でfixed 2025崩壊をpath分解した。q95はcommon-entry delta `-46.6146` とreplacement delta `-58.6720` が両方悪く、q99はreplacement delta `+60.6992` で改善するがtotalはNoTrade未満。次は `direction_side_inversion`, `exit_capture_failure`, `same_entry_exit_delta`, `replacement_quality` を別targetとして作り、EV-overestimate risk単独では拾えない低risk大損contextを説明する。
 - 00246でcommon/replacement loss targetを作ると、`direction_side_inversion_target` が common 50 rows / `-592.5618`, chronological risk_pressure AUC `0.6865` と相対的に良かった。次はdirection-side inversion headをprediction rowへ接続し、bucket-supported predictionとglobal fallbackを分けたranking/selector featureとして評価する。`common_failure_target` と広い `exit_capture_failure_target` は粗すぎるため、そのままtraining labelにしない。
+- 00247でdirection inversion riskをprediction rowへ接続した。s0.1はfixed 2025 q99/floor5を `-177.3790 -> -147.3314` に改善したが、q95は横ばいでNoTrade未満。direct score penaltyは標準採用せず、次はcandidate-level selector/ranking feature、bucket-supported source constraint、replacement positive-quality headとの併用に移す。
 
 ## 外部データ候補
 
