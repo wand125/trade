@@ -4,6 +4,20 @@
 
 ## 2026-07-02 JST
 
+### 01:35 Entry EV direction exit broad validation
+
+- 00256の次アクションとして、fixed 2025 stressではなく、既存predictionがカバーする広い月範囲へdirection / exit residual target診断を適用した。
+- 対象は `cal2024: 2024-01..02`, `fresh2024: 2024-03..12`, `refit2025: 2025-01..12`。
+- s0.5 artifacts: policy replay `data/reports/backtests/20260701_163114_20260702_entry_ev_side_prior_pressure_s0p5_broad_validation_trades_for_direction_exit_s1/`, enrichment `data/reports/backtests/20260701_163245_20260702_entry_ev_side_prior_pressure_s0p5_broad_validation_trade_enrichment_for_direction_exit_s1/`, diagnostic `data/reports/backtests/20260701_163300_20260702_entry_ev_direction_exit_residual_target_s0p5_broad_validation_s1/`。
+- s1 artifacts: policy replay `data/reports/backtests/20260701_163328_20260702_entry_ev_side_prior_pressure_s1_broad_validation_trades_for_direction_exit_s1/`, enrichment `data/reports/backtests/20260701_163453_20260702_entry_ev_side_prior_pressure_s1_broad_validation_trade_enrichment_for_direction_exit_s1/`, diagnostic `data/reports/backtests/20260701_163503_20260702_entry_ev_direction_exit_residual_target_s1_broad_validation_s1/`。
+- s0.5は215 selected rows。`confidence_exit -> same_side_large_regret_loss_target` pooled AUC `0.6919`, `confidence_exit -> large_exit_regret_loss_target` `0.6548`。pointwiseでは `selected_loss_first_prob` が same-side large regret AUC `0.7040`。
+- s1は108 selected rows。`side_context -> same_side_large_regret_loss_target` pooled AUC `0.7008`, `confidence_exit -> large_exit_regret_loss_target` `0.6677`。pointwiseでは `selected_loss_first_prob` が same-side large regret AUC `0.8100`。
+- direction/profit-barrier missは両scoreでchronological bucketが弱い。s0.5のdirection best pooled AUC `0.4569`, profit-barrier miss best `0.4758`; s1のdirection best `0.4087`, profit-barrier miss best `0.4638`。
+- 判断: broad validation diagnosticはaccepted。exit-regret risk auxiliary featureへ進めるが、hard blockや標準policyにはしない。標準policyはNoTrade。
+- report: `docs/reports/00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: s0.5/s1 broad policy replay OK; s0.5/s1 enrichment OK; s0.5/s1 direction/exit diagnostic OK
+
 ### 01:24 Entry EV direction exit fixed 2025 stress
 
 - 00255のdirection / exit residual targetを、00244/00245で崩れた fixed 2025-03..12 `side_prior_pressure_s0p5` stress tradesへ適用した。

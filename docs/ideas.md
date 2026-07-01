@@ -33,6 +33,8 @@
 - `direction_or_exit_loss_target` はvalidation上で `realized_loss_target` と同一になったため広すぎる。direction/profit-barrier miss、large-exit-regret、hold-too-longを分けて扱う。
 - fixed 2025 stressへdirection/exit residual targetを広げると no-prior shareは `0.1053` へ改善したが、chronological best pooled AUCは `0.5922` 程度でpolicy化には弱い。stress診断はvalidation evidenceとして使わない。
 - fixed 2025 stressでは `selected_loss_first_prob` が same-side missed / low-capture に AUC `0.7325`、same-side large regretに `0.7182` と強い。次のchronological validationではEV-overestimateだけでなくloss-first / profit-barrier / exit-hold特徴を分けて入れる。
+- broad validationでは `selected_loss_first_prob` がs0.5/s1両方でexit-regret系targetに残った。次は `confidence_exit` / `side_context` のprior-month bucket rateをprediction rowへ戻し、exit-regret risk auxiliary inputとしてcandidate-level selectorで評価する。
+- direction/profit-barrier missはbroad validationでもchronological pooled AUCが弱い。現bucketだけでpolicy化せず、side/context regime、side confidence、recent side drift、sequence-derived direction stabilityを別headで試す。
 
 ## モデル
 
@@ -71,6 +73,7 @@
 - validation target positiveが3件のような少数targetは、AUCが高くてもentry blockerに直結しない。policy接続前にpositive count、bucket share、勝ちtrade削除率、replacement path悪化を必ず見る。
 - chronological calibrationの no-prior share が `0.74` のように高い場合、pooled AUCが少し良くてもpolicy化しない。まずvalidation familyを増やしてbucket supportを確保する。
 - bucket supportが改善しても、fixed stressだけでAUCが `0.59` 程度ならhard gateにしない。support改善と未来汎化は別問題として扱う。
+- broad validationでAUC `0.65..0.70` が出ても、同じrowsで閾値を探すと過学習する。prediction-row input化後はprior-only replay、role/month floor、NoTrade-first selectorを必須にする。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。

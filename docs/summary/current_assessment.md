@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 01:24 JST
+最終更新: 2026-07-02 01:35 JST
 
 ## 結論
 
@@ -16,7 +16,7 @@
 |---|---|---|
 | Standard policy | なし | NoTrade-firstを維持 |
 | Best current evidence | `00253` で `exit_risk bucket t0.10..t0.20` hard selectorがfixed 2025でpositive total/worst month改善したが、`00254` のchronological validationではbaseline超えなし。`00256` のfixed stressもpolicy evidenceではない | fixed-window candidate rejected for now |
-| Latest diagnostic result | `00256` でdirection/exit residual targetをfixed 2025 stressへ適用。no-priorは `0.1053` へ改善したがbest pooled AUCは `0.5922`。pointwiseでは `selected_loss_first_prob` がexit/capture系に AUC `0.7325` | stress diagnostic accepted / not policy |
+| Latest diagnostic result | `00257` でs0.5/s1 broad validationへdirection/exit residual targetを適用。exit-regret系はchronological pooled AUC `0.65..0.70` が残るが、direction/profit-barrier missは弱い | broad diagnostic accepted / not policy |
 | Pointwise screens | q95 floor5 の high EV-overestimate risk rows は損失を拾うが、contextによって勝ちも削る | replacement未評価なのでpolicyではない |
 | Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement、common-entry loss、target featureのwindow依存 | hard blockではなく分解targetで扱う |
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00221` | raw / calibrated EV threshold、rank gate、quantile admission、positive floorを検証。候補数やscaleは改善するが、NoTrade-first selectorは通らない。 |
 | Exit capture / hold cap | `00222`..`00232` | `720m` や executable EV calibration は診断上有効。ただし月次tail、support不足、fresh/refit反転が残る。direct score標準化はしない。 |
 | Side balance / downside | `00233`..`00239` | side-balance単独、downside interaction、coverage gate、composite gateはいずれも標準候補を生まない。component targetへ分解する方針に転換。 |
-| Component target / EV overestimate / direction / replacement / exit | `00240`..`00256` | EV overestimateは有効だがfixed 2025で残差が出た。direction-side inversionはdiagnostic featureとして有効だが、単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。forced-exit riskはdirect penaltyでもselectorでも標準化不可。direction/exit residual target generationとfixed stress診断はacceptedだがpolicy化不可。 |
+| Component target / EV overestimate / direction / replacement / exit | `00240`..`00257` | EV overestimateは有効だがfixed/broad residualではloss-first / exit-regret系signalがより安定。direction-side inversionはdiagnostic featureとして有効だが、単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。forced-exit riskはdirect penaltyでもselectorでも標準化不可。direction/exit residual target generation、fixed stress、broad validation診断はacceptedだがpolicy化不可。 |
 
 ## 採用済みインフラ
 
@@ -58,6 +58,7 @@
 - multi-family policy trade enrichment for validation diagnostics
 - direction/exit residual target diagnostics
 - fixed-period direction/exit residual stress diagnostics
+- broad validation direction/exit residual diagnostics
 
 ## 採用しないもの
 
@@ -94,14 +95,16 @@
 - validation 77 rows / no-prior 0.74 のcalibrationをentry blockerへ直結すること
 - fixed 2025 stressで見つけた `selected_loss_first_prob` をhard blockへ直結すること
 - fixed stressのchronological bucket calibrationを標準policy evidenceとして扱うこと
+- broad validationのexit-regret AUCだけでhard selectorを採用すること
+- s1の取引数減少を利益edgeとして扱うこと
 
 ## 次にやること
 
-1. 00255/00256のtargetを、fixed stressではなく広いchronological validation familyへ適用する。
-2. `selected_loss_first_prob`, `selected_ev_overestimate_risk`, profit-barrier bucket, exit-hold bucketを別々のauxiliary featureとして扱う。
+1. exit-regret risk auxiliary inputを、prior-month rowsだけでprediction rowへ接続する。
+2. `selected_loss_first_prob`, `confidence_exit`, `side_context` をexit-regret系feature候補にし、direction/profit-barrier missとは分ける。
 3. `direction_or_exit_loss_target` は広すぎるため捨て、direction/profit-barrier miss、same-side missed、large-exit-regret、hold-too-longを分けて扱う。
-4. 新候補は NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、side PnL、trade supportで比較する。
-5. validation月を増やすまでは、少数positive target、fixed stress target、低AUC calibrationをentry blockerへ直接変換しない。
+4. 新候補は NoTrade、s0.5/s1 broad baseline、fixed 2025 stress、worst month、max DD、side PnL、trade supportで比較する。
+5. broad validationで見つけたfeatureも、直接hard blockにせずNoTrade-first selectorとprior-only replayを通す。
 
 ## 代表的な読む順
 
@@ -125,6 +128,7 @@
 16. `00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
 17. `00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
 18. `00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
+19. `00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
 
 entry EV admissionの流れを見る:
 
