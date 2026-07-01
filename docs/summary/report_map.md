@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 01:06 JST
+最終更新: 2026-07-02 01:17 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00254` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed 2025残差ではdirection-side inversionとexit capture failureが主target候補。replacement qualityは弱い。forced-exit riskはdirect penaltyでは失敗し、bucket-only hard selectorもvalidationではbaseline超えなし。multi-family validation enrichmentはaccepted。 |
+| `00240`..`00255` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed 2025残差ではdirection-side inversionとexit capture failureが主target候補。replacement qualityは弱い。forced-exit riskは標準化不可。multi-family enrichmentとdirection/exit residual target generationはacceptedだが、現validation supportではpolicy化しない。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00254` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed 2025で崩壊。direction inversion、replacement quality、forced-exit direct penaltyは標準化できない。forced-exit hard selectorはfixed 2025で有望だったが、chronological validationではbaselineを超えない。標準はNoTrade。 |
+| Latest decision | `00239`..`00255` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed 2025で崩壊。direction inversion、replacement quality、forced-exit direct penaltyは標準化できない。forced-exit hard selectorもvalidationではbaselineを超えない。direction/exit residual targetは作れたがsupport不足。標準はNoTrade。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -53,6 +53,7 @@
 14. `00252_2026-07-02_entry_ev_forced_exit_policy_inputs.md`
 15. `00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`
 16. `00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
+17. `00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
 
 entry EV admissionを追う:
 
@@ -75,6 +76,7 @@ component targetへ至る流れを追う:
 7. `00239_2026-06-30_entry_ev_composite_target_decomposition.md`
 8. `00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`
 9. `00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
+10. `00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
 
 古い罠を確認する:
 
@@ -108,10 +110,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00254 Entry EV Forced Exit Validation Selector Check
-Status: accepted infrastructure / selector rejected for standard
-Question: fixed 2025で有望だったforced-exit hard selectorはchronological validationでもbaselineを超えるか
-Best evidence: validation forced-exit target is only 3 positives; selector replay does not exceed baseline +68.0000
-Decision: multi-family enrichmentはaccepted。forced-exit selectorは標準policyにしない
-Next: broader direction/exit-capture residual targetsへ戻す
+Report: 00255 Entry EV Direction Exit Residual Target Diagnostics
+Status: accepted target diagnostics / not policy
+Question: validation enriched tradesでdirection/exit-capture residual targetはsupportとchronological signalを持つか
+Best evidence: direction_error_loss covers 29 trades / -104.8800, but chronological no-prior share is 0.7403
+Decision: target generationはaccepted。entry blockerにはしない
+Next: wider enriched validation familyでsupportを増やし、direction/profit-barrier missとlarge-exit-regret/hold-too-longを分ける
 ```

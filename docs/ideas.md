@@ -29,6 +29,8 @@
 - forced-exit hard selectorでは `exit_risk bucket t0.10..t0.20` がfixed 2025で大きく改善した。次はこの閾値帯を事前登録してvalidationへ戻す。`ev_exit t0.10` はtail縮小専用featureとして扱う。
 - forced-exit hard selectorをvalidationへ戻すとbaselineを超えず、低閾値はfresh/refitの勝ちtradeを削った。forced-exit threshold探索は一旦止め、multi-family enrichmentを使ってより広いdirection/exit-capture residual targetへ戻す。
 - forced-exit selector後のMay 2025残差は、forced-exit bucketではなくdirection error / same-side oracle edge / large exit regretに残る。次targetはdirection/exit-capture連動で作る。
+- validation enriched tradesでは `direction_error_loss_target` と `profit_barrier_miss_loss_target` が29件 / `-104.8800` を覆う。`selected_ev_overestimate_risk` はAUC `0.7083` だが20 rowsのみなので、hard blockではなくfeature候補として扱う。
+- `direction_or_exit_loss_target` はvalidation上で `realized_loss_target` と同一になったため広すぎる。direction/profit-barrier miss、large-exit-regret、hold-too-longを分けて扱う。
 
 ## モデル
 
@@ -65,6 +67,7 @@
 - target AUCが高いだけではpolicyに変換できない。00252 forced-exit riskのように、tailを縮める設定とtotalを改善する設定が分かれる場合は、direct scoreではなくNoTrade-first selector/tail objectiveで扱う。
 - fixed 2025で `exitrisk_bucket_t0p10..t0p20` が良く見えても、同一window発見の候補なので標準policyへ直行しない。threshold bandを狭く事前登録し、別chronological windowでNoTrade比較する。
 - validation target positiveが3件のような少数targetは、AUCが高くてもentry blockerに直結しない。policy接続前にpositive count、bucket share、勝ちtrade削除率、replacement path悪化を必ず見る。
+- chronological calibrationの no-prior share が `0.74` のように高い場合、pooled AUCが少し良くてもpolicy化しない。まずvalidation familyを増やしてbucket supportを確保する。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。

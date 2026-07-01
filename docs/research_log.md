@@ -4,6 +4,20 @@
 
 ## 2026-07-02 JST
 
+### 01:17 Entry EV direction exit residual target diagnostics
+
+- 00254でforced-exit selectorを止めたため、次の本流として direction / exit-capture residual target をvalidation enriched trades上で作る `scripts/experiments/entry_ev_direction_exit_residual_target_diagnostics.py` を追加した。
+- artifactは `data/reports/backtests/20260701_161638_20260702_entry_ev_direction_exit_residual_target_diagnostics_s1/`。
+- inputは00254の multi-family enriched validation trades 77 rows。
+- target supportは `direction_error_loss_target` 29件 / target PnL `-104.8800`, `large_exit_regret_loss_target` 8件 / `-57.6552`, `hold_too_long_loss_target` 9件 / `-55.9920`。
+- `direction_or_exit_loss_target` はこのvalidation sliceでは `realized_loss_target` と同一になり、広すぎる。
+- pointwiseでは `selected_ev_overestimate_risk` が direction/profit-barrier miss系に AUC `0.7083` だが、predicted rowsは20件のみ。`selected_time_exit_prob` は realized lossに AUC `0.6802`。
+- chronological calibrationは no-prior share `0.7403` が大きい。bestは `profit_exit -> hold_too_long_loss_target` pooled AUC `0.6875`, `profit_exit -> large_exit_regret_loss_target` `0.6667`。direction error系は `side_context` pooled AUC `0.5208`。
+- 判断: direction/exit residual target generationはaccepted。現validation supportだけではentry blockerや標準policyには接続しない。標準policyはNoTrade。
+- report: `docs/reports/00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: direction/exit residual target unit tests OK; validation diagnostic run OK; docs report tests OK
+
 ### 01:06 Entry EV forced exit validation selector check
 
 - 00253で有望だった `exit_risk bucket t0.10..t0.20` hard selectorをchronological validation familyへ戻した。

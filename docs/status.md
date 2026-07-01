@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 01:06 JST
+最終更新: 2026-07-02 01:17 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV direction exit residual target diagnosticsを追加した。00254でforced-exit selectorを止めたため、次の本流として validation enriched trades 77 rows上に direction / exit-capture residual targetを作った。`direction_error_loss_target` は29件 / target PnL `-104.8800`, `large_exit_regret_loss_target` は8件 / `-57.6552`, `hold_too_long_loss_target` は9件 / `-55.9920`。pointwiseでは `selected_ev_overestimate_risk` が direction/profit-barrier miss系に AUC `0.7083` だがpredicted rowsは20件のみ。chronological calibrationは no-prior share `0.7403` が大きく、bestでも `profit_exit -> hold_too_long_loss_target` pooled AUC `0.6875`, direction error系 `side_context` pooled AUC `0.5208`。判断: direction/exit residual target generationはaccepted。現validation supportだけではentry blockerや標準policyには接続しない。標準policyはNoTrade。詳細は `docs/reports/00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV forced exit validation selector checkを追加した。00253で有望だったforced-exit hard selectorをchronological validation familyへ戻すため、multi-family policy trade enrichment `scripts/experiments/entry_ev_multifamily_policy_trade_enrichment.py` を追加し、familyごとのprediction parquetへ正しくjoinしてexit-shortening/forced-exit diagnostics用の `selected_*` columnsを生成できるようにした。validation selected trades 77 rowsでは `forced_exit_loss_target` は3件 / target PnL `-8.4240` と小さい。`exit_risk` calibrationは mean AUC `0.9167`, pooled AUC `0.9444` と強く見えるがsupport不足。selector replayではbaseline `side_prior_pressure_s0p5` q95/floor5 total `+68.0000` を上回る設定はなく、`exitrisk_t0p02/t0p04` は `+41.4470`, `exitrisk_t0p01` は `-5.3622`, `evexit_t0p01` は `+54.8862`。判断: multi-family enrichment infrastructureはaccepted。validation forced-exit selectorは標準採用しない。00253のfixed 2025 positive resultはこのvalidation windowでは再現せず、標準policyはNoTrade。詳細は `docs/reports/00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
