@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 01:54 JST
+最終更新: 2026-07-02 02:04 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV exit regret selector deltaを追加した。`entry_ev_quantile_policy_backtest` のrun構造を直接比較する `scripts/experiments/entry_ev_policy_trade_delta_diagnostics.py` を追加し、00258の `exit_regret_selector_confidenceexit_bucket_t0p4` q99/floor5をbaseline s0.5 q99/floor5とtrade deltaで分解した。broad deltaは base 70 trades / `-142.3776` から candidate 36 trades / `+18.9072`、total delta `+161.2848`。only_base削除は39 rows / `+147.4706` だが、removed positive `+336.7570` も大きく、removed negative `-484.2276` で上回る構造。only_candidate replacementは5 rows / `-25.7298` で悪化。fixed 2025 deltaも total delta `+196.5008` だが同じ構造。s1 exposure baselineよりは良い。判断: delta診断はaccepted。candidateはpre-registeredのまま維持し、標準policyにはしない。標準policyはNoTrade。詳細は `docs/reports/00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV exit regret selector candidateを追加した。00257のexit-regret signalをprediction rowへ戻すため、`entry_ev_forced_exit_policy_inputs.py` に `confidence_exit`, `profit_exit`, `context_confidence` specsと `side_confidence_gap_bucket` を追加した。broad s0.5 target `same_side_large_regret_loss_target` から `exit_regret` riskを生成し、`confidence_exit` mean AUC `0.7239`, bucket share `0.4093`。soft penaltyは悪化したが、hard selector `exit_regret_selector_confidenceexit_bucket_t0p4` はbroad q99/floor5を `-142.3776 -> +18.9072`, max DD `162.1992 -> 54.5368` に改善。fixed 2025-03..12でも q99/floor5 `-177.3790 -> +19.1218`。判断: q99/floor5をpre-registered diagnostic candidateへ昇格。ただし同じbroad target/replay由来なので標準policyにはしない。標準policyはNoTrade。詳細は `docs/reports/00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

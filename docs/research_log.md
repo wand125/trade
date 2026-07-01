@@ -4,6 +4,23 @@
 
 ## 2026-07-02 JST
 
+### 02:04 Entry EV exit regret selector delta
+
+- 00258の次アクションとして、`exit_regret_selector_confidenceexit_bucket_t0p4` q99/floor5をbaseline s0.5 q99/floor5とtrade deltaで分解した。
+- `entry_ev_quantile_policy_backtest` のrun構造を直接比較する `scripts/experiments/entry_ev_policy_trade_delta_diagnostics.py` を追加した。
+- broad delta artifactは `data/reports/backtests/20260701_170355_20260702_entry_ev_exit_regret_selector_confexit_t0p4_q99_broad_delta_s2/`。
+- fixed 2025 delta artifactは `data/reports/backtests/20260701_170355_20260702_entry_ev_exit_regret_selector_confexit_t0p4_q99_fixed2025_delta_s2/`。
+- broad deltaは base 70 trades / `-142.3776`, candidate 36 trades / `+18.9072`, total delta `+161.2848`。
+- broadの内訳は only_base 39 rows / delta `+147.4706`, common 31 rows / `+39.5440`, only_candidate 5 rows / `-25.7298`。
+- broad only_baseは removed negative `-484.2276` を消す一方、removed positive `+336.7570` も失う。only_candidate replacementは added positive `+30.2670`, added negative `-55.9968` でnet negative。
+- fixed 2025 deltaは base 53 trades / `-177.3790`, candidate 21 trades / `+19.1218`, total delta `+196.5008`。only_base 36 rows / `+183.5286`, common `+42.8660`, only_candidate `-29.8938`。
+- s1 exposure baseline broad q99/floor5は `-46.3822`, max DD `118.8072`, 28 trades。exit-regret selectorは `+18.9072`, max DD `54.5368`, 36 tradesで、単なるs1型の取引削減より良い。
+- 月別では 2025-04 `+94.1720`, 2025-05 `+107.9724`, 2025-10 `+46.6100` が改善主因。一方 2025-11 `-39.6980`, 2025-09 `-27.5460`, 2025-03 `-26.8204`, 2024-03 `-24.0400` は悪化。
+- 判断: delta診断はaccepted。candidateはpre-registeredのまま維持するが、勝ちtrade削除、replacement悪化、月別悪化が残るため標準policyにはしない。標準policyはNoTrade。
+- report: `docs/reports/00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: policy trade delta unit test OK; py_compile OK; broad/fixed q99 delta run OK
+
 ### 01:54 Entry EV exit regret selector candidate
 
 - 00257の次アクションとして、exit-regret riskをprediction rowへ戻す入力生成を実装した。
