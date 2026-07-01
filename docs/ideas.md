@@ -42,6 +42,7 @@
 - only-candidate replacementは `candidate_pnl` ではなく `replacement_stateful_net` をtargetにする。candidate単体が勝っても、より良いbaseline tradeを塞ぐとone-position制約では悪化する。
 - `selected_conf_gap_bucket in {strong, nonpositive}` は replacement harm を強く拾った。次はexit-regret `t0.4` を動かさず、このreplacement guardだけを入れてstateful replayする。
 - `conf_gap_extreme` replacement guardはstateful replayでも broad/fixed を改善したが、same-window診断由来なので追加chronology/別familyへ固定適用してから候補選定する。
+- replacement guard replayをadmission gateへ通すとstrict/relaxedはNoTrade。support-relaxedでは q99/floor5が通るが、fresh2024が0 tradeのため標準候補ではない。次はこの0-trade原因をquantile support、score scale、side-gap distribution、entry floorに分けて診断する。
 
 ## モデル
 
@@ -85,6 +86,7 @@
 - deltaでremoved negativeがremoved positiveを上回っても、replacementがnet negativeなら標準化しない。one-position制約では「削った後に何が入るか」を必ず評価する。
 - replacement-riskのpointwise suppression estimateをstateful policy evidenceとして扱わない。`conf_gap_extreme` のように強いscreenでも、必ず一玉制約のstateful replayで確認してからpre-registerする。
 - replacement guard replayでq95/floor5が良く見えても、同じwindowでq95/q99を選ぶと過学習する。q95/floor5はdiagnostic candidateとして外部validationに回す。
+- support-relaxed q99/floor5は、role trade support不足を許した場合だけ通る。NoTrade-firstの標準採用では `min_role_trades` とactive/positive role supportを維持し、0-trade roleを「安全」と誤読しない。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。

@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 02:28 JST
+最終更新: 2026-07-02 02:35 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00261` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorがpre-registered candidateへ昇格し、deltaでもs1露出削減より良い。ただし勝ちtrade削除とreplacement悪化が残る。00260/00261で `replacement_stateful_net` targetと `conf_gap_extreme` replacement guard replayを追加し、q95/floor5もpositive化した。 |
+| `00240`..`00262` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorがpre-registered candidateへ昇格し、deltaでもs1露出削減より良い。ただし勝ちtrade削除とreplacement悪化が残る。00260/00261で `replacement_stateful_net` targetと `conf_gap_extreme` replacement guard replayを追加し、00262でadmission gateはNoTradeのままと確認した。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00261` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed/broadで崩壊。exit-regret `confidence_exit t0.4` hard selectorはbroad/fixed2025で改善し、replacement guard replayでさらに改善した。ただしguardはsame-window診断由来で、tail/side concentrationも残るため標準はNoTrade。 |
+| Latest decision | `00239`..`00262` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed/broadで崩壊。exit-regret `confidence_exit t0.4` hard selectorはbroad/fixed2025で改善し、replacement guard replayでさらに改善した。ただしadmission gateではfresh2024が0 tradeでrole support不足になり、標準はNoTrade。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -60,6 +60,7 @@
 21. `00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
 22. `00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
 23. `00261_2026-07-02_entry_ev_exit_regret_replacement_guard_replay.md`
+24. `00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`
 
 entry EV admissionを追う:
 
@@ -89,6 +90,7 @@ component targetへ至る流れを追う:
 14. `00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
 15. `00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
 16. `00261_2026-07-02_entry_ev_exit_regret_replacement_guard_replay.md`
+17. `00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`
 
 古い罠を確認する:
 
@@ -122,10 +124,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00261 Entry EV Exit Regret Replacement Guard Replay
-Status: accepted stateful replay diagnostic / not standard
-Question: conf_gap_extreme replacement guardはpointwiseだけでなくstateful replayでも改善するか
-Best evidence: broad q95/floor5 -30.2972 -> +63.5468, fixed q95/floor5 -67.8612 -> +25.9828; q99 also improves +8.215
-Decision: diagnostic replay candidateにするが、same-window由来なので標準化しない
-Next:追加chronology/別familyへ固定適用、admission gates、May tail診断、side share gate
+Report: 00262 Entry EV Exit Regret Replacement Guard Admission
+Status: accepted admission diagnostic / not standard
+Question: replacement guard candidateはNoTrade-first admission gateを通るか
+Best evidence: strict/relaxedはNoTrade。support-relaxedでは q99/floor5 validation total +27.1222, worst -54.2268, trades 36, side share 0.6944
+Decision: role trade support不足のため標準化しない。標準policyはNoTrade
+Next:追加chronology/別familyへ固定適用、fresh2024 0-trade原因診断、May tail診断
 ```

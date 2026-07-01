@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 02:28 JST
+最終更新: 2026-07-02 02:35 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV exit regret replacement guard admission診断を追加した。00261のguard replayをNoTrade-first admission selectorへ通したところ、strict gateもrelaxed diagnostic gateも `selected=no_trade`。主因は `fresh2024_broad_validation` が全候補0 tradeとなり、role-level trade supportを満たせないこと。support-only relaxationとして `min_role_trades=0`, `min_month_trades=0` を許すと q99/floor5だけが通り、validation total `+27.1222`, worst month `-54.2268`, trades `36`, max side share `0.6944`。ただしこれは標準ゲートではなく、追加chronology用の診断候補に留める。標準policyはNoTrade。詳細は `docs/reports/00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV exit regret replacement guard replayを追加した。00260の `conf_gap_extreme` replacement-risk screenを、`entry_ev_forced_exit_selector_inputs.py` の `--replacement-guard-conf-gap-buckets` として実際のselector inputへ接続した。exit-regret thresholdは `t0.4` のまま、片側がrisk-blockされた時だけ残った反対側の `side_confidence_gap_bucket in {strong, nonpositive}` を追加blockする。broad replayでは q99/floor5 `+18.9072 -> +27.1222`, q95/floor5 `-30.2972 -> +63.5468`。fixed 2025-03..12では q99/floor5 `+19.1218 -> +27.3368`, q95/floor5 `-67.8612 -> +25.9828`。判断: stateful replay evidenceはaccepted。`exit_regret_selector_replguard_confidenceexit_bucket_t0p4` はdiagnostic replay candidate。ただし同じreplacement診断から作ったguardなので標準policyにはしない。標準policyはNoTrade。詳細は `docs/reports/00261_2026-07-02_entry_ev_exit_regret_replacement_guard_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

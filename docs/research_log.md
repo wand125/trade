@@ -4,6 +4,22 @@
 
 ## 2026-07-02 JST
 
+### 02:35 Entry EV exit regret replacement guard admission
+
+- 00261の replacement guard replayをNoTrade-first admission selectorへ通した。
+- strict admission artifactは `data/reports/backtests/20260701_173345_20260702_entry_ev_exit_regret_replguard_admission_strict3_s1/`。
+- relaxed diagnostic admission artifactは `data/reports/backtests/20260701_173345_20260702_entry_ev_exit_regret_replguard_admission_relaxed3_s1/`。
+- support-relaxed diagnostic admission artifactは `data/reports/backtests/20260701_173532_20260702_entry_ev_exit_regret_replguard_admission_support_relaxed3_s1/`。
+- strict gateは `selected=no_trade`。全4候補が `positive_roles_low`, `active_roles_low`, `role_trades_low`, `month_trades_low` を含むblockerで落ちた。
+- relaxed diagnostic gateも `selected=no_trade`。全4候補が `role_trades_low` で落ちた。
+- 主因は `fresh2024_broad_validation` が全候補で0 tradeとなり、role-level trade supportを満たせないこと。
+- support-only relaxationとして `min_role_trades=0`, `min_month_trades=0` を許すと q99/floor5だけが通り、validation total `+27.1222`, min role total `0.0000`, worst month `-54.2268`, trades `36`, max DD `54.5368`, max side share `0.6944`。
+- q95/floor5は total `+63.5468` だが positive role countが1で、support-relaxedでも不合格。
+- 判断: replacement guard admission diagnosticはaccepted。q99/floor5は追加chronology用のsupport-relaxed diagnostic candidateに留め、標準policyにはしない。標準policyはNoTrade。
+- report: `docs/reports/00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: strict admission selector run OK; relaxed diagnostic admission selector run OK; support-relaxed diagnostic admission selector run OK
+
 ### 02:28 Entry EV exit regret replacement guard replay
 
 - 00260の `conf_gap_extreme` replacement-risk screenを、実際のselector inputへ接続してstateful replayした。
