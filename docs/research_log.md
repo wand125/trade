@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 08:25 Entry EV external hybrid side regime tail risk
+
+作業:
+
+- 00273の次アクションとして、capture-adjusted base selector scoreに chronological side/regime tail-risk headを重ねた。
+- `scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py` を追加し、common-entry targetを対象月より前だけで `direction + combined_regime` / `direction + combined_regime + session_regime` に集計してprediction rowへ戻した。
+- `direction_side_inversion_target` と `exit_capture_failure_target` を `direction_regime` で試し、negative controlとして `side_context` も試した。
+- q99/q95 floor5/rank90をstateful replayし、support、admission、trade enrichmentを実行した。
+- report: `docs/reports/00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- `direction_regime` の `direction_side_inversion_target` s0.25、`exit_capture_failure_target` s0.1/s0.25は同じstateful経路になり、q99/floor5/rank90は total `+3.1260`, worst month `-0.7200`, trades `3` まで改善した。
+- q95/floor5/rank90は total `-7.2060`, worst month `-4.5420`, trades `5`。
+- `direction_regime` s0.1と細かい `side_context` s0.25は q99 `-27.5640`, q95 `-29.5080` で悪化側に戻った。
+- q99 supportは4 candidate rowsで全てlong。admissionは `month_pnl_below_floor;role_trades_low;month_trades_low;side_share_high` でNoTrade。
+- q99 trade enrichmentでは direction error `0.0000`, EV overestimate mean `4.5454` まで下がったが、exit regret sumは `116.8140` とまだ大きい。
+
+判断:
+
+- coarse `direction_regime` tail-riskは有望なdiagnostic head。
+- ただし同一外部fold上の薄いsupport、全long集中、month floor未達なので標準policyにはしない。
+- 次は別chronologyで固定適用し、exit timing targetは別に改善する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `python3 -m py_compile scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py tests/test_entry_ev_side_regime_tail_policy_inputs.py`: OK
+- `python3 -m unittest tests.test_entry_ev_side_regime_tail_policy_inputs`: OK
+- input generation / stateful replay / support / admission / trade enrichment: OK
+
 ### 08:10 Entry EV external hybrid base executable selector
 
 作業:

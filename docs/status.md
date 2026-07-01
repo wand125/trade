@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 08:10 JST
+最終更新: 2026-07-02 08:25 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-Entry EV external hybrid base executable selectorを追加した。00272の反省を受け、capture factorをselector前のbase calibrated scoreへ掛け、そのbase executable score上でexit-regret riskとpre-block side-gap selectorを再生成した。post-selector補正よりは改善したがNoTrade未満。q99/floor5/rank90は `-27.4800`, 2 trades。q95/floor5/rank90は `-12.1040`, 4 trades。q95は00272の `-29.5080` より改善したが、00270の `+0.0820` には届かない。supportはq99 2 candidate rows、q95 13 candidate rows。admissionは両方NoTrade。判断: selector前capture補正は配置としては妥当だが、単独score化では2025-12 short tailを止められない。次はcapture-adjusted scoreにside/regime tail riskまたはdirection-side robustness headを併用する。詳細は `docs/reports/00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+Entry EV external hybrid side regime tail riskを追加した。00273のcapture-adjusted base selector scoreに、対象月より前のcommon-entry targetだけでfitするcoarse `direction_regime` tail-risk headを重ねた。`scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py` と単体テストを追加した。`direction_side_inversion_target` s0.25、`exit_capture_failure_target` s0.1/s0.25は同じstateful経路になり、q99/floor5/rank90は total `+3.1260`, worst month `-0.7200`, trades `3` まで改善した。ただし全tradeがlong、candidate rowsは4、admissionは `month_pnl_below_floor;role_trades_low;month_trades_low;side_share_high` でNoTrade。q95は total `-7.2060`。細かい `side_context` s0.25は q99 `-27.5640` へ戻り改善しない。判断: coarse side/regime tail-riskは有望なdiagnostic headだが、標準policyにはしない。詳細は `docs/reports/00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+Entry EV external hybrid base executable selectorを追加した。00272の反省を受け、capture factorをselector前のbase calibrated scoreへ掛け、そのbase executable score上でexit-regret riskとpre-block side-gap selectorを再生成した。post-selector補正よりは改善したがNoTrade未満。q99/floor5/rank90は `-27.4800`, 2 trades。q95/floor5/rank90は `-12.1040`, 4 trades。q95は00272の `-29.5080` より改善したが、00270の `+0.0820` には届かない。supportはq99 2 candidate rows、q95 13 candidate rows。admissionは両方NoTrade。判断: selector前capture補正は配置としては妥当だが、単独score化では2025-12 short tailを止められない。詳細は `docs/reports/00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV external hybrid executable EV preflightを追加した。00271のEV過大評価 / exit-capture failureに対し、既存prior-only executable EV補正を外部hybrid `2025-09..12` に固定適用した。post-selector scoreへcapture factorを掛けるとbase q95 scoreは `31.6282..37.7288` から executable q95 `9.1734..12.4031` へ縮んだが、stateful replayは q99 `-27.5640` / 3 trades、q95 `-29.5080` / 4 tradesでNoTrade未満。補正後tradeは両候補ともwin rate `0.0`。判断: executable EV補正方向は有効だが、post-selector / blocked-side scoreへの後段適用は採用しない。次はselector前のbase calibrated scoreへcapture factorを入れ、その後にexit-regret selector / side-gap quantileを再計算する。詳細は `docs/reports/00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
@@ -545,7 +547,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-直近更新: `max_predicted_hold_minutes` の広域検証では `240m` 単独ではなく `250..260m` 帯が本流になった。primary fixed candidateは `260m`、defensive sensitivityは `250m`。標準採用はまだせず、fresh chronological windowでfull prediction frameとpost-exit coverageを確保して再探索なし確認する。
+直近更新: `direction_regime` tail-risk headはq99を一時的にプラス化したが、3 trades/all-long/month floor未達で標準採用しない。次は同じfoldでthreshold/scopeを増やさず、別chronologyへ固定適用する。exit regretがまだ大きいため、exit timing targetは別headとして改善する。
 
 - 新targetを使う実験では、旧datasetを `--skip-existing` で流用しない。旧parquetでは新列が欠けるため、policy改善確認には再生成が必須。
 - holding max capの次検証では、`scripts/experiments/holding_max_grid.py` を使い、`prediction_coverage.csv` を確認する。月末後24h以内の決済があり得るため、predictionは `dataset_month == target_month` に切らずfull frameを渡す。fresh applyでは原則 `--require-post-coverage` を使う。
