@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 00:15 JST
+最終更新: 2026-07-02 00:45 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV forced exit selector inputsを追加した。00252の反省として、forced-exit riskをsmooth score penaltyではなくbucket-supported side candidate hard selectorに変換し、片側だけ高リスクなら反対側への置換も許すstateful replayを実施した。fixed 2025-03..12では `exitrisk_bucket_t0p10..t0p20` が大きく改善し、best q99は `exitrisk_bucket_t0p15/t0p20` total `+161.5908`, worst month `-74.7354`, trades `85`, max DD `79.9540`。`t0p10` もq99 total `+160.7678`, q95 total `+143.0104` と近く、side shareはより穏当。`evexit_bucket_t0p10` は q99 worst month `-48.1024`, max DD `55.0276` とtailを縮めるが total `-90.8702` で総損益候補ではない。判断: hard selector infrastructureはaccepted。固定2025上の有望候補は `exit_risk bucket t0.10..t0.20` だが、同一windowで見つけた結果なので標準policyにはせず、chronological validationへ戻す。標準policyはNoTrade。詳細は `docs/reports/00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV forced exit policy inputsを追加した。00251の次アクションとして `forced_exit_loss_target` をprediction rowへ接続し、`direction_inversion_bucket_s0p1` scoreへsoft penaltyをかけるstateful replayを実施した。all q95/q99 selected-trade target 123 rowsでは chronological mean AUCが `ev_exit 0.9500`, `exit_risk 0.8667` と強い。fixed 2025-03..12では総損益ベストが `forced_exit_loss_exitrisk_bucket_s0p5` q95 `-60.7862` だが worst month `-223.3346`。q99総損益ベストは `exitrisk_bucket_s0p25` `-93.3284`、q99 worst monthベストは `evexit_bucket_s1` worst `-86.6640` だが total `-185.0306`。判断: forced-exit input/replay infrastructureはaccepted。現penalty scoreは標準policyにせず、candidate selector / tail-risk objective / hold-cap adjustment featureへ回す。詳細は `docs/reports/00252_2026-07-02_entry_ev_forced_exit_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

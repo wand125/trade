@@ -4,6 +4,20 @@
 
 ## 2026-07-02 JST
 
+### 00:45 Entry EV forced exit selector inputs
+
+- 00252の反省として、forced-exit riskをsmooth score penaltyではなく side candidate hard selector に変換する `scripts/experiments/entry_ev_forced_exit_selector_inputs.py` を追加した。
+- artifactは `data/reports/backtests/20260701_152625_20260702_entry_ev_forced_exit_selector_inputs_s1/`。
+- `bucket` sourceだけを使用し、global fallbackはdirect/block decisionに使わない。`risk >= threshold` のsideだけscoreを `blocked_score` に落とし、反対sideが残ればstateful replayで置換できる形にした。
+- fixed 2025-03..12 replay 10設定では、`exit_risk bucket t0.10..t0.20` が大きく改善。best q99は `exitrisk_bucket_t0p15/t0p20` total `+161.5908`, worst month `-74.7354`, trades `85`, max DD `79.9540`。
+- `exitrisk_bucket_t0p10` も q99 total `+160.7678`, q95 total `+143.0104` と近く、side shareは `t0p15/t0p20` より穏当。
+- `evexit_bucket_t0p10` は q99 worst month `-48.1024`, max DD `55.0276` とtailを縮めるが、q99 total `-90.8702`。tail-risk diagnosticに留める。
+- May residualでは `exitrisk_t0p10` q99 `-74.7354`, q95 `-98.8414`。合算では direction error rate `0.7188`, same-side oracle profitable `0.9688`, large exit regret `0.7500`。forced-exit selector後の残差は方向/exit-capture問題。
+- 判断: hard selector input/replay infrastructureはaccepted。`exit_risk bucket t0.10..t0.20` は有望候補だが固定2025で見つけたため標準policyにはしない。次はchronological validationへ戻す。
+- report: `docs/reports/00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: forced-exit selector unit test OK; py_compile OK; selector input generation OK; fixed 2025 replay 10 settings OK; representative trade-output replays OK; May residual diagnostics OK
+
 ### 00:15 Entry EV forced exit policy inputs
 
 - 00251の次アクションとして、`forced_exit_loss_target` をprediction rowへ接続する `scripts/experiments/entry_ev_forced_exit_policy_inputs.py` を追加した。
