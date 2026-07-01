@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 04:01 JST
+最終更新: 2026-07-02 07:49 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV external hybrid 2025-09..12 replayを追加した。00269のHGB alias replayはpreflight止まりだったため、既存HGB entry + MLP exit hybrid `2025-09..12` へq99 prior guard方針を固定適用した。holdingは既存 `pred_mlp_*_exit_event_minutes` を使用。q99/floor5/rank90は9 candidate rows / 7 episodes / 3 active monthsだが、stateful replayは `-28.3940`, 6 trades, worst month `-19.2900`。prior guardはq99/q95とも発火0。q95/floor5/rank90は15 rows / 13 episodes / 4 months、10 tradesで total `+0.0820` だが worst month `-18.2640` でmonth floorを落とす。combined admissionはNoTrade。判断: q99 prior guardは外部full-hybrid foldでも標準採用を支持しない。詳細は `docs/reports/00270_2026-07-02_entry_ev_external_hybrid_2025_09_12_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV external HGB prior guard replayを追加した。既存entry-EV sweep inventoryではclean full-rank validationとして再利用できるのが既知の `2024-03..04` と `2025-01..02` だけだったため、標準HGB predictionを外部family preflightとして利用した。`scripts/experiments/entry_ev_base_policy_input_aliases.py` を追加し、生HGB predictionへquantile列、`pred_mlp_*exit_event_minutes` alias、ゼロbase risk列を付け、exit-regret selector pipelineへ接続した。HGB q99/floor5/rank90はsupport不足ではなく、HGB 2024-03..06で142 rows / 58 episodes / 4 active months。ただしstateful replayは HGB 2024-03..06 `-36.1556`, HGB 2025-08 `+26.5800`, overall `-9.5756`。prior guardは実行経路に影響せず、admissionはNoTrade。判断: base alias infrastructureはaccepted、外部HGB preflightはq99 prior guard標準採用を支持しない。詳細は `docs/reports/00269_2026-07-02_entry_ev_external_hgb_prior_guard_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

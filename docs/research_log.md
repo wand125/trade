@@ -4,6 +4,43 @@
 
 ## 2026-07-02 JST
 
+### 07:49 Entry EV external hybrid 2025-09..12 replay
+
+作業:
+
+- 00269のHGB alias replayより標準条件に近い、既存HGB entry + MLP exit hybrid `2025-09..12` を外部full-hybrid foldとして使った。
+- `entry_ev_base_policy_input_aliases.py` でbase quantile / base riskを付けた。holdingは既存 `pred_mlp_*_exit_event_minutes` を維持した。
+- exit-regret risk、pre/post selector input、prior `direction_regime` guardを00267/00269と同じ固定設定で生成した。
+- q99/floor5/rank90をno-guard / prior-guardでreplayした。
+- q95/floor5/rank90をstress比較としてreplayした。
+- support、episode、combined admissionを実行した。
+- report: `docs/reports/00270_2026-07-02_entry_ev_external_hybrid_2025_09_12_replay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- q99 prior guard inputは pre pass 9 / post pass 9 / newly admitted 1 / blocked 0。
+- q99 replayは no-guardとprior-guardが同一。total `-28.3940`, worst month `-19.2900`, trades `6`, max DD `26.7600`。
+- q99 supportは9 candidate rows / 7 episodes / 3 active months。
+- q95 replayは total `+0.0820`, worst month `-18.2640`, trades `10`, max DD `26.7600`。
+- q95 supportは15 candidate rows / 13 episodes / 4 active months。
+- combined admissionはNoTrade。q95は `month_pnl_below_floor`、q99は `positive_roles_low;total_pnl_below_floor;role_total_pnl_below_floor;month_pnl_below_floor;role_trades_low;month_trades_low`。
+
+判断:
+
+- q99 prior guardは外部full-hybrid foldでも標準採用を支持しない。
+- q95も月別tailが残るため標準候補にしない。
+- このbranchのthreshold rescueは止め、モデル/data設計へ戻す。
+- 標準policyはNoTrade。
+
+検証:
+
+- base input / risk input / selector input / prior guard input: OK
+- q99 no-guard and prior-guard replay: OK
+- q95 stress replay: OK
+- q99/q95 support and episode diagnostics: OK
+- combined admission selector: OK
+
 ### 04:01 Entry EV external HGB prior guard replay
 
 作業:
