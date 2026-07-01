@@ -39,6 +39,8 @@
 - soft exit-regret penaltyは悪化した。exit-regret riskは連続減点より、bucket source限定のhard selector / candidate-level selectorとして扱う。
 - exit-regret selector deltaではonly-candidate replacementがnet negative。次はreplacement rowsだけのrisk targetを作り、selectorで空いた枠へ入る悪い代替tradeを抑える。
 - exit-regret selectorは勝ちtradeも大きく削る。2025-03/09/11の悪化月を、removed positive / common deterioration / replacementのどれが主因か分けて診断する。
+- only-candidate replacementは `candidate_pnl` ではなく `replacement_stateful_net` をtargetにする。candidate単体が勝っても、より良いbaseline tradeを塞ぐとone-position制約では悪化する。
+- `selected_conf_gap_bucket in {strong, nonpositive}` は replacement harm を強く拾った。次はexit-regret `t0.4` を動かさず、このreplacement guardだけを入れてstateful replayする。
 
 ## モデル
 
@@ -80,6 +82,7 @@
 - broad validationでAUC `0.65..0.70` が出ても、同じrowsで閾値を探すと過学習する。prediction-row input化後はprior-only replay、role/month floor、NoTrade-first selectorを必須にする。
 - broad/fixed両方で改善した候補でも、target生成とreplayが同じ履歴に絡む場合は標準policyにしない。trade-delta、追加holdout、s1 exposure baseline比較を通す。
 - deltaでremoved negativeがremoved positiveを上回っても、replacementがnet negativeなら標準化しない。one-position制約では「削った後に何が入るか」を必ず評価する。
+- replacement-riskのpointwise suppression estimateをstateful policy evidenceとして扱わない。`conf_gap_extreme` のように強いscreenでも、必ず一玉制約のstateful replayで確認してからpre-registerする。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。

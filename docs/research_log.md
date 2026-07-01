@@ -4,6 +4,26 @@
 
 ## 2026-07-02 JST
 
+### 02:17 Entry EV exit regret replacement risk
+
+- 00259の次アクションとして、exit-regret selectorのonly-candidate replacement悪化を診断した。
+- `scripts/experiments/entry_ev_replacement_risk_delta_diagnostics.py` を追加し、trade delta only-candidate rowsをenriched prediction rowsへ戻した。
+- unit test `tests/test_entry_ev_replacement_risk_delta_diagnostics.py` を追加した。
+- candidate trade enrichment artifactは `data/reports/backtests/20260701_171213_20260702_entry_ev_exit_regret_selector_confexit_t0p4_broad_enrichment_for_replacement_s1/`。
+- all-candidate broad delta artifactは `data/reports/backtests/20260701_171253_20260702_entry_ev_exit_regret_selector_confexit_t0p4_all_candidates_broad_delta_s1/`。
+- all-candidate fixed 2025 delta artifactは `data/reports/backtests/20260701_171618_20260702_entry_ev_exit_regret_selector_confexit_t0p4_all_candidates_fixed2025_delta_s1/`。
+- broad replacement-risk artifactは `data/reports/backtests/20260701_171641_20260702_entry_ev_exit_regret_selector_replacement_risk_broad_s1/`。
+- fixed 2025 replacement-risk artifactは `data/reports/backtests/20260701_171641_20260702_entry_ev_exit_regret_selector_replacement_risk_fixed2025_s1/`。
+- targetは `candidate_pnl < 0` ではなく `replacement_stateful_net < 0` とした。candidate単体が勝っても、より良いbaseline tradeを塞ぐとone-position制約では悪化するため。
+- broad all-candidate only-candidate rowsは26件 / stateful net `-321.0916`。q99/floor5は5件 / harmful 3 / candidate PnL `-25.7298` だが、blocked positive `+122.9530` を含めると stateful net `-148.6588`。
+- fixed 2025では q99/floor5が4件 / harmful 3 / candidate PnL `-29.8938`, stateful net `-152.8468`。
+- `selected_conf_gap_bucket in {strong, nonpositive}` はbroadで10 rows / harmful 8 / stateful net `-378.9356`, nonharm flagged net `+10.7900`。fixedも同じ10 rows / harmful 8 / `-378.9356`。
+- `conf_gap_extreme_and_profit_miss` はbroad/fixedとも4 rows / harmful 4 / stateful net `-246.6400` でcleanだが、残るharmが大きい。
+- 判断: replacement-risk delta diagnosticはaccepted。`conf_gap_extreme` は次のstateful replay candidate。ただし現時点ではpointwise suppression estimateであり、標準policyにはしない。標準policyはNoTrade。
+- report: `docs/reports/00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: replacement-risk unit test OK; policy trade delta unit test OK; docs report test OK; py_compile OK; broad/fixed all-candidate delta run OK; broad/fixed replacement-risk diagnostic run OK
+
 ### 02:04 Entry EV exit regret selector delta
 
 - 00258の次アクションとして、`exit_regret_selector_confidenceexit_bucket_t0p4` q99/floor5をbaseline s0.5 q99/floor5とtrade deltaで分解した。

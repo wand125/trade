@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 02:04 JST
+最終更新: 2026-07-02 02:17 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00259` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorがpre-registered candidateへ昇格し、deltaでもs1露出削減より良い。ただし勝ちtrade削除とreplacement悪化が残る。 |
+| `00240`..`00260` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorがpre-registered candidateへ昇格し、deltaでもs1露出削減より良い。ただし勝ちtrade削除とreplacement悪化が残る。00260で `replacement_stateful_net` targetと `conf_gap_extreme` replacement-risk candidateを追加。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00259` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed/broadで崩壊。exit-regret `confidence_exit t0.4` hard selectorはbroad/fixed2025で改善し、deltaでもs1より良いが、勝ちtrade削除とreplacement悪化が残る。追加holdout前なので標準はNoTrade。 |
+| Latest decision | `00239`..`00260` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed/broadで崩壊。exit-regret `confidence_exit t0.4` hard selectorはbroad/fixed2025で改善し、deltaでもs1より良いが、勝ちtrade削除とreplacement悪化が残る。`conf_gap_extreme` はreplacement-risk replay candidateだが、stateful replay前なので標準はNoTrade。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -58,6 +58,7 @@
 19. `00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
 20. `00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
 21. `00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
+22. `00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
 
 entry EV admissionを追う:
 
@@ -85,6 +86,7 @@ component targetへ至る流れを追う:
 12. `00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
 13. `00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
 14. `00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
+15. `00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
 
 古い罠を確認する:
 
@@ -118,10 +120,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00259 Entry EV Exit Regret Selector Delta
-Status: accepted delta diagnostic / candidate remains pre-registered
-Question: exit-regret selectorの改善はclean loss removalか、それとも勝ちtrade削除/replacement悪化を含むか
-Best evidence: broad delta +161.2848, fixed2025 delta +196.5008, but broad removed positive +336.7570 and only-candidate replacement -25.7298
-Decision: candidateは維持するが標準化しない
-Next:追加chronology replay、replacement-risk check、悪化月2025-03/09/11診断、side share gate
+Report: 00260 Entry EV Exit Regret Replacement Risk
+Status: accepted replacement-risk diagnostic / replay candidate
+Question: only-candidate replacement悪化はどの事前特徴で拾えるか
+Best evidence: conf_gap_extreme flags broad/fixed 10 rows, harmful 8, stateful net -378.9356, nonharm flagged net +10.7900
+Decision: conf_gap_extremeを次のstateful replay candidateにするが、pointwise estimateなので標準化しない
+Next: t0.4維持でreplacement guard stateful replay、追加chronology、side share gate
 ```

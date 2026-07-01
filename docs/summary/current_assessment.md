@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 02:04 JST
+最終更新: 2026-07-02 02:17 JST
 
 ## 結論
 
@@ -16,7 +16,7 @@
 |---|---|---|
 | Standard policy | なし | NoTrade-firstを維持 |
 | Best current evidence | `00253` で `exit_risk bucket t0.10..t0.20` hard selectorがfixed 2025でpositive total/worst month改善したが、`00254` のchronological validationではbaseline超えなし。`00256` のfixed stressもpolicy evidenceではない | fixed-window candidate rejected for now |
-| Latest diagnostic result | `00259` でexit-regret selectorのtrade deltaを分解。broad delta `+161.2848`, fixed2025 delta `+196.5008` だが、勝ちtrade削除とreplacement悪化が残る | pre-registered candidate remains / not standard |
+| Latest diagnostic result | `00260` でexit-regret selectorのonly-candidate replacementを `replacement_stateful_net` targetで分解。`conf_gap_extreme` はbroad/fixedで10 rows / harmful 8 / stateful net `-378.9356` を拾う | replacement-risk replay candidate / not standard |
 | Pointwise screens | q95 floor5 の high EV-overestimate risk rows は損失を拾うが、contextによって勝ちも削る | replacement未評価なのでpolicyではない |
 | Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement、common-entry loss、target featureのwindow依存 | hard blockではなく分解targetで扱う |
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00221` | raw / calibrated EV threshold、rank gate、quantile admission、positive floorを検証。候補数やscaleは改善するが、NoTrade-first selectorは通らない。 |
 | Exit capture / hold cap | `00222`..`00232` | `720m` や executable EV calibration は診断上有効。ただし月次tail、support不足、fresh/refit反転が残る。direct score標準化はしない。 |
 | Side balance / downside | `00233`..`00239` | side-balance単独、downside interaction、coverage gate、composite gateはいずれも標準候補を生まない。component targetへ分解する方針に転換。 |
-| Component target / EV overestimate / direction / replacement / exit | `00240`..`00259` | EV overestimateは有効だがfixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorは有望なpre-registered candidateだが、deltaでは勝ちtrade削除とreplacement悪化が残る。direction-side inversionは単独selector/direct penaltyでは標準化できない。direction/exit residual target generation、fixed/broad diagnostics、exit-regret selector/delta診断はaccepted。 |
+| Component target / EV overestimate / direction / replacement / exit | `00240`..`00260` | EV overestimateは有効だがfixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorは有望なpre-registered candidateだが、deltaでは勝ちtrade削除とreplacement悪化が残る。00260で `replacement_stateful_net` targetと `conf_gap_extreme` replacement-risk candidateを追加。direction-side inversionは単独selector/direct penaltyでは標準化できない。 |
 
 ## 採用済みインフラ
 
@@ -62,6 +62,7 @@
 - exit-regret risk prediction-row input generation
 - exit-regret hard selector input generation
 - entry-EV policy-run trade delta diagnostics
+- entry-EV replacement-risk delta diagnostics
 
 ## 採用しないもの
 
@@ -104,14 +105,16 @@
 - `exit_regret_selector_confidenceexit_bucket_t0p4` を追加holdoutなしで標準policyにすること
 - exit-regret selectorをclean loss removerとして扱うこと
 - only-candidate replacement悪化を未確認のまま採用すること
+- replacement-riskのpointwise suppression estimateをstateful policy evidenceとして扱うこと
+- `conf_gap_extreme` replacement guardをstateful replayなしで標準policyにすること
 
 ## 次にやること
 
-1. `exit_regret_selector_confidenceexit_bucket_t0p4` q99/floor5をpre-registerし、追加chronologyまたは別familyで再探索なしにreplayする。
-2. only-candidate replacement rowsのrisk targetを作り、replacement悪化 `-25..-30` を抑えられるか見る。
-3. 2025-03/09/11の悪化月を診断し、勝ちtrade削除を減らす条件を探す。ただしt0.4 threshold自体は同じrowsで再調整しない。
-4. side concentrationが高いため、候補selectorにside share / role-month support gateを加える。
-5. direction/profit-barrier missは現bucketでは弱いため、exit-regret selectorとは別headで扱う。
+1. `exit_regret_selector_confidenceexit_bucket_t0p4` に `conf_gap_extreme` replacement guardを加え、threshold `t0.4` は動かさずstateful replayする。
+2. replay結果を00258/00259 candidate、s1 exposure baseline、NoTradeと比較する。
+3. 改善する場合だけ、`conf_gap_extreme` をpre-registerして追加chronologyまたは別familyへ再探索なしに適用する。
+4. 2025-03/09/11の悪化月を診断し、勝ちtrade削除を減らす条件を探す。ただし同じrowsで閾値再調整しない。
+5. side concentrationが高いため、候補selectorにside share / role-month support gateを加える。
 
 ## 代表的な読む順
 
@@ -138,6 +141,7 @@
 19. `00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
 20. `00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
 21. `00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
+22. `00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
 
 entry EV admissionの流れを見る:
 
