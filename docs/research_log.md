@@ -4,6 +4,19 @@
 
 ## 2026-07-01 JST
 
+### 23:07 Entry EV direction inversion selector diagnostics
+
+- 00247の次アクションとして、direction inversion riskをcandidate-level selector/ranking featureとして評価する `scripts/experiments/entry_ev_direction_inversion_selector_diagnostics.py` を追加した。
+- artifactは `data/reports/backtests/20260701_140703_20260701_entry_ev_direction_inversion_selector_diagnostics_s1/`。
+- side-prior baselineとdirection s0.1 runを同じdirection inversion prediction parquetでenrichし、selected sideのrisk/source/supportをcandidate単位に集約した。
+- NoTrade-first selectionでは全候補が `total_pnl_below_floor`, `role_total_pnl_below_floor`, `month_pnl_below_floor` で不合格。risk条件以前にPnL床を通らない。
+- direction s0.1 q99/floor5は total `-147.3314`, min month `-153.9192`, bucket high-risk PnL `-51.3254`, global high-risk PnL `-68.8644`。
+- pointwiseでは side-prior q95/floor5 の `bucket_or_global_high` 削除が `-160.8606 -> +79.3774` に見えるが、kept min month `-55.3686` で、replacement replayではない。
+- 判断: selector/ranking diagnosticsはaccepted。direction inversion risk単独では標準候補にならない。次はreplacement positive-quality headと組み合わせ、stateful replayで確認する。
+- report: `docs/reports/00248_2026-07-01_entry_ev_direction_inversion_selector_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: direction inversion selector unit tests OK; py_compile OK; diagnostic run OK
+
 ### 22:57 Entry EV direction inversion policy inputs
 
 - 00246で有望だった `direction_side_inversion_target` をprediction rowへ接続する `scripts/experiments/entry_ev_direction_inversion_policy_inputs.py` を追加した。

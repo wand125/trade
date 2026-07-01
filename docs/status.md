@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 22:57 JST
+最終更新: 2026-07-01 23:07 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV direction inversion selector diagnosticsを追加した。00247のdirection inversion riskをdirect score penaltyではなくcandidate-level selector/ranking featureとして集約した。side-prior baselineとdirection s0.1 runを同じprediction parquetでenrichし、selected sideのrisk/source/supportをcandidate単位に集約。NoTrade-first selectionでは全候補が `total_pnl_below_floor`, `role_total_pnl_below_floor`, `month_pnl_below_floor` で不合格。pointwiseではhigh-risk削除が改善に見えるが、one-position replacementを再実行しておらずpolicy evidenceではない。判断: selector diagnosticsはaccepted。direction inversion risk単独では標準候補にならない。次はreplacement positive-quality headと組み合わせ、stateful replayで確認する。詳細は `docs/reports/00248_2026-07-01_entry_ev_direction_inversion_selector_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV direction inversion policy inputsを追加した。00246の `direction_side_inversion_target` をprediction rowへ接続し、bucket-supported riskだけをscore penaltyに使う `direction_inversion_bucket` scoreを生成した。fixed 2025-03..12では s0.1 が q99/floor5 `-177.3790 -> -147.3314` に改善、q95/floor5は `-160.8606 -> -163.3410` とほぼ横ばい。s0.25/s0.5は過剰penaltyで、特にq95を壊す。path診断ではs0.1 q99の改善はreplacement差 `+33.5480` が主で、common-entry差は `-3.5004`。判断: direction inversion risk input generationはaccepted。direct score penaltyは標準policyにせず、s0.1をdiagnostic baselineに留める。次はselector/ranking feature化とreplacement quality併用へ進む。詳細は `docs/reports/00247_2026-07-01_entry_ev_direction_inversion_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

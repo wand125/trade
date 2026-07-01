@@ -1,6 +1,6 @@
 # Trade Research Summary
 
-最終更新: 2026-07-01 22:57 JST
+最終更新: 2026-07-01 23:07 JST
 
 `docs/reports/` の大量レポートを読む前の入口。ここでは詳細ログを再掲せず、現在の判断、研究レーン、読む順番だけを管理する。
 
@@ -10,7 +10,7 @@
    現時点の結論、採用状態、次に進めるべき検証。
 
 2. [Report Map](report_map.md)
-   `00001` から `00247` までのレポートをテーマ別に圧縮した地図。
+   `00001` から `00248` までのレポートをテーマ別に圧縮した地図。
 
 3. 詳細が必要なときだけ [../reports](../reports) の個別レポートを読む。
 
@@ -18,7 +18,7 @@
 
 標準採用できる利益最大化policyはまだない。現在の標準判断は NoTrade-first で、採用できているのは検証インフラと診断レーンである。
 
-最新の焦点は entry EV 系の再整理。絶対EV閾値、rank gate、quantile admission、hold-cap延長、prior inversion guard、executable EV、side-balance、composite hard gateを順に試したが、標準候補はまだない。`00243` で `side_prior_pressure` がbaseよりAUC改善し、`00244` でprediction rowへ接続するとvalidationは改善した。ただし fixed 2025で崩れ、`00245` でcommon-entry lossとreplacement lossを分離し、`00246` でdirection-side inversionが次のprimary target候補になり、`00247` でprediction row接続まで進めた。direct score penaltyではNoTradeを超えないため、標準policyはNoTradeのまま。
+最新の焦点は entry EV 系の再整理。絶対EV閾値、rank gate、quantile admission、hold-cap延長、prior inversion guard、executable EV、side-balance、composite hard gateを順に試したが、標準候補はまだない。`00243` で `side_prior_pressure` がbaseよりAUC改善し、`00244` でprediction rowへ接続するとvalidationは改善した。ただし fixed 2025で崩れ、`00245` でcommon-entry lossとreplacement lossを分離し、`00246` でdirection-side inversionが次のprimary target候補になり、`00247` でprediction row接続、`00248` でselector/ranking feature診断まで進めた。単独ではNoTradeを超えないため、標準policyはNoTradeのまま。
 
 ## 更新ルール
 

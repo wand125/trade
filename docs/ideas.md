@@ -116,6 +116,7 @@
 - 00245でfixed 2025崩壊をpath分解した。q95はcommon-entry delta `-46.6146` とreplacement delta `-58.6720` が両方悪く、q99はreplacement delta `+60.6992` で改善するがtotalはNoTrade未満。次は `direction_side_inversion`, `exit_capture_failure`, `same_entry_exit_delta`, `replacement_quality` を別targetとして作り、EV-overestimate risk単独では拾えない低risk大損contextを説明する。
 - 00246でcommon/replacement loss targetを作ると、`direction_side_inversion_target` が common 50 rows / `-592.5618`, chronological risk_pressure AUC `0.6865` と相対的に良かった。次はdirection-side inversion headをprediction rowへ接続し、bucket-supported predictionとglobal fallbackを分けたranking/selector featureとして評価する。`common_failure_target` と広い `exit_capture_failure_target` は粗すぎるため、そのままtraining labelにしない。
 - 00247でdirection inversion riskをprediction rowへ接続した。s0.1はfixed 2025 q99/floor5を `-177.3790 -> -147.3314` に改善したが、q95は横ばいでNoTrade未満。direct score penaltyは標準採用せず、次はcandidate-level selector/ranking feature、bucket-supported source constraint、replacement positive-quality headとの併用に移す。
+- 00248でdirection inversion riskをcandidate-level selector/ranking featureとして集約したが、全候補がPnL床で不合格。pointwise high-risk削除は見かけ上改善するが、one-position replacement replayではない。次は `replacement_positive_quality_target` をprediction rowへ接続し、direction inversion riskはreplacement qualityが低い局面だけ使うcombined stateful ruleとして検証する。
 
 ## 外部データ候補
 
