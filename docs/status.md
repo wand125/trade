@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 23:07 JST
+最終更新: 2026-07-01 23:25 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV replacement quality policy inputsを追加した。00248の次アクションとして `replacement_positive_quality_target` をprediction rowへ接続し、direction inversion riskを `direction_risk * (1 - replacement_quality)` としてreplacement qualityが低い時だけ使うcombined scoreを生成した。`risk_pressure` quality headは chronological mean AUC `0.3542` と逆向きに近く、`side_context` も `0.4722` と弱い。fixed 2025-03..12 stateful replayではq99/floor5の最良は引き続きdirection s0.1 `-147.3314`、combined最良は `-156.6124` で及ばない。q95/floor5はside_context/global fallback系が total `-156.9854` と僅かにside-priorを上回ったが、min month `-223.9294` でNoTrade未満。判断: replacement-quality input/replay infrastructureはaccepted。現行headとcombined scoreは標準policyにしない。詳細は `docs/reports/00249_2026-07-01_entry_ev_replacement_quality_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV direction inversion selector diagnosticsを追加した。00247のdirection inversion riskをdirect score penaltyではなくcandidate-level selector/ranking featureとして集約した。side-prior baselineとdirection s0.1 runを同じprediction parquetでenrichし、selected sideのrisk/source/supportをcandidate単位に集約。NoTrade-first selectionでは全候補が `total_pnl_below_floor`, `role_total_pnl_below_floor`, `month_pnl_below_floor` で不合格。pointwiseではhigh-risk削除が改善に見えるが、one-position replacementを再実行しておらずpolicy evidenceではない。判断: selector diagnosticsはaccepted。direction inversion risk単独では標準候補にならない。次はreplacement positive-quality headと組み合わせ、stateful replayで確認する。詳細は `docs/reports/00248_2026-07-01_entry_ev_direction_inversion_selector_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

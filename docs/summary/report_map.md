@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-01 23:07 JST
+最終更新: 2026-07-01 23:25 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00248` | Component targets / EV overestimate / direction | EV overestimateは相対的に残るが、fixed 2025残差ではdirection-side inversionが主target候補。00248でselector feature化まで進めたが、単独では標準採用なし。 |
+| `00240`..`00249` | Component targets / EV overestimate / direction / replacement | EV overestimateは相対的に残るが、fixed 2025残差ではdirection-side inversionが主target候補。replacement positive-qualityとのcombined replayもNoTrade未満で、標準採用なし。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00248` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだが、fixed 2025で崩壊。direction inversionはdiagnostic featureとして残すが、次はreplacement quality併用。標準はNoTrade。 |
+| Latest decision | `00239`..`00249` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed 2025で崩壊。direction inversionはdiagnostic featureとして残る。replacement quality併用も現定義では弱く、標準はNoTrade。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -47,6 +47,7 @@
 8. `00246_2026-07-01_entry_ev_common_loss_target_diagnostics.md`
 9. `00247_2026-07-01_entry_ev_direction_inversion_policy_inputs.md`
 10. `00248_2026-07-01_entry_ev_direction_inversion_selector_diagnostics.md`
+11. `00249_2026-07-01_entry_ev_replacement_quality_policy_inputs.md`
 
 entry EV admissionを追う:
 
@@ -100,10 +101,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00248 Entry EV Direction Inversion Selector Diagnostics
+Report: 00249 Entry EV Replacement Quality Policy Inputs
 Status: accepted diagnostics / not standard
-Question: direction inversion riskはcandidate selector/ranking featureとして単独利用できるか
-Best evidence: all candidates fail PnL floors; pointwise high-risk deletion can improve totals but is not stateful replay
-Decision: selector diagnosticsはaccepted。単独では標準policyにしない
-Next: replacement_positive_quality_target headとcombined stateful ruleを試す
+Question: replacement positive-quality headでdirection inversion riskの副作用を抑えられるか
+Best evidence: target AUC is weak; combined stateful replay remains NoTrade below zero
+Decision: input/replay infrastructureはaccepted。現行headとcombined scoreは標準policyにしない
+Next: replacement qualityをstay-flat value / replacement regretへreframeし、q99 residual common lossとexit captureを診断する
 ```

@@ -4,6 +4,20 @@
 
 ## 2026-07-01 JST
 
+### 23:25 Entry EV replacement quality policy inputs
+
+- 00248の次アクションとして、`replacement_positive_quality_target` をprediction rowへ接続する `scripts/experiments/entry_ev_replacement_quality_policy_inputs.py` を追加した。
+- artifactは `data/reports/backtests/20260701_141851_20260701_entry_ev_replacement_quality_policy_inputs_s1/` と `data/reports/backtests/20260701_142327_20260701_entry_ev_replacement_quality_side_context_policy_inputs_s1/`。
+- replacement-only 43 rowsから、対象月より前だけで低容量bucket rateをfitし、long/short side rowへ `predicted_replacement_quality` を付与した。
+- combined scoreは `direction_inversion_risk * (1 - replacement_quality)` をpenalty化し、direction riskをreplacement qualityが低い時だけ使う形にした。
+- target calibrationは `risk_pressure` mean AUC `0.3542`, `side_context` / `side_context_risk` mean AUC `0.4722`。現行のbinary positive-quality headは弱い。
+- fixed 2025-03..12では、q99/floor5の最良は引き続きdirection s0.1 `-147.3314`。combined最良は `risk_pressure drbucket_or_global/qbucket_or_global s0.25` の `-156.6124`。
+- q95/floor5は `side_context drbucket_or_global/qbucket_or_global s0.25` が total `-156.9854` でside-priorを僅かに上回るが、min month `-223.9294` でNoTrade未満。
+- 判断: replacement-quality prediction-row inputとcombined stateful replay infrastructureはaccepted。現行headとcombined scoreは標準policyにしない。
+- report: `docs/reports/00249_2026-07-01_entry_ev_replacement_quality_policy_inputs.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: replacement quality input unit tests OK; py_compile OK; input generation OK; fixed 2025 stateful replay 6 settings OK
+
 ### 23:07 Entry EV direction inversion selector diagnostics
 
 - 00247の次アクションとして、direction inversion riskをcandidate-level selector/ranking featureとして評価する `scripts/experiments/entry_ev_direction_inversion_selector_diagnostics.py` を追加した。
