@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 02:35 JST
+最終更新: 2026-07-02 02:52 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV quantile candidate support診断を追加した。00262のfresh2024 0-trade原因を候補漏斗で分解し、`scripts/experiments/entry_ev_quantile_candidate_support_diagnostics.py` を追加した。replguard + `sg95` では fresh q99/floor5が quantile hold ok `184` まで残るが floor5通過 `0`、q95/floor5も `622 -> 0`。一方base `side_prior_pressure_s0p5` では fresh q99/floor5 `26` rows、q95/floor5 `34` rowsが通り、すべてshort。base q99/floor5 26 rowsは selector後も `score>5` と `rank_q90` を満たし直接blockも0だが、post-block `side_gap_pct` が約0.88に落ち `sg95` で消える。blocked sideの `-1e9` がside-gap分布を汚染している可能性が高い。`sg0` replayは total positiveでも worst month `-133.6988` とrole trade support不足でadmissionはNoTrade。次はpre-block/finite-side side-gap quantileを作る。詳細は `docs/reports/00263_2026-07-02_entry_ev_quantile_candidate_support_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV exit regret replacement guard admission診断を追加した。00261のguard replayをNoTrade-first admission selectorへ通したところ、strict gateもrelaxed diagnostic gateも `selected=no_trade`。主因は `fresh2024_broad_validation` が全候補0 tradeとなり、role-level trade supportを満たせないこと。support-only relaxationとして `min_role_trades=0`, `min_month_trades=0` を許すと q99/floor5だけが通り、validation total `+27.1222`, worst month `-54.2268`, trades `36`, max side share `0.6944`。ただしこれは標準ゲートではなく、追加chronology用の診断候補に留める。標準policyはNoTrade。詳細は `docs/reports/00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

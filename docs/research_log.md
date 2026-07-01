@@ -4,6 +4,28 @@
 
 ## 2026-07-02 JST
 
+### 02:52 Entry EV quantile candidate support diagnostics
+
+- 00262のfresh2024 0-trade原因を、candidate row supportの漏斗で診断した。
+- `scripts/experiments/entry_ev_quantile_candidate_support_diagnostics.py` を追加した。
+- unit test `tests/test_entry_ev_quantile_candidate_support_diagnostics.py` を追加した。
+- replguard `sg95` support artifactは `data/reports/backtests/20260701_174501_20260702_entry_ev_exit_regret_replguard_candidate_support_v2_s1/`。
+- no-guard `sg95` support artifactは `data/reports/backtests/20260701_174614_20260702_entry_ev_exit_regret_noguard_candidate_support_s1/`。
+- base side-prior support artifactは `data/reports/backtests/20260701_174652_20260702_entry_ev_side_prior_s0p5_candidate_support_s1/`。
+- `sg0` support artifactsは `data/reports/backtests/20260701_174857_20260702_entry_ev_exit_regret_noguard_sg0_support_s1/` と `data/reports/backtests/20260701_174926_20260702_entry_ev_exit_regret_replguard_sg0_support_s1/`。
+- `sg0` broad replay artifactは `data/reports/backtests/20260701_175000_20260702_entry_ev_exit_regret_replguard_sg0_broad_backtest_s1/`。
+- `sg0` admission artifactsは `data/reports/backtests/20260701_175147_20260702_entry_ev_exit_regret_replguard_sg0_admission_strict3_s1/` と `data/reports/backtests/20260701_175147_20260702_entry_ev_exit_regret_replguard_sg0_admission_relaxed3_s1/`。
+- replguard `sg95` では fresh q99/floor5が quantile all `187`, hold ok `184` まで残るが floor5通過 `0`。q95/floor5も `631`, `622`, `0`。
+- base `side_prior_pressure_s0p5` では fresh q99/floor5が `26` rows、q95/floor5が `34` rows通過し、すべてshort。
+- base q99/floor5の26 rowsを追跡すると、exit-regret selector後も `score_q99=26`, `rank_q90=26`, `score_gt5=26`, direct block `0` だが、`side_gap_q95=0`。
+- 原因は selector blocking後の `side_gap_pct` 再計算。blocked sideの `-1e9` がside-gap分布を膨らませ、通常のshort候補の `side_gap_pct` が約0.88に落ちる。
+- `sg0` では fresh supportが q99/floor5 `26`, q95/floor5 `38` に戻る。
+- replguard `sg0` replayは q95/floor5 total `+117.7700` だが worst month `-133.6988`, trades `181`, max DD `133.6988`。strict/relaxed admissionはNoTrade。
+- 判断: candidate support diagnosticはaccepted。`side_gap_pct` post-block汚染を修正候補にする。`sg0` は診断だけで、標準policyにはしない。標準policyはNoTrade。
+- report: `docs/reports/00263_2026-07-02_entry_ev_quantile_candidate_support_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: candidate support unit test OK; py_compile OK; support diagnostic runs OK; `sg0` replay OK; `sg0` admission selector runs OK
+
 ### 02:35 Entry EV exit regret replacement guard admission
 
 - 00261の replacement guard replayをNoTrade-first admission selectorへ通した。
