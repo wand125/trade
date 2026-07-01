@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 08:04 Entry EV external hybrid executable EV preflight
+
+作業:
+
+- 00271のEV過大評価 / exit-capture failureに対し、既存のprior-only executable EV補正を外部hybrid `2025-09..12` へ固定適用した。
+- `entry_ev_executable_ev_policy_inputs.py` で、post-selector score `pred_exit_regret_selector_replguard_preblockgap_confidenceexit_bucket_t0p4_*` にcapture factorを掛けた `external_executable` scoreを生成した。
+- q99/q95 floor5/rank90をstateful replayし、support、admission、trade enrichmentを実行した。
+- report: `docs/reports/00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- base selected score q95は `31.6282..37.7288` から executable q95 `9.1734..12.4031` へ縮んだ。
+- q99 replayは total `-27.5640`, worst month `-26.8440`, trades `3`。
+- q95 replayは total `-29.5080`, worst month `-26.8440`, trades `4`。
+- supportはq99 4 candidate rows、q95 8 candidate rows。
+- admissionは両方NoTrade。blockersは `positive_roles_low;total_pnl_below_floor;role_total_pnl_below_floor;month_pnl_below_floor;role_trades_low;month_trades_low`。
+- 補正後trade enrichmentではq99/q95ともwin rate `0.0`。
+
+判断:
+
+- executable EV補正はscore scaleを縮めるが、post-selector / blocked-side scoreへ後段適用するとstateful admissionは改善しない。
+- このrunは負の対照として保持し、policy候補にはしない。
+- 次はselector前のbase calibrated scoreへcapture factorを入れ、その後にexit-regret selector / side-gap quantileを再計算する。
+- 標準policyはNoTrade。
+
+検証:
+
+- executable EV input generation: OK
+- q99/q95 stateful replay: OK
+- support/admission/trade enrichment: OK
+
 ### 07:57 Entry EV external hybrid loss target insight
 
 作業:
