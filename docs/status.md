@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 03:50 JST
+最終更新: 2026-07-02 04:01 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV external HGB prior guard replayを追加した。既存entry-EV sweep inventoryではclean full-rank validationとして再利用できるのが既知の `2024-03..04` と `2025-01..02` だけだったため、標準HGB predictionを外部family preflightとして利用した。`scripts/experiments/entry_ev_base_policy_input_aliases.py` を追加し、生HGB predictionへquantile列、`pred_mlp_*exit_event_minutes` alias、ゼロbase risk列を付け、exit-regret selector pipelineへ接続した。HGB q99/floor5/rank90はsupport不足ではなく、HGB 2024-03..06で142 rows / 58 episodes / 4 active months。ただしstateful replayは HGB 2024-03..06 `-36.1556`, HGB 2025-08 `+26.5800`, overall `-9.5756`。prior guardは実行経路に影響せず、admissionはNoTrade。判断: base alias infrastructureはaccepted、外部HGB preflightはq99 prior guard標準採用を支持しない。詳細は `docs/reports/00269_2026-07-02_entry_ev_external_hgb_prior_guard_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV fresh support episode diagnosticsを追加した。00267で残ったfresh2024 support不足をcandidate rows、episode、stateful tradeへ分解するため、`scripts/experiments/entry_ev_candidate_episode_support_diagnostics.py` を追加した。q99/floor5/rank90はfreshで26 rowsあるが6 episodes、1 active monthに集中し、実行では1 trade `+24.0400` のみ。q95/floor5/rank90は34 rows、9 episodes、3 months、3 trades `+32.7380` まで増えるが、00267ではq99よりtail/DDが悪い。q99 rank0はfresh supportを61 rows、23 episodes、5 months、8 trades `+73.6226` へ増やす一方、cal2024 `-26.9300`、refit2025 `-106.8816`、overall `-60.1890` へ崩れ、strict admissionはNoTrade。判断: episode診断はaccepted、rank0 support緩和はreject、標準policyはNoTrade。詳細は `docs/reports/00268_2026-07-02_entry_ev_fresh_support_episode_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 04:01 Entry EV external HGB prior guard replay
+
+作業:
+
+- `entry_ev_validation_inventory.py` を再実行し、既存entry-EV sweepでclean full-rank validationとして再利用できるwindowを確認した。
+- `scripts/experiments/entry_ev_base_policy_input_aliases.py` を追加した。
+- 標準HGB predictionへ quantile列、`pred_mlp_*exit_event_minutes` alias、ゼロbase risk列を付け、exit-regret selector pipelineへ接続した。
+- HGB 2024-03..06 と HGB 2025-08 に、`confidence_exit` exit-regret risk、pre-block side-gap selector、prior `direction_regime` guardを固定適用した。
+- q99/floor5/rank90で no-guard と prior-guard をstateful replayした。
+- support、episode、admission診断を実行した。
+- report: `docs/reports/00269_2026-07-02_entry_ev_external_hgb_prior_guard_replay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- usable full-rank validation inventoryは既知の `2024-03..04`, `2025-01..02` のみ。
+- HGB q99/floor5/rank90 supportは HGB 2024-03..06で142 rows / 58 episodes / 4 active months、HGB 2025-08で11 rows / 7 episodes / 1 active month。
+- prior guard inputは HGB 2025-08で1 rowをblockしたが、実行trade経路には影響しなかった。
+- no-guardとprior-guardのreplayは同一。HGB 2024-03..06 `-36.1556`, HGB 2025-08 `+26.5800`, overall `-9.5756`, trades `35`, max DD `56.1766`。
+- admissionはNoTrade。blockersは `positive_roles_low;total_pnl_below_floor;role_total_pnl_below_floor;month_pnl_below_floor`。
+
+判断:
+
+- base policy input alias infrastructureはaccepted。
+- 外部HGB preflightはq99 prior guardの標準採用を支持しない。
+- この失敗はfreshのようなsupport不足ではなく、別familyでのPnL/regime robustness不足。
+- 標準policyはNoTrade。q99 prior guardはdiagnostic candidateのまま。
+
+検証:
+
+- `python3 -m unittest tests.test_entry_ev_base_policy_input_aliases`: OK, 1 test
+- `python3 -m py_compile scripts/experiments/entry_ev_base_policy_input_aliases.py tests/test_entry_ev_base_policy_input_aliases.py`: OK
+- validation inventory / base inputs / risk inputs / selector inputs / prior guard / replay / support / admission: OK
+
 ### 03:50 Entry EV fresh support episode diagnostics
 
 作業:

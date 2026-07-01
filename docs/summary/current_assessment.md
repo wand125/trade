@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 03:50 JST
+最終更新: 2026-07-02 04:01 JST
 
 ## 結論
 
@@ -8,7 +8,7 @@
 
 現在の標準判断は NoTrade-first。候補policyは、複数chronological window、role/month PnL floor、trade support、side balance、NoTrade比較を通らない限り標準化しない。
 
-直近で最も進んだ候補は exit-regret系。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00268` ではfresh support不足をepisode単位で分解し、q99/rank90/floor5は26 rowsでも6 episodes/1 active month/1 tradeに集中していること、rank0緩和はfresh supportを増やすがcal/refitを壊すことを確認した。
+直近で最も進んだ候補は exit-regret系。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00268` ではfresh support不足をepisode単位で分解し、rank0緩和はfresh supportを増やすがcal/refitを壊すことを確認した。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満だった。
 
 ## 現在の判断
 
@@ -16,9 +16,9 @@
 |---|---|
 | Standard policy | なし。NoTrade-firstを維持 |
 | Current diagnostic candidate | q99/floor5: `exit_regret_selector_replguard` + pre-block support normalization + prior `direction_regime` guard |
-| Why not standard | strict/relaxed admissionで `role_trades_low`。fresh2024はq99/rank90/floor5で6 episodes/1 active month/1 tradeしかない |
+| Why not standard | strict/relaxed admissionで `role_trades_low`。外部HGB preflightでもoverallがNoTrade未満 |
 | Useful signal | exit-regret / loss-first / replacement-stateful-net |
-| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊 |
+| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足 |
 
 ## 研究レーン
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00268` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。policyはdiagnostic candidate止まり。 |
+| Component / exit-regret | `00240`..`00269` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB preflightでもNoTrade未満。policyはdiagnostic candidate止まり。 |
 
 ## 採用済みインフラ
 
@@ -46,6 +46,7 @@
 - prior-guard prediction input generation
 - quantile policy side-block passthrough
 - candidate episode support diagnostics
+- base policy input aliases for external HGB preflight
 
 ## 採用しないもの
 
@@ -62,12 +63,13 @@
 - prior context guardのno-replacement estimateをstateful policy evidenceとして扱うこと
 - support-relaxed selectionを標準admissionとして扱うこと
 - q99 rank0緩和をfresh support改善だけで採用すること
+- 外部HGB preflightのpositive sub-windowだけでq99 prior guardを採用すること
 
 ## 次にやること
 
-1. q99/floor5 + prior direction_regime guardを固定し、外部chronologyまたは再生成familyへ再探索なしで適用する。
-2. fresh2024 support不足は、同一windowのrank/floor緩和ではなく、データ/window追加または別chronologyで解く。
-3. q95はstress比較に留める。statefulでもtail/DDがq99より悪い。
+1. q99/floor5 + prior direction_regime guardはdiagnostic candidateとして凍結し、標準採用はしない。
+2. 次に標準化を狙うなら、raw HGB aliasではなくfull pipelineの独立chronologyを生成する。
+3. fresh2024 support不足は、同一windowのrank/floor緩和ではなく、データ/window追加または別chronologyで解く。
 4. threshold/scopeを同じrefit windowで追加探索しない。
 5. role trade support、role PnL、month floor、side share、NoTrade-first比較を標準採用ゲートとして維持する。
 
@@ -84,3 +86,4 @@
 9. `00266_2026-07-02_entry_ev_preblock_prior_context_guard.md`
 10. `00267_2026-07-02_entry_ev_preblock_prior_guard_stateful_replay.md`
 11. `00268_2026-07-02_entry_ev_fresh_support_episode_diagnostics.md`
+12. `00269_2026-07-02_entry_ev_external_hgb_prior_guard_replay.md`
