@@ -114,6 +114,7 @@
 - 00243でcontext calibration sweepを行うと、`side_prior_pressure = direction + support_bucket + pressure_bucket + prior_support_bucket + feature_pressure_bucket` はbaseよりchronological/role holdout AUCが改善したが、`side_drift` や `full_context` は過細分化で悪化した。次はside_driftをbucket keyへ直入れせず、`side_prior_pressure` riskをprediction rowへ接続してrank/score penaltyとしてstateful replayする。
 - 00244で`side_prior_pressure` riskをprediction rowへ接続すると、s0.5はvalidation q95/floor5 `+68.0000`, q99/floor5 `+35.0014` まで改善したが、fixed 2025-03..12で q99/floor5 `-177.3790` と崩れた。次はpenalty強度調整ではなく、fixed 2025の崩れをside/context/replacement pathに分解し、追加chronological component-target windowを増やす。
 - 00245でfixed 2025崩壊をpath分解した。q95はcommon-entry delta `-46.6146` とreplacement delta `-58.6720` が両方悪く、q99はreplacement delta `+60.6992` で改善するがtotalはNoTrade未満。次は `direction_side_inversion`, `exit_capture_failure`, `same_entry_exit_delta`, `replacement_quality` を別targetとして作り、EV-overestimate risk単独では拾えない低risk大損contextを説明する。
+- 00246でcommon/replacement loss targetを作ると、`direction_side_inversion_target` が common 50 rows / `-592.5618`, chronological risk_pressure AUC `0.6865` と相対的に良かった。次はdirection-side inversion headをprediction rowへ接続し、bucket-supported predictionとglobal fallbackを分けたranking/selector featureとして評価する。`common_failure_target` と広い `exit_capture_failure_target` は粗すぎるため、そのままtraining labelにしない。
 
 ## 外部データ候補
 

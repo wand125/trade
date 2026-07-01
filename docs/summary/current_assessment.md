@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-01 22:29 JST
+最終更新: 2026-07-01 22:40 JST
 
 ## 結論
 
@@ -16,7 +16,7 @@
 |---|---|---|
 | Standard policy | なし | NoTrade-firstを維持 |
 | Best current evidence | `00243` で `side_prior_pressure` がbaseよりAUC改善し、`00244` でstateful validationも改善 | diagnostic baseline止まり |
-| Latest diagnostic result | `00245` でfixed 2025崩壊をpath分解。q95はcommon-entry差 `-46.6146` とreplacement差 `-58.6720` が両方悪化。q99はreplacement差 `+60.6992` で改善するがtotalは `-177.3790` | s0.5は標準採用しない |
+| Latest diagnostic result | `00246` でcommon/replacement lossをtarget化。`direction_side_inversion_target` は common 50 rows / `-592.5618`, chronological `risk_pressure` AUC `0.6865` | 次のprimary target candidate |
 | Pointwise screens | q95 floor5 の high EV-overestimate risk rows は損失を拾うが、contextによって勝ちも削る | replacement未評価なのでpolicyではない |
 | Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement、common-entry loss | hard blockではなく分解targetで扱う |
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00221` | raw / calibrated EV threshold、rank gate、quantile admission、positive floorを検証。候補数やscaleは改善するが、NoTrade-first selectorは通らない。 |
 | Exit capture / hold cap | `00222`..`00232` | `720m` や executable EV calibration は診断上有効。ただし月次tail、support不足、fresh/refit反転が残る。direct score標準化はしない。 |
 | Side balance / downside | `00233`..`00239` | side-balance単独、downside interaction、coverage gate、composite gateはいずれも標準候補を生まない。component targetへ分解する方針に転換。 |
-| Component target / EV overestimate | `00240`..`00245` | EV overestimateが相対的に最も使えるtarget。`side_prior_pressure` はAUCとvalidationを改善したが、fixed 2025で崩れた。00245でcommon-entry lossとreplacement lossを分離し、次はdirection/exit/replacement-aware targetへ移す。 |
+| Component target / EV overestimate / direction | `00240`..`00246` | EV overestimateは有効だがfixed 2025で残差が出た。00246でdirection-side inversionがcommon/replacement損失の主target候補になった。 |
 
 ## 採用済みインフラ
 
@@ -46,6 +46,7 @@
 - EV-overestimate context calibration sweep
 - EV-overestimate side-prior-pressure prediction input generation
 - fixed-period common-entry/replacement path diagnostics
+- common-entry and replacement loss target diagnostics
 
 ## 採用しないもの
 
@@ -65,14 +66,16 @@
 - `side_drift_bucket` や `full_context` を小データのbucket keyへ直入れすること
 - `side_prior_pressure_s0p5` のrelaxed validation near-missを標準policyにすること
 - `side_prior_pressure_s0p5` のfixed 2025 path分解後に、同じwindowでpenalty strengthだけを再探索すること
+- `common_failure_target` をそのまま単一binary training labelにすること
+- 現定義の広い `exit_capture_failure_target` を単独headにすること
 
 ## 次にやること
 
-1. q95/q99共通のcommon-entry lossを抑えるtargetを作る。候補は `direction_side_inversion`, `exit_capture_failure`, `same_entry_exit_delta`, `realized_loss`。
-2. `range_normal_vol/ny_overlap` の低risk大損を、side margin、predicted hold、exit regret、recent realized context lossで説明できるか調べる。
-3. `only_side_prior` replacementをtargetにして、replacement quality / positive replacement regret を別に診断する。
-4. component targetsをより多いchronological windowsで生成し、early monthのno-prior問題を下げる。
-5. pointwise screenを使う場合は、必ずone-position stateful replayかreplacement-aware diagnosticsで確認する。
+1. `direction_side_inversion_target` の低容量chronological headをprediction rowへ接続する。
+2. `prediction_source` / bucket supportを明示し、global fallbackの高riskをbucket-supported highriskと同列に扱わない。
+3. direction inversion riskは、まずranking/selector featureとして使い、hard blockにしない。
+4. `replacement_positive_quality_target` をonly-side-prior replacement qualityのsecondary headとして診断する。
+5. exit captureは、same-side missed profit、forced-exit loss、predicted hold mismatchへ細分化してからhead化する。
 6. 新候補は NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、side PnL、trade supportで比較する。
 
 ## 代表的な読む順
@@ -86,6 +89,7 @@
 5. `00243_2026-07-01_entry_ev_context_calibration_sweep.md`
 6. `00244_2026-07-01_entry_ev_side_prior_pressure_policy_inputs.md`
 7. `00245_2026-07-01_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics.md`
+8. `00246_2026-07-01_entry_ev_common_loss_target_diagnostics.md`
 
 entry EV admissionの流れを見る:
 

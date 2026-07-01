@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 22:29 JST
+最終更新: 2026-07-01 22:40 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV common loss target diagnosticsを追加した。00245のcommon-entry損失をtarget化し、base/side-priorの同一entryをペア化した。common 90 rowsのside-prior totalは `-202.1978`。`direction_side_inversion_target` は 50 rows / target PnL `-592.5618` を拾い、selected risk単体AUC `0.6755`、chronological `risk_pressure` spec AUC `0.6865` と相対的に良い。`common_large_loss_target` は target PnL `-573.1764` だがchronological AUC `0.3639` で弱く、`exit_capture_failure_target` はtarget rate `0.8000` と広すぎる。判断: common/replacement target generationはaccepted。次の本流はdirection-side inversion headをprediction rowへ戻すこと。詳細は `docs/reports/00246_2026-07-01_entry_ev_common_loss_target_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV side-prior-pressure fixed 2025 failure diagnosticsを追加した。00244で崩れた `side_prior_pressure_s0p5` をbase side-balanced dense720とtrade path単位で比較し、common-entry deltaとreplacement deltaを分けた。q95/floor5は base `-55.5740` から side-prior `-160.8606` へ悪化し、共通entry差 `-46.6146` と置換差 `-58.6720` が両方悪い。q99/floor5は base `-229.7382` から side-prior `-177.3790` へ改善し、置換差 `+60.6992` が効いたが、絶対損益はNoTrade未満。`range_normal_vol/ny_overlap` などselected riskが低いまま大きく負ける共通contextがあり、EV-overestimate riskだけでは足りない。判断: path diagnosticsはaccepted。s0.5は標準policyにせず、次はcommon loss向けのdirection/exit/replacement-aware targetへ進む。詳細は `docs/reports/00245_2026-07-01_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

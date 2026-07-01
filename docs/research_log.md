@@ -4,6 +4,21 @@
 
 ## 2026-07-01 JST
 
+### 22:40 Entry EV common loss target diagnostics
+
+- 00245の次アクションとして、common-entry損失をtarget化する `scripts/experiments/entry_ev_common_loss_target_diagnostics.py` を追加した。
+- artifactは `data/reports/backtests/20260701_133922_20260701_entry_ev_common_loss_target_diagnostics_s1/`。
+- baseとside-priorが同じentryを選んだcommon 90 rowsをペア化し、`common_large_loss_target`, `common_degraded_target`, `direction_side_inversion_target`, `exit_capture_failure_target`, `common_low_risk_large_loss_target` を作った。
+- common side-prior totalは `-202.1978`。`direction_side_inversion_target` は 50 rows / target PnL `-592.5618`、selected-risk AUC `0.6755`、chronological `risk_pressure` spec AUC `0.6865`。
+- `common_large_loss_target` は target PnL `-573.1764` だが chronological `risk_pressure` AUC `0.3639`。大損を直接予測するよりdirection inversionを先に分ける。
+- `exit_capture_failure_target` は target rate `0.8000` と広すぎ、`common_failure_target` は `0.9556` で粗すぎる。
+- 低risk大損は3 rows / `-145.8552` で、全てdirection inversionとexit failureも立つ。EV-overestimate riskをさらに調整するのではなく、direction/exit headへ戻す。
+- replacement 43 rowsでも `replacement_direction_side_inversion_target` が 19 rows / `-524.9992` を拾う。
+- 判断: common/replacement target generationはaccepted。次は `direction_side_inversion_target` の低容量chronological headをprediction rowへ接続する。
+- report: `docs/reports/00246_2026-07-01_entry_ev_common_loss_target_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: common loss target unit tests OK; py_compile OK; diagnostic run OK
+
 ### 22:29 Entry EV side-prior-pressure fixed 2025 failure diagnostics
 
 - 00244で崩れた `side_prior_pressure_s0p5` fixed 2025-03..12を、base side-balanced dense720とのtrade path差分に分解する `scripts/experiments/entry_ev_side_prior_pressure_failure_diagnostics.py` を追加した。
