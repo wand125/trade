@@ -23,6 +23,7 @@
 - entry と exit を分離して学習する。
 - side/context guard発火後の代替tradeを `positive_replacement_regret` で審査し、margin不足ならstay flatにする。
 - `replacement_positive_quality_target` は43 rowsのbinary positive PnLでは弱いため、stay-flat比較、replacement regret、candidate-only downside、common-entry harmの連続targetへreframeする。
+- q99 direction s0.1の残存large lossは全てdirection error + exit capture failure。entry側direction headとexit側hold-too-long / low-capture / forced-exit loss targetを分離して扱う。
 
 ## モデル
 
@@ -55,6 +56,7 @@
 - データを増やしても単月最適化を始めると同じ問題が再発するため、walk-forward を必須にする。
 - `direction + combined_regime + session_regime` の決済済み実績だけを使う online context drawdown guard。月内またはrolling recent tradesの同一文脈損失が閾値を超えたら、追加admission marginまたはcooldownでstay flatに寄せる。
 - replacement quality headは `risk_pressure` AUC `0.3542`, `side_context` AUC `0.4722` と弱かったため、現定義のままdirection riskの安全弁にしない。global fallback sourceも別validation windowを通るまでscoreへ直接使わない。
+- `hold_too_long_loss_target` は q99 direction s0.1で 11 trades / loss PnL `-322.7892` を覆う。exit shortening系targetとして、chronological OOF calibrationとstateful replayを次に確認する。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。

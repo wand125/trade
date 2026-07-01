@@ -4,6 +4,20 @@
 
 ## 2026-07-01 JST
 
+### 23:36 Entry EV direction s0.1 residual loss diagnostics
+
+- 00249の次アクションとして、q99 direction s0.1に残った損失を分解する `scripts/experiments/entry_ev_direction_residual_loss_diagnostics.py` を追加した。
+- artifactは `data/reports/backtests/20260701_143603_20260701_entry_ev_direction_s0p1_residual_loss_diagnostics_s1/`。
+- fixed 2025-03..12のdirection s0.1 tradesをprediction parquetでenrichし、direction risk、replacement quality、EV overestimate、exit capture、profit barrier miss、holding gapを同じtrade rowに並べた。
+- q99/floor5は 50 trades / total `-147.3314`、loss PnL `-554.4084`、win PnL `+407.0770`。
+- q99のloss PnLは `direction_side_inversion_target -506.6136`, `exit_capture_failure_target -530.4240`, `profit_barrier_miss_loss_target -530.6412` がほぼ覆う。large loss 10件は全てdirection errorかつexit capture failure。
+- `hold_too_long_loss_target` は q99で 11 trades / loss PnL `-322.7892` を覆い、exit shortening系target候補として強い。
+- 低direction-risk大損も3件 / `-104.5680` あり、2025-10 `long/range_normal_vol/ny_overlap` は risk `0.2544` のまま `-55.9080`。direction risk単独では拾えない。
+- 判断: residual diagnosticsはaccepted。次はexit captureをhold-too-long / low-capture / forced-exit lossへ細分化し、chronological OOF targetへ戻す。
+- report: `docs/reports/00250_2026-07-01_entry_ev_direction_s0p1_residual_loss_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: residual loss diagnostic unit test OK; py_compile OK; fixed 2025 diagnostic run OK
+
 ### 23:25 Entry EV replacement quality policy inputs
 
 - 00248の次アクションとして、`replacement_positive_quality_target` をprediction rowへ接続する `scripts/experiments/entry_ev_replacement_quality_policy_inputs.py` を追加した。

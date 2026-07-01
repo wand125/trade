@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-01 23:25 JST
+最終更新: 2026-07-01 23:36 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV direction s0.1 residual loss diagnosticsを追加した。00249の次アクションとして、q99 direction s0.1に残った損失をdirection/exit/replacement/holdingの各flagへ分解した。q99/floor5は 50 trades / total `-147.3314`、loss PnL `-554.4084`、win PnL `+407.0770`。loss PnLは `direction_side_inversion_target -506.6136`, `exit_capture_failure_target -530.4240`, `profit_barrier_miss_loss_target -530.6412` がほぼ覆う。large loss 10件は全てdirection errorかつexit capture failure。`hold_too_long_loss_target` も11 trades / `-322.7892` を覆う。一方、低direction-risk大損も3件 / `-104.5680` あり、direction risk単独では拾えない。判断: residual diagnosticsはaccepted。次はexit captureをhold-too-long / low-capture / forced-exit lossへ細分化し、chronological OOF targetへ戻す。詳細は `docs/reports/00250_2026-07-01_entry_ev_direction_s0p1_residual_loss_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV replacement quality policy inputsを追加した。00248の次アクションとして `replacement_positive_quality_target` をprediction rowへ接続し、direction inversion riskを `direction_risk * (1 - replacement_quality)` としてreplacement qualityが低い時だけ使うcombined scoreを生成した。`risk_pressure` quality headは chronological mean AUC `0.3542` と逆向きに近く、`side_context` も `0.4722` と弱い。fixed 2025-03..12 stateful replayではq99/floor5の最良は引き続きdirection s0.1 `-147.3314`、combined最良は `-156.6124` で及ばない。q95/floor5はside_context/global fallback系が total `-156.9854` と僅かにside-priorを上回ったが、min month `-223.9294` でNoTrade未満。判断: replacement-quality input/replay infrastructureはaccepted。現行headとcombined scoreは標準policyにしない。詳細は `docs/reports/00249_2026-07-01_entry_ev_replacement_quality_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
