@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 01:17 JST
+最終更新: 2026-07-02 01:24 JST
 
 ## 結論
 
@@ -15,10 +15,10 @@
 | 項目 | 状態 | 判断 |
 |---|---|---|
 | Standard policy | なし | NoTrade-firstを維持 |
-| Best current evidence | `00253` で `exit_risk bucket t0.10..t0.20` hard selectorがfixed 2025でpositive total/worst month改善したが、`00254` のchronological validationではbaseline超えなし | fixed-window candidate rejected for now |
-| Latest diagnostic result | `00255` でdirection/exit residual target診断を追加。direction error lossは29件 / `-104.8800` を覆うが、chronological calibrationはno-prior `0.7403` で弱い | target generation accepted / not policy |
+| Best current evidence | `00253` で `exit_risk bucket t0.10..t0.20` hard selectorがfixed 2025でpositive total/worst month改善したが、`00254` のchronological validationではbaseline超えなし。`00256` のfixed stressもpolicy evidenceではない | fixed-window candidate rejected for now |
+| Latest diagnostic result | `00256` でdirection/exit residual targetをfixed 2025 stressへ適用。no-priorは `0.1053` へ改善したがbest pooled AUCは `0.5922`。pointwiseでは `selected_loss_first_prob` がexit/capture系に AUC `0.7325` | stress diagnostic accepted / not policy |
 | Pointwise screens | q95 floor5 の high EV-overestimate risk rows は損失を拾うが、contextによって勝ちも削る | replacement未評価なのでpolicyではない |
-| Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement、common-entry loss | hard blockではなく分解targetで扱う |
+| Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement、common-entry loss、target featureのwindow依存 | hard blockではなく分解targetで扱う |
 
 ## 研究レーン
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00221` | raw / calibrated EV threshold、rank gate、quantile admission、positive floorを検証。候補数やscaleは改善するが、NoTrade-first selectorは通らない。 |
 | Exit capture / hold cap | `00222`..`00232` | `720m` や executable EV calibration は診断上有効。ただし月次tail、support不足、fresh/refit反転が残る。direct score標準化はしない。 |
 | Side balance / downside | `00233`..`00239` | side-balance単独、downside interaction、coverage gate、composite gateはいずれも標準候補を生まない。component targetへ分解する方針に転換。 |
-| Component target / EV overestimate / direction / replacement / exit | `00240`..`00255` | EV overestimateは有効だがfixed 2025で残差が出た。direction-side inversionはdiagnostic featureとして有効だが、単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。forced-exit riskはdirect penaltyでもselectorでも標準化不可。direction/exit residual target generationはacceptedだがsupport不足。 |
+| Component target / EV overestimate / direction / replacement / exit | `00240`..`00256` | EV overestimateは有効だがfixed 2025で残差が出た。direction-side inversionはdiagnostic featureとして有効だが、単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。forced-exit riskはdirect penaltyでもselectorでも標準化不可。direction/exit residual target generationとfixed stress診断はacceptedだがpolicy化不可。 |
 
 ## 採用済みインフラ
 
@@ -57,6 +57,7 @@
 - forced-exit hard selector input generation and stateful replay
 - multi-family policy trade enrichment for validation diagnostics
 - direction/exit residual target diagnostics
+- fixed-period direction/exit residual stress diagnostics
 
 ## 採用しないもの
 
@@ -91,14 +92,16 @@
 - validation forced-exit selectorの低閾値再探索を続けること
 - `direction_or_exit_loss_target` のように実質realized lossへ潰れる広すぎるtargetをtraining labelにすること
 - validation 77 rows / no-prior 0.74 のcalibrationをentry blockerへ直結すること
+- fixed 2025 stressで見つけた `selected_loss_first_prob` をhard blockへ直結すること
+- fixed stressのchronological bucket calibrationを標準policy evidenceとして扱うこと
 
 ## 次にやること
 
-1. 00255のtargetをより広い enriched validation familyへ適用し、no-prior shareを下げる。
-2. `selected_ev_overestimate_risk` はdirection/profit-barrier miss targetのfeature候補、`profit_exit` はhold-too-long / large-exit-regret targetのfeature候補として扱う。
-3. `direction_or_exit_loss_target` は広すぎるため捨て、direction/profit-barrier miss、large-exit-regret、hold-too-longを分けて扱う。
+1. 00255/00256のtargetを、fixed stressではなく広いchronological validation familyへ適用する。
+2. `selected_loss_first_prob`, `selected_ev_overestimate_risk`, profit-barrier bucket, exit-hold bucketを別々のauxiliary featureとして扱う。
+3. `direction_or_exit_loss_target` は広すぎるため捨て、direction/profit-barrier miss、same-side missed、large-exit-regret、hold-too-longを分けて扱う。
 4. 新候補は NoTrade、previous diagnostic baseline、cost stress、worst month、max DD、side PnL、trade supportで比較する。
-5. validation月を増やすまでは、少数positive targetや高no-prior calibrationをentry blockerへ直接変換しない。
+5. validation月を増やすまでは、少数positive target、fixed stress target、低AUC calibrationをentry blockerへ直接変換しない。
 
 ## 代表的な読む順
 
@@ -121,6 +124,7 @@
 15. `00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`
 16. `00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
 17. `00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
+18. `00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
 
 entry EV admissionの流れを見る:
 

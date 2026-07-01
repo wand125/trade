@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 01:17 JST
+最終更新: 2026-07-02 01:24 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV direction exit fixed 2025 stressを追加した。00255のdirection / exit residual targetを、00244/00245で崩れた fixed 2025-03..12 `side_prior_pressure_s0p5` stress tradesへ適用した。q95は80 trades / total `-160.8606`、q99は53 trades / `-177.3790`。133 rowsでは no-prior shareが `0.1053` まで下がったが、chronological calibrationのbest pooled AUCは `side_context -> same_side_large_regret_loss_target 0.5922`, `profit_exit -> large_exit_regret_loss_target 0.5621` 程度でpolicy化には弱い。pointwiseでは `selected_loss_first_prob` が same-side / low-capture / exit-regret系targetに強く、AUC `0.7325` / `0.7182` を出した。判断: fixed stress diagnosticはaccepted。これはvalidation evidenceではなく、loss-first / exit-capture feature候補の発見として扱う。標準policyはNoTrade。詳細は `docs/reports/00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV direction exit residual target diagnosticsを追加した。00254でforced-exit selectorを止めたため、次の本流として validation enriched trades 77 rows上に direction / exit-capture residual targetを作った。`direction_error_loss_target` は29件 / target PnL `-104.8800`, `large_exit_regret_loss_target` は8件 / `-57.6552`, `hold_too_long_loss_target` は9件 / `-55.9920`。pointwiseでは `selected_ev_overestimate_risk` が direction/profit-barrier miss系に AUC `0.7083` だがpredicted rowsは20件のみ。chronological calibrationは no-prior share `0.7403` が大きく、bestでも `profit_exit -> hold_too_long_loss_target` pooled AUC `0.6875`, direction error系 `side_context` pooled AUC `0.5208`。判断: direction/exit residual target generationはaccepted。現validation supportだけではentry blockerや標準policyには接続しない。標準policyはNoTrade。詳細は `docs/reports/00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

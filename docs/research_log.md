@@ -4,6 +4,21 @@
 
 ## 2026-07-02 JST
 
+### 01:24 Entry EV direction exit fixed 2025 stress
+
+- 00255のdirection / exit residual targetを、00244/00245で崩れた fixed 2025-03..12 `side_prior_pressure_s0p5` stress tradesへ適用した。
+- enrichment artifactは `data/reports/backtests/20260701_162239_20260702_entry_ev_side_prior_pressure_s0p5_fixed2025_trade_enrichment_for_direction_exit_s1/`。
+- diagnostic artifactは `data/reports/backtests/20260701_162254_20260702_entry_ev_direction_exit_residual_target_fixed2025_stress_s1/`。
+- q95 stressは80 trades / total `-160.8606`、q99 stressは53 trades / `-177.3790`。direction errorはそれぞれ `0.5125`, `0.5283`、profit-barrier missは `0.5250`, `0.6038`。
+- 133 rowsでは no-prior shareが00255 validationの `0.7403` から `0.1053` へ下がった。
+- target supportは `profit_barrier_miss_loss_target` 66件 / `-1381.9356`, `direction_error_loss_target` 57件 / `-1298.5440`, `large_exit_regret_loss_target` 51件 / `-1281.4632`, `hold_too_long_loss_target` 29件 / `-868.0464`。
+- pointwiseでは `selected_loss_first_prob` が `same_side_missed_loss_target` / `low_capture_loss_target` に AUC `0.7325`、`same_side_large_regret_loss_target` に `0.7182`。
+- chronological calibrationはsupportが増えてもbest pooled AUCが `side_context -> same_side_large_regret_loss_target 0.5922`, `profit_exit -> large_exit_regret_loss_target 0.5621` 程度。policy化には弱い。
+- 判断: fixed 2025 stress diagnosticはaccepted。これはvalidation evidenceではなく、loss-first / exit-capture feature候補の発見として扱う。標準policyはNoTrade。
+- report: `docs/reports/00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: fixed 2025 enrichment run OK; fixed 2025 direction/exit residual diagnostic run OK
+
 ### 01:17 Entry EV direction exit residual target diagnostics
 
 - 00254でforced-exit selectorを止めたため、次の本流として direction / exit-capture residual target をvalidation enriched trades上で作る `scripts/experiments/entry_ev_direction_exit_residual_target_diagnostics.py` を追加した。
