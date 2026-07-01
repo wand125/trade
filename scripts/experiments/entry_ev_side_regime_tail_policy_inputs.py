@@ -299,6 +299,7 @@ def add_tail_adjusted_scores(
     family: str,
     group_specs: list[str],
     score_kind_prefix: str,
+    side_gap_source_score_kind: str,
     long_column: str,
     short_column: str,
     long_rank_column: str,
@@ -354,6 +355,17 @@ def add_tail_adjusted_scores(
                 short_rank_column=short_rank_column,
                 quantile_scopes=quantile_scopes,
             )
+            if side_gap_source_score_kind:
+                for scope_name in quantile_scopes:
+                    source_column = (
+                        f"pred_{side_gap_source_score_kind}_side_gap_pct_{scope_name}"
+                    )
+                    target_column = f"pred_{score_kind}_side_gap_pct_{scope_name}"
+                    if source_column not in output.columns:
+                        raise ValueError(
+                            f"predictions missing side-gap source column: {source_column}"
+                        )
+                    output[target_column] = output[source_column].to_numpy()
             summary_rows.append(
                 {
                     "family": family,
@@ -361,6 +373,7 @@ def add_tail_adjusted_scores(
                     "score_kind": score_kind,
                     "penalty_strength": strength,
                     "target_source_mode": "bucket_or_global" if use_global_risk else "bucket",
+                    "side_gap_source_score_kind": side_gap_source_score_kind,
                     "long_scale_mean": float(long_scale.mean()),
                     "short_scale_mean": float(short_scale.mean()),
                     "long_risk_mean": float(long_risk.mean()),
@@ -511,6 +524,7 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
             family=family,
             group_specs=group_specs,
             score_kind_prefix=args.score_kind_prefix,
+            side_gap_source_score_kind=args.side_gap_source_score_kind,
             long_column=args.long_column,
             short_column=args.short_column,
             long_rank_column=args.long_rank_column,
@@ -552,6 +566,7 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
         "group_specs": group_specs,
         "group_columns": {spec: GROUP_SPECS[spec] for spec in group_specs},
         "score_kind_prefix": args.score_kind_prefix,
+        "side_gap_source_score_kind": args.side_gap_source_score_kind,
         "long_column": args.long_column,
         "short_column": args.short_column,
         "long_rank_column": args.long_rank_column,
@@ -585,6 +600,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target", default=DEFAULT_TARGET)
     parser.add_argument("--group-specs", default=DEFAULT_GROUP_SPECS)
     parser.add_argument("--score-kind-prefix", default=DEFAULT_SCORE_KIND_PREFIX)
+    parser.add_argument(
+        "--side-gap-source-score-kind",
+        default="",
+        help=(
+            "Optional source score kind whose side_gap_pct_* columns are copied to the "
+            "new score kind. Use this to preserve pre-block side-gap gates."
+        ),
+    )
     parser.add_argument("--long-column", default="pred_calibrated_long_best_adjusted_pnl")
     parser.add_argument("--short-column", default="pred_calibrated_short_best_adjusted_pnl")
     parser.add_argument("--long-rank-column", default="pred_long_entry_local_rank")

@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 08:25 JST
+最終更新: 2026-07-02 08:36 JST
 
 ## 結論
 
@@ -8,15 +8,15 @@
 
 現在の標準判断は NoTrade-first。候補policyは、複数chronological window、role/month PnL floor、trade support、side balance、NoTrade比較を通らない限り標準化しない。
 
-直近で最も進んだ候補は exit-regret系から、capture-adjusted score上のcoarse side/regime tail-risk headへ移った。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00268` ではfresh support不足をepisode単位で分解し、rank0緩和はfresh supportを増やすがcal/refitを壊すことを確認した。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたがNoTrade未満。`00273` ではselector前base scoreへ移してq95 `-12.1040` まで戻したが、まだNoTrade未満だった。`00274` では `direction_regime` tail-riskを重ねるとq99が `+3.1260` まで改善したが、3 trades / all-long / month floor未達でadmissionはNoTradeだった。
+直近で最も進んだ候補は exit-regret系から、capture-adjusted score上のcoarse side/regime tail-risk headへ移ったが、外部HGB chronologyで弱い再現に留まった。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたがNoTrade未満。`00273` ではselector前base scoreへ移してq95 `-12.1040` まで戻したが、まだNoTrade未満だった。`00274` では `direction_regime` tail-riskを重ねるとq99が `+3.1260` まで改善したが、3 trades / all-long / month floor未達でadmissionはNoTradeだった。`00275` で外部HGBへ固定適用すると、bestはoverall `-9.1956` と00269比 `+0.3800` の小幅改善に留まり、標準化を支持しなかった。
 
 ## 現在の判断
 
 | 項目 | 判断 |
 |---|---|
 | Standard policy | なし。NoTrade-firstを維持 |
-| Current diagnostic candidate | `direction_regime` tail-risk head on capture-adjusted base score。q99が同一外部foldで `+3.1260` まで改善 |
-| Why not standard | q99は3 trades、全long、month floor未達、`role_trades_low` / `month_trades_low` / `side_share_high` |
+| Current diagnostic candidate | policy candidateなし。`direction_regime` tail-riskはdiagnostic featureへ降格 |
+| Why not standard | 00274は3 trades/all-long、00275の外部HGB固定適用はoverall `-9.1956` でNoTrade未満 |
 | Useful signal | exit-regret / loss-first / replacement-stateful-net / same-side missed loss / low-capture loss / profit-barrier miss |
 | Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足 |
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00274` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。 |
+| Component / exit-regret | `00240`..`00275` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。 |
 
 ## 採用済みインフラ
 
@@ -48,6 +48,7 @@
 - candidate episode support diagnostics
 - base policy input aliases for external HGB preflight
 - side/regime tail-risk prediction input generation
+- side-gap source inheritance for post-selector score heads
 
 ## 採用しないもの
 
@@ -68,12 +69,13 @@
 - q99 prior guard branchをさらにthreshold rescueすること
 - q95のnear-zero totalをmonth floor未達のまま救済候補にすること
 - `direction_regime` tail-risk q99を3 trades/all-longのまま標準採用すること
+- side-gap quantileを継承せず、no-prior rowのtrade pathまで変えるscore-head実験をpolicy evidenceにすること
 
 ## 次にやること
 
-1. `direction_regime` tail-risk headを別chronologyへ固定適用し、同一foldの偶然を潰す。
-2. q99 positive resultはdiagnostic baselineとしてだけ扱い、threshold/scopeを同じ `2025-09..12` foldで追加探索しない。
-3. exit regretがまだ大きいため、exit timing targetは別headとして改善する。
+1. tail-risk gateの追加探索はいったん止め、exit timing / exit regret reductionへ戻す。
+2. score headをselector後に重ねる場合は `--side-gap-source-score-kind` でpre-block side-gap gateを明示的に継承する。
+3. `direction_regime` tail-riskはdiagnostic featureとして保持し、policy candidateにはしない。
 4. fresh/external support不足は、同一windowのrank/floor緩和ではなく、データ/window追加または別chronologyで解く。
 5. `00270` の2025-09/12損失はfeature/target insightとしてのみ分解し、blacklist tuningには使わない。
 6. role trade support、role PnL、month floor、side share、NoTrade-first比較を標準採用ゲートとして維持する。
@@ -97,3 +99,4 @@
 15. `00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`
 16. `00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`
 17. `00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`
+18. `00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`

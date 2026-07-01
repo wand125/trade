@@ -44,6 +44,7 @@ class EntryEvSideRegimeTailPolicyInputsTests(unittest.TestCase):
                 "pred_base_short_best_adjusted_pnl": [8.0, 8.0, 8.0, 8.0],
                 "pred_long_entry_local_rank": [0.8, 0.8, 0.8, 0.8],
                 "pred_short_entry_local_rank": [0.7, 0.7, 0.7, 0.7],
+                "pred_base_side_gap_pct_month": [0.11, 0.22, 0.33, 0.44],
             }
         )
         targets = pd.DataFrame(
@@ -69,6 +70,7 @@ class EntryEvSideRegimeTailPolicyInputsTests(unittest.TestCase):
                 target="direction_side_inversion_target",
                 group_specs="direction_regime",
                 score_kind_prefix="side_regime_tail",
+                side_gap_source_score_kind="base",
                 long_column="pred_base_long_best_adjusted_pnl",
                 short_column="pred_base_short_best_adjusted_pnl",
                 long_rank_column="pred_long_entry_local_rank",
@@ -99,9 +101,13 @@ class EntryEvSideRegimeTailPolicyInputsTests(unittest.TestCase):
             quantile_column = (
                 "pred_side_regime_tail_direction_regime_s0p5_selected_score_pct_month"
             )
+            side_gap_column = (
+                "pred_side_regime_tail_direction_regime_s0p5_side_gap_pct_month"
+            )
             self.assertIn(risk_column, enriched.columns)
             self.assertIn(score_column, enriched.columns)
             self.assertIn(quantile_column, enriched.columns)
+            self.assertIn(side_gap_column, enriched.columns)
             march = enriched[enriched["dataset_month"].eq("2024-03")].reset_index(drop=True)
             self.assertEqual(
                 march[
@@ -121,10 +127,12 @@ class EntryEvSideRegimeTailPolicyInputsTests(unittest.TestCase):
                 march[score_column].iloc[0],
                 march["pred_base_long_best_adjusted_pnl"].iloc[0],
             )
+            self.assertEqual(march[side_gap_column].tolist(), [0.33, 0.44])
             self.assertEqual(
                 summary["score_kind"].iloc[0],
                 "side_regime_tail_direction_regime_s0p5",
             )
+            self.assertEqual(summary["side_gap_source_score_kind"].iloc[0], "base")
 
 
 if __name__ == "__main__":

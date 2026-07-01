@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 08:36 Entry EV external HGB side regime tail check
+
+作業:
+
+- 00274の `direction_regime` tail-risk headを、別chronologyの00269 external HGB preflightへ固定適用した。
+- tail-risk score生成時に既存pre-block side-gap quantileが引き継がれず、priorなしのHGB 2024側までtrade pathが変わる不整合を発見した。
+- `entry_ev_side_regime_tail_policy_inputs.py` に `--side-gap-source-score-kind` を追加し、既存score kindの `side_gap_pct_*` を新score kindへコピーできるようにした。
+- 修正後のdir-inv s0.25 / exit-cap s0.1をq99/floor5/rank90でreplayし、support、admission、trade enrichment、deltaを確認した。
+- report: `docs/reports/00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- HGB 2024-03..06はno-priorで完全にno-opになり、00269 baselineと同一の `-36.1556`, 31 tradesに戻った。
+- HGB 2025-08では、exit-cap s0.1が `+26.5800 -> +26.9600` と小幅改善しただけ。
+- dir-inv s0.25はHGB 2025-08を `+18.5300` へ悪化させた。
+- overallは baseline `-9.5756`、exit-cap s0.1 `-9.1956`、dir-inv s0.25 `-17.6256`。
+- admissionは `positive_roles_low;total_pnl_below_floor;role_total_pnl_below_floor;month_pnl_below_floor` でNoTrade。
+
+判断:
+
+- 00274のcoarse tail-risk headは外部HGB chronologyでは再現的な改善を示さない。
+- `--side-gap-source-score-kind` と no-prior no-op checkはaccepted infrastructure。
+- 次はtail-risk gateの追加探索ではなく、exit timing / exit regret reductionへ戻す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `python3 -m py_compile scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py tests/test_entry_ev_side_regime_tail_policy_inputs.py`: OK
+- `python3 -m unittest tests.test_entry_ev_side_regime_tail_policy_inputs`: OK
+- corrected input generation / stateful replay / support / admission / enrichment / delta: OK
+
 ### 08:25 Entry EV external hybrid side regime tail risk
 
 作業:

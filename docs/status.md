@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 08:25 JST
+最終更新: 2026-07-02 08:36 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV external HGB side regime tail checkを追加した。00274のcoarse `direction_regime` tail-risk headを00269 external HGB preflightへ固定適用した。途中で、tail-risk score生成時に既存pre-block side-gap quantileが引き継がれず、priorなしのHGB 2024側までtrade pathが変わる不整合を発見したため、`scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py` に `--side-gap-source-score-kind` を追加した。修正後、HGB 2024-03..06はno-priorで完全にno-opとなり、00269 baselineと同じ `-36.1556`, 31 tradesに戻った。HGB 2025-08ではexit-cap s0.1が `+26.5800 -> +26.9600` と小幅改善しただけで、overallは baseline `-9.5756` に対して `-9.1956`。admissionはNoTrade。判断: 00274のtail-risk headは外部HGB chronologyで再現的な改善を示さない。tail-risk gate追加探索を止め、exit timing / exit regret reductionへ戻す。詳細は `docs/reports/00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV external hybrid side regime tail riskを追加した。00273のcapture-adjusted base selector scoreに、対象月より前のcommon-entry targetだけでfitするcoarse `direction_regime` tail-risk headを重ねた。`scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py` と単体テストを追加した。`direction_side_inversion_target` s0.25、`exit_capture_failure_target` s0.1/s0.25は同じstateful経路になり、q99/floor5/rank90は total `+3.1260`, worst month `-0.7200`, trades `3` まで改善した。ただし全tradeがlong、candidate rowsは4、admissionは `month_pnl_below_floor;role_trades_low;month_trades_low;side_share_high` でNoTrade。q95は total `-7.2060`。細かい `side_context` s0.25は q99 `-27.5640` へ戻り改善しない。判断: coarse side/regime tail-riskは有望なdiagnostic headだが、標準policyにはしない。詳細は `docs/reports/00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
@@ -547,7 +549,7 @@ candidate quality downside drift診断を追加済み。`trade_data.meta_model c
 
 ## 次の作業
 
-直近更新: `direction_regime` tail-risk headはq99を一時的にプラス化したが、3 trades/all-long/month floor未達で標準採用しない。次は同じfoldでthreshold/scopeを増やさず、別chronologyへ固定適用する。exit regretがまだ大きいため、exit timing targetは別headとして改善する。
+直近更新: `direction_regime` tail-risk headは別chronologyのexternal HGBで再現改善せず、diagnostic featureへ降格した。score headをselector後に重ねる場合は `--side-gap-source-score-kind` でpre-block side-gap gateを継承する。次はtail-risk gate追加探索ではなく、exit timing / exit regret reductionへ戻る。
 
 - 新targetを使う実験では、旧datasetを `--skip-existing` で流用しない。旧parquetでは新列が欠けるため、policy改善確認には再生成が必須。
 - holding max capの次検証では、`scripts/experiments/holding_max_grid.py` を使い、`prediction_coverage.csv` を確認する。月末後24h以内の決済があり得るため、predictionは `dataset_month == target_month` に切らずfull frameを渡す。fresh applyでは原則 `--require-post-coverage` を使う。

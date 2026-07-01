@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 08:25 JST
+最終更新: 2026-07-02 08:36 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00274` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。 |
+| `00258`..`00275` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00274` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。fresh supportをrank0で増やすとcal/refitが崩れ、外部HGBと外部full-hybridでもNoTrade未満。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskを重ねるとq99 `+3.1260` まで改善したが、3 trades/all-long/month floor未達でNoTrade。 |
+| Latest decision | `00258`..`00275` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。外部HGBと外部full-hybridでもNoTrade未満。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99を同一foldでプラス化したが、00275の外部HGB固定適用ではbest `-9.1956` でNoTrade。tail-risk headはdiagnostic featureへ降格。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -50,6 +50,7 @@
 15. `00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`
 16. `00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`
 17. `00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`
+18. `00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`
 
 component targetの流れを読む:
 
@@ -96,10 +97,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00274 Entry EV External Hybrid Side Regime Tail Risk
+Report: 00275 Entry EV External HGB Side Regime Tail Check
 Status: diagnostic branch / policy rejected
-Question: capture-adjusted base selector scoreへcoarse side/regime tail-riskを重ねれば残存short tailを止められるか
-Best evidence: direction_regime tail-riskでq99は +3.1260 / worst -0.7200まで改善したが、3 trades/all-long/month floor未達でNoTrade-first gate未達
+Question: 00274のcoarse side/regime tail-risk headは別chronologyの外部HGBでも再現するか
+Best evidence: HGB 2025-08は +0.3800 の小幅改善だけで、overallは -9.1956、HGB 2024 lossを消せずNoTrade
 Decision: 標準policyはNoTrade
-Next: 別chronologyへ固定適用し、exit timing targetを別headで改善する
+Next: tail-risk gate追加探索を止め、exit timing / exit regret reductionへ戻す
 ```
