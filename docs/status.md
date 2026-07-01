@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 01:35 JST
+最終更新: 2026-07-02 01:54 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV exit regret selector candidateを追加した。00257のexit-regret signalをprediction rowへ戻すため、`entry_ev_forced_exit_policy_inputs.py` に `confidence_exit`, `profit_exit`, `context_confidence` specsと `side_confidence_gap_bucket` を追加した。broad s0.5 target `same_side_large_regret_loss_target` から `exit_regret` riskを生成し、`confidence_exit` mean AUC `0.7239`, bucket share `0.4093`。soft penaltyは悪化したが、hard selector `exit_regret_selector_confidenceexit_bucket_t0p4` はbroad q99/floor5を `-142.3776 -> +18.9072`, max DD `162.1992 -> 54.5368` に改善。fixed 2025-03..12でも q99/floor5 `-177.3790 -> +19.1218`。判断: q99/floor5をpre-registered diagnostic candidateへ昇格。ただし同じbroad target/replay由来なので標準policyにはしない。標準policyはNoTrade。詳細は `docs/reports/00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV direction exit broad validationを追加した。既存predictionがカバーする `cal2024 2024-01..02`, `fresh2024 2024-03..12`, `refit2025 2025-01..12` へs0.5/s1の広域policy replayを行い、trade enrichmentとdirection/exit residual target診断を実施した。s0.5は215 rows、s1は108 rows。s0.5では `confidence_exit -> same_side_large_regret_loss_target` pooled AUC `0.6919`, `large_exit_regret_loss_target` `0.6548`。s1でも `side_context -> same_side_large_regret_loss_target` `0.7008`, `confidence_exit -> large_exit_regret_loss_target` `0.6677`。pointwiseでは `selected_loss_first_prob` が両方で強い。一方、direction/profit-barrier missはchronological bucketが弱い。判断: broad validation diagnosticはaccepted。exit-regret risk auxiliary featureへ進めるが、標準policyはNoTrade。詳細は `docs/reports/00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

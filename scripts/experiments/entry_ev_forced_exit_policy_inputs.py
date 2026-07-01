@@ -23,7 +23,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from trade_data.backtest import json_default, make_run_dir  # noqa: E402
 
 from entry_ev_exit_shortening_target_diagnostics import (  # noqa: E402
-    CALIBRATION_SPECS,
+    CALIBRATION_SPECS as EXIT_SHORTENING_CALIBRATION_SPECS,
     brier_score,
     bool_series,
     bucketize,
@@ -44,10 +44,35 @@ DEFAULT_QUANTILE_SCOPES = "month,side_month,side_regime_session_month"
 
 RISK_SPEC_LABELS = {
     "side_context": "sidectx",
+    "confidence_exit": "confexit",
+    "profit_exit": "profitexit",
     "exit_plan": "exitplan",
     "exit_risk": "exitrisk",
     "direction_exit": "direxit",
     "ev_exit": "evexit",
+    "context_confidence": "ctxconf",
+}
+
+CALIBRATION_SPECS = {
+    **EXIT_SHORTENING_CALIBRATION_SPECS,
+    "confidence_exit": [
+        "direction",
+        "side_confidence_gap_bucket",
+        "loss_first_prob_bucket",
+        "time_exit_prob_bucket",
+    ],
+    "profit_exit": [
+        "direction",
+        "pred_profit_barrier_bucket",
+        "loss_first_prob_bucket",
+        "pred_exit_hold_bucket",
+    ],
+    "context_confidence": [
+        "direction",
+        "combined_regime",
+        "session_regime",
+        "side_confidence_gap_bucket",
+    ],
 }
 
 
@@ -202,6 +227,13 @@ def build_side_rows(
         side_column("pred", side, "profit_barrier_hit"),
         default=np.nan,
     )
+    if side == "long":
+        side_confidence = numeric_series(predictions, "pred_best_side_prob_1", default=np.nan)
+        opposite_confidence = numeric_series(predictions, "pred_best_side_prob_-1", default=np.nan)
+    else:
+        side_confidence = numeric_series(predictions, "pred_best_side_prob_-1", default=np.nan)
+        opposite_confidence = numeric_series(predictions, "pred_best_side_prob_1", default=np.nan)
+    side_confidence_gap = side_confidence - opposite_confidence
     rows = pd.DataFrame(
         {
             "_row_id": np.arange(len(predictions), dtype=int),
@@ -209,6 +241,11 @@ def build_side_rows(
             "direction": side,
             "combined_regime": text_series(predictions, "combined_regime"),
             "session_regime": text_series(predictions, "session_regime"),
+            "side_confidence_gap_bucket": bucketize(
+                side_confidence_gap,
+                bins=[-float("inf"), -0.05, 0.0, 0.10, 0.25, float("inf")],
+                labels=["opposite_favored", "nonpositive", "weak", "medium", "strong"],
+            ),
             "selected_direction_risk_bucket": direction_risk_bucket,
             "selected_ev_overestimate_bucket": bucketize(
                 risk,

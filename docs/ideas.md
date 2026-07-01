@@ -35,6 +35,8 @@
 - fixed 2025 stressでは `selected_loss_first_prob` が same-side missed / low-capture に AUC `0.7325`、same-side large regretに `0.7182` と強い。次のchronological validationではEV-overestimateだけでなくloss-first / profit-barrier / exit-hold特徴を分けて入れる。
 - broad validationでは `selected_loss_first_prob` がs0.5/s1両方でexit-regret系targetに残った。次は `confidence_exit` / `side_context` のprior-month bucket rateをprediction rowへ戻し、exit-regret risk auxiliary inputとしてcandidate-level selectorで評価する。
 - direction/profit-barrier missはbroad validationでもchronological pooled AUCが弱い。現bucketだけでpolicy化せず、side/context regime、side confidence、recent side drift、sequence-derived direction stabilityを別headで試す。
+- `exit_regret_selector_confidenceexit_bucket_t0p4` はbroad/fixed2025で改善したため、次は閾値を動かさずq99/floor5をpre-registerして追加chronologyへ適用する。
+- soft exit-regret penaltyは悪化した。exit-regret riskは連続減点より、bucket source限定のhard selector / candidate-level selectorとして扱う。
 
 ## モデル
 
@@ -74,6 +76,7 @@
 - chronological calibrationの no-prior share が `0.74` のように高い場合、pooled AUCが少し良くてもpolicy化しない。まずvalidation familyを増やしてbucket supportを確保する。
 - bucket supportが改善しても、fixed stressだけでAUCが `0.59` 程度ならhard gateにしない。support改善と未来汎化は別問題として扱う。
 - broad validationでAUC `0.65..0.70` が出ても、同じrowsで閾値を探すと過学習する。prediction-row input化後はprior-only replay、role/month floor、NoTrade-first selectorを必須にする。
+- broad/fixed両方で改善した候補でも、target生成とreplayが同じ履歴に絡む場合は標準policyにしない。trade-delta、追加holdout、s1 exposure baseline比較を通す。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。

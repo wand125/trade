@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 01:35 JST
+最終更新: 2026-07-02 01:54 JST
 
 `docs/reports/` を個別に読む前のテーマ地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -20,13 +20,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank gate、quantile admission、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00232` | Prior inversion / executable EV / dense capture | prior guard、risk score、exit capture target、executable EV calibration、stateful score、dense capture modelを検証。featureとして有用だが標準policyなし。 |
 | `00233`..`00239` | Side balance / downside / composite | side balance、downside pressure、coverage、composite hard gateを検証。hard gateでは候補が生まれず、component targetへ分解。 |
-| `00240`..`00257` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed/broad residualではloss-first / exit-regret系signalがより安定。replacement qualityは弱い。forced-exit riskは標準化不可。multi-family enrichment、direction/exit residual target generation、fixed stress、broad validation診断はacceptedだが、まだpolicy化しない。 |
+| `00240`..`00258` | Component targets / EV overestimate / direction / replacement / exit | EV overestimateは相対的に残るが、fixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorがpre-registered candidateへ昇格。replacement qualityは弱い。multi-family enrichment、direction/exit residual target generation、fixed/broad diagnostics、exit-regret selector inputはaccepted。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00239`..`00257` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed/broadで崩壊。direction inversion、replacement quality、forced-exit direct penaltyは標準化できない。forced-exit hard selectorもvalidationではbaselineを超えない。direction/exit residual targetは作れ、exit-regret系ではbroad validation signalが残るが、標準はNoTrade。 |
+| Latest decision | `00239`..`00258` | composite hard gateからcomponent targetへ分解。`side_prior_pressure_s0p5` はvalidation near-missだがfixed/broadで崩壊。exit-regret `confidence_exit t0.4` hard selectorはbroad/fixed2025で改善し、pre-registered candidateへ昇格。ただし追加holdout前なので標準はNoTrade。 |
 | Entry EV selector | `00208`, `00212`, `00213`, `00215`..`00221` | absolute EVはscale driftに弱い。quantile/rankは候補数を揃えるが、role/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 260m capがbindingし、720mは診断上改善する。ただしdirection/context errorが混ざるためhold延長だけでは採用不可。 |
 | Side balance | `00233`..`00238` | refitのlong過剰は縮むがfresh tailを悪化させる。side-balance単独ではなくdownside/context targetへ分解する。 |
@@ -56,6 +56,7 @@
 17. `00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
 18. `00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
 19. `00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
+20. `00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
 
 entry EV admissionを追う:
 
@@ -81,6 +82,7 @@ component targetへ至る流れを追う:
 10. `00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
 11. `00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
 12. `00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
+13. `00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
 
 古い罠を確認する:
 
@@ -114,10 +116,10 @@ component targetへ至る流れを追う:
 ## Summary Card Template
 
 ```text
-Report: 00257 Entry EV Direction Exit Broad Validation
-Status: accepted broad diagnostic / not policy
-Question: broad validationでもexit-regret/direction residual target signalは残るか
-Best evidence: s0.5 confidence_exit -> same_side_large_regret pooled AUC 0.6919, s1 side_context -> same_side_large_regret 0.7008, but direction/profit-barrier miss remains weak
-Decision: exit-regret auxiliary featureへ進める。hard blockにはしない
-Next: prior-month exit-regret risk inputをprediction rowへ接続し、NoTrade-first selectorで評価する
+Report: 00258 Entry EV Exit Regret Selector Candidate
+Status: pre-registered diagnostic candidate / not standard policy
+Question: exit-regret riskをprediction rowへ戻すとstateful replayは改善するか
+Best evidence: confidence_exit t0.4 q99/floor5 improves broad -142.3776 -> +18.9072 and fixed2025 -177.3790 -> +19.1218
+Decision: q99/floor5をpre-registered candidateへ昇格。追加holdoutなしで標準化しない
+Next: trade-delta、月別、side share、s1 exposure baseline比較、追加chronology replay
 ```

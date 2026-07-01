@@ -4,6 +4,22 @@
 
 ## 2026-07-02 JST
 
+### 01:54 Entry EV exit regret selector candidate
+
+- 00257の次アクションとして、exit-regret riskをprediction rowへ戻す入力生成を実装した。
+- `scripts/experiments/entry_ev_forced_exit_policy_inputs.py` に `confidence_exit`, `profit_exit`, `context_confidence` risk specsとprediction-row側の `side_confidence_gap_bucket` を追加した。
+- unit test `tests/test_entry_ev_forced_exit_policy_inputs.py` に `confidence_exit` specで `same_side_large_regret_loss_target` から `exit_regret` riskを作るケースを追加した。
+- risk input artifactは `data/reports/backtests/20260701_164144_20260702_entry_ev_exit_regret_risk_s0p5_broad_policy_inputs_s1/`。
+- target calibration overallは `confidence_exit` mean AUC `0.7239`, mean Brier `0.1857`, bucket share `0.4093`; `side_context` mean AUC `0.5086`。
+- soft penalty `exit_regret_confexit_bucket_s0p5` はbroad q99/floor5 `-142.3776 -> -153.6806`, q95/floor5 `-84.1626 -> -96.2626` で悪化したためreject。
+- hard selector input artifactは `data/reports/backtests/20260701_164713_20260702_entry_ev_exit_regret_selector_s0p5_broad_inputs_s1/`。`confidence_exit t0.4` のbase-selected block shareは refit2025 `0.1681`, fresh2024 `0.1399`, cal2024 `0.0197`。
+- hard selector broad replay `data/reports/backtests/20260701_164827_20260702_entry_ev_exit_regret_selector_confexit_t0p4_broad_validation_backtest_s1/` では q99/floor5 `-142.3776 -> +18.9072`, max DD `162.1992 -> 54.5368`; q95/floor5 `-84.1626 -> -30.2972`。
+- fixed 2025-03..12 replay `data/reports/backtests/20260701_165213_20260702_entry_ev_exit_regret_selector_confexit_t0p4_fixed2025_03_12_backtest_s1/` では q99/floor5 `-177.3790 -> +19.1218`, q95/floor5 `-160.8606 -> -67.8612`。
+- 判断: `exit_regret_selector_confidenceexit_bucket_t0p4` q99/floor5をpre-registered diagnostic candidateへ昇格。ただし同じbroad target/replay loop由来なので標準policyにはしない。標準policyはNoTrade。
+- report: `docs/reports/00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: forced-exit policy input unit tests OK; py_compile OK; risk input generation OK; selector input generation OK; broad/fixed replay OK
+
 ### 01:35 Entry EV direction exit broad validation
 
 - 00256の次アクションとして、fixed 2025 stressではなく、既存predictionがカバーする広い月範囲へdirection / exit residual target診断を適用した。

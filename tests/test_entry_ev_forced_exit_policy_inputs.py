@@ -40,6 +40,8 @@ class EntryEvForcedExitPolicyInputsTests(unittest.TestCase):
                 ),
                 "combined_regime": ["range", "range", "range", "down"],
                 "session_regime": ["asia", "asia", "asia", "london"],
+                "pred_best_side_prob_1": [0.70, 0.70, 0.70, 0.45],
+                "pred_best_side_prob_-1": [0.30, 0.30, 0.30, 0.55],
                 "pred_side_prior_pressure_long_predicted_ev_overestimate_risk": [
                     0.20,
                     0.20,
@@ -173,6 +175,128 @@ class EntryEvForcedExitPolicyInputsTests(unittest.TestCase):
         )
         self.assertEqual(summary["score_kind"].iloc[0], "forced_exit_loss_exitrisk_bucket_s0p5")
         self.assertEqual(calibration["risk_spec"].iloc[0], "exit_risk")
+
+    def test_confidence_exit_spec_writes_exit_regret_risk(self):
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2024-01", "2024-02", "2024-03"],
+                "decision_timestamp": pd.to_datetime(
+                    [
+                        "2024-01-01 00:00:00Z",
+                        "2024-02-01 00:00:00Z",
+                        "2024-03-01 00:00:00Z",
+                    ],
+                    utc=True,
+                ),
+                "combined_regime": ["range", "range", "range"],
+                "session_regime": ["asia", "asia", "asia"],
+                "pred_best_side_prob_1": [0.70, 0.70, 0.70],
+                "pred_best_side_prob_-1": [0.30, 0.30, 0.30],
+                "pred_side_prior_pressure_long_predicted_ev_overestimate_risk": [
+                    0.20,
+                    0.20,
+                    0.20,
+                ],
+                "pred_side_prior_pressure_short_predicted_ev_overestimate_risk": [
+                    0.40,
+                    0.40,
+                    0.40,
+                ],
+                "pred_mlp_long_exit_event_minutes": [120.0, 120.0, 120.0],
+                "pred_mlp_short_exit_event_minutes": [60.0, 60.0, 60.0],
+                "pred_long_best_holding_minutes": [60.0, 60.0, 60.0],
+                "pred_short_best_holding_minutes": [60.0, 60.0, 60.0],
+                "pred_long_exit_event_prob_0": [0.2, 0.2, 0.2],
+                "pred_short_exit_event_prob_0": [0.1, 0.1, 0.1],
+                "pred_long_exit_event_prob_2": [0.8, 0.8, 0.8],
+                "pred_short_exit_event_prob_2": [0.1, 0.1, 0.1],
+                "pred_long_profit_barrier_hit": [0.0, 0.0, 0.0],
+                "pred_short_profit_barrier_hit": [1.0, 1.0, 1.0],
+                "pred_long_fixed_60m_adjusted_pnl": [5.0, 5.0, 5.0],
+                "pred_short_fixed_60m_adjusted_pnl": [5.0, 5.0, 5.0],
+                "pred_long_fixed_720m_adjusted_pnl": [-20.0, -20.0, -20.0],
+                "pred_short_fixed_720m_adjusted_pnl": [15.0, 15.0, 15.0],
+                "pred_side_prior_pressure_s0p5_long_best_adjusted_pnl": [
+                    10.0,
+                    10.0,
+                    10.0,
+                ],
+                "pred_side_prior_pressure_s0p5_short_best_adjusted_pnl": [
+                    8.0,
+                    8.0,
+                    8.0,
+                ],
+                "pred_long_entry_local_rank": [0.8, 0.8, 0.8],
+                "pred_short_entry_local_rank": [0.7, 0.7, 0.7],
+            }
+        )
+        targets = pd.DataFrame(
+            {
+                "month": ["2024-01", "2024-01", "2024-02"],
+                "direction": ["long", "long", "long"],
+                "side_confidence_gap_bucket": ["strong", "strong", "strong"],
+                "loss_first_prob_bucket": ["high", "high", "high"],
+                "time_exit_prob_bucket": ["very_low", "very_low", "very_low"],
+                "same_side_large_regret_loss_target": [True, False, True],
+                "adjusted_pnl": [-20.0, 5.0, -25.0],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            prediction_path = tmp_path / "pred.parquet"
+            targets_path = tmp_path / "targets.csv"
+            predictions.to_parquet(prediction_path, index=False)
+            targets.to_csv(targets_path, index=False)
+            args = argparse.Namespace(
+                family_predictions=[f"toy={prediction_path}"],
+                exit_targets=targets_path,
+                target="same_side_large_regret_loss_target",
+                risk_name="exit_regret",
+                risk_specs="confidence_exit",
+                risk_prefix="pred_side_prior_pressure",
+                long_column="pred_side_prior_pressure_s0p5_long_best_adjusted_pnl",
+                short_column="pred_side_prior_pressure_s0p5_short_best_adjusted_pnl",
+                long_rank_column="pred_long_entry_local_rank",
+                short_rank_column="pred_short_entry_local_rank",
+                score_kind_prefix="exit_regret",
+                source_modes="bucket",
+                penalty_strengths="0.5",
+                no_prior_risk=0.0,
+                min_score_scale=0.0,
+                prior_strength=1.0,
+                min_group_support=1,
+                quantile_scopes="month",
+                output_dir=tmp_path,
+                label="unit_exit_regret_inputs",
+            )
+
+            run_dir = entry_ev_forced_exit_policy_inputs.build_policy_inputs(args)
+            enriched = pd.read_parquet(
+                run_dir / "enriched_predictions" / "toy_predictions_forced_exit.parquet"
+            )
+            calibration = pd.read_csv(run_dir / "forced_exit_target_calibration_overall.csv")
+
+        risk_column = (
+            "pred_exit_regret_confidence_exit_long_predicted_exit_regret_risk"
+        )
+        source_column = (
+            "pred_exit_regret_confidence_exit_long_exit_regret_prediction_source"
+        )
+        score_column = (
+            "pred_exit_regret_confexit_bucket_s0p5_long_best_adjusted_pnl"
+        )
+        march = enriched[enriched["dataset_month"].eq("2024-03")].reset_index(drop=True)
+
+        self.assertIn(risk_column, enriched.columns)
+        self.assertIn(score_column, enriched.columns)
+        self.assertEqual(march[source_column].iloc[0], "bucket")
+        self.assertAlmostEqual(march[risk_column].iloc[0], 2.0 / 3.0)
+        self.assertLess(
+            march[score_column].iloc[0],
+            march["pred_side_prior_pressure_s0p5_long_best_adjusted_pnl"].iloc[0],
+        )
+        self.assertEqual(calibration["risk_spec"].iloc[0], "confidence_exit")
 
 
 if __name__ == "__main__":

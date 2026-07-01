@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 01:35 JST
+最終更新: 2026-07-02 01:54 JST
 
 ## 結論
 
@@ -16,7 +16,7 @@
 |---|---|---|
 | Standard policy | なし | NoTrade-firstを維持 |
 | Best current evidence | `00253` で `exit_risk bucket t0.10..t0.20` hard selectorがfixed 2025でpositive total/worst month改善したが、`00254` のchronological validationではbaseline超えなし。`00256` のfixed stressもpolicy evidenceではない | fixed-window candidate rejected for now |
-| Latest diagnostic result | `00257` でs0.5/s1 broad validationへdirection/exit residual targetを適用。exit-regret系はchronological pooled AUC `0.65..0.70` が残るが、direction/profit-barrier missは弱い | broad diagnostic accepted / not policy |
+| Latest diagnostic result | `00258` でexit-regret risk inputとhard selectorを追加。`confidence_exit t0.4` q99/floor5はbroad `-142.3776 -> +18.9072`, fixed2025 `-177.3790 -> +19.1218` | pre-registered diagnostic candidate / not standard |
 | Pointwise screens | q95 floor5 の high EV-overestimate risk rows は損失を拾うが、contextによって勝ちも削る | replacement未評価なのでpolicyではない |
 | Main failure | validation support不足、fold間EV scale drift、side/context反転、exit capture不足、one-position replacement、common-entry loss、target featureのwindow依存 | hard blockではなく分解targetで扱う |
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00221` | raw / calibrated EV threshold、rank gate、quantile admission、positive floorを検証。候補数やscaleは改善するが、NoTrade-first selectorは通らない。 |
 | Exit capture / hold cap | `00222`..`00232` | `720m` や executable EV calibration は診断上有効。ただし月次tail、support不足、fresh/refit反転が残る。direct score標準化はしない。 |
 | Side balance / downside | `00233`..`00239` | side-balance単独、downside interaction、coverage gate、composite gateはいずれも標準候補を生まない。component targetへ分解する方針に転換。 |
-| Component target / EV overestimate / direction / replacement / exit | `00240`..`00257` | EV overestimateは有効だがfixed/broad residualではloss-first / exit-regret系signalがより安定。direction-side inversionはdiagnostic featureとして有効だが、単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。forced-exit riskはdirect penaltyでもselectorでも標準化不可。direction/exit residual target generation、fixed stress、broad validation診断はacceptedだがpolicy化不可。 |
+| Component target / EV overestimate / direction / replacement / exit | `00240`..`00258` | EV overestimateは有効だがfixed/broad residualではloss-first / exit-regret系signalがより安定。exit-regret `confidence_exit t0.4` hard selectorは有望なpre-registered candidate。direction-side inversionは単独selector/direct penaltyでは標準化できない。replacement positive-quality headは現定義だと弱い。direction/exit residual target generation、fixed stress、broad validation、exit-regret selector診断はaccepted。 |
 
 ## 採用済みインフラ
 
@@ -59,6 +59,8 @@
 - direction/exit residual target diagnostics
 - fixed-period direction/exit residual stress diagnostics
 - broad validation direction/exit residual diagnostics
+- exit-regret risk prediction-row input generation
+- exit-regret hard selector input generation
 
 ## 採用しないもの
 
@@ -97,14 +99,16 @@
 - fixed stressのchronological bucket calibrationを標準policy evidenceとして扱うこと
 - broad validationのexit-regret AUCだけでhard selectorを採用すること
 - s1の取引数減少を利益edgeとして扱うこと
+- soft `exit_regret_confexit_bucket_s0p5` penalty
+- `exit_regret_selector_confidenceexit_bucket_t0p4` を追加holdoutなしで標準policyにすること
 
 ## 次にやること
 
-1. exit-regret risk auxiliary inputを、prior-month rowsだけでprediction rowへ接続する。
-2. `selected_loss_first_prob`, `confidence_exit`, `side_context` をexit-regret系feature候補にし、direction/profit-barrier missとは分ける。
-3. `direction_or_exit_loss_target` は広すぎるため捨て、direction/profit-barrier miss、same-side missed、large-exit-regret、hold-too-longを分けて扱う。
-4. 新候補は NoTrade、s0.5/s1 broad baseline、fixed 2025 stress、worst month、max DD、side PnL、trade supportで比較する。
-5. broad validationで見つけたfeatureも、直接hard blockにせずNoTrade-first selectorとprior-only replayを通す。
+1. `exit_regret_selector_confidenceexit_bucket_t0p4` q99/floor5をpre-registerし、追加chronologyまたは別familyで再探索なしにreplayする。
+2. baseline s0.5 q99/floor5との差分をtrade-delta診断し、removed losses / removed wins / replacement lossesを分ける。
+3. 月別PnL、side share、trade count、max DDを確認し、改善が少数trade依存かを見る。
+4. s1 exposure-reduction baselineと比較し、単に取引数を減らしただけではないか確認する。
+5. direction/profit-barrier missは現bucketでは弱いため、exit-regret selectorとは別headで扱う。
 
 ## 代表的な読む順
 
@@ -129,6 +133,7 @@
 17. `00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
 18. `00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
 19. `00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
+20. `00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
 
 entry EV admissionの流れを見る:
 
