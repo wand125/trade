@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 07:49 JST
+最終更新: 2026-07-02 07:57 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV external hybrid loss target insightを追加した。00270でrejectした外部HGB+MLP hybrid `2025-09..12` のq99/q95実行tradeをprediction rowへjoinし、損失月 `2025-09,2025-12` を教師/特徴量設計の材料として分解した。q99は6 trades / total `-28.3940`, direction error `0.6667`, EV overestimate mean `30.7672`, exit regret sum `177.5340`。q95は10 trades / total `+0.0820`, direction error `0.6000`, EV overestimate mean `28.8171`, exit regret sum `356.6480`。損失月に絞るとq99/q95とも `no_edge_entry=0` で、全tradeに同方向oracle利益余地があった。16 rows全体では `same_side_missed_loss_target` / `low_capture_loss_target` / `late_exit_regret_loss_target` が7件 / target PnL `-82.5360`, false側 `+54.2240`。判断: policy復活ではなく、exit-capture/executable-EV calibrationとdirection-side robustnessを分けた教師設計へ戻す。詳細は `docs/reports/00271_2026-07-02_entry_ev_external_hybrid_loss_target_insight.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV external hybrid 2025-09..12 replayを追加した。00269のHGB alias replayはpreflight止まりだったため、既存HGB entry + MLP exit hybrid `2025-09..12` へq99 prior guard方針を固定適用した。holdingは既存 `pred_mlp_*_exit_event_minutes` を使用。q99/floor5/rank90は9 candidate rows / 7 episodes / 3 active monthsだが、stateful replayは `-28.3940`, 6 trades, worst month `-19.2900`。prior guardはq99/q95とも発火0。q95/floor5/rank90は15 rows / 13 episodes / 4 months、10 tradesで total `+0.0820` だが worst month `-18.2640` でmonth floorを落とす。combined admissionはNoTrade。判断: q99 prior guardは外部full-hybrid foldでも標準採用を支持しない。詳細は `docs/reports/00270_2026-07-02_entry_ev_external_hybrid_2025_09_12_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

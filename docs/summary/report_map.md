@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 07:49 JST
+最終更新: 2026-07-02 07:57 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00270` | Exit-regret / replacement guard | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。branchはpolicy候補から外し、diagnostic baselineとして保持。 |
+| `00258`..`00271` | Exit-regret / replacement guard / loss target insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。branchはpolicy候補から外し、教師設計へ戻す。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00270` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。fresh supportをrank0で増やすとcal/refitが崩れ、外部HGBと外部full-hybridでもNoTrade未満。q95もmonth floor未達のためbranchは終了。 |
+| Latest decision | `00258`..`00271` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。fresh supportをrank0で増やすとcal/refitが崩れ、外部HGBと外部full-hybridでもNoTrade未満。q95もmonth floor未達のためbranchは終了。00271の損失分解から次はexit-capture/executable-EV教師へ戻る。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -46,6 +46,7 @@
 11. `00268_2026-07-02_entry_ev_fresh_support_episode_diagnostics.md`
 12. `00269_2026-07-02_entry_ev_external_hgb_prior_guard_replay.md`
 13. `00270_2026-07-02_entry_ev_external_hybrid_2025_09_12_replay.md`
+14. `00271_2026-07-02_entry_ev_external_hybrid_loss_target_insight.md`
 
 component targetの流れを読む:
 
@@ -92,10 +93,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00270 Entry EV External Hybrid 2025-09..12 Replay
-Status: accepted infrastructure / policy rejected
-Question: q99 prior guardは外部full-hybrid foldでもNoTradeを超えるか
-Best evidence: q99は -28.3940、q95は +0.0820 だがworst month -18.2640でNoTrade-first gate未達
+Report: 00271 Entry EV External Hybrid Loss Target Insight
+Status: diagnostic insight / policy rejected
+Question: 00270の損失はentry no-edgeか、exit capture / EV calibration失敗か
+Best evidence: 損失月はno_edge_entry 0、same-side oracle total positive、same_side_missed/low_capture/late_exit_regret target 7件で -82.5360
 Decision: 標準policyはNoTrade
-Next: q99 prior guard branchをdiagnostic baseline化し、モデル/data設計へ戻る
+Next: exit-capture / executable-EV calibration / direction-side robustnessを別target headへ戻す
 ```

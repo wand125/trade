@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 07:57 Entry EV external hybrid loss target insight
+
+作業:
+
+- 00270でrejectした外部HGB+MLP hybrid `2025-09..12` のq99/q95実行tradeを、policy復活ではなく教師/特徴量設計の材料として分解した。
+- `entry_ev_multifamily_policy_trade_enrichment.py` でq99/q95のtrade CSVをprior-guard predictionへjoinした。
+- q99/q95の損失月 `2025-09,2025-12` を `entry_ev_residual_month_loss_diagnostics.py` で分解した。
+- `entry_ev_exit_shortening_target_diagnostics.py` でsame-side missed / low-capture / late-exit-regret / profit-barrier miss targetを確認した。
+- report: `docs/reports/00271_2026-07-02_entry_ev_external_hybrid_loss_target_insight.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- q99は6 trades / total `-28.3940`、direction error `0.6667`、EV overestimate mean `30.7672`、exit regret sum `177.5340`。
+- q95は10 trades / total `+0.0820`、direction error `0.6000`、EV overestimate mean `28.8171`、exit regret sum `356.6480`。
+- q99損失月は4 trades / total `-37.5540`、same-side oracle total `77.6700`、actual best total `174.6900`、no edge rate `0.0000`。
+- q95損失月は5 trades / total `-33.7840`、same-side oracle total `104.4930`、actual best total `214.3900`、no edge rate `0.0000`。
+- 16 rows全体では `same_side_missed_loss_target` / `low_capture_loss_target` / `late_exit_regret_loss_target` が7件 / target PnL `-82.5360`、false側 `+54.2240`。
+
+判断:
+
+- 00270の失敗はentry候補が完全に無価値というより、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心。
+- 静的context blacklistやq99/q95 prior guard復活には使わない。
+- 次はexit capture / executable EV calibration / direction-side robustnessを別target headとして学習側へ戻す。
+- 標準policyはNoTrade。
+
+検証:
+
+- q99/q95 trade enrichment: OK
+- q99/q95 loss residual diagnostics: OK
+- exit target insight diagnostics: OK
+
 ### 07:49 Entry EV external hybrid 2025-09..12 replay
 
 作業:

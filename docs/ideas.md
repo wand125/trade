@@ -100,6 +100,7 @@
 - rank0緩和はfresh supportを増やしてもcal/refit role PnLを壊した。support不足を同一windowのrank/floor緩和で解くのではなく、外部chronology、再生成family、データ/window追加で検証する。
 - 外部HGB preflightではq99/rank90/floor5のsupportは十分あったがPnLがNoTrade未満だった。次に見るべきはsupport補強ではなく、full pipelineを独立chronologyで再生成した場合のPnL再現性。
 - 外部full-hybrid 2025-09..12でもq99 prior guardはNoTrade未満、q95は合計ほぼゼロだがmonth floor未達。exit-regret/prior-guard branchはthreshold rescueを止め、side/regime robustnessやexit timing constraintの学習設計へ戻す。
+- 外部full-hybrid損失月では `no_edge_entry=0` で、同方向oracle利益を実行exitで取り逃す `same_side_missed_loss` / `low_capture_loss` / `late_exit_regret_loss` が損失を覆った。entry no-trade hard labelに潰さず、exit-capture / executable-EV calibration / direction-side robustnessを別target headに分ける。
 - online drawdown guardの閾値はvalidation total PnLだけで選ぶと `inf` または低margin relaxationに寄りやすい。prior-only `worst` objective と高い再入場margin (`20/20`) はtail riskを縮める候補だが利益最大化ではないため、未使用月で事前登録mandateとして検証する。
 - cooldownだけでbreach後の再入場を許可すると、良い前半月だけでなくside driftが壊れた後半月のshort損失も戻る。cooldownは標準採用せず、breach後の再入場判断は recent side drift / realized context loss / prediction-side bias を特徴量化して審査する。
 - `prior_context_pnl`, `prior_context_active_loss_breach`, `prior_context_trade_count`, `minutes_since_context_breach`, `entry_margin` を selected-trade failure / stateful risk / candidate selection の特徴量へ戻す。recovery hard rule単体は prior-only で改善しない。
