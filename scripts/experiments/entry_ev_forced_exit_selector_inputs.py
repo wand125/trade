@@ -23,13 +23,19 @@ if str(SCRIPT_DIR) not in sys.path:
 from trade_data.backtest import json_default, make_run_dir  # noqa: E402
 
 from entry_ev_executable_ev_policy_inputs import add_executable_quantile_columns  # noqa: E402
-from entry_ev_scale_quantile_diagnostics import parse_scope_csv  # noqa: E402
+from entry_ev_scale_quantile_diagnostics import (  # noqa: E402
+    add_scope_quantiles,
+    build_score_frame,
+    parse_scope_csv,
+    quantile_column_name,
+)
 
 
 DEFAULT_RISK_NAME = "forced_exit_loss"
 DEFAULT_RISK_SPECS = "exit_risk,ev_exit"
 DEFAULT_SCORE_KIND_PREFIX = "forced_exit_selector"
 DEFAULT_QUANTILE_SCOPES = "month,side_month,side_regime_session_month"
+SIDE_GAP_QUANTILE_MODES = {"post_block", "pre_block"}
 
 RISK_SPEC_LABELS = {
     "exit_risk": "exitrisk",
@@ -189,6 +195,44 @@ def side_conf_gap_mask(
     return text_series(frame, column).isin(set(buckets))
 
 
+def overwrite_side_gap_quantiles_from_pre_block_scores(
+    output: pd.DataFrame,
+    *,
+    family: str,
+    score_kind: str,
+    long_base: pd.Series,
+    short_base: pd.Series,
+    long_rank_column: str,
+    short_rank_column: str,
+    quantile_scopes: list[str],
+) -> pd.DataFrame:
+    result = output.copy()
+    long_temp = f"__{score_kind}_preblock_long_score"
+    short_temp = f"__{score_kind}_preblock_short_score"
+    quantile_input = result.copy()
+    quantile_input[long_temp] = long_base.to_numpy()
+    quantile_input[short_temp] = short_base.to_numpy()
+    score_frame = build_score_frame(
+        quantile_input,
+        family=family,
+        score_kind=score_kind,
+        long_score_column=long_temp,
+        short_score_column=short_temp,
+        long_rank_column=long_rank_column,
+        short_rank_column=short_rank_column,
+    )
+    for scope_name in quantile_scopes:
+        scoped = add_scope_quantiles(score_frame, scope_name=scope_name)
+        result[
+            quantile_column_name(
+                score_kind=score_kind,
+                source_column="side_gap",
+                scope_name=scope_name,
+            )
+        ] = scoped["side_gap_pct"].to_numpy()
+    return result
+
+
 def add_selector_scores(
     predictions: pd.DataFrame,
     *,
@@ -204,8 +248,11 @@ def add_selector_scores(
     short_rank_column: str,
     blocked_score: float,
     quantile_scopes: list[str],
+    side_gap_quantile_mode: str,
     replacement_guard_conf_gap_buckets: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if side_gap_quantile_mode not in SIDE_GAP_QUANTILE_MODES:
+        raise ValueError(f"unknown side_gap_quantile_mode: {side_gap_quantile_mode}")
     output = predictions.copy()
     long_base = numeric_series(output, long_column, default=np.nan)
     short_base = numeric_series(output, short_column, default=np.nan)
@@ -287,6 +334,17 @@ def add_selector_scores(
                     short_rank_column=short_rank_column,
                     quantile_scopes=quantile_scopes,
                 )
+                if side_gap_quantile_mode == "pre_block":
+                    output = overwrite_side_gap_quantiles_from_pre_block_scores(
+                        output,
+                        family=family,
+                        score_kind=score_kind,
+                        long_base=long_base,
+                        short_base=short_base,
+                        long_rank_column=long_rank_column,
+                        short_rank_column=short_rank_column,
+                        quantile_scopes=quantile_scopes,
+                    )
                 selector_side = pd.Series(
                     np.where(
                         output[long_output_column].astype(float)
@@ -308,6 +366,7 @@ def add_selector_scores(
                         "risk_spec": risk_spec,
                         "source_mode": source_mode,
                         "risk_threshold": threshold,
+                        "side_gap_quantile_mode": side_gap_quantile_mode,
                         "replacement_guard_conf_gap_buckets": ",".join(
                             replacement_guard_conf_gap_buckets
                         ),
@@ -349,6 +408,9 @@ def build_selector_inputs(args: argparse.Namespace) -> Path:
     source_modes = parse_csv(args.source_modes)
     risk_thresholds = parse_float_csv(args.risk_thresholds)
     quantile_scopes = parse_scope_csv(args.quantile_scopes)
+    side_gap_quantile_mode = getattr(args, "side_gap_quantile_mode", "post_block")
+    if side_gap_quantile_mode not in SIDE_GAP_QUANTILE_MODES:
+        raise ValueError(f"unknown side_gap_quantile_mode: {side_gap_quantile_mode}")
     replacement_guard_conf_gap_buckets = parse_csv(args.replacement_guard_conf_gap_buckets)
     if not risk_specs:
         raise ValueError("--risk-specs must not be empty")
@@ -388,6 +450,7 @@ def build_selector_inputs(args: argparse.Namespace) -> Path:
             short_rank_column=args.short_rank_column,
             blocked_score=args.blocked_score,
             quantile_scopes=quantile_scopes,
+            side_gap_quantile_mode=side_gap_quantile_mode,
             replacement_guard_conf_gap_buckets=replacement_guard_conf_gap_buckets,
         )
         output_path = enriched_dir / f"{family}_predictions_forced_exit_selector.parquet"
@@ -409,6 +472,7 @@ def build_selector_inputs(args: argparse.Namespace) -> Path:
         "short_rank_column": args.short_rank_column,
         "blocked_score": args.blocked_score,
         "quantile_scopes": quantile_scopes,
+        "side_gap_quantile_mode": side_gap_quantile_mode,
         "replacement_guard_conf_gap_buckets": replacement_guard_conf_gap_buckets,
     }
     (run_dir / "config.json").write_text(
@@ -441,6 +505,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--short-rank-column", default="pred_short_entry_local_rank")
     parser.add_argument("--blocked-score", type=float, default=-1000000000.0)
     parser.add_argument("--quantile-scopes", default=DEFAULT_QUANTILE_SCOPES)
+    parser.add_argument(
+        "--side-gap-quantile-mode",
+        choices=sorted(SIDE_GAP_QUANTILE_MODES),
+        default="post_block",
+        help=(
+            "Use post-block selector scores or pre-block base scores for "
+            "side-gap quantile columns."
+        ),
+    )
     parser.add_argument(
         "--replacement-guard-conf-gap-buckets",
         default="",

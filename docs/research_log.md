@@ -4,6 +4,26 @@
 
 ## 2026-07-02 JST
 
+### 03:03 Entry EV pre-block side-gap quantile
+
+- 00263で見つけた post-block `side_gap_pct` 汚染に対応した。
+- `scripts/experiments/entry_ev_forced_exit_selector_inputs.py` に `--side-gap-quantile-mode {post_block,pre_block}` を追加した。
+- 既定は従来互換の `post_block`。
+- `pre_block` では selector scoreはpost-blockのまま、`side_gap_pct` だけbase long/short score由来で上書きする。
+- unit test `tests/test_entry_ev_forced_exit_selector_inputs.py` に、blocked score sentinel がside-gap percentileを膨らませるケースと `pre_block` で回避するケースを追加した。
+- pre-block side-gap selector input artifactは `data/reports/backtests/20260701_175911_20260702_entry_ev_exit_regret_replguard_preblockgap_t0p4_inputs_s1/`。
+- candidate support artifactは `data/reports/backtests/20260701_180008_20260702_entry_ev_exit_regret_replguard_preblockgap_candidate_support_s1/`。
+- broad replay artifactは `data/reports/backtests/20260701_180025_20260702_entry_ev_exit_regret_replguard_preblockgap_broad_backtest_s1/`。
+- admission artifactsは `data/reports/backtests/20260701_180326_20260702_entry_ev_exit_regret_replguard_preblockgap_admission_strict3_s1/` と `data/reports/backtests/20260701_180326_20260702_entry_ev_exit_regret_replguard_preblockgap_admission_relaxed3_s1/`。
+- fresh supportは q99/floor5 `0 -> 26` rows、q95/floor5 `0 -> 34` rows に戻った。
+- 一方refit supportも大きく増え、q99/floor5 `101 -> 225` rows、q95/floor5 `280 -> 535` rows。
+- broad replayでは q99/floor5 total `-23.5882`, worst `-128.3504`, trades `70`; q95/floor5 total `-14.6536`, worst `-140.8024`, trades `119`。
+- strict/relaxed admissionはNoTrade。
+- 判断: pre-block side-gap quantile infrastructureはaccepted。現pre-block `sg95` policyはreject。標準policyはNoTrade。
+- report: `docs/reports/00264_2026-07-02_entry_ev_preblock_side_gap_quantile.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+- 検証: forced-exit selector input unit tests OK; py_compile OK; pre-block input generation OK; support diagnostic OK; broad replay OK; admission selector runs OK
+
 ### 02:52 Entry EV quantile candidate support diagnostics
 
 - 00262のfresh2024 0-trade原因を、candidate row supportの漏斗で診断した。

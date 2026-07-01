@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 02:52 JST
+最終更新: 2026-07-02 03:03 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV pre-block side-gap quantileを追加した。00263のpost-block `side_gap_pct` 汚染に対応するため、`entry_ev_forced_exit_selector_inputs.py` に `--side-gap-quantile-mode {post_block,pre_block}` を追加した。既定は従来通り `post_block`。`pre_block` では selector scoreはpost-blockのまま、`side_gap_pct` だけbase long/short score由来で上書きする。fresh supportは復活し、q99/floor5 `0 -> 26` rows、q95/floor5 `0 -> 34` rows。ただしreplayでは refit tailが戻り、q99/floor5 total `-23.5882`, q95/floor5 total `-14.6536`。strict/relaxed admissionはNoTrade。判断: infrastructureはaccepted、policyはreject。標準policyはNoTrade。詳細は `docs/reports/00264_2026-07-02_entry_ev_preblock_side_gap_quantile.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV quantile candidate support診断を追加した。00262のfresh2024 0-trade原因を候補漏斗で分解し、`scripts/experiments/entry_ev_quantile_candidate_support_diagnostics.py` を追加した。replguard + `sg95` では fresh q99/floor5が quantile hold ok `184` まで残るが floor5通過 `0`、q95/floor5も `622 -> 0`。一方base `side_prior_pressure_s0p5` では fresh q99/floor5 `26` rows、q95/floor5 `34` rowsが通り、すべてshort。base q99/floor5 26 rowsは selector後も `score>5` と `rank_q90` を満たし直接blockも0だが、post-block `side_gap_pct` が約0.88に落ち `sg95` で消える。blocked sideの `-1e9` がside-gap分布を汚染している可能性が高い。`sg0` replayは total positiveでも worst month `-133.6988` とrole trade support不足でadmissionはNoTrade。次はpre-block/finite-side side-gap quantileを作る。詳細は `docs/reports/00263_2026-07-02_entry_ev_quantile_candidate_support_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

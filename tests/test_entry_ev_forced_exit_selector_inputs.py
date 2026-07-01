@@ -227,6 +227,105 @@ class EntryEvForcedExitSelectorInputsTests(unittest.TestCase):
             2.0 / 3.0,
         )
 
+    def test_pre_block_side_gap_quantile_ignores_blocked_score_sentinel(self):
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2024-03", "2024-03", "2024-03"],
+                "decision_timestamp": pd.to_datetime(
+                    [
+                        "2024-03-01 00:00:00Z",
+                        "2024-03-01 00:01:00Z",
+                        "2024-03-01 00:02:00Z",
+                    ],
+                    utc=True,
+                ),
+                "pred_direction_inversion_bucket_s0p1_long_best_adjusted_pnl": [
+                    10.0,
+                    9.0,
+                    8.0,
+                ],
+                "pred_direction_inversion_bucket_s0p1_short_best_adjusted_pnl": [
+                    8.0,
+                    8.5,
+                    1.0,
+                ],
+                "pred_long_entry_local_rank": [0.9, 0.9, 0.9],
+                "pred_short_entry_local_rank": [0.8, 0.8, 0.8],
+                "pred_forced_exit_loss_exit_risk_long_predicted_forced_exit_loss_risk": [
+                    0.60,
+                    0.10,
+                    0.10,
+                ],
+                "pred_forced_exit_loss_exit_risk_short_predicted_forced_exit_loss_risk": [
+                    0.10,
+                    0.10,
+                    0.10,
+                ],
+                "pred_forced_exit_loss_exit_risk_long_forced_exit_loss_prediction_source": [
+                    "bucket",
+                    "bucket",
+                    "bucket",
+                ],
+                "pred_forced_exit_loss_exit_risk_short_forced_exit_loss_prediction_source": [
+                    "bucket",
+                    "bucket",
+                    "bucket",
+                ],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            prediction_path = tmp_path / "pred.parquet"
+            predictions.to_parquet(prediction_path, index=False)
+            base_args = dict(
+                family_predictions=[f"toy={prediction_path}"],
+                risk_name="forced_exit_loss",
+                risk_specs="exit_risk",
+                score_kind_prefix="forced_exit_selector",
+                source_modes="bucket",
+                risk_thresholds="0.5",
+                long_column="pred_direction_inversion_bucket_s0p1_long_best_adjusted_pnl",
+                short_column="pred_direction_inversion_bucket_s0p1_short_best_adjusted_pnl",
+                long_rank_column="pred_long_entry_local_rank",
+                short_rank_column="pred_short_entry_local_rank",
+                blocked_score=-999.0,
+                quantile_scopes="month",
+                replacement_guard_conf_gap_buckets="",
+                output_dir=tmp_path,
+            )
+            post_args = argparse.Namespace(
+                **base_args,
+                side_gap_quantile_mode="post_block",
+                label="unit_forced_exit_selector_post_block_gap",
+            )
+            pre_args = argparse.Namespace(
+                **base_args,
+                side_gap_quantile_mode="pre_block",
+                label="unit_forced_exit_selector_pre_block_gap",
+            )
+
+            post_dir = entry_ev_forced_exit_selector_inputs.build_selector_inputs(post_args)
+            pre_dir = entry_ev_forced_exit_selector_inputs.build_selector_inputs(pre_args)
+            post = pd.read_parquet(
+                post_dir
+                / "enriched_predictions"
+                / "toy_predictions_forced_exit_selector.parquet"
+            )
+            pre = pd.read_parquet(
+                pre_dir
+                / "enriched_predictions"
+                / "toy_predictions_forced_exit_selector.parquet"
+            )
+
+        score_kind = "forced_exit_selector_exitrisk_bucket_t0p5"
+        side_gap_pct = f"pred_{score_kind}_side_gap_pct_month"
+        long_score = f"pred_{score_kind}_long_best_adjusted_pnl"
+
+        self.assertEqual(pre[long_score].iloc[0], -999.0)
+        self.assertAlmostEqual(post[side_gap_pct].iloc[0], 1.0)
+        self.assertAlmostEqual(pre[side_gap_pct].iloc[0], 2.0 / 3.0)
+
 
 if __name__ == "__main__":
     unittest.main()

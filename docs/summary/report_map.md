@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 02:52 JST
+最終更新: 2026-07-02 03:03 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00263` | Exit-regret / replacement guard | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認。diagnostic candidate止まり。 |
+| `00258`..`00264` | Exit-regret / replacement guard | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装したがrefit tailが戻る。diagnostic candidate止まり。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00263` | exit-regret selector + replacement guardは最有望だが、sg95ではfresh2024 0-trade、sg0ではtail過大。標準はNoTrade。 |
+| Latest decision | `00258`..`00264` | exit-regret selector + replacement guardは最有望だが、post-block sg95ではfresh2024 0-trade、pre-block sg95ではrefit tail過大。標準はNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -39,6 +39,7 @@
 4. `00261_2026-07-02_entry_ev_exit_regret_replacement_guard_replay.md`
 5. `00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`
 6. `00263_2026-07-02_entry_ev_quantile_candidate_support_diagnostics.md`
+7. `00264_2026-07-02_entry_ev_preblock_side_gap_quantile.md`
 
 component targetの流れを読む:
 
@@ -85,10 +86,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00263 Entry EV Quantile Candidate Support Diagnostics
-Status: accepted support diagnostic / not standard
-Question: fresh2024 0-tradeはどのcandidate gateで起きているか
-Best evidence: base q99/floor5 fresh 26 rowsはselector後もscore>5だが side_gap_q95=0。post-block side-gap quantileが汚染されている
+Report: 00264 Entry EV Pre-Block Side Gap Quantile
+Status: accepted infrastructure / policy rejected
+Question: post-block side-gap quantile汚染を直すとadmission candidateは改善するか
+Best evidence: fresh supportは戻るが q99/floor5 total -23.5882, q95/floor5 total -14.6536。refit tailが戻る
 Decision: 標準policyはNoTrade
-Next: pre-block/finite-side side-gap quantileを追加して再評価
+Next: newly admitted refit rowsを分解し、two-stage tail/replacement guardを検討
 ```
