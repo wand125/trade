@@ -186,6 +186,61 @@ class EntryEvStatefulEntryBlockOverlayTest(unittest.TestCase):
             [True, True, False, True],
         )
 
+    def test_entry_block_mask_supports_long_range_normal_ny_position_quality_rules(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    "direction": "long",
+                    "session_regime": "ny_overlap",
+                    "combined_regime": "range_normal_vol",
+                    "selected_loss_first_prob": 0.29,
+                    "pred_side_confidence_gap": 0.21,
+                    "pred_taken_entry_local_rank": 0.54,
+                    "pred_taken_ev": 7.0,
+                    "selected_fixed_60m_pred_pnl": 0.5,
+                    "selected_fixed_720m_pred_pnl": 1.0,
+                    "holding_minutes": 1.0,
+                    "hold_extension_applied": False,
+                },
+                {
+                    "direction": "long",
+                    "session_regime": "ny_overlap",
+                    "combined_regime": "range_normal_vol",
+                    "selected_loss_first_prob": 0.2,
+                    "pred_side_confidence_gap": 0.1,
+                    "pred_taken_entry_local_rank": 0.6,
+                    "pred_taken_ev": 10.0,
+                    "selected_fixed_60m_pred_pnl": -0.5,
+                    "selected_fixed_720m_pred_pnl": -1.0,
+                    "holding_minutes": 1.0,
+                    "hold_extension_applied": False,
+                },
+                {
+                    "direction": "short",
+                    "session_regime": "ny_overlap",
+                    "combined_regime": "range_normal_vol",
+                    "selected_loss_first_prob": 0.5,
+                    "pred_side_confidence_gap": 0.3,
+                    "pred_taken_entry_local_rank": 0.4,
+                    "pred_taken_ev": 5.0,
+                    "selected_fixed_60m_pred_pnl": 2.0,
+                    "selected_fixed_720m_pred_pnl": 2.0,
+                    "holding_minutes": 1.0,
+                    "hold_extension_applied": False,
+                },
+            ]
+        )
+
+        self.assertEqual(entry_block_mask(frame, "long_range_normal_ny").tolist(), [True, True, False])
+        self.assertEqual(
+            entry_block_mask(frame, "long_range_normal_ny_fixed60_pred_gt0").tolist(),
+            [True, False, False],
+        )
+        self.assertEqual(
+            entry_block_mask(frame, "long_range_normal_ny_lossprob_lt0p3_sidegap_ge0p2").tolist(),
+            [True, False, False],
+        )
+
     def test_summarize_overlay_blocks_matching_trade(self) -> None:
         stateful = pd.DataFrame(
             [

@@ -4,6 +4,39 @@
 
 ## 2026-07-02 JST
 
+### 17:22 Entry EV position-quality proxy overlay
+
+作業:
+
+- 00309のnegative resultを受け、`holdext_long_range_normal_ny` をextension vetoではなくentry/no-entryまたはposition-quality問題として扱った。
+- `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` に entry-time observableな `long_range_normal_ny*` rulesを追加した。
+- `tests/test_entry_ev_stateful_entry_block_overlay.py` に long / `range_normal_vol` / `ny_overlap` 系ruleのunit testを追加した。
+- report: `docs/reports/00310_2026-07-02_entry_ev_position_quality_proxy_overlay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00308/00309の `isolated_large_loss_long / threshold -5 / fixed720 / require-model-used` branch。
+- `long_range_normal_ny_fixed60_pred_gt0` は total `+326.1098 -> +337.6010`、month min `-0.8832 -> -0.7200`、blocked 4件 / blocked PnL `-11.4912`。
+- broad `long_range_normal_ny` は total `+342.1610` まで伸びるが、month minは `-0.9692` へ悪化。
+- 1件proxyの `long_range_normal_ny_lossprob_lt0p3_sidegap_ge0p2` は00309 target rowだけを消し、total `+326.9930` / month min `-0.7200`。
+- `long_range_normal_ny_fixed60_pred_gt0` が消した4件は全て `refit2025_validation` の `long / range_normal_vol / ny_overlap` に集中した。
+- default support-awareでは `support_aware_only` だが、support2では `too_many_support_limited_negative_months`、shallow025では `structural_negative_months` でblocked。
+
+判断:
+
+- entry-time observableな position-quality proxy rulesはaccepted diagnostic infrastructure。
+- `long_range_normal_ny_fixed60_pred_gt0` は短期path過大評価のdiagnostic candidate。
+- broad block、1件proxy、default support-aware passの標準採用はreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_stateful_entry_block_overlay.py tests/test_entry_ev_stateful_entry_block_overlay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_stateful_entry_block_overlay`: OK
+- 00310 position-quality proxy overlay run: OK
+- 00310 support-aware default/support2/shallow025 runs: OK
+
 ### 17:08 Entry EV hold-extension veto diagnostics
 
 作業:

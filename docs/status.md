@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 17:08 JST
+最終更新: 2026-07-02 17:22 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV position-quality proxy overlayを追加した。00309のnegative resultを受け、`holdext_long_range_normal_ny` をextension vetoではなくentry/no-entryまたはposition-quality問題として扱い、entry-time observableな `long_range_normal_ny*` rulesを `entry_ev_stateful_entry_block_overlay.py` に追加した。対象branch `isolated_large_loss_long / threshold -5 / fixed720 / require-model-used` では、`long_range_normal_ny_fixed60_pred_gt0` が total `+326.1098 -> +337.6010`、month min `-0.8832 -> -0.7200` まで改善した。ただしblocked 4件は全て `refit2025_validation` に集中し、standard admissionは不合格。default support-awareでは `support_aware_only` だが、support2では `too_many_support_limited_negative_months`、shallow025では `structural_negative_months` でblocked。判断: position-quality proxy rulesはaccepted diagnostic infrastructure、`long_range_normal_ny_fixed60_pred_gt0` はdiagnostic candidate、標準policyはNoTrade。詳細は `docs/reports/00310_2026-07-02_entry_ev_position_quality_proxy_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV hold-extension veto diagnosticsを追加した。00308 branchをdefault/support2/shallow025のsupport-aware admissionで再評価し、00308 best post-hold block branchはdefaultでは `support_aware_only` だが、support2では `too_many_support_limited_negative_months`、shallow025では `structural_negative_months` でblockedと確認した。`entry_ev_hold_extension_stateful_replay.py` に `--extension-veto-rules` を追加し、`holdext_long_range_normal_ny` を実行時extension vetoへ戻したが、対象tradeはbase exit `-2.5152`、fixed720 `-0.8832` で、延長を止めると `+326.1098 -> +325.2078`、month min `-0.8832 -> -1.7852` へ悪化した。判断: extension veto infrastructureはaccepted、`holdext_long_range_normal_ny` vetoはpost-hold blockの代替としてreject、標準policyはNoTrade。詳細は `docs/reports/00309_2026-07-02_entry_ev_hold_extension_veto_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

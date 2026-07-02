@@ -39,6 +39,13 @@ DEFAULT_BLOCK_RULES = (
     "short_entry_hour_23_lossprob_ge0p4,"
     "short_london_midloss_sidegap_pos,"
     "holdext_long_range_normal_ny,"
+    "long_range_normal_ny,"
+    "long_range_normal_ny_fixed60_pred_gt0,"
+    "long_range_normal_ny_fixed720_pred_gt0,"
+    "long_range_normal_ny_rank_lt0p55,"
+    "long_range_normal_ny_taken_ev_lt8,"
+    "long_range_normal_ny_lossprob_ge0p28,"
+    "long_range_normal_ny_lossprob_lt0p3_sidegap_ge0p2,"
     "short_london_midloss_or_holdext_range_ny,"
     "short_rollover_or_london_midloss_or_holdext_range_ny"
 )
@@ -209,6 +216,33 @@ def entry_block_mask(frame: pd.DataFrame, rule: str) -> pd.Series:
             & string_series(frame, "session_regime").eq("ny_overlap")
             & holding_minutes.ge(720.0)
         )
+    long_range_normal_ny = (
+        long
+        & string_series(frame, "combined_regime").eq("range_normal_vol")
+        & string_series(frame, "session_regime").eq("ny_overlap")
+    )
+    if rule == "long_range_normal_ny":
+        return long_range_normal_ny
+    if rule == "long_range_normal_ny_fixed60_pred_gt0":
+        return long_range_normal_ny & numeric_series(
+            frame,
+            "selected_fixed_60m_pred_pnl",
+            default=-np.inf,
+        ).gt(0.0)
+    if rule == "long_range_normal_ny_fixed720_pred_gt0":
+        return long_range_normal_ny & numeric_series(
+            frame,
+            "selected_fixed_720m_pred_pnl",
+            default=-np.inf,
+        ).gt(0.0)
+    if rule == "long_range_normal_ny_rank_lt0p55":
+        return long_range_normal_ny & entry_rank.lt(0.55)
+    if rule == "long_range_normal_ny_taken_ev_lt8":
+        return long_range_normal_ny & numeric_series(frame, "pred_taken_ev", default=np.inf).lt(8.0)
+    if rule == "long_range_normal_ny_lossprob_ge0p28":
+        return long_range_normal_ny & loss_first.ge(0.28)
+    if rule == "long_range_normal_ny_lossprob_lt0p3_sidegap_ge0p2":
+        return long_range_normal_ny & loss_first.lt(0.3) & side_gap.ge(0.2)
     if rule == "short_london_midloss_or_holdext_range_ny":
         return entry_block_mask(frame, "short_london_midloss_sidegap_pos") | entry_block_mask(
             frame,
