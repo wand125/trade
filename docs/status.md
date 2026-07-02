@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 08:53 JST
+最終更新: 2026-07-02 09:05 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV loss_exit30 fixed internal chronologyを追加した。00276でpre-register候補にした q95 + `loss_exit30` を、threshold再探索なしで内部chronology `cal2024/fresh2024/refit2025` へ固定適用した。内部baseは total `-14.6536`, worst `-140.8024`, 119 trades だったが、`loss_exit30` は total `+67.5682`, worst `-11.3450`, 353 trades に改善。00276外部HGB/hybridと統合すると q95 + `loss_exit30` は total `+112.0990`, positive roles `6/6`, role min `+2.6780`, 494 trades。ただし month min `-11.3450` が残り、内部admissionもNoTrade。`scripts/experiments/entry_ev_variant_trade_delta_diagnostics.py` を追加し、base vs loss_exit30を分解したところ、common trade改善 `+33.0386` とonly-candidate追加entry net `+47.3832` の合算で、added negative `-123.0768` も大きい。判断: `loss_exit30` はpre-standard diagnostic candidateへ昇格するが、標準policyはNoTrade。次は悪いonly-candidate追加entryを抑えるか、loss-first thresholdをquantile/calibrated thresholdへ置き換える。詳細は `docs/reports/00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV exit timing loss exit thresholdを追加した。tail-risk gate探索を止めてexit timing / exit regret reductionへ戻し、`scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` を追加した。高いdynamic exit threshold `0.75/0.90` はhybrid/HGBとも実行経路をほぼ変えず、holding shrinkは損失を少し縮めるだけだった。一方で低い `loss_first_exit_threshold` は強く、HGB単体では q95 + `loss_exit20` が total `+54.0206`, month min `+2.6780`, 233 tradesでNoTrade-first gateを通過した。ただしhybridでは最良帯が `loss_exit35` 付近へずれ、HGB+hybrid統合では q95 + `loss_exit30` が total `+44.5308`, role min `+2.6780`, positive roles `3/3` まで改善する一方、month min `-4.1460` が残った。判断: low loss-first dynamic exitは有力診断候補だが、同window threshold sweep由来なので標準採用しない。次は q95 + `loss_exit30` を追加chronologyへ再探索なしで固定適用し、absolute thresholdではなくvalidation分布ベースのquantile/calibrated thresholdへ置き換える。詳細は `docs/reports/00276_2026-07-02_entry_ev_exit_timing_loss_exit_threshold.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

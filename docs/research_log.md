@@ -6796,3 +6796,51 @@ Policy結果:
 - `python3 -m py_compile scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py tests/test_entry_ev_quantile_exit_timing_sensitivity.py`: OK
 - `python3 -m unittest tests.test_entry_ev_quantile_exit_timing_sensitivity`: OK
 - hybrid/HGB exit timing replay and threshold sweeps: OK
+
+### 2026-07-02 09:05 JST Entry EV loss_exit30 fixed internal chronology
+
+作業:
+
+- 00276でpre-register候補にした q95/floor5/rank90 + `loss_exit30` を、threshold再探索なしで内部chronology `cal2024/fresh2024/refit2025` へ固定適用した。
+- `scripts/experiments/entry_ev_variant_trade_delta_diagnostics.py` を追加し、同一run内の `base` vs `loss_exit30` variantをtrade deltaで比較できるようにした。
+- report: `docs/reports/00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+内部chronology結果:
+
+| variant | total pnl | worst month | trades | max DD |
+|---|---:|---:|---:|---:|
+| base | `-14.6536` | `-140.8024` | `119` | `140.8024` |
+| loss_exit30 | `+67.5682` | `-11.3450` | `353` | `33.9764` |
+
+00276外部 + 00277内部の統合:
+
+| metric | value |
+|---|---:|
+| total pnl | `+112.0990` |
+| role min | `+2.6780` |
+| positive roles | `6/6` |
+| month min | `-11.3450` |
+| trades | `494` |
+
+trade delta:
+
+| status | base pnl | candidate pnl | delta |
+|---|---:|---:|---:|
+| common | `-12.8536` | `+20.1850` | `+33.0386` |
+| only_base | `-1.8000` | `0.0000` | `+1.8000` |
+| only_candidate | `0.0000` | `+47.3832` | `+47.3832` |
+
+判断:
+
+- q95 + `loss_exit30` は追加chronologyでも再現し、全role positiveまで進んだ。
+- ただし month min `-11.3450` が残るため標準policyはNoTrade。
+- 改善は早期決済そのものだけでなく、決済後の追加entry機会にも依存する。
+- only-candidate追加entryは net positive だが added negative `-123.0768` も大きく、次のrisk filter対象。
+
+検証:
+
+- `python3 -m py_compile scripts/experiments/entry_ev_variant_trade_delta_diagnostics.py tests/test_entry_ev_variant_trade_delta_diagnostics.py`: OK
+- `python3 -m unittest tests.test_entry_ev_variant_trade_delta_diagnostics`: OK
+- q95 + `loss_exit30` fixed internal replay: OK
+- variant trade delta diagnostics: OK
