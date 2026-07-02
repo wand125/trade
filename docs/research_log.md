@@ -4,6 +4,41 @@
 
 ## 2026-07-02 JST
 
+### 15:15 Entry EV prior pressure large-loss head
+
+作業:
+
+- 00301の結論どおり、prior residual pressureをhard gateではなくlarge-loss / uncertainty headのfeatureとして使えるか診断した。
+- `scripts/experiments/entry_ev_selected_trade_large_loss_head.py` を追加し、selected-trade prior pressure rowsからchronological OOF large-loss classifierを作れるようにした。
+- `tests/test_entry_ev_selected_trade_large_loss_head.py` を追加した。
+- report: `docs/reports/00302_2026-07-02_entry_ev_prior_pressure_large_loss_head.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 比較は `base` features と `base_prior` features。`base_prior` はbase特徴に prior PnL、loss rate、large-loss rate、bias、MAE、overestimate、residual pressureを加える。
+- PnL baseは AUC `0.6682`, AP `0.2146`, Brier `0.0913`。
+- Factor baseは AUC `0.6741`, AP `0.1714`, Brier `0.0923`。
+- PnL base_priorは AUC `0.6565`, AP `0.1604`, Brier `0.0948`。
+- Factor base_priorは AUC `0.6628`, AP `0.1532`, Brier `0.0945`。
+- high-risk除去は全て悪化。最も悪化幅が小さい `factor base_prior prob_ge_0.4` でも2 trades / flagged PnL `+15.0000`。
+
+判断:
+
+- chronological large-loss head diagnosticsはaccepted infrastructure。
+- 現prior residual pressure feature追加はlarge-loss head改善としてreject。
+- large-loss probabilityのdirect hard gateはreject。
+- 次はpointwise gateを増やすより、candidate-level selector / stateful replay / path-aware labelへ進める。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_trade_large_loss_head.py tests/test_entry_ev_selected_trade_large_loss_head.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_large_loss_head`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_large_loss_head tests.test_entry_ev_selected_trade_prior_residual_pressure tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- prior pressure large-loss head run: OK
+
 ### 15:02 Entry EV prior residual pressure
 
 作業:

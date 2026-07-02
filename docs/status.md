@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 15:02 JST
+最終更新: 2026-07-02 15:15 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV prior pressure large-loss headを追加した。00301のprior residual pressureをhard gateではなくlarge-loss / uncertainty headのfeatureとして使えるか診断する `scripts/experiments/entry_ev_selected_trade_large_loss_head.py` を実装した。base特徴だけでは PnL AUC `0.6682`, AP `0.2146`、factor AUC `0.6741`, AP `0.1714` だが、prior pressureを足すと PnL AP `0.1604`, factor AP `0.1532` へ悪化。high-risk除去も全て悪化し、最小悪化の `factor base_prior prob_ge_0.4` でも2 trades / flagged PnL `+15.0000`。判断: large-loss head infrastructureはaccepted、現prior pressure feature追加とdirect hard gateはreject。次はcandidate-level selector / stateful replay / path-aware labelへ進む。詳細は `docs/reports/00302_2026-07-02_entry_ev_prior_pressure_large_loss_head.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV prior residual pressureを追加した。00300で見えた危険contextを、同一windowのstatic blacklistではなく対象月より前だけで作るprior residual pressureとして診断する `scripts/experiments/entry_ev_selected_trade_prior_residual_pressure.py` を実装した。最良診断ruleは factor mode / `direction,combined_regime,session_regime` / `prior_count_ge5_lossrate_ge0p5_bias_pos` で、6 tradesをflagし flagged PnL `-10.8380`, kept PnL `+340.2728`, loss precision `0.6667`。ただし同じruleはPnL modeでは flagged PnL `+1.5620` と悪化し、広いdirection/session ruleは69 trades / flagged PnL `+152.2132` と勝ちを大きく削る。判断: prior residual pressure diagnosticsはaccepted infrastructure、best ruleはdiagnostic candidate、hard gate標準化はreject。次はfeatureとしてuncertainty / large-loss headやcandidate-level selectorへ入れる。詳細は `docs/reports/00301_2026-07-02_entry_ev_prior_residual_pressure.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
