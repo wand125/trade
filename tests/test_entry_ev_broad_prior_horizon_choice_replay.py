@@ -96,6 +96,7 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
         scored["ranker_pred_tail_loss_prob"] = [0.1, 0.2]
         scored["ranker_pred_delta_vs_60"] = [0.0, 2.0]
         scored["ranker_pred_beats60_prob"] = [0.4, 0.9]
+        scored["ranker_pred_harmful_overestimate_prob"] = [0.2, 0.3]
         scored["ranker_core_model_used"] = [True, True]
         scored["duration_prior_count"] = [10, 10]
         scored["duration_prior_months"] = [2, 2]
@@ -112,6 +113,7 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             delta_weight=0.25,
             beats60_weight=0.5,
             tail_score_weight=2.0,
+            harmful_score_weight=5.0,
             lower_bound_mae_weight=0.25,
             lower_bound_bias_weight=0.25,
             lower_bound_tail_miss_weight=5.0,
@@ -164,10 +166,11 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
                 "ranker_pred_pnl": [10.0],
                 "ranker_pred_delta_vs_60": [4.0],
                 "ranker_pred_beats60_prob": [0.5],
-                "ranker_pred_tail_loss_prob": [0.2],
-                "residual_prior_mae": [3.0],
-                "residual_prior_bias": [2.0],
-                "residual_prior_tail_miss_rate": [0.4],
+            "ranker_pred_tail_loss_prob": [0.2],
+            "ranker_pred_harmful_overestimate_prob": [0.0],
+            "residual_prior_mae": [3.0],
+            "residual_prior_bias": [2.0],
+            "residual_prior_tail_miss_rate": [0.4],
             }
         )
 
@@ -177,6 +180,7 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             delta_weight=0.25,
             beats60_weight=0.5,
             tail_score_weight=2.0,
+            harmful_score_weight=5.0,
             lower_bound_mae_weight=0.5,
             lower_bound_bias_weight=0.25,
             lower_bound_tail_miss_weight=5.0,
@@ -188,6 +192,24 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
         self.assertNotIn("residual_prior_mae", DEFAULT_HORIZON_NUMERIC_FEATURES)
         self.assertNotIn("residual_prior_tail_miss_rate", DEFAULT_HORIZON_NUMERIC_FEATURES)
         self.assertNotIn("residual_prior_context_spec", DEFAULT_HORIZON_CATEGORICAL_FEATURES)
+
+    def test_harmful_overestimate_target_uses_fixed_prediction_error(self) -> None:
+        rows = sample_rows().iloc[[0]].copy()
+        rows["side_fixed_60m_adjusted_pnl"] = [2.0]
+        rows["side_fixed_720m_adjusted_pnl"] = [-5.0]
+        rows["pred_fixed_720m_adjusted_pnl"] = [3.0]
+
+        output = expand_horizon_examples(
+            rows,
+            horizons=[720],
+            min_executable_pnl=0.0,
+            tail_loss_threshold=-3.0,
+            min_delta_vs_60=0.0,
+            harmful_overestimate_threshold=2.0,
+            harmful_underperform_60_threshold=2.0,
+        )
+
+        self.assertTrue(bool(output.iloc[0]["target_horizon_harmful_overestimate"]))
 
 
 if __name__ == "__main__":

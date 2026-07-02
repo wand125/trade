@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 07:13 Entry EV harmful overestimate target diagnostics
+
+作業:
+
+- 00330の次アクションとして、harmful overestimate と profitable high-variance 720m を分離するtarget診断を追加した。
+- `scripts/experiments/entry_ev_horizon_overestimate_target_diagnostics.py` を追加し、`harmful_overestimate`, `support_harmful_overestimate`, `profitable_high_variance_720`, `dangerous_high_variance_720` を出力するようにした。
+- 既存horizon-choice rankerに `target_horizon_harmful_overestimate` classifier headと `pnl_harmful_guard` 系score modeを追加した。
+- report: `docs/reports/00331_2026-07-03_entry_ev_harmful_overestimate_target.md`
+
+結果:
+
+- available candidatesのharmful head AUCは60m `0.8859`、240m `0.9391`、720m `0.8758`。target分離のsignalは出た。
+- 720mの有害文脈と利益文脈は分かれる。`short/up_normal_vol/asia/one_failed` はharmful PnL `-330.4680`、`short/down_normal_vol/asia/one_failed` はprofitable HV720 PnL `+89.4930`。
+- residual thresholdは有害を拾うがwinner damageが大きい。720m `residual_mae>=10` はharmful PnL `-1175.8440` を拾う一方でprofitable HV720を100% damage。
+- harmful direct penaltyはbaselineを超えなかった。weight 1 bestは `pnl_harmful_guard +397.3780`、weight 5 bestは `pnl_delta_harmful_guard +394.7840`。00329 baseline `+403.2680` 未満。
+
+判断:
+
+- harmful-overestimate target diagnosticsとchronological classifier headはaccepted。
+- harmful probabilityのdirect score subtractionはpolicy候補としてreject。
+- 次はharmful probabilityをsupport-aware objectiveのfeatureとして使う。標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_horizon_overestimate_target_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00331 target diagnostics / harmful guard w5 / harmful guard w1: OK
+
 ### 06:54 Entry EV horizon choice lower-bound residual score
 
 作業:

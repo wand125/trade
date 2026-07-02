@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 06:54 JST
+最終更新: 2026-07-03 07:13 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-Entry EV horizon choice lower-bound residual scoreを追加した。00329の次アクションとして、horizon/context別にtarget月より前のprediction residualを集計し、`pnl_lower`, `pnl_delta_lower`, `pnl_delta_tail_lower` を作った。residual priorはデフォルトではranker特徴量に入れず、score-only / diagnosticsとして扱う。strong penaltyは追加をほぼ消してbest combined `+339.2910` へ悪化、light penaltyもbest `+376.8110` で00329 low-complexity baseline `+403.2680` を超えず、tiny penaltyはほぼno-opだった。判断: chronological residual prior / lower-bound score infrastructureはaccepted、現weightのlower-bound scoreはpolicy候補としてreject。residual priorは診断/featuresとして残し、次は harmful overestimate と profitable high-variance 720m を分離するtarget、およびthin month/supportを明示的にrewardする目的関数へ進む。標準policyはNoTrade。詳細は `docs/reports/00330_2026-07-03_entry_ev_horizon_choice_lower_bound.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+Entry EV harmful overestimate target diagnosticsを追加した。00330の次アクションとして、harmful overestimate と profitable high-variance 720m を分離するtarget診断を実装し、既存horizon-choice rankerへ `target_horizon_harmful_overestimate` classifier headと `pnl_harmful_guard` 系score modeを追加した。available candidatesのharmful head AUCは60m `0.8859`、240m `0.9391`、720m `0.8758` とsignalはある。一方、direct penalty replayはweight 1 best `+397.3780`、weight 5 best `+394.7840` で、00329 baseline `+403.2680` を超えない。判断: harmful-overestimate target/head infrastructureはaccepted、direct harmful penaltyはpolicy候補としてreject。次はharmful probabilityをsupport-aware objectiveのfeatureとして使う。標準policyはNoTrade。詳細は `docs/reports/00331_2026-07-03_entry_ev_harmful_overestimate_target.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+
+Entry EV horizon choice lower-bound residual scoreを追加した。00329の次アクションとして、horizon/context別にtarget月より前のprediction residualを集計し、`pnl_lower`, `pnl_delta_lower`, `pnl_delta_tail_lower` を作った。residual priorはデフォルトではranker特徴量に入れず、score-only / diagnosticsとして扱う。strong penaltyは追加をほぼ消してbest combined `+339.2910` へ悪化、light penaltyもbest `+376.8110` で00329 low-complexity baseline `+403.2680` を超えず、tiny penaltyはほぼno-opだった。判断: chronological residual prior / lower-bound score infrastructureはaccepted、現weightのlower-bound scoreはpolicy候補としてreject。residual priorは診断/featuresとして残す。標準policyはNoTrade。詳細は `docs/reports/00330_2026-07-03_entry_ev_horizon_choice_lower_bound.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV broad prior horizon-choice rankerを追加した。00328でbroad duration priorは静的penaltyでは鈍すぎると分かったため、broad train rowsを60/240/720mのhorizon-level examplesへ展開し、target月より前だけで `pnl / delta_vs_60 / executable / tail_loss / beats_60` headを学習した。default complexityはbest added PnL `+29.2630`、combined `+368.5540` で00328 direct penalty `+363.0870` を超えたが、00326 hpen0.25 `+374.6110` には届かなかった。tail強化だけでは `+364.4940` に悪化。低複雑度版 (`max_leaf_nodes=4`, `l2=5`) はadded PnL `+63.9770`、combined `+403.2680` まで伸び、diagnostic bestを更新した。ただしmonth min `-0.6120`、role trade min `3`、remaining extra trades `3`、blockers `month_pnl_below_floor,role_trades_low,side_share_high` が残る。判断: broad-prior horizon-choice ranker infrastructureとlow-complexity diagnostic branchはaccepted、標準policyはNoTrade。詳細は `docs/reports/00329_2026-07-03_entry_ev_broad_prior_horizon_choice_ranker.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

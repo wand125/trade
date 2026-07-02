@@ -177,6 +177,8 @@ def expand_horizon_examples(
     min_executable_pnl: float,
     tail_loss_threshold: float,
     min_delta_vs_60: float,
+    harmful_overestimate_threshold: float = 2.0,
+    harmful_underperform_60_threshold: float = 2.0,
 ) -> pd.DataFrame:
     source = normalize_source_rows(frame)
     frames: list[pd.DataFrame] = []
@@ -212,6 +214,15 @@ def expand_horizon_examples(
         output["target_horizon_executable"] = actual.ge(min_executable_pnl)
         output["target_horizon_tail_loss"] = actual.le(tail_loss_threshold)
         output["target_horizon_beats_60"] = (actual - fixed60_actual).ge(min_delta_vs_60)
+        output["target_horizon_harmful_overestimate"] = (
+            pred.ge(min_executable_pnl)
+            & (pred - actual).ge(harmful_overestimate_threshold)
+            & (
+                actual.lt(min_executable_pnl)
+                | (actual - fixed60_actual).le(-abs(harmful_underperform_60_threshold))
+                | actual.le(tail_loss_threshold)
+            )
+        )
         frames.append(output)
     return pd.concat(frames, ignore_index=True, sort=False)
 
@@ -480,6 +491,7 @@ def score_predictions(
     delta_weight: float,
     beats60_weight: float,
     tail_score_weight: float,
+    harmful_score_weight: float,
     lower_bound_mae_weight: float,
     lower_bound_bias_weight: float,
     lower_bound_tail_miss_weight: float,
@@ -494,6 +506,19 @@ def score_predictions(
         return pnl + delta_weight * delta + beats60_weight * beats60
     if score_mode == "pnl_delta_tail":
         return pnl + delta_weight * delta + beats60_weight * beats60 - tail_score_weight * tail
+    harmful = numeric_series(frame, "ranker_pred_harmful_overestimate_prob", default=0.0)
+    if score_mode == "pnl_harmful_guard":
+        return pnl - harmful_score_weight * harmful
+    if score_mode == "pnl_delta_harmful_guard":
+        return pnl + delta_weight * delta + beats60_weight * beats60 - harmful_score_weight * harmful
+    if score_mode == "pnl_delta_tail_harmful_guard":
+        return (
+            pnl
+            + delta_weight * delta
+            + beats60_weight * beats60
+            - tail_score_weight * tail
+            - harmful_score_weight * harmful
+        )
     lower_bound_penalty = (
         lower_bound_mae_weight * numeric_series(frame, "residual_prior_mae", default=0.0)
         + lower_bound_bias_weight
@@ -628,6 +653,12 @@ def chronological_ranker_predictions(
             "ranker_pred_beats60_prob",
             "classifier",
         ),
+        (
+            "harmful_overestimate",
+            "target_horizon_harmful_overestimate",
+            "ranker_pred_harmful_overestimate_prob",
+            "classifier",
+        ),
     ]
     for _, _, pred_column, _ in target_specs:
         scored[pred_column] = 0.0
@@ -734,6 +765,12 @@ def metric_summary(scored: pd.DataFrame) -> pd.DataFrame:
         ("executable", "ranker_pred_executable_prob", "target_horizon_executable", "classifier"),
         ("tail_loss", "ranker_pred_tail_loss_prob", "target_horizon_tail_loss", "classifier"),
         ("beats_60", "ranker_pred_beats60_prob", "target_horizon_beats_60", "classifier"),
+        (
+            "harmful_overestimate",
+            "ranker_pred_harmful_overestimate_prob",
+            "target_horizon_harmful_overestimate",
+            "classifier",
+        ),
     ]
     for scope, group in scored.groupby("row_scope", dropna=False):
         for horizon, horizon_group in group.groupby("hv_chosen_horizon_minutes", dropna=False):
@@ -795,6 +832,7 @@ def pivot_ranker_predictions(
     delta_weight: float,
     beats60_weight: float,
     tail_score_weight: float,
+    harmful_score_weight: float,
     lower_bound_mae_weight: float,
     lower_bound_bias_weight: float,
     lower_bound_tail_miss_weight: float,
@@ -815,6 +853,7 @@ def pivot_ranker_predictions(
         delta_weight=delta_weight,
         beats60_weight=beats60_weight,
         tail_score_weight=tail_score_weight,
+        harmful_score_weight=harmful_score_weight,
         lower_bound_mae_weight=lower_bound_mae_weight,
         lower_bound_bias_weight=lower_bound_bias_weight,
         lower_bound_tail_miss_weight=lower_bound_tail_miss_weight,
@@ -840,6 +879,7 @@ def pivot_ranker_predictions(
                 "ranker_pred_tail_loss_prob",
                 "ranker_pred_delta_vs_60",
                 "ranker_pred_beats60_prob",
+                "ranker_pred_harmful_overestimate_prob",
                 "ranker_choice_score",
                 "ranker_core_model_used",
                 "duration_prior_count",
@@ -864,6 +904,9 @@ def pivot_ranker_predictions(
             "ranker_pred_pnl": f"ranker_hv_{horizon}m_pred_pnl",
             "ranker_pred_delta_vs_60": f"ranker_hv_{horizon}m_pred_delta_vs_60",
             "ranker_pred_beats60_prob": f"ranker_hv_{horizon}m_pred_beats60_prob",
+            "ranker_pred_harmful_overestimate_prob": (
+                f"ranker_hv_{horizon}m_pred_harmful_overestimate_prob"
+            ),
             "duration_prior_count": f"ranker_hv_{horizon}m_prior_count",
             "duration_prior_months": f"ranker_hv_{horizon}m_prior_months",
             "duration_prior_mean_pnl": f"ranker_hv_{horizon}m_prior_mean_pnl",
@@ -949,6 +992,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
         min_executable_pnl=args.min_executable_pnl,
         tail_loss_threshold=args.tail_loss_threshold,
         min_delta_vs_60=args.min_delta_vs_60,
+        harmful_overestimate_threshold=args.harmful_overestimate_threshold,
+        harmful_underperform_60_threshold=args.harmful_underperform_60_threshold,
     )
     eval_examples = expand_horizon_examples(
         eval_rows,
@@ -956,6 +1001,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
         min_executable_pnl=args.min_executable_pnl,
         tail_loss_threshold=args.tail_loss_threshold,
         min_delta_vs_60=args.min_delta_vs_60,
+        harmful_overestimate_threshold=args.harmful_overestimate_threshold,
+        harmful_underperform_60_threshold=args.harmful_underperform_60_threshold,
     )
     train_examples = add_prior_features_to_examples(
         train_examples,
@@ -1060,6 +1107,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
             delta_weight=args.delta_weight,
             beats60_weight=args.beats60_weight,
             tail_score_weight=args.tail_score_weight,
+            harmful_score_weight=args.harmful_score_weight,
             lower_bound_mae_weight=args.lower_bound_mae_weight,
             lower_bound_bias_weight=args.lower_bound_bias_weight,
             lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
@@ -1075,6 +1123,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
             delta_weight=args.delta_weight,
             beats60_weight=args.beats60_weight,
             tail_score_weight=args.tail_score_weight,
+            harmful_score_weight=args.harmful_score_weight,
             lower_bound_mae_weight=args.lower_bound_mae_weight,
             lower_bound_bias_weight=args.lower_bound_bias_weight,
             lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
@@ -1179,6 +1228,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "min_prior_months": args.min_prior_months,
         "shrinkage_count": args.shrinkage_count,
         "tail_loss_threshold": args.tail_loss_threshold,
+        "harmful_overestimate_threshold": args.harmful_overestimate_threshold,
+        "harmful_underperform_60_threshold": args.harmful_underperform_60_threshold,
         "negative_pnl_weight": args.negative_pnl_weight,
         "underperform_weight": args.underperform_weight,
         "loss_rate_weight": args.loss_rate_weight,
@@ -1189,6 +1240,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "delta_weight": args.delta_weight,
         "beats60_weight": args.beats60_weight,
         "tail_score_weight": args.tail_score_weight,
+        "harmful_score_weight": args.harmful_score_weight,
         "lower_bound_mae_weight": args.lower_bound_mae_weight,
         "lower_bound_bias_weight": args.lower_bound_bias_weight,
         "lower_bound_tail_miss_weight": args.lower_bound_tail_miss_weight,
@@ -1264,6 +1316,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-executable-pnl", type=float, default=0.0)
     parser.add_argument("--tail-loss-threshold", type=float, default=-5.0)
     parser.add_argument("--min-delta-vs-60", type=float, default=0.0)
+    parser.add_argument("--harmful-overestimate-threshold", type=float, default=2.0)
+    parser.add_argument("--harmful-underperform-60-threshold", type=float, default=2.0)
     parser.add_argument("--negative-pnl-weight", type=float, default=1.0)
     parser.add_argument("--underperform-weight", type=float, default=1.0)
     parser.add_argument("--loss-rate-weight", type=float, default=0.0)
@@ -1274,6 +1328,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delta-weight", type=float, default=0.25)
     parser.add_argument("--beats60-weight", type=float, default=0.5)
     parser.add_argument("--tail-score-weight", type=float, default=2.0)
+    parser.add_argument("--harmful-score-weight", type=float, default=5.0)
     parser.add_argument("--lower-bound-mae-weight", type=float, default=0.25)
     parser.add_argument("--lower-bound-bias-weight", type=float, default=0.25)
     parser.add_argument("--lower-bound-tail-miss-weight", type=float, default=5.0)

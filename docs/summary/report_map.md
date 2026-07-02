@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-03 06:54 JST
+最終更新: 2026-07-03 07:13 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00330` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318から00322で反対側near-missをexit target化し、広いcandidate universeのhorizon viabilityを試した。00323でsupport repairへ接続するとcombined `+362.7000` まで伸びたがstandard blockersが残る。00325 actual-floor upper-boundはcombined `+371.6610`。00326でrow x horizon化とhorizon penalty `0.25` を試すと、actual-floorなしでもfresh2024 2024-08を60mへ切り替え、combined `+374.6110` まで伸びた。00327でsupport-repair-only calibrationはprior不足で失敗。00328でbroad duration prior direct penaltyはcombined `+363.0870` に留まった。00329でbroad priorをhorizon-choice ranker featureへ入れ、低複雑度版はcombined `+403.2680` まで伸びた。00330でhorizon/context residual lower-boundを試したが、light以上は勝ち720mを削り、tinyはほぼno-op。standard blockersは残る。標準policyはNoTrade。 |
+| `00258`..`00331` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318から00322で反対側near-missをexit target化し、広いcandidate universeのhorizon viabilityを試した。00323でsupport repairへ接続するとcombined `+362.7000` まで伸びたがstandard blockersが残る。00325 actual-floor upper-boundはcombined `+371.6610`。00326でrow x horizon化とhorizon penalty `0.25` を試すと、actual-floorなしでもfresh2024 2024-08を60mへ切り替え、combined `+374.6110` まで伸びた。00327でsupport-repair-only calibrationはprior不足で失敗。00329でbroad priorをhorizon-choice ranker featureへ入れ、低複雑度版はcombined `+403.2680` まで伸びた。00330 lower-boundは勝ち720mを削って悪化。00331 harmful headはAUCが出たがdirect penaltyはbaselineを超えない。standard blockersは残る。標準policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00330` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00325ではtarget-aware repair utilityを接続し、actual-floor upper-boundならcombined `+371.6610` まで伸びた。00326ではrow x horizon化とhpen0.25でpred-onlyでもcombined `+374.6110` まで到達した。00327のsupport-repair-only calibrationでは2024-08 prior不足でlearned penaltyが成立しない。00328のbroad duration prior direct penaltyは勝ち候補も削るためreject。00329ではpriorをfeatureとしてchronological horizon-choice rankerへ入れ、低複雑度版がcombined `+403.2680` まで伸びた。00330ではhorizon/context別prior residualからlower-bound scoreを作ったが、現weightではbaselineを超えず、residual priorは診断/featuresとして残す判断。標準policyはNoTrade。次はharmful overestimateとprofitable high-variance 720mを分離するtargetへ進む。 |
+| Latest decision | `00258`..`00331` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00325ではtarget-aware repair utilityを接続し、actual-floor upper-boundならcombined `+371.6610` まで伸びた。00326ではrow x horizon化とhpen0.25でpred-onlyでもcombined `+374.6110` まで到達した。00329ではpriorをfeatureとしてchronological horizon-choice rankerへ入れ、低複雑度版がcombined `+403.2680` まで伸びた。00330 lower-boundはbaselineを超えず、00331 harmful-overestimate headは識別力があるがdirect penaltyはbaseline未満。標準policyはNoTrade。次はharmful probabilityをsupport-aware objectiveのfeatureとして使う。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -106,6 +106,7 @@
 71. `00328_2026-07-03_entry_ev_broad_duration_prior_repair_replay.md`
 72. `00329_2026-07-03_entry_ev_broad_prior_horizon_choice_ranker.md`
 73. `00330_2026-07-03_entry_ev_horizon_choice_lower_bound.md`
+74. `00331_2026-07-03_entry_ev_harmful_overestimate_target.md`
 
 component targetの流れを読む:
 
@@ -152,10 +153,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00330 Entry EV Horizon Choice Lower-Bound Residual Score
+Report: 00331 Entry EV Harmful Overestimate Target Diagnostics
 Status: accepted infrastructure / standard NoTrade
-Question: horizon/context residual priorをlower-bound scoreにすると00329 low-complexity rankerを改善するか
-Best evidence: strong/light lower-boundは勝ち720mを削って悪化し、tinyはほぼno-op。baseline +403.2680を超えない。
+Question: harmful overestimateとprofitable high-variance 720mを分離し、direct guard scoreで00329 baselineを超えられるか
+Best evidence: harmful head AUCはavailable 720mで0.8758と高いが、direct penalty bestはw1 +397.3780でbaseline +403.2680未満。
 Decision: 標準policyはNoTrade
-Next: residual priorは診断/featuresとして残し、harmful overestimateとprofitable high-variance 720mを分離するtargetへ進む
+Next: harmful probabilityをsupport-aware objectiveのfeatureとして使う
 ```
