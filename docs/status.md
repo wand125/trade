@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 15:41 JST
+最終更新: 2026-07-02 15:56 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV uncompensated sequence-state diagnosticsを追加した。00304のuncompensated-loss headをdirect gateで押し続けず、selected-trade path上の前後trade結果、月内trade数、前回exitからのgap、同方向/同context継続、target周辺のwinner availabilityを分解する `scripts/experiments/entry_ev_uncompensated_sequence_state_diagnostics.py` を実装した。`pnl/base/base` は232 trades / total `+329.4348` / target 22件で、targetは `>10` trade月に18/22、次trade勝ちに15/22、前回勝ち後に12/22、short側に16/22が集中した。high-risk threshold除去は96本すべて悪化し、positive block deltaは0本、最小悪化でも flagged PnL `+5.6900`。判断: sequence-state diagnosticsはaccepted、uncompensated-risk probabilityのdirect gateはreject。次はcandidate-level selector / stateful replayでreplacement / skipped next winner / missed future candidateを明示的に扱う。詳細は `docs/reports/00305_2026-07-02_entry_ev_uncompensated_sequence_state.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV uncompensated-loss headを追加した。00303の次アクションどおり、`is_large_loss` ではなく `large_loss_uncompensated_by_context` を教師候補にしたchronological OOF head `scripts/experiments/entry_ev_selected_trade_uncompensated_loss_head.py` を実装した。best APは `pnl / source base / base` の `0.1463` で、00302 large-loss headのbest AP `0.2146` より低い。threshold除去は160本すべて悪化し、positive block deltaは0本、最小悪化でも flagged PnL `+5.6900`。top predicted rowsは依然として2025-11 `short|down_normal_vol|london` の補償済みpair (`-7.9800`, `+62.0800`, context total `+54.1000`) を拾う。判断: target generationとhead infrastructureはaccepted、現feature/headのdirect hard gateはreject。次はcandidate-level selector / stateful replayへ戻す。詳細は `docs/reports/00304_2026-07-02_entry_ev_uncompensated_loss_head.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

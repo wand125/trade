@@ -7719,3 +7719,41 @@ trade delta:
 - stateful hold-extension replay: OK
 - strict 00286 selector: OK
 - floor-only 00286 selector: OK
+
+### 2026-07-02 15:56 JST Entry EV uncompensated sequence-state diagnostics
+
+作業:
+
+- 00304のuncompensated-loss headをdirect gateで押し続けず、selected-trade path上のsequence/state診断へ戻した。
+- `scripts/experiments/entry_ev_uncompensated_sequence_state_diagnostics.py` を追加し、前後trade結果、月内trade数、前回exitからのgap、同方向/同context継続、target周辺のwinner availabilityを付与した。
+- `tests/test_entry_ev_uncompensated_sequence_state_diagnostics.py` を追加し、prev/next path feature、risk threshold summary、sequence group summaryを固定した。
+- report: `docs/reports/00305_2026-07-02_entry_ev_uncompensated_sequence_state.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| view | value | reading |
+|---|---:|---|
+| `pnl/base/base` selected path | `232` trades / `+329.4348` | diagnostic branch全体はプラス |
+| uncompensated targets | `22` | target PnL `-115.0848` |
+| `>10` trade月のtarget | `18/22` | targetは高密度月に集中 |
+| 次trade勝ちのtarget | `15/22` | 単純blockは次のwinnerを消しやすい |
+| 前回勝ち後のtarget | `12/22` | post-loss cooldownでは説明しきれない |
+| short側target | `16/22` | short contextに偏るがstatic blacklist化は危険 |
+| threshold除去 | positive delta `0/96` | direct gateは引き続きreject |
+
+判断:
+
+- uncompensated sequence-state diagnosticsはaccepted infrastructure。
+- targetは孤立損失ではなく、前後winnerや高密度pathに埋まっている。
+- uncompensated-loss probabilityのdirect hard gate、high-risk quantile removalはreject。
+- `next_*` 系列は診断専用で、実行時featureには使わない。
+- 次はcandidate-level selector / stateful replayでreplacement / skipped next winner / missed future candidateを明示的に評価する。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_uncompensated_sequence_state_diagnostics.py tests/test_entry_ev_uncompensated_sequence_state_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_uncompensated_sequence_state_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_uncompensated_sequence_state_diagnostics tests.test_entry_ev_selected_trade_uncompensated_loss_head tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- uncompensated sequence-state diagnostics run: OK
