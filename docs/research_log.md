@@ -4,6 +4,37 @@
 
 ## 2026-07-02 JST
 
+### 19:04 Entry EV fixed60 margin trade-set delta
+
+作業:
+
+- 00314の次アクションとして、w5で消えた/置換されたtradeを00310 referenceと差分比較した。
+- `scripts/experiments/entry_ev_trade_set_delta_diagnostics.py` を追加し、entry-block overlay trade setを `added / removed / common_changed / common_same` に分解できるようにした。
+- 00310 `position_quality_proxy_overlay` と00314 `fixed60_margin_w5_position_quality_overlay` の `isolated_large_loss_long / t-5 / h720` branchを比較した。
+- report: `docs/reports/00315_2026-07-02_entry_ev_fixed60_margin_trade_set_delta.md`
+
+結果:
+
+- `entryblock_none` は `+326.1098 -> +338.4078`、差分 `+12.2980`。added 0 / removed 5 / common_changed 0。
+- `long_range_normal_ny_fixed60_pred_gt0` は `+337.6010 -> +339.2910`、差分 `+1.6900`。added 0 / removed 2 / common_changed 0。
+- removed 5本は全て `refit2025_validation`。3本は long `range_normal_vol / ny_overlap`、2本は short `down_normal_vol / asia`。
+- 00310で `long_range_normal_ny_fixed60_pred_gt0` がblockedしていた4本のうち3本は、00314ではw5 marginで先に候補集合から消えていた。
+
+判断:
+
+- trade-set delta diagnosticsはaccepted infrastructure。
+- 00314 w5の改善源は理解できたが、refit2025集中は解消していない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_trade_set_delta_diagnostics.py tests/test_entry_ev_trade_set_delta_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_trade_set_delta_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_trade_set_delta_diagnostics tests.test_docs_reports`: OK
+- `uv run python -m unittest tests.test_entry_ev_fixed60_uncertainty_margin_policy_inputs tests.test_entry_ev_stateful_entry_block_overlay tests.test_entry_ev_stateful_support_aware_admission`: OK
+- `git diff --check`: OK
+- 00310 vs 00314 w5 trade-set delta run: OK
+
 ### 18:48 Entry EV fixed60 uncertainty soft margin
 
 作業:

@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 18:48 JST
+最終更新: 2026-07-02 19:04 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00314` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00312でfixed60 false-positiveをprior-only uncertainty featureへ戻し、00313でuncertainty headのAP改善を確認したがdirect thresholdは勝ちtradeを削るためreject。00314でfixed60 uncertaintyをsoft marginへ戻し、preblockgap side-gap継承ありのfamily-aware w5が raw `+139.1098`、hold-extension後 `+338.4078`、position-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。ただしstandard admissionはblocked、default support-awareは診断扱い、support2/shallow025ではblocked。標準policyはNoTrade。 |
+| `00258`..`00315` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00312でfixed60 false-positiveをprior-only uncertainty featureへ戻し、00313でuncertainty headのAP改善を確認したがdirect thresholdは勝ちtradeを削るためreject。00314でfixed60 uncertaintyをsoft marginへ戻し、family-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00315でtrade-set deltaを確認し、00314改善はrefit2025の少数removed tradeに集中、added 0 / common_changed 0 と判明。標準policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00314` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertaintyをsoft marginへ戻し、preblockgap side-gap quantile継承とw0 controlを追加したうえで、family-aware w5が raw `+139.1098`、hold-extension後 `+338.4078`、position-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。ただしstandard admissionはblocked、default support-awareは診断扱い、support2/shallow025ではblocked。標準policyはNoTrade。 |
+| Latest decision | `00258`..`00315` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。support2/shallow025では引き続きblockedで、標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -90,6 +90,7 @@
 55. `00312_2026-07-02_entry_ev_fixed60_prior_uncertainty.md`
 56. `00313_2026-07-02_entry_ev_fixed60_prior_uncertainty_head.md`
 57. `00314_2026-07-02_entry_ev_fixed60_uncertainty_soft_margin.md`
+58. `00315_2026-07-02_entry_ev_fixed60_margin_trade_set_delta.md`
 
 component targetの流れを読む:
 
@@ -136,10 +137,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00314 Entry EV Fixed60 Uncertainty Soft Margin
-Status: accepted infrastructure / diagnostic best updated / standard NoTrade
-Question: fixed60 uncertaintyをbinary gateではなくprediction-row soft marginとして使えるか
-Best evidence: preblockgap w0 controlはreplacement baseline +126.8118を再現。family-aware w5はraw +139.1098、hold-extension後 +338.4078、position-quality overlay後 +339.2910 / month min -0.7200
+Report: 00315 Entry EV Fixed60 Margin Trade Set Delta
+Status: accepted infrastructure / refit-concentrated improvement confirmed / standard NoTrade
+Question: 00314 w5改善はどのtrade集合差分から来たか
+Best evidence: `entryblock_none` delta +12.2980はremoved 5だけ、`long_range_normal_ny_fixed60_pred_gt0` delta +1.6900はremoved 2だけ。added 0 / common_changed 0で、removedは全てrefit2025。
 Decision: 標準policyはNoTrade
-Next: w5差分をrole/month/contextで分解し、support-limited negative monthsとside-shareを直接扱う
+Next: family/refit依存を弱めるcoarser/shrunk priorとsupport-limited negative months対策へ進む
 ```

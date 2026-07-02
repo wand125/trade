@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 18:48 JST
+最終更新: 2026-07-02 19:04 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV fixed60 margin trade-set delta diagnosticsを追加した。00314のfamily-aware w5改善源を00310 referenceと比較し、entry-block overlay trade setを `added / removed / common_changed` に分解した。`entryblock_none` は `+326.1098 -> +338.4078`、差分 `+12.2980` で、added 0 / removed 5 / common_changed 0。`long_range_normal_ny_fixed60_pred_gt0` は `+337.6010 -> +339.2910`、差分 `+1.6900` で、added 0 / removed 2 / common_changed 0。removed 5本は全て `refit2025_validation` に集中し、00310でblockedされた4本のうち3本は00314ではw5で先に消えていた。判断: trade-set delta diagnosticsはaccepted infrastructure、00314 w5の改善源は理解できたがrefit集中は解消していない、標準policyはNoTrade。詳細は `docs/reports/00315_2026-07-02_entry_ev_fixed60_margin_trade_set_delta.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV fixed60 uncertainty soft marginを追加した。00313のdirect hard gate rejectedを受け、selected-trade実績から対象月より前だけのfixed60 false-positive priorを作り、prediction parquetのlong/short両側へ `margin_score = base_score - weight * prior_fp_rate * max(side_fixed60_pred_pnl, 0)` を追加した。初回のw0 controlは既存 `preblockgap` side-gap quantileを再計算してしまい、baseline `+126.8118` を `+24.9388` へ崩したため、`--side-gap-source-score-kind` で元score kindのside-gap quantileを継承するよう修正。preblockgap継承後のw0はbaselineを再現した。raw replacementでは family-aware w5 が `+139.1098`、hold-extension後は `+338.4078`、position-quality overlay後は `+339.2910` / month min `-0.7200` まで改善した。ただしstandard admissionはblocked、default support-awareは `support_aware_only`、support2/shallow025ではblocked。判断: fixed60 uncertainty soft-margin input generationとpreblockgap継承はaccepted infrastructure、family-aware w5はdiagnostic best更新、標準policyはNoTrade。詳細は `docs/reports/00314_2026-07-02_entry_ev_fixed60_uncertainty_soft_margin.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
