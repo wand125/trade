@@ -8691,3 +8691,36 @@ trade delta:
 - `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_listwise_teacher_diagnostics.py tests/test_entry_ev_support_repair_listwise_teacher_diagnostics.py`: OK
 - `uv run python -m unittest tests.test_entry_ev_support_repair_listwise_teacher_diagnostics tests.test_entry_ev_support_repair_listwise_cluster_diagnostics tests.test_entry_ev_support_repair_horizon_replay`: OK
 - best / EV -2 teacher diagnostics run: OK
+
+### 2026-07-03 08:39 JST Entry EV support repair singleton abstention diagnostics
+
+作業:
+
+- 00336でrerankingでは救えないと確認したsingleton negativeを、observable abstentionとして診断した。
+- `scripts/experiments/entry_ev_support_repair_singleton_abstention_diagnostics.py` を追加し、00336 teacher examplesのcurrent selected additionsからflagged rowを除外して月次metricsを再計算した。
+- actual PnLは評価にだけ使い、abstention条件には `quota_group_is_singleton`, horizon, broad prior, predicted PnL, predicted fixed-best horizonだけを使った。
+- report: `docs/reports/00337_2026-07-03_entry_ev_support_repair_singleton_abstention.md`
+
+主要結果:
+
+| scenario | rule | abstained actual | kept added PnL | combined | blockers |
+|---|---|---:|---:|---:|---|
+| best | singleton_any | `+10.9530` | `+49.9000` | `+389.1910` | month / role-trades / side-share |
+| best | risk-conditioned rules | `0.0000` | `+60.8530` | `+400.1440` | month / role-trades / side-share |
+| EV -2 | none | `0.0000` | `+31.7170` | `+371.0080` | role-total / month / side-share |
+| EV -2 | risk-conditioned rules | `-29.1360` | `+60.8530` | `+400.1440` | month / role-trades / side-share |
+
+判断:
+
+- singleton abstention diagnosticsはaccepted infrastructure。
+- `singleton_any` はpositive singletonを削るためreject。
+- EV -2の `fresh2024_validation 2024-08 long -29.1360` は、`720m prior mean < 0`, `prior tail >= 0.35`, `prior risk >= 5`, `pred_pnl < 2`, `pred fixed best 60m` で事前に弾ける。
+- ただしこれはbest相当へ戻すだけで、standard blockersは残る。risk-conditioned abstentionはdiagnostic signalであって標準policyではない。
+- 次はこのabstentionを広いsingleton面で検証し、fresh/thin month候補生成を追加する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_singleton_abstention_diagnostics.py tests/test_entry_ev_support_repair_singleton_abstention_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_singleton_abstention_diagnostics`: OK
+- best / EV -2 singleton abstention diagnostics run: OK

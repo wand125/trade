@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 08:28 JST
+最終更新: 2026-07-03 08:39 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair singleton abstention diagnosticsを追加した。00336でreranking不能と分かったsingleton negativeを、listwise rerankerではなくobservable abstentionとして診断した。baseline bestでは唯一のsingletonが `hybrid2025_0912_external 2025-10 long +10.9530` なので、`singleton_any` はadded PnLを `+60.8530 -> +49.9000` に悪化させる。一方EV -2では `fresh2024_validation 2024-08 long -29.1360` を `720m prior mean < 0`, `prior tail >= 0.35`, `prior risk >= 5`, `pred_pnl < 2`, `pred fixed best 60m` が弾き、added PnLを `+31.7170 -> +60.8530`、combinedを `+371.0080 -> +400.1440` に戻した。ただしbaseline best相当へ戻るだけで、blockersは `month_pnl_below_floor,role_trades_low,side_share_high` のまま。判断: singleton abstention diagnosticsはaccepted infrastructure、`singleton_any` はreject、risk-conditioned abstentionはdiagnostic signalで標準policyではない。標準policyはNoTrade。詳細は `docs/reports/00337_2026-07-03_entry_ev_support_repair_singleton_abstention.md`。
 
 Entry EV support repair listwise teacher diagnosticsを追加した。00335のleak-free listwise候補面から、actual oracleをpolicyではなくteacherとして扱う診断を作成し、`actual_oracle_greedy_selected` を `oracle_teacher_selected` として、quota groupをlearnable / singletonに分けた。baseline bestは31 rows / 5 groups / learnable 4 / singleton 1で、oracle改善は `+5.7600` のみ。EV -2は111 rows / 6 groups / learnable 5 / singleton 1で、oracle改善 `+25.4430` はあるが、`fresh2024_validation 2024-08 long -29.1360` はsingleton negativeでrerankingやmeta-selectorでは救えない。observable feature selectorはrepair_scoreがcurrent同等、pred PnL系が `-2.5172`、tail/harmful/support proxyは大幅悪化。判断: teacher diagnosticsはaccepted infrastructure、現候補面だけで低容量meta-selectorを作るのは薄い。次はsingleton negative向けabstentionとfresh/thin month候補生成へ進む。標準policyはNoTrade。詳細は `docs/reports/00336_2026-07-03_entry_ev_support_repair_listwise_teacher.md`。
 
