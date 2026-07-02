@@ -207,6 +207,20 @@ def horizon_and_score(row: pd.Series, horizon_mode: str) -> tuple[int, float, st
     return horizon, float(row[score_column]), score_column
 
 
+def horizon_model_used(row: pd.Series, horizon_minutes: int) -> bool:
+    column = f"pred_hold_extension_model_used_{int(horizon_minutes)}m"
+    if column not in row.index:
+        return False
+    value = row[column]
+    if pd.isna(value):
+        return False
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return bool(float(value))
+    return str(value).strip().lower() in {"true", "1", "yes", "y"}
+
+
 def raw_from_adjusted(adjusted_pnl: float, *, profit_multiplier: float, loss_multiplier: float) -> float:
     if adjusted_pnl > 0:
         return adjusted_pnl / profit_multiplier if profit_multiplier != 0 else adjusted_pnl
@@ -288,6 +302,7 @@ def replay_group(
     apply_mask: pd.Series,
     threshold: float,
     horizon_mode: str,
+    require_model_used: bool,
     profit_multiplier: float,
     loss_multiplier: float,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -305,10 +320,12 @@ def replay_group(
 
         horizon, predicted_score, score_column = horizon_and_score(row, horizon_mode)
         extension_exit = entry_timestamp + pd.Timedelta(minutes=horizon)
+        model_used = horizon_model_used(row, horizon)
         can_extend = (
             bool(apply_mask.loc[index])
             and np.isfinite(predicted_score)
             and predicted_score >= threshold
+            and (not require_model_used or model_used)
             and horizon > 0
             and f"actual_taken_fixed_{horizon}m_adjusted_pnl" in row.index
             and pd.notna(row[f"actual_taken_fixed_{horizon}m_adjusted_pnl"])
@@ -497,6 +514,7 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
                         apply_mask=mask,
                         threshold=threshold,
                         horizon_mode=horizon_mode,
+                        require_model_used=args.require_model_used,
                         profit_multiplier=args.profit_multiplier,
                         loss_multiplier=args.loss_multiplier,
                     )
@@ -553,6 +571,7 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
         "thresholds": thresholds,
         "apply_universes": apply_universes,
         "horizon_modes": horizon_modes,
+        "require_model_used": args.require_model_used,
         "profit_multiplier": args.profit_multiplier,
         "loss_multiplier": args.loss_multiplier,
         "group_columns": group_columns,
@@ -591,6 +610,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--thresholds", default=DEFAULT_THRESHOLDS)
     parser.add_argument("--apply-universes", default=DEFAULT_APPLY_UNIVERSES)
     parser.add_argument("--horizon-modes", default=DEFAULT_HORIZON_MODES)
+    parser.add_argument("--require-model-used", action="store_true")
     parser.add_argument("--profit-multiplier", type=float, default=1.0)
     parser.add_argument("--loss-multiplier", type=float, default=1.2)
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))

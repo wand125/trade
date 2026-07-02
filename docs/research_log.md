@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 16:51 Entry EV replacement hold-extension integration
+
+作業:
+
+- 00307のshort entry-block replacement後trade pathをenrichし、isolated/capture特徴を再生成してhold-extension target / stateful replayへ戻した。
+- `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` に `--require-model-used` を追加した。
+- `tests/test_entry_ev_hold_extension_stateful_replay.py` にfallback scoreではextensionしないテストを追加した。
+- report: `docs/reports/00308_2026-07-02_entry_ev_replacement_hold_extension_integration.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 00307 replacement raw pathは total `+126.8118` / 254 trades / month min `-6.8324`。
+- `--require-model-used` なしの `isolated_large_loss_long / t-5 / h720` は total `+307.7638` だが、hgb2024_0306 2024-03が `-17.6936` へ壊れた。
+- 破綻rowは `pred_hold_extension_model_used_720m=False` のfallback score `+0.4951` でfixed720延長され、`-2.0400 -> -20.1840` になっていた。
+- `--require-model-used` ありでは `isolated_large_loss_long / t-5 / h720` が total `+326.1098` / month min `-0.8832` / role min `+0.5354`。
+- さらに `holdext_long_range_normal_ny` blockを重ねると total `+326.9930` / month min `-0.7200` / role min `+0.5354`。
+- 00293 best `+329.4348` / month min `-0.7200` よりtotalは少し低いが、short blockをno-replacement削除ではなくreplacement pathで処理できた。
+
+判断:
+
+- `--require-model-used` hookはaccepted infrastructure。
+- replacement -> hold-extension integration pipelineはaccepted infrastructure。
+- replacement + require-model-used hold-extensionはdiagnostic candidateへ昇格。
+- fallback hold-extension predictionでaggressive fixed720を開くことはreject。
+- `holdext_long_range_normal_ny` はまだpost-hold no-replacement blockなので、標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_hold_extension_stateful_replay.py tests/test_entry_ev_hold_extension_stateful_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_hold_extension_stateful_replay tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- replacement enrichment / isolated capture / hold target / stateful replay / overlay runs: OK
+
 ### 16:32 Entry EV short entry-block replacement replay
 
 作業:

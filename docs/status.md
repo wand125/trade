@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 16:32 JST
+最終更新: 2026-07-02 16:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV replacement hold-extension integrationを追加した。00307のshort entry-block replacement後のtrade pathをenrichし、isolated/capture特徴を再生成してchronological hold-extension targetとstateful replayへ戻した。`entry_ev_hold_extension_stateful_replay.py` に `--require-model-used` を追加し、fallback predictionではaggressive fixed720延長しないようにした。`--require-model-used` なしの `isolated_large_loss_long / t-5 / h720` は total `+307.7638` だが hgb2024_0306 2024-03が `-17.6936` へ壊れた。原因は `pred_hold_extension_model_used_720m=False` のfallback score `+0.4951` が `-2.0400 -> -20.1840` のfixed720延長を許したこと。`--require-model-used` ありでは total `+326.1098`, month min `-0.8832`、さらに `holdext_long_range_normal_ny` blockで total `+326.9930`, month min `-0.7200`, role min `+0.5354`。判断: require-model-used hookとreplacement->hold-extension統合pipelineはaccepted infrastructure / diagnostic candidate、標準policyはNoTrade。詳細は `docs/reports/00308_2026-07-02_entry_ev_replacement_hold_extension_integration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV short entry-block replacement replayを追加した。00306の次アクションとして、未選択entry候補feedへ戻し、prediction-row observableなshort entry-block flagを付けたうえで、`side_ev_penalty_rules` によるside EV penalty replacement replayを実装した。対象はshort側の `rollover_lossprob_ge0p4 OR london_midloss_sidegap_pos` で、00293 comboのうちhold-extension後にしか分からない `holdext_long_range_normal_ny` はまだ含めていない。raw `loss_exit30_cd15` 段階の合算では baseline `+118.6900` / 266 trades / month min `-6.8324` から replacement `+126.8118` / 254 trades / month min `-6.8324` へ `+8.1218` 改善した。hybrid 2025-12は `-4.1460 -> +4.5000` へ改善したが、internal+hgb側は `+112.0660 -> +111.5418` と小幅悪化し、refit2025 2025-09/02のfloorも未解決。判断: prediction-row flag generationとside EV penalty replacement replayはaccepted infrastructure、short entry-block replacementはdiagnostic candidate、標準policyはNoTrade。詳細は `docs/reports/00307_2026-07-02_entry_ev_short_entryblock_replacement_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

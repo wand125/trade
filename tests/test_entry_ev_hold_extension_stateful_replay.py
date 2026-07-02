@@ -5,6 +5,7 @@ import unittest
 import pandas as pd
 
 from scripts.experiments.entry_ev_hold_extension_stateful_replay import (
+    horizon_model_used,
     parse_horizon_modes,
     replay_group,
     selector_compatible_monthly_metrics,
@@ -92,6 +93,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             apply_mask=apply_mask,
             threshold=5.0,
             horizon_mode="predicted",
+            require_model_used=False,
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -132,6 +134,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             apply_mask=universe_mask(base, "isolated_large_loss"),
             threshold=5.0,
             horizon_mode="predicted",
+            require_model_used=False,
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -246,6 +249,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             apply_mask=universe_mask(frame, "isolated_large_loss_long"),
             threshold=-5.0,
             horizon_mode="720",
+            require_model_used=False,
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -256,6 +260,45 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
         self.assertEqual(trades[0]["hold_extension_score_column"], "pred_hold_extension_delta_720m")
         self.assertAlmostEqual(trades[0]["hold_extension_pred_delta"], -4.0)
         self.assertAlmostEqual(trades[0]["adjusted_pnl"], 12.0)
+
+    def test_require_model_used_blocks_fallback_extension(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    **row(
+                        entry_minute=1,
+                        exit_minute=2,
+                        adjusted_pnl=-3.0,
+                        pred_delta=0.0,
+                        horizon=60,
+                        fixed_pnl=8.0,
+                        isolated_large_loss=True,
+                    ),
+                    "pred_hold_extension_delta_720m": 0.5,
+                    "pred_hold_extension_model_used_720m": False,
+                    "actual_taken_fixed_720m_adjusted_pnl": -12.0,
+                }
+            ]
+        )
+
+        trades, skipped = replay_group(
+            frame,
+            apply_mask=universe_mask(frame, "isolated_large_loss_long"),
+            threshold=-5.0,
+            horizon_mode="720",
+            require_model_used=True,
+            profit_multiplier=1.0,
+            loss_multiplier=1.2,
+        )
+
+        self.assertFalse(skipped)
+        self.assertFalse(trades[0]["hold_extension_applied"])
+        self.assertAlmostEqual(trades[0]["adjusted_pnl"], -3.0)
+
+    def test_horizon_model_used_parses_bool_like_values(self) -> None:
+        self.assertTrue(horizon_model_used(pd.Series({"pred_hold_extension_model_used_720m": "true"}), 720))
+        self.assertFalse(horizon_model_used(pd.Series({"pred_hold_extension_model_used_720m": "false"}), 720))
+        self.assertFalse(horizon_model_used(pd.Series({}), 720))
 
 
 if __name__ == "__main__":
