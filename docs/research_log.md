@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 18:48 Entry EV fixed60 uncertainty soft margin
+
+作業:
+
+- 00313の次アクションとして、fixed60 uncertaintyをhard gateではなくentry scoreのsoft marginへ戻した。
+- `scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py` を追加し、selected-trade実績から対象月より前だけのfixed60 false-positive priorを作り、prediction parquetのlong/short両側へmargin scoreを生成した。
+- w0 controlで、新score kindのside-gap quantileを再計算するとbaselineを再現できないことを確認した。
+- `--side-gap-source-score-kind` を追加し、既存 `preblockgap` side-gap quantileを継承できるようにした。
+- report: `docs/reports/00314_2026-07-02_entry_ev_fixed60_uncertainty_soft_margin.md`
+
+結果:
+
+- preblockgap継承なしのw0 controlは baseline `+126.8118` を再現せず `+24.9388` へ崩れた。
+- preblockgap継承ありのw0 controlは replacement baseline `+126.8118` / 254 trades / month min `-6.8324` を再現した。
+- raw replacement replayでは family-aware `fixed60_uncertainty_margin_famdirregsess_w5` が `+139.1098` / 249 tradesで最良。month minは `-6.8324` のまま。
+- 00308 pipelineへ戻すと、`isolated_large_loss_long / t-5 / h720 / require-model-used` は total `+338.4078` / month min `-0.8832`。00308同branch `+326.1098` より改善した。
+- 00310と同じ position-quality overlayでは `long_range_normal_ny_fixed60_pred_gt0` と `holdext_long_range_normal_ny` が total `+339.2910` / month min `-0.7200`。00310同proxy `+337.6010` を上回った。
+- default support-awareは `support_aware_only` だが、support2では `too_many_support_limited_negative_months`、shallow025では `structural_negative_months` でblocked。
+
+判断:
+
+- fixed60 uncertainty soft-margin input generationはaccepted infrastructure。
+- preblockgap side-gap quantile inheritanceとw0 controlは今後のscore-head実験で必須。
+- family-aware w5 branchはdiagnostic bestを更新したが、標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py tests/test_entry_ev_fixed60_uncertainty_margin_policy_inputs.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_fixed60_uncertainty_margin_policy_inputs`: OK
+- `uv run python -m unittest tests.test_entry_ev_fixed60_uncertainty_margin_policy_inputs tests.test_docs_reports`: OK
+- `uv run python -m unittest tests.test_entry_ev_quantile_exit_timing_sensitivity tests.test_entry_ev_stateful_entry_block_overlay tests.test_entry_ev_stateful_support_aware_admission`: OK
+- `git diff --check`: OK
+- fixed60 uncertainty margin input generation / replay sweep / best branch pipeline / support-aware runs: OK
+
 ### 18:06 Entry EV fixed60 prior uncertainty head
 
 作業:
