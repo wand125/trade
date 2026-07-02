@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 13:50 JST
+最終更新: 2026-07-02 14:00 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-aware admissionを追加した。00294の次アクションとして、月次floor breachをsupport-limited / shallow / structuralへ分ける `scripts/experiments/entry_ev_stateful_support_aware_admission.py` を実装した。00293 best branchはstrict standardでは `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high` でNoTradeだが、default support-aware floorでは structural negative months `0` により `support_aware_only`。ただしsupport-limited許容を2に下げる、またはshallow floorを `-0.25` に厳しくするとblocked。判断: support-aware admissionはaccepted diagnostics、標準policyはNoTrade。詳細は `docs/reports/00295_2026-07-02_entry_ev_support_aware_admission.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV overlay residual floor diagnosticsを追加した。00293で残った4つのnegative monthsをunblocked tradesだけで診断し、3件は1 trade monthかつside share `1.0`、残るrefit2025 2025-03は9 trades / PnL `-0.4730` と確認した。fixed-horizon hindsightでは7 loss中5件が改善するが、refit2025 2025-03の主損失 short `down_normal_vol / ny_overlap` はfixed 60/240/720mで悪化し、同contextは全体 `+19.5636` のためblock化しない。判断: residual floor diagnosticsはaccepted infrastructure、remaining one-trade negative monthsを単発blacklistで追わない、標準policyはNoTrade。次はsupport-aware admission diagnosticsへ寄せる。詳細は `docs/reports/00294_2026-07-02_entry_ev_overlay_residual_floor_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 14:00 Entry EV support-aware admission
+
+作業:
+
+- 00294の次アクションとして、月次floor breachをsupport-limited / shallow / structuralへ分けるdiagnostic selectorを追加した。
+- `scripts/experiments/entry_ev_stateful_support_aware_admission.py` を追加し、strict standard gateとsupport-aware floor gateを並べて出せるようにした。
+- `tests/test_entry_ev_stateful_support_aware_admission.py` を追加した。
+- report: `docs/reports/00295_2026-07-02_entry_ev_support_aware_admission.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 00293 best branchは strict standardでは `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high` でNoTrade。
+- default support-aware floorでは total `+329.4348`, role min `+0.5354`, structural negative months `0` で `support_aware_only`。
+- support-limited negative monthsは3、shallow negative monthsは1。
+- support-limited許容を2へ下げるとblocked。shallow floorを `-0.25` へ厳しくしてもblocked。
+
+判断:
+
+- support-aware admission diagnosticsはaccepted infrastructure。
+- `support_aware_only` を標準採用とは扱わない。
+- strict standard gateは維持し、support-aware分類は失敗種類の分析層として使う。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_stateful_support_aware_admission.py tests/test_entry_ev_stateful_support_aware_admission.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_stateful_support_aware_admission`: OK
+- default / support2 / shallow025 support-aware admission runs: OK
+
 ### 13:50 Entry EV overlay residual floor diagnostics
 
 作業:
