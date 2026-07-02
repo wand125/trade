@@ -4,6 +4,31 @@
 
 ## 2026-07-03 JST
 
+### 08:03 Entry EV support repair listwise cluster diagnostics
+
+作業:
+
+- 00333で薄かったselected addition近傍から一段戻り、stateful selection直前の広いgated候補面を診断した。
+- `scripts/experiments/entry_ev_support_repair_listwise_cluster_diagnostics.py` を追加し、`selected + quota_full` rowsを再構成して、quotaと一玉非重複制約つきのlistwise greedy selectorを比較した。
+- report: `docs/reports/00334_2026-07-03_entry_ev_support_repair_listwise_cluster.md`
+
+結果:
+
+- baseline best scenarioは31候補まで広がったが、`repair_score_greedy` はcurrent replayと一致し、actual oracle差は `+2.6360` だけだった。
+- EV -2 scenarioは111候補まで広がり、actual oracle差は `+22.3190`。ただし `fresh2024 2024-08 long -29.1360` は候補が1本しかなく、rerankingでは救えない。
+- low harmful / low tail / high support proxy selectorはいずれも大きく悪化した。
+
+判断:
+
+- stateful pre-selection listwise cluster diagnosticsはaccepted。
+- simple rerankerでは標準blockerを解けない。次はlistwise examplesを教師化しつつ、fresh/thin monthの候補生成またはabstention層を作る。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_support_repair_listwise_cluster_diagnostics`: OK
+- baseline best / EV -2 listwise diagnostics: OK
+
 ### 07:52 Entry EV support repair pairwise switch diagnostics
 
 作業:
