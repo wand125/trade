@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 08:17 JST
+最終更新: 2026-07-03 08:28 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair listwise teacher diagnosticsを追加した。00335のleak-free listwise候補面から、actual oracleをpolicyではなくteacherとして扱う診断を作成し、`actual_oracle_greedy_selected` を `oracle_teacher_selected` として、quota groupをlearnable / singletonに分けた。baseline bestは31 rows / 5 groups / learnable 4 / singleton 1で、oracle改善は `+5.7600` のみ。EV -2は111 rows / 6 groups / learnable 5 / singleton 1で、oracle改善 `+25.4430` はあるが、`fresh2024_validation 2024-08 long -29.1360` はsingleton negativeでrerankingやmeta-selectorでは救えない。observable feature selectorはrepair_scoreがcurrent同等、pred PnL系が `-2.5172`、tail/harmful/support proxyは大幅悪化。判断: teacher diagnosticsはaccepted infrastructure、現候補面だけで低容量meta-selectorを作るのは薄い。次はsingleton negative向けabstentionとfresh/thin month候補生成へ進む。標準policyはNoTrade。詳細は `docs/reports/00336_2026-07-03_entry_ev_support_repair_listwise_teacher.md`。
 
 Entry EV support repair leak-free tiebreakを追加した。00334のlistwise cluster診断後に、support repairの実行時候補sortとlistwise `repair_score_greedy` / `support_proxy_high_greedy` に `actual_pnl_at_hv_chosen_horizon` がtie-breakerとして混入していることを確認した。これはscore同点候補で将来実損益を見て選ぶlook-aheadなので、runtime selectorから除去し、oracle診断だけにactual PnL利用を限定した。00332 w0 s2条件をleak-freeで本体replayし直すと、best scenarioはadded PnL `+63.9770 -> +60.8530`、combined `+403.2680 -> +400.1440`、EV -2 scenarioはadded PnL `+34.8410 -> +31.7170`、combined `+374.1320 -> +371.0080` に下方修正。leak-free replay後のlistwise診断では `current_replay == repair_score_greedy` へ整合したが、best scenarioでもactual oracle差 `+5.7600`、EV -2では `+25.4430` が残り、標準blockerは未解決。判断: tie-breaker修正はaccepted、00334のcurrent-vs-repair同値はleak混入後の読みとして破棄、標準policyはNoTrade。次はleak-free replay baselineから、chronological listwise target/meta-selector、fresh/thin-month候補生成、singleton harmful候補のabstention層へ進む。詳細は `docs/reports/00335_2026-07-03_entry_ev_support_repair_leakfree_tiebreak.md`。
 

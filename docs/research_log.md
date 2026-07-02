@@ -8660,3 +8660,34 @@ trade delta:
 - `uv run python -m unittest tests.test_entry_ev_support_repair_horizon_replay tests.test_entry_ev_support_repair_listwise_cluster_diagnostics tests.test_docs_reports`: OK
 - leak-free broad-prior horizon-choice replay: OK
 - leak-free listwise diagnostics on new replay: OK
+
+### 2026-07-03 08:28 JST Entry EV support repair listwise teacher diagnostics
+
+作業:
+
+- 00335のleak-free listwise候補面を、actual oracle policyではなくteacher診断へ変換した。
+- `scripts/experiments/entry_ev_support_repair_listwise_teacher_diagnostics.py` を追加した。
+- `actual_oracle_greedy_selected` を `oracle_teacher_selected` として扱い、quota groupをlearnable groupとsingleton groupに分けた。
+- observable feature別に同じquota/overlap制約下のgreedy selectorを作り、teacher overlap、actual PnL、oracle差、rank AUCを比較した。
+- report: `docs/reports/00336_2026-07-03_entry_ev_support_repair_listwise_teacher.md`
+
+主要結果:
+
+| scenario | rows | groups | learnable | singleton | current | oracle | delta | singleton negative |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| p0.45 / EV 2 / tail 0.3 | `31` | `5` | `4` | `1` | `+60.8530` | `+66.6130` | `+5.7600` | `0` |
+| p0.45 / EV -2 / tail 0.3 | `111` | `6` | `5` | `1` | `+31.7170` | `+57.1600` | `+25.4430` | `1` |
+
+判断:
+
+- teacher diagnosticsはaccepted infrastructure。
+- direct feature selectorはどれもcurrentを超えない。repair_scoreはcurrent同等、pred PnL系は `-2.5172`、tail/harmful/support proxyは大幅悪化。
+- EV -2のoracle改善はlearnable groupsにあるが、`fresh2024_validation 2024-08 long -29.1360` はsingleton negativeなのでreranking/meta-selectorでは救えない。
+- 現5-6 groupだけで低容量meta-selectorを学習するのは薄い。次はsingleton negative向けabstentionとfresh/thin month候補生成を優先する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_listwise_teacher_diagnostics.py tests/test_entry_ev_support_repair_listwise_teacher_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_listwise_teacher_diagnostics tests.test_entry_ev_support_repair_listwise_cluster_diagnostics tests.test_entry_ev_support_repair_horizon_replay`: OK
+- best / EV -2 teacher diagnostics run: OK
