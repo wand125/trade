@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 05:42 JST
+最終更新: 2026-07-03 05:55 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV horizon duration penalty calibrationを追加した。00326のhpen0.25を同一repair set診断のまま採用しないため、target monthより前の候補だけで `repair_horizon_penalty_weight_effective` を選ぶchronological calibrationを実装した。strict校正(min prior 10 rows / 2 months)もloose校正(min prior 1 row / 1 month)も、added PnL `+3.2340`、combined `+342.5250`、month min `-19.8260`、role min `-20.8016` でpred-only no-penaltyと同じ失敗。fresh2024 2024-08はprior候補0件で `0.00` fallbackとなり、720m `-29.1360` を止められなかった。fallback `0.25` を事前固定するとcombined `+374.6110` を再現するが、これはlearned evidenceではない。判断: chronological calibration infrastructureはaccepted、support-repair対象行だけでduration penaltyを学ぶ方針はreject、次は広いcandidate universeでduration riskを学習する。標準policyはNoTrade。詳細は `docs/reports/00327_2026-07-03_entry_ev_horizon_duration_penalty_calibration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV row x horizon support repairを追加した。00325で残ったpre-chosen horizon問題に対し、prediction rowsから60/240/720mを別候補として展開する `--choice-input-mode row_horizon_grid` を実装した。actual-floor upper-boundは6本追加、added PnL `+35.3200`、combined total `+374.6110` で、00325 upper-boundから `+2.9500` 改善。pred-only / no horizon penaltyはfresh2024 2024-08 long 720m `-29.1360` を拾い `+3.2340` に留まるが、observable proxyのhorizon penalty `0.25` を入れると同rowを60m `+2.9500` に切り替え、actual-floorなしでadded PnL `+35.3200` に到達した。ただしhpen0.25は同じrepair set上の診断値で、`0.5/1.0` では良い長期候補も削るため標準policyにはしない。次はduration risk / horizon choiceをchronological OOFでcalibrateする。標準policyはNoTrade。詳細は `docs/reports/00326_2026-07-03_entry_ev_row_horizon_support_repair.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 05:55 Entry EV horizon duration penalty calibration
+
+作業:
+
+- 00326で見つけたhpen0.25を同一repair set上の診断値で終わらせず、target monthより前の候補だけでduration penaltyを選ぶchronological calibrationを実装した。
+- `scripts/experiments/entry_ev_horizon_duration_penalty_calibration.py` を追加し、row-specific `repair_horizon_penalty_weight_effective` を既存support repair replayへ渡せるようにした。
+- report: `docs/reports/00327_2026-07-03_entry_ev_horizon_duration_penalty_calibration.md`
+
+結果:
+
+- strict校正(min prior 10 rows / 2 months)はadded PnL `+3.2340`、combined `+342.5250`、month min `-19.8260`、role min `-20.8016` で、pred-only no-penaltyと同じだった。
+- loose校正(min prior 1 row / 1 month)もadded PnL `+3.2340`、combined `+342.5250` で同じ失敗に留まった。
+- fresh2024 2024-08はprior候補0件のため `0.00` fallbackとなり、720m `-29.1360` を止められなかった。
+- fallback `0.25` を事前固定すると00326 hpen0.25と同じ added PnL `+35.3200`、combined `+374.6110` を再現するが、これはlearned calibrationではない。
+
+判断:
+
+- chronological duration-penalty calibration infrastructureはaccepted。
+- support-repair対象行だけでduration penaltyを学ぶ方針は現時点ではreject。
+- fallback0.25はdiagnostic sensitivityであり、標準policyやlearned evidenceとして扱わない。
+- 次はduration risk / short-horizon-overestimateを00322 broad candidate universeなど広いprior dataで学習し、support repairへfeatureとして戻す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_horizon_duration_penalty_calibration.py scripts/experiments/entry_ev_support_repair_horizon_replay.py tests/test_entry_ev_horizon_duration_penalty_calibration.py tests/test_entry_ev_support_repair_horizon_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_horizon_duration_penalty_calibration tests.test_entry_ev_support_repair_horizon_replay`: OK
+- 00327 strict / loose chronological calibration / fallback0.25 diagnostic runs: OK
+
 ### 05:42 Entry EV row x horizon support repair
 
 作業:

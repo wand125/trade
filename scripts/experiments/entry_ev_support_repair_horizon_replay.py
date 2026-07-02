@@ -556,14 +556,32 @@ def add_repair_utility_columns(
         expected_pnl = numeric_series(output, "hv_chosen_score", default=0.0)
     tail_prob = numeric_series(output, "hv_chosen_pred_tail_loss_prob", default=0.0)
     horizon_penalty = numeric_series(output, "hv_chosen_horizon_minutes", default=0.0) / 60.0
+    if "repair_horizon_penalty_weight_effective" in output.columns:
+        horizon_penalty_weight = numeric_series(
+            output,
+            "repair_horizon_penalty_weight_effective",
+            default=repair_horizon_penalty_weight,
+        )
+    else:
+        horizon_penalty_weight = pd.Series(
+            repair_horizon_penalty_weight,
+            index=output.index,
+            dtype=float,
+        )
     output["repair_expected_pnl"] = expected_pnl.fillna(0.0)
     output["repair_tail_penalty"] = tail_prob.fillna(0.0)
     output["repair_horizon_penalty"] = horizon_penalty.fillna(0.0)
+    output["repair_horizon_penalty_weight_effective"] = horizon_penalty_weight.fillna(
+        repair_horizon_penalty_weight
+    )
+    output["repair_horizon_penalty_amount"] = (
+        output["repair_horizon_penalty_weight_effective"] * output["repair_horizon_penalty"]
+    )
     output["repair_score"] = (
         repair_support_weight * numeric_series(output, "support_reduction_value")
         + repair_expected_pnl_weight * output["repair_expected_pnl"]
         - repair_tail_penalty_weight * output["repair_tail_penalty"]
-        - repair_horizon_penalty_weight * output["repair_horizon_penalty"]
+        - output["repair_horizon_penalty_amount"]
     )
     return output
 
