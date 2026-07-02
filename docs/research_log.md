@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 17:51 Entry EV fixed60 prior uncertainty
+
+作業:
+
+- 00311でhard-block昇格を止めた `long_range_normal_ny_fixed60_pred_gt0` を、短期path過大評価のprior-only feature候補へ戻した。
+- `scripts/experiments/entry_ev_short_horizon_prior_uncertainty.py` を追加し、`selected_fixed_60m_pred_pnl > 0` かつ `selected_fixed_60m_actual_pnl < 0` を診断targetとして、対象月より前だけのcontext prior統計を生成できるようにした。
+- `tests/test_entry_ev_short_horizon_prior_uncertainty.py` を追加した。
+- report: `docs/reports/00312_2026-07-02_entry_ev_fixed60_prior_uncertainty.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00310の `isolated_large_loss_long_t-5_h720` / `entryblock_none` 246 trades、total `+326.1098`、fixed60 false-positive 51件。
+- 細粒度 `family,direction,combined_regime,session_regime` の `prior_count_ge5_pnl_neg_fp_rate_ge0p4` は4件をflagし、flagged PnL `-11.4360`、3/4がfixed60 false-positive、final loss precision `1.0000`。
+- ただしflagged 4件は全て `refit2025_validation`。非refit holdoutでは同ruleは発火0件。
+- holdoutでは広いcontext ruleに小幅改善があるが、false-positive precisionが低く、hard gateには不適。
+
+判断:
+
+- fixed60 prior uncertainty diagnosticsはaccepted infrastructure。
+- `prior_fixed_false_positive_rate`, `prior_fixed_overestimate_mean`, `prior_fixed_uncertainty_pressure` はfeature候補として残す。
+- no-replacement hard gateとしてはreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_short_horizon_prior_uncertainty.py tests/test_entry_ev_short_horizon_prior_uncertainty.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_short_horizon_prior_uncertainty`: OK
+- 00312 fixed60 prior uncertainty diagnostics run: OK
+
 ### 17:36 Entry EV position-quality holdout support
 
 作業:

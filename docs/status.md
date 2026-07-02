@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 17:36 JST
+最終更新: 2026-07-02 17:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV fixed60 prior uncertainty diagnosticsを追加した。00311で `long_range_normal_ny_fixed60_pred_gt0` のhard-block昇格を止めたため、短期path過大評価を対象月より前だけのprior featureへ戻した。`entry_ev_short_horizon_prior_uncertainty.py` を追加し、`selected_fixed_60m_pred_pnl > 0` かつ `selected_fixed_60m_actual_pnl < 0` を診断targetにして、context別 `prior_fixed_false_positive_rate`, `prior_fixed_overestimate_mean`, `prior_fixed_uncertainty_pressure` などを生成する。00310 best branchの `entryblock_none` 246 tradesでは、細粒度 `family,direction,combined_regime,session_regime` の `prior_count_ge5_pnl_neg_fp_rate_ge0p4` が4件 / flagged PnL `-11.4360` / final loss precision `1.0000` で00310のrefit集中blockをほぼ再現した。ただし全て `refit2025_validation` で、非refit holdoutでは同rule発火0件。判断: fixed60 prior uncertaintyはaccepted infrastructure / feature候補、hard gate標準化はreject、標準policyはNoTrade。詳細は `docs/reports/00312_2026-07-02_entry_ev_fixed60_prior_uncertainty.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV position-quality holdout support diagnosticsを追加した。00310の `long_range_normal_ny_fixed60_pred_gt0` を未使用chronologyへ再探索なしで適用できるか確認するため、`entry_ev_entry_block_holdout_support_diagnostics.py` を追加した。discoveryを `refit2025_validation`、holdoutを非refit rolesとすると、`long_range_normal_ny_fixed60_pred_gt0` は全体 +11.4912、discovery +11.4912、holdout発火0件 / delta 0.0000。broader `long_range_normal_ny` はholdoutで2件発火し net +0.7370だが、cal loss 1件とhgb winner 1件を同時に削る。判断: holdout-support diagnosticsはaccepted infrastructure、`long_range_normal_ny_fixed60_pred_gt0` は未使用chronology支持なし、標準policyはNoTrade。詳細は `docs/reports/00311_2026-07-02_entry_ev_position_quality_holdout_support.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
