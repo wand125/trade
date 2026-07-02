@@ -55,6 +55,54 @@ class EntryEvSupportRepairHorizonReplayTest(unittest.TestCase):
         self.assertEqual(float(selected.iloc[0]["adjusted_pnl"]), 4.0)
         self.assertCountEqual(rejected["reject_reason"].tolist(), ["overlap", "quota_full"])
 
+    def test_select_support_additions_can_sort_by_repair_score(self) -> None:
+        base_trades = pd.DataFrame(
+            {
+                "role": ["r"],
+                "family": ["f"],
+                "month": ["2026-01"],
+                "direction": ["short"],
+                "entry_timestamp": [pd.Timestamp("2026-01-01T00:00:00Z")],
+                "exit_timestamp": [pd.Timestamp("2026-01-01T00:10:00Z")],
+                "adjusted_pnl": [1.0],
+                "repair_source": ["base"],
+            }
+        )
+        choices = pd.DataFrame(
+            {
+                "role": ["r", "r"],
+                "family": ["f", "f"],
+                "month": ["2026-01", "2026-01"],
+                "side": ["long", "long"],
+                "entry_timestamp": [
+                    pd.Timestamp("2026-01-01T01:00:00Z"),
+                    pd.Timestamp("2026-01-01T03:00:00Z"),
+                ],
+                "exit_timestamp": [
+                    pd.Timestamp("2026-01-01T02:00:00Z"),
+                    pd.Timestamp("2026-01-01T04:00:00Z"),
+                ],
+                "hv_chosen_score": [100.0, 1.0],
+                "repair_score": [0.0, 10.0],
+                "support_reduction_value": [0, 1],
+                "repair_expected_pnl": [0.0, 2.0],
+                "actual_pnl_at_hv_chosen_horizon": [1.0, 2.0],
+                "adjusted_pnl": [1.0, 2.0],
+                "extra_side_needed": [1, 1],
+            }
+        )
+
+        selected, rejected = select_support_additions(
+            base_trades,
+            choices,
+            selection_mode="repair_score",
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(float(selected.iloc[0]["repair_score"]), 10.0)
+        self.assertEqual(float(selected.iloc[0]["adjusted_pnl"]), 2.0)
+        self.assertEqual(rejected.iloc[0]["reject_reason"], "quota_full")
+
     def test_update_monthly_metrics_adds_side_counts_and_pnl(self) -> None:
         base_monthly = pd.DataFrame(
             {
@@ -181,6 +229,87 @@ class EntryEvSupportRepairHorizonReplayTest(unittest.TestCase):
         self.assertTrue(bool(summary.iloc[0]["selector_pass"]))
         self.assertEqual(summary.iloc[0]["blockers"], "")
         self.assertEqual(int(summary.iloc[0]["remaining_extra_trades_needed"]), 0)
+
+    def test_replay_scenarios_repair_mode_can_filter_negative_actual_candidate(self) -> None:
+        base_monthly = pd.DataFrame(
+            {
+                "source": ["s"],
+                "role": ["r"],
+                "family": ["f"],
+                "variant": ["v"],
+                "candidate": ["c"],
+                "entry_block_rule": ["rule"],
+                "month": ["2026-01"],
+                "total_adjusted_pnl": [1.0],
+                "trade_count": [1],
+                "long_trade_count": [0],
+                "short_trade_count": [1],
+                "max_side_trade_share": [1.0],
+                "max_drawdown": [0.0],
+            }
+        )
+        base_trades = pd.DataFrame(
+            {
+                "role": ["r"],
+                "family": ["f"],
+                "month": ["2026-01"],
+                "direction": ["short"],
+                "entry_timestamp": [pd.Timestamp("2026-01-01T00:00:00Z")],
+                "exit_timestamp": [pd.Timestamp("2026-01-01T00:10:00Z")],
+                "adjusted_pnl": [1.0],
+                "repair_source": ["base"],
+            }
+        )
+        choices = pd.DataFrame(
+            {
+                "row_scope": ["available_candidates", "available_candidates"],
+                "prob_threshold": [0.5, 0.5],
+                "ev_threshold": [0.0, 0.0],
+                "tail_prob_threshold": [0.3, 0.3],
+                "require_model_used": [True, True],
+                "role": ["r", "r"],
+                "family": ["f", "f"],
+                "month": ["2026-01", "2026-01"],
+                "side": ["long", "long"],
+                "entry_timestamp": [
+                    pd.Timestamp("2026-01-01T01:00:00Z"),
+                    pd.Timestamp("2026-01-01T03:00:00Z"),
+                ],
+                "exit_timestamp": [
+                    pd.Timestamp("2026-01-01T02:00:00Z"),
+                    pd.Timestamp("2026-01-01T04:00:00Z"),
+                ],
+                "hv_chosen_horizon_minutes": [60, 60],
+                "hv_chosen_score": [10.0, 2.0],
+                "hv_chosen_pred_pnl": [10.0, 2.0],
+                "hv_chosen_pred_tail_loss_prob": [0.1, 0.1],
+                "actual_pnl_at_hv_chosen_horizon": [-5.0, 3.0],
+                "adjusted_pnl": [-5.0, 3.0],
+                "extra_side_needed": [1, 1],
+            }
+        )
+
+        summary, _, additions, rejections = replay_scenarios(
+            base_monthly,
+            base_trades,
+            choices,
+            min_total_pnl=0.0,
+            min_role_total_pnl=0.0,
+            month_floor=0.0,
+            shallow_month_floor=-1.0,
+            min_role_trades=1,
+            min_month_trades=1,
+            max_side_trade_share=0.95,
+            cap_to_extra_side_needed=True,
+            overlap_key_columns=["role"],
+            selection_mode="repair_score",
+            min_chosen_actual_pnl=0.0,
+        )
+
+        self.assertEqual(len(additions), 1)
+        self.assertEqual(float(additions.iloc[0]["adjusted_pnl"]), 3.0)
+        self.assertEqual(int(summary.iloc[0]["rejected_actual_pnl_floor_count"]), 1)
+        self.assertEqual(rejections.iloc[0]["reject_reason"], "actual_pnl_floor")
 
     def test_read_choice_candidates_filters_unchosen_and_non_target_rows(self) -> None:
         frame = pd.DataFrame(

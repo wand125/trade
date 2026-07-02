@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 05:27 Entry EV target-aware support repair replay
+
+作業:
+
+- 00324のcoverage診断を受けて、00323 support repair replayへtarget-aware repair utilityを接続した。
+- `scripts/experiments/entry_ev_support_repair_horizon_replay.py` に `--selection-mode repair_score`、chosen-horizon prediction列、repair utility列、pred/actual/tail prefilterを追加した。
+- report: `docs/reports/00325_2026-07-03_entry_ev_target_aware_support_repair_replay.md`
+
+結果:
+
+- actual-floor diagnosticのbestは available candidates / p0.5 / EV0 / tail0.3 / model-used yes。5本追加、added PnL `+32.3700`、combined total `+371.6610`。
+- 00323 best totalの combined `+362.7000` からは `+8.9610` 改善したが、month min `-0.6120`、remaining extra trades `3`、remaining month PnL hurdle `+1.4486` でstandard gateは通らない。
+- pred-only対照ではfresh2024 2024-08 long 720m `-29.1360` を拾い、added PnL `+3.2340`、month min `-19.8260`、role min `-20.8016` まで悪化した。
+
+判断:
+
+- target-aware repair utility infrastructureはaccepted。
+- actual-floor runは上限診断としてacceptedだが、future realized PnLを使うためpolicy evidenceにはしない。
+- pred-only repair_score replayはpolicy候補としてreject。
+- 次はrow x horizon candidateをrepair utilityで採点してからhorizonを選ぶ。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_horizon_replay.py tests/test_entry_ev_support_repair_horizon_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_horizon_replay`: OK
+- 00325 actual-floor target-aware support repair replay: OK
+- 00325 pred-only control replay: OK
+
 ### 05:15 Entry EV support repair target coverage
 
 作業:

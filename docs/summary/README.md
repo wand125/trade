@@ -1,6 +1,6 @@
 # Trade Research Summary
 
-最終更新: 2026-07-03 05:15 JST
+最終更新: 2026-07-03 05:27 JST
 
 `docs/reports/` を読む前の入口。summaryでは詳細な実験ログを再掲せず、現在の判断、研究レーン、読む順番だけを管理する。
 
@@ -10,7 +10,7 @@
    今の採用判断、主な失敗構造、次アクション。
 
 2. [Report Map](report_map.md)
-   `00001` から `00324` までのレポートを研究レーン別に圧縮した地図。
+   `00001` から `00325` までのレポートを研究レーン別に圧縮した地図。
 
 3. 詳細が必要なときだけ [../reports](../reports) の個別レポートを読む。
 
@@ -18,7 +18,7 @@
 
 標準採用できる利益最大化policyはまだない。標準判断は NoTrade-first のまま。
 
-最新の診断bestは、q95 + raw `loss_exit30_cd15` dynamic exit cooldownを土台に、short entry-block replacement、require-model-used hold-extension、fixed60 family-aware uncertainty margin w5、entry-time position-quality overlayを重ねたbranch。`00314` でposition-quality overlay後 `+339.2910` / month min `-0.7200` まで改善したが、`00317` でside/support修復に long `5` / short `3` の `8` extra trades が必要と分かった。`00318` から `00322` でnear-miss support候補をexit target化し、広いcandidate universeでhorizon viabilityを学習した。`00323` でsupport repairへ接続すると、best totalは5本追加 / added PnL `+23.4090` / combined `+362.7000` まで伸びたが、month min `-0.6120`、remaining extra trades `3`、blockers `month_pnl_below_floor,side_share_high` が残った。`00324` で残存target月を分解し、`refit2025 2025-07` はtarget-awareに拾える一方、`fresh2024 2024-03/2024-11` は単純threshold緩和では壊れると確認した。標準policyはNoTradeのまま。
+最新の診断bestは、q95 + raw `loss_exit30_cd15` dynamic exit cooldownを土台に、short entry-block replacement、require-model-used hold-extension、fixed60 family-aware uncertainty margin w5、entry-time position-quality overlayを重ねたbranch。`00314` でposition-quality overlay後 `+339.2910` / month min `-0.7200` まで改善したが、`00317` でside/support修復に long `5` / short `3` の `8` extra trades が必要と分かった。`00318` から `00322` でnear-miss support候補をexit target化し、広いcandidate universeでhorizon viabilityを学習した。`00323` でsupport repairへ接続するとcombined `+362.7000` まで伸び、`00324` で残存target月を分解した。`00325` のactual-floor upper-bound診断では5本追加 / added PnL `+32.3700` / combined `+371.6610` まで伸びたが、future realized PnLを使うためpolicy evidenceではない。pred-only対照はfresh2024 2024-08 long 720m `-29.1360` を拾って悪化した。標準policyはNoTradeのまま。
 
 ## 更新ルール
 

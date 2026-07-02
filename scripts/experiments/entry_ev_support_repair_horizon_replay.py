@@ -261,7 +261,190 @@ def read_choice_candidates(
     )
     output["direction"] = output["side"]
     output["adjusted_pnl"] = output["actual_pnl_at_hv_chosen_horizon"]
+    output = add_chosen_prediction_columns(output)
     return output.reset_index(drop=True)
+
+
+def infer_horizons(frame: pd.DataFrame) -> list[int]:
+    horizons: list[int] = []
+    for column in frame.columns:
+        if not column.startswith("pred_hv_") or not column.endswith("m_pnl"):
+            continue
+        raw = column.removeprefix("pred_hv_").removesuffix("m_pnl")
+        try:
+            horizons.append(int(raw))
+        except ValueError:
+            continue
+    return sorted(set(horizons))
+
+
+def add_chosen_prediction_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    output = frame.copy()
+    output["hv_chosen_pred_executable_prob"] = np.nan
+    output["hv_chosen_pred_pnl"] = np.nan
+    output["hv_chosen_pred_tail_loss_prob"] = np.nan
+    output["hv_chosen_pred_model_used"] = False
+    if "hv_chosen_horizon_minutes" not in output.columns:
+        return output
+    chosen_horizon = numeric_series(output, "hv_chosen_horizon_minutes", default=0.0)
+    for horizon in infer_horizons(output):
+        mask = chosen_horizon.eq(float(horizon))
+        if not mask.any():
+            continue
+        prob_column = f"pred_hv_{horizon}m_executable_prob"
+        pnl_column = f"pred_hv_{horizon}m_pnl"
+        tail_column = f"pred_hv_{horizon}m_tail_loss_prob"
+        executable_model_column = f"pred_hv_{horizon}m_executable_model_used"
+        pnl_model_column = f"pred_hv_{horizon}m_pnl_model_used"
+        tail_model_column = f"pred_hv_{horizon}m_tail_model_used"
+        if prob_column in output.columns:
+            output.loc[mask, "hv_chosen_pred_executable_prob"] = numeric_series(
+                output,
+                prob_column,
+            )[mask]
+        if pnl_column in output.columns:
+            output.loc[mask, "hv_chosen_pred_pnl"] = numeric_series(output, pnl_column)[mask]
+        if tail_column in output.columns:
+            output.loc[mask, "hv_chosen_pred_tail_loss_prob"] = numeric_series(
+                output,
+                tail_column,
+            )[mask]
+        model_used = (
+            bool_series(output, executable_model_column)
+            & bool_series(output, pnl_model_column)
+            & bool_series(output, tail_model_column)
+        )
+        output.loc[mask, "hv_chosen_pred_model_used"] = model_used[mask]
+    return output
+
+
+def support_reduction_for_addition(
+    *,
+    long_count: int,
+    short_count: int,
+    side: str,
+    min_month_trades: int,
+    max_side_trade_share: float,
+) -> int:
+    before = minimal_side_balanced_additions(
+        long_count=long_count,
+        short_count=short_count,
+        min_trades=min_month_trades,
+        max_side_trade_share=max_side_trade_share,
+    )
+    after_long = long_count + (1 if side == "long" else 0)
+    after_short = short_count + (1 if side == "short" else 0)
+    after = minimal_side_balanced_additions(
+        long_count=after_long,
+        short_count=after_short,
+        min_trades=min_month_trades,
+        max_side_trade_share=max_side_trade_share,
+    )
+    return max(0, int(before["extra_trades_needed"]) - int(after["extra_trades_needed"]))
+
+
+def add_repair_utility_columns(
+    base_monthly: pd.DataFrame,
+    choices: pd.DataFrame,
+    *,
+    min_month_trades: int,
+    max_side_trade_share: float,
+    repair_support_weight: float,
+    repair_expected_pnl_weight: float,
+    repair_tail_penalty_weight: float,
+) -> pd.DataFrame:
+    output = choices.copy()
+    lookup = {
+        (str(row["role"]), str(row["month"])): row
+        for _, row in base_monthly.iterrows()
+    }
+    support_values: list[int] = []
+    base_month_pnls: list[float] = []
+    base_trade_counts: list[int] = []
+    for _, row in output.iterrows():
+        base_row = lookup.get((str(row["role"]), str(row["month"])))
+        if base_row is None:
+            long_count = 0
+            short_count = 0
+            base_month_pnls.append(0.0)
+            base_trade_counts.append(0)
+        else:
+            long_count = int(float(base_row["long_trade_count"]))
+            short_count = int(float(base_row["short_trade_count"]))
+            base_month_pnls.append(float(base_row["total_adjusted_pnl"]))
+            base_trade_counts.append(int(float(base_row["trade_count"])))
+        support_values.append(
+            support_reduction_for_addition(
+                long_count=long_count,
+                short_count=short_count,
+                side=str(row["side"]),
+                min_month_trades=min_month_trades,
+                max_side_trade_share=max_side_trade_share,
+            )
+        )
+    output["base_month_pnl"] = base_month_pnls
+    output["base_month_trade_count"] = base_trade_counts
+    output["support_reduction_value"] = support_values
+    expected_pnl = numeric_series(output, "hv_chosen_pred_pnl", default=np.nan)
+    if expected_pnl.isna().all():
+        expected_pnl = numeric_series(output, "hv_chosen_score", default=0.0)
+    tail_prob = numeric_series(output, "hv_chosen_pred_tail_loss_prob", default=0.0)
+    output["repair_expected_pnl"] = expected_pnl.fillna(0.0)
+    output["repair_tail_penalty"] = tail_prob.fillna(0.0)
+    output["repair_score"] = (
+        repair_support_weight * numeric_series(output, "support_reduction_value")
+        + repair_expected_pnl_weight * output["repair_expected_pnl"]
+        - repair_tail_penalty_weight * output["repair_tail_penalty"]
+    )
+    return output
+
+
+def apply_choice_prefilters(
+    choices: pd.DataFrame,
+    *,
+    min_chosen_pred_pnl: float | None,
+    min_chosen_actual_pnl: float | None,
+    max_chosen_tail_prob: float | None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    kept = choices.copy()
+    rejected_frames: list[pd.DataFrame] = []
+    filters = [
+        (
+            "pred_pnl_floor",
+            min_chosen_pred_pnl,
+            lambda frame, value: numeric_series(
+                frame,
+                "hv_chosen_pred_pnl",
+                default=-np.inf,
+            ).lt(float(value)),
+        ),
+        (
+            "actual_pnl_floor",
+            min_chosen_actual_pnl,
+            lambda frame, value: numeric_series(frame, "adjusted_pnl", default=-np.inf).lt(
+                float(value)
+            ),
+        ),
+        (
+            "tail_prob_ceiling",
+            max_chosen_tail_prob,
+            lambda frame, value: numeric_series(
+                frame,
+                "hv_chosen_pred_tail_loss_prob",
+                default=np.inf,
+            ).gt(float(value)),
+        ),
+    ]
+    for reason, value, mask_fn in filters:
+        if value is None or kept.empty:
+            continue
+        rejected = kept[mask_fn(kept, value)].copy()
+        if not rejected.empty:
+            rejected["reject_reason"] = reason
+            rejected_frames.append(rejected)
+            kept = kept.drop(rejected.index)
+    rejected_all = pd.concat(rejected_frames, ignore_index=True) if rejected_frames else pd.DataFrame()
+    return kept.reset_index(drop=True), rejected_all
 
 
 def intervals_overlap(
@@ -278,6 +461,7 @@ def select_support_additions(
     *,
     cap_to_extra_side_needed: bool = True,
     overlap_key_columns: list[str] | None = None,
+    selection_mode: str = "score",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     if overlap_key_columns is None:
         overlap_key_columns = ["role"]
@@ -301,18 +485,34 @@ def select_support_additions(
     quota_used: dict[tuple[str, str, str], int] = {}
     selected_rows: list[dict[str, Any]] = []
     rejected_rows: list[dict[str, Any]] = []
-    sort_columns = [
-        column
-        for column in [
+    if selection_mode == "repair_score" and "repair_score" in choices.columns:
+        candidate_sort_columns = [
+            "repair_score",
+            "support_reduction_value",
+            "repair_expected_pnl",
+            "actual_pnl_at_hv_chosen_horizon",
+            "decision_timestamp",
+            "entry_timestamp",
+        ]
+    else:
+        candidate_sort_columns = [
             "hv_chosen_score",
             "actual_pnl_at_hv_chosen_horizon",
             "decision_timestamp",
             "entry_timestamp",
         ]
-        if column in choices.columns
-    ]
+    sort_columns = [column for column in candidate_sort_columns if column in choices.columns]
     ascending = [
-        False if column in {"hv_chosen_score", "actual_pnl_at_hv_chosen_horizon"} else True
+        False
+        if column
+        in {
+            "hv_chosen_score",
+            "actual_pnl_at_hv_chosen_horizon",
+            "repair_score",
+            "support_reduction_value",
+            "repair_expected_pnl",
+        }
+        else True
         for column in sort_columns
     ]
     sorted_choices = choices.sort_values(
@@ -604,21 +804,53 @@ def replay_scenarios(
     max_side_trade_share: float,
     cap_to_extra_side_needed: bool,
     overlap_key_columns: list[str],
+    selection_mode: str = "score",
+    repair_support_weight: float = 1.0,
+    repair_expected_pnl_weight: float = 1.0,
+    repair_tail_penalty_weight: float = 1.0,
+    min_chosen_pred_pnl: float | None = None,
+    min_chosen_actual_pnl: float | None = None,
+    max_chosen_tail_prob: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     summary_rows: list[dict[str, Any]] = []
     monthly_frames: list[pd.DataFrame] = []
     addition_frames: list[pd.DataFrame] = []
     rejection_frames: list[pd.DataFrame] = []
     base_stats = base_summary(base_monthly)
+    if selection_mode == "repair_score":
+        choices = add_repair_utility_columns(
+            base_monthly,
+            choices,
+            min_month_trades=min_month_trades,
+            max_side_trade_share=max_side_trade_share,
+            repair_support_weight=repair_support_weight,
+            repair_expected_pnl_weight=repair_expected_pnl_weight,
+            repair_tail_penalty_weight=repair_tail_penalty_weight,
+        )
     for key, group in choices.groupby(SCENARIO_COLUMNS, dropna=False, sort=False):
         scenario = dict(zip(SCENARIO_COLUMNS, key, strict=True))
         label = scenario_label(pd.Series(scenario))
-        additions, rejections = select_support_additions(
-            base_trades,
+        filtered_group, prefilter_rejections = apply_choice_prefilters(
             group,
+            min_chosen_pred_pnl=min_chosen_pred_pnl,
+            min_chosen_actual_pnl=min_chosen_actual_pnl,
+            max_chosen_tail_prob=max_chosen_tail_prob,
+        )
+        additions, selection_rejections = select_support_additions(
+            base_trades,
+            filtered_group,
             cap_to_extra_side_needed=cap_to_extra_side_needed,
             overlap_key_columns=overlap_key_columns,
+            selection_mode=selection_mode,
         )
+        rejections = pd.concat(
+            [prefilter_rejections, selection_rejections],
+            ignore_index=True,
+        ) if not prefilter_rejections.empty or not selection_rejections.empty else pd.DataFrame()
+        if not additions.empty:
+            additions["selection_mode"] = selection_mode
+        if not rejections.empty:
+            rejections["selection_mode"] = selection_mode
         if not additions.empty:
             additions["scenario_label"] = label
             for column, value in scenario.items():
@@ -659,8 +891,10 @@ def replay_scenarios(
             {
                 **scenario,
                 "scenario_label": label,
+                "selection_mode": selection_mode,
                 **base_stats,
                 "candidate_rows": int(len(group)),
+                "post_filter_candidate_rows": int(len(filtered_group)),
                 "chosen_input_rows": int(group["hv_chosen_horizon_minutes"].gt(0).sum()),
                 "added_count": int(len(additions)),
                 "added_pnl": added_pnl,
@@ -671,6 +905,21 @@ def replay_scenarios(
                 else 0,
                 "rejected_quota_count": int(
                     rejections["reject_reason"].eq("quota_full").sum()
+                )
+                if not rejections.empty
+                else 0,
+                "rejected_pred_pnl_floor_count": int(
+                    rejections["reject_reason"].eq("pred_pnl_floor").sum()
+                )
+                if not rejections.empty
+                else 0,
+                "rejected_actual_pnl_floor_count": int(
+                    rejections["reject_reason"].eq("actual_pnl_floor").sum()
+                )
+                if not rejections.empty
+                else 0,
+                "rejected_tail_prob_ceiling_count": int(
+                    rejections["reject_reason"].eq("tail_prob_ceiling").sum()
                 )
                 if not rejections.empty
                 else 0,
@@ -734,6 +983,13 @@ def run_replay(args: argparse.Namespace) -> Path:
         max_side_trade_share=args.max_side_trade_share,
         cap_to_extra_side_needed=args.cap_to_extra_side_needed,
         overlap_key_columns=overlap_keys,
+        selection_mode=args.selection_mode,
+        repair_support_weight=args.repair_support_weight,
+        repair_expected_pnl_weight=args.repair_expected_pnl_weight,
+        repair_tail_penalty_weight=args.repair_tail_penalty_weight,
+        min_chosen_pred_pnl=args.min_chosen_pred_pnl,
+        min_chosen_actual_pnl=args.min_chosen_actual_pnl,
+        max_chosen_tail_prob=args.max_chosen_tail_prob,
     )
     run_dir = make_run_dir(args.output_dir, args.label)
     summary.to_csv(run_dir / "support_repair_horizon_replay_summary.csv", index=False)
@@ -753,6 +1009,13 @@ def run_replay(args: argparse.Namespace) -> Path:
                 "target_only": args.target_only,
                 "cap_to_extra_side_needed": args.cap_to_extra_side_needed,
                 "overlap_keys": overlap_keys,
+                "selection_mode": args.selection_mode,
+                "repair_support_weight": args.repair_support_weight,
+                "repair_expected_pnl_weight": args.repair_expected_pnl_weight,
+                "repair_tail_penalty_weight": args.repair_tail_penalty_weight,
+                "min_chosen_pred_pnl": args.min_chosen_pred_pnl,
+                "min_chosen_actual_pnl": args.min_chosen_actual_pnl,
+                "max_chosen_tail_prob": args.max_chosen_tail_prob,
                 "min_total_pnl": args.min_total_pnl,
                 "min_role_total_pnl": args.min_role_total_pnl,
                 "month_floor": args.month_floor,
@@ -816,6 +1079,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
     )
     parser.add_argument("--overlap-keys", default="role")
+    parser.add_argument("--selection-mode", choices=["score", "repair_score"], default="score")
+    parser.add_argument("--repair-support-weight", type=float, default=1.0)
+    parser.add_argument("--repair-expected-pnl-weight", type=float, default=1.0)
+    parser.add_argument("--repair-tail-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--min-chosen-pred-pnl", type=float)
+    parser.add_argument("--min-chosen-actual-pnl", type=float)
+    parser.add_argument("--max-chosen-tail-prob", type=float)
     parser.add_argument("--min-total-pnl", type=float, default=0.0)
     parser.add_argument("--min-role-total-pnl", type=float, default=0.0)
     parser.add_argument("--month-floor", type=float, default=0.0)
