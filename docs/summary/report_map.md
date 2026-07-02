@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 21:21 JST
+最終更新: 2026-07-02 21:40 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00322` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00315で改善源はrefit2025の少数removed tradeに集中、00316で粗いpriorへshrinkすると崩れると確認。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318で反対側near-miss候補はあるが固定horizonで崩れ、00319でfixed-best targetは有望だが現predicted fixed horizon choiceは悪化。00320/00321のnear-miss-only exit head / horizon viabilityもdirect selectorとして悪化。00322で広いcandidate universeへ学習を広げるとq90 + one-failed trainingは available raw `+71.3850`、非重複後 `+18.4790`、greedy raw `+34.3230`、非重複後 `+20.5430` まで改善したが、overlapping cluster依存でstateful policy evidenceではない。score>=5 broad universeは失敗。標準policyはNoTrade。 |
+| `00258`..`00323` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318から00322で反対側near-missをexit target化し、広いcandidate universeのhorizon viabilityを試した。00322 q90 + one-failedは available raw `+71.3850`、非重複後 `+18.4790` まで改善したが、overlapping cluster依存。00323でsupport repairへ接続すると、best totalは5本追加 / added PnL `+23.4090` / combined `+362.7000` まで伸びたが、month min `-0.6120`、remaining extra trades `3`、blockers `month_pnl_below_floor,side_share_high` が残った。標準policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00322` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318ではone-fail strict候補でsupport数は埋まるが、fixed horizon実現が悪く、oracle bestとの差が大きい。00319ではnear-miss exit target化により、fixed-bestなら改善余地があるが現predicted fixed horizonでは悪化すると確認。00320/00321のnear-miss-only exit head / horizon viabilityはdirect selectorとしてreject。00322では広いcandidate universeで再学習し、q90 + one-failed trainingが available raw `+71.3850` / 非重複後 `+18.4790`、greedy raw `+34.3230` / 非重複後 `+20.5430` まで改善した。ただしraw threshold PnLはoverlapping cluster依存で、score>=5 broad universeは失敗。次はs2出力をstateful support-repair replayへ接続する。標準policyはNoTrade。 |
+| Latest decision | `00258`..`00323` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00322 q90 + one-failed trainingはrow-levelでは前進した。00323でstateful-compatible support repairへ接続すると、best totalは5本追加 / added PnL `+23.4090` / combined `+362.7000` まで伸びたが、month min `-0.6120`、remaining extra trades `3`、remaining PnL hurdle `+1.4486` でstandard gateは未通過。EV-2でrepair countは縮むがrefit2025 2025-07 short `-4.9356` を拾ってfloorを悪化させる。次はtarget-aware repair utilityと残るtarget月coverage診断。標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -98,6 +98,7 @@
 63. `00320_2026-07-02_entry_ev_near_miss_exit_head.md`
 64. `00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`
 65. `00322_2026-07-02_entry_ev_broad_horizon_viability.md`
+66. `00323_2026-07-02_entry_ev_support_repair_horizon_replay.md`
 
 component targetの流れを読む:
 
@@ -144,10 +145,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00322 Entry EV Broad Horizon Viability
+Report: 00323 Entry EV Support Repair Horizon Replay
 Status: accepted infrastructure / standard NoTrade
-Question: 広いcandidate universeでhorizon viabilityを学習し、near-miss support候補のtail-loss / PnL calibrationを改善できるか
-Best evidence: q90 + one-failed trainingはavailable raw +71.3850 / 非重複後 +18.4790、greedy raw +34.3230 / 非重複後 +20.5430。ただしraw利益はoverlapping cluster依存。score>=5 broad universeは失敗。
+Question: 00322 s2 horizon choicesを00314 best branchのsupport repairへ接続するとstandard blockersを解けるか
+Best evidence: best totalは5本追加 / added PnL +23.4090 / combined +362.7000。ただしmonth min -0.6120、remaining extra trades 3、blockers month_pnl_below_floor,side_share_high。EV-2はrepair countを減らすが2025-07 short -4.9356でfloor悪化。
 Decision: 標準policyはNoTrade
-Next: s2出力をstateful support-repair replayへ接続し、non-overlap/stateful制約下で評価する
+Next: target-aware repair utilityと残るtarget月coverage診断へ進む
 ```

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 21:21 JST
+最終更新: 2026-07-02 21:40 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair horizon replayを追加した。00322の次アクションとして、q90 + one-failed broad horizon viability outputを00314 best branchのsupport repairへ接続した。best totalは available candidates / prob `0.6` / EV `0` / tail `0.3` / model-used yesで、5本追加、added PnL `+23.4090`、combined total `+362.7000`。ただしmonth min `-0.6120`、remaining extra trades `3`、remaining month PnL hurdle `+1.4486` で、blockersは `month_pnl_below_floor,side_share_high`。repair targetを最も減らすEV `-2` は6本追加でremaining extra trades `2` まで縮むが、refit2025 2025-07 short `-4.9356` を拾ってmonth min `-2.8532` へ悪化する。判断: support-repair horizon replay infrastructureはaccepted、00322 s2 support additionsは標準policy / support overlayとしてreject。次はtarget-aware repair utilityと残るtarget月coverage診断へ進む。標準policyはNoTrade。詳細は `docs/reports/00323_2026-07-02_entry_ev_support_repair_horizon_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV broad horizon viabilityを追加した。00321の次アクションとして、near-miss-only headを広いprediction-row candidate universeで再学習し、評価は00319 near-miss rowsへ限定した。s1 q90 broad trainingは4303 train rowsで、available candidatesのmodel-used raw bestが `+23.5350`、非重複後 `+14.8160`、greedy selectedはmodel-used raw `+16.8700`、非重複後 `+13.7800`。s2 q90 + one-failed trainingは9697 train rowsで、available candidatesはraw `+71.3850`、非重複後 `+18.4790`、greedy selectedはraw `+34.3230`、非重複後 `+20.5430`。s3 score>=5 broad trainingは90447 train rowsだが、available candidates raw `-40.6836`、非重複後 `-12.8676` で失敗。判断: broad candidate universe horizon viabilityとnon-overlap auditはaccepted infrastructure、q90 + one-failed broad trainingはdiagnostic candidate、raw threshold PnL / overlapping available choices / score>=5 broad universeはpolicy evidenceとしてreject。次はs2出力をstateful support-repair replayへ接続する。標準policyはNoTrade。詳細は `docs/reports/00322_2026-07-02_entry_ev_broad_horizon_viability.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

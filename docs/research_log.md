@@ -4,6 +4,34 @@
 
 ## 2026-07-02 JST
 
+### 21:40 Entry EV support repair horizon replay
+
+作業:
+
+- 00322の次アクションとして、q90 + one-failed broad horizon viability outputを00314 best branchのsupport repairへ接続した。
+- `scripts/experiments/entry_ev_support_repair_horizon_replay.py` を追加し、必要side・必要本数・既存stateful trade非重複制約つきでnear-miss horizon choicesを追加する診断を実装した。
+- report: `docs/reports/00323_2026-07-02_entry_ev_support_repair_horizon_replay.md`
+
+結果:
+
+- best totalは available candidates / prob `0.6` / EV `0` / tail `0.3` / model-used yes。5本追加、added PnL `+23.4090`、combined total `+362.7000`。
+- ただしmonth min `-0.6120`、remaining extra trades `3`、remaining month PnL hurdle `+1.4486` で、blockersは `month_pnl_below_floor,side_share_high`。
+- repair targetを最も減らすEV `-2` は6本追加でremaining extra trades `2` まで縮むが、refit2025 2025-07 short `-4.9356` を拾ってmonth min `-2.8532` へ悪化する。
+- EV>=0では `fresh2024 2024-03`, `fresh2024 2024-11`, `refit2025 2025-07` に候補が通らない。
+
+判断:
+
+- support-repair horizon replay infrastructureはaccepted。
+- 00322 s2は一部support repairに使えるが、標準policy / support overlayとしてはreject。
+- 次はtarget-aware repair utilityを作り、残るtarget月のcoverageを診断する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_horizon_replay.py tests/test_entry_ev_support_repair_horizon_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_horizon_replay`: OK
+- 00323 support repair horizon replay run: OK
+
 ### 21:21 Entry EV broad horizon viability
 
 作業:
