@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 14:00 JST
+最終更新: 2026-07-02 14:09 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-aware progression compareを追加した。00295のsupport-aware分類を、raw cd15、00290 hold-extension、00291 side horizon、00292 entry block、00293 residual comboへ横断適用した。default条件で `support_aware_only` になったのは00293 residual comboだけで、bestは total `+329.4348`, role min `+0.5354`, month min `-0.7200`, structural negative months `0`。一方でsupport-limited許容を2に下げる、またはshallow floorを `-0.25` へ厳しくするとblocked。判断: support-aware分類は候補系列の進歩を説明する診断としてaccepted、標準policyはNoTrade。詳細は `docs/reports/00296_2026-07-02_entry_ev_support_aware_progression_compare.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV support-aware admissionを追加した。00294の次アクションとして、月次floor breachをsupport-limited / shallow / structuralへ分ける `scripts/experiments/entry_ev_stateful_support_aware_admission.py` を実装した。00293 best branchはstrict standardでは `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high` でNoTradeだが、default support-aware floorでは structural negative months `0` により `support_aware_only`。ただしsupport-limited許容を2に下げる、またはshallow floorを `-0.25` に厳しくするとblocked。判断: support-aware admissionはaccepted diagnostics、標準policyはNoTrade。詳細は `docs/reports/00295_2026-07-02_entry_ev_support_aware_admission.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

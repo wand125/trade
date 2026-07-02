@@ -4,6 +4,34 @@
 
 ## 2026-07-02 JST
 
+### 14:09 Entry EV support-aware progression compare
+
+作業:
+
+- 00295のsupport-aware分類を、raw cd15 -> hold-extension -> side horizon -> entry block -> residual combo の候補系列へ横断適用した。
+- raw cd15 internal/external、00290、00291、00292、00293のmonthly metricsを同じsupport-aware selectorへ入力した。
+- report: `docs/reports/00296_2026-07-02_entry_ev_support_aware_progression_compare.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- default条件で `support_aware_only` になったのは00293 residual comboだけ。
+- bestは total `+329.4348`, role min `+0.5354`, month min `-0.7200`, structural negative months `0`。
+- raw cd15、00290、00291、00292はstructural negative monthsまたはsupport-limited負け月過多でblocked。
+- support-limited許容を2に下げるとblocked。shallow floorを `-0.25` へ厳しくしてもblocked。
+
+判断:
+
+- support-aware分類は候補系列の進歩を説明する診断として有効。
+- ただしpassは感度設定に依存するため、標準policyへ昇格しない。
+- residual comboはdiagnostic benchmarkとして維持し、標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_stateful_support_aware_admission.py tests/test_entry_ev_stateful_support_aware_admission.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_stateful_support_aware_admission tests.test_entry_ev_stateful_floor_meta_selector tests.test_entry_ev_overlay_residual_floor_diagnostics tests.test_docs_reports`: OK
+- default / support2 / shallow025 progression compare runs: OK
+
 ### 14:00 Entry EV support-aware admission
 
 作業:
