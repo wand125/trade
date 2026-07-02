@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 12:44 JST
+最終更新: 2026-07-02 12:56 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV hold-extension stateful replayを追加した。00289のno-replay診断を、base trade path上で延長中の後続tradeをskipするstateful replayへ接続する `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` を実装した。pre-registered候補 `isolated_loss` training + `isolated_large_loss` threshold 5はstatefulでも total `+250.7350`, delta vs base `+132.0450`, extended 7, skipped 8, skipped PnL `-3.9820` と改善を維持した。ただし month min は `-6.8324` のままで、strict 00286 selectorは `month_pnl_below_floor,role_trades_low,side_share_high`、floor-onlyでも `month_pnl_below_floor` によりNoTrade。判断: stateful hold-extension replay infrastructureはaccepted、pre-registered候補はdiagnostic継続、標準policyはNoTrade。次は2025-09/2025-06のisolated large-loss long recall不足を別targetで改善する。詳細は `docs/reports/00290_2026-07-02_entry_ev_hold_extension_stateful_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV hold-extension target modelを追加した。00288のfixed-horizon / hold-extension choiceをchronological supervised targetにし、actual fixed 60/240/720m deltaを対象月より前だけで学習する `scripts/experiments/entry_ev_hold_extension_target_model.py` を実装した。default `isolated` 学習、`all` 学習、`isolated min120` はmonth floorを壊してreject。`train_universe=isolated_loss` でexit時点観測可能な `isolated_large_loss` に閾値5を適用すると、no-replay診断では flagged 7 trades、actual replacement delta `+128.0630`、total `+246.7530`、month min `-6.8324` でbaseline floorを維持した。ただし2025-09 `-6.8324`、2025-06 `-6.5136`、hybrid 2025-12 `-4.1460` は未改善で、fixed-horizon置換summaryはstateful replayではない。判断: hold-extension target model infrastructureはaccepted、`isolated_loss` training + `isolated_large_loss` threshold 5はdiagnostic candidate、標準policyはNoTrade。次はexit-time hookへ接続し、00286 selectorでfull stateful replayする。詳細は `docs/reports/00289_2026-07-02_entry_ev_hold_extension_target_model.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

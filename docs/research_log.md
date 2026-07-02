@@ -7228,3 +7228,38 @@ trade delta:
 - `uv run python -m py_compile scripts/experiments/entry_ev_hold_extension_target_model.py tests/test_entry_ev_hold_extension_target_model.py`: OK
 - `uv run python -m unittest tests.test_entry_ev_hold_extension_target_model`: OK
 - hold-extension chronological diagnostics runs: OK
+
+### 2026-07-02 12:56 JST Entry EV hold-extension stateful replay
+
+作業:
+
+- 00289のno-replay診断をstateful replayへ接続した。
+- `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` を追加し、00289のscored trade tableをexit-time extension decision tableとして使った。
+- 延長中に重なる後続base tradesはskipし、extension-onlyの一玉制約pathとして再評価した。
+- stateful replay出力を00286 selectorへ渡せるよう、selector-compatible monthly metricsも出力した。
+- report: `docs/reports/00290_2026-07-02_entry_ev_hold_extension_stateful_replay.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| apply universe | threshold | total | delta vs base | month min | role min | extended | skipped | decision |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| isolated_large_loss | `5` | `+250.7350` | `+132.0450` | `-6.8324` | `+0.0074` | `7` | `8` | diagnostic |
+| isolated_large_loss | `10` | `+145.5146` | `+26.8246` | `-6.8324` | `+0.0074` | `3` | `3` | weaker |
+| isolated_loss | `5` | `+180.0744` | `+61.3844` | `-25.6500` | `+8.3344` | `19` | `23` | reject |
+
+判断:
+
+- stateful hold-extension replay infrastructureはaccepted。
+- pre-registered候補 `isolated_loss` training + `isolated_large_loss` threshold 5はstatefulでも改善を維持する。
+- ただしmonth floorは `-6.8324` のまま。strict selectorもfloor-only selectorもNoTrade。
+- 2025-09/2025-06には実際にfixed horizonで改善するisolated large-loss longがあるが、predicted deltaがthreshold未満で拾えていない。
+- 次はthresholdを単純に下げず、long large-loss recallを高める別target / guardを作る。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_hold_extension_stateful_replay.py tests/test_entry_ev_hold_extension_stateful_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_hold_extension_stateful_replay`: OK
+- stateful hold-extension replay: OK
+- strict 00286 selector: OK
+- floor-only 00286 selector: OK
