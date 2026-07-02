@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 13:26 Entry EV stateful entry block overlay
+
+作業:
+
+- 00291の次アクションとして、hybrid 2025-12 short lossをentry/no-entry側から診断した。
+- `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` を追加し、既存stateful trade pathに観測可能featureをjoinして、entry block ruleをno-replacement overlayで月次/selector形式へ戻せるようにした。
+- `tests/test_entry_ev_stateful_entry_block_overlay.py` を追加した。
+- report: `docs/reports/00292_2026-07-02_entry_ev_stateful_entry_block_overlay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- best side-horizon候補 `isolated_large_loss_long + fixed720 + threshold -5` に `short_rollover_lossprob_ge0p4` などの狭いblockを重ねると、hybrid 2025-12のproblem trade 1件だけを除去した。
+- total `+318.8540 -> +323.5700`, month min `-4.1460 -> -2.4566`。
+- hybrid 2025-12は `-4.1460 -> +0.5700` へ改善。
+- strict selectorは `month_pnl_below_floor,role_trades_low,side_share_high`、floor-only selectorも `month_pnl_below_floor` でNoTrade。
+
+判断:
+
+- stateful entry-block no-replacement overlay infrastructureはaccepted。
+- 今回のblock ruleは1件だけを拾うため、diagnostic止まり。
+- no-replacement overlayをfull stateful replacement replayとして扱わない。
+- 次はrefit2025 2025-03 `-2.4566` と2025-08 `-2.1480` の残存floorを診断する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_stateful_entry_block_overlay.py tests/test_entry_ev_stateful_entry_block_overlay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_stateful_entry_block_overlay`: OK
+- entry block overlay run: OK
+- strict / floor-only 00286 selector: OK
+
 ### 13:12 Entry EV hold-extension side horizon replay
 
 作業:

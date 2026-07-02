@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 13:12 JST
+最終更新: 2026-07-02 13:26 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV stateful entry block overlayを追加した。00291で残ったhybrid 2025-12 short `-4.1460` に対し、既存stateful trade pathへ観測可能featureをjoinし、entry block ruleをno-replacement overlayで月次/selector形式へ戻す `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` を実装した。best side-horizon候補 `isolated_large_loss_long + fixed720 + threshold -5` に狭いshort rollover blockを重ねると、problem trade 1件を除去し total `+318.8540 -> +323.5700`, month min `-4.1460 -> -2.4566` へ改善。ただしstrict/floor-only selectorはNoTradeで、1件blockは過学習リスクが高い。判断: entry block overlay infrastructureはaccepted、ruleはdiagnostic、標準policyはNoTrade。次はrefit2025 2025-03/08の残存floorを診断する。詳細は `docs/reports/00292_2026-07-02_entry_ev_stateful_entry_block_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV hold-extension side horizon replayを追加した。00290で残った2025-09/2025-06 isolated large-loss long recall不足に対し、stateful replayへ side suffix universe と fixed horizon mode を追加した。`isolated_large_loss_long` + horizon `720` + threshold `-5` は total `+318.8540`, delta vs base `+200.1640`, month min `-4.1460` まで改善。ただし strict/floor-only selectorはNoTradeで、残るworstはhybrid 2025-12 `-4.1460`。判断: side-aware fixed horizon replay infrastructureはaccepted、候補はdiagnostic、標準policyはNoTrade。次はextensionではなくhybrid 2025-12 short lossのentry/early-stop/block diagnosticsへ進む。詳細は `docs/reports/00291_2026-07-02_entry_ev_hold_extension_side_horizon_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
