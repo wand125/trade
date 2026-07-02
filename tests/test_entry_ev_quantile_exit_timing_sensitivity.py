@@ -6,6 +6,7 @@ import unittest
 import pandas as pd
 
 from scripts.experiments.entry_ev_quantile_exit_timing_sensitivity import (
+    build_parser,
     parse_exit_timing_variant,
     parse_exit_timing_variants,
     summarize_candidates,
@@ -39,6 +40,18 @@ class EntryEvQuantileExitTimingSensitivityTest(unittest.TestCase):
     def test_parse_exit_timing_variant_rejects_negative_guard(self) -> None:
         with self.assertRaises(Exception):
             parse_exit_timing_variant("bad:0:0:inf:0.30:-1:0")
+
+    def test_parser_accepts_side_block_rules(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "--family-predictions",
+                "fam=predictions.parquet",
+                "--side-block-rules",
+                "long:guard=1,short:guard=1",
+            ]
+        )
+
+        self.assertEqual(args.side_block_rules, "long:guard=1,short:guard=1")
 
     def test_summarize_candidates_requires_positive_roles_and_trade_support(self) -> None:
         monthly = pd.DataFrame(

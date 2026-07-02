@@ -275,6 +275,7 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
                 short_loss_first_column=args.short_loss_first_column,
                 min_valid_predicted_hold_minutes=args.min_valid_predicted_hold_minutes,
                 max_predicted_hold_minutes=args.max_predicted_hold_minutes,
+                side_block_rules=tuple(parse_optional_csv(args.side_block_rules)),
             )
             for variant in variants:
                 model_config = replace(
@@ -376,6 +377,7 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
         "short_holding_column": args.short_holding_column,
         "long_loss_first_column": args.long_loss_first_column,
         "short_loss_first_column": args.short_loss_first_column,
+        "side_block_rules": parse_optional_csv(args.side_block_rules),
         "min_valid_predicted_hold_minutes": args.min_valid_predicted_hold_minutes,
         "max_predicted_hold_minutes": args.max_predicted_hold_minutes,
         "max_hold_hours": args.max_hold_hours,
@@ -449,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--short-holding-column", default="pred_mlp_short_exit_event_minutes")
     parser.add_argument("--long-loss-first-column", default="pred_long_exit_event_prob_2")
     parser.add_argument("--short-loss-first-column", default="pred_short_exit_event_prob_2")
+    parser.add_argument("--side-block-rules", default="")
     parser.add_argument("--min-valid-predicted-hold-minutes", type=float, default=30.0)
     parser.add_argument("--max-predicted-hold-minutes", type=float, default=260.0)
     parser.add_argument("--max-hold-hours", type=float, default=24.0)

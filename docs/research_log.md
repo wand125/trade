@@ -7038,3 +7038,34 @@ trade delta:
 - `python3 -m unittest tests.test_entry_ev_variant_trade_delta_diagnostics`: OK
 - q95 + `loss_exit30` fixed internal replay: OK
 - variant trade delta diagnostics: OK
+
+### 2026-07-02 11:38 JST Entry EV downside meta block inputs
+
+作業:
+
+- 00283でdirect score replacementをrejectしたため、raw cd15 entry scoreを維持し、supervised shrinkage outputを補助featureとしてdownside meta headへ入れた。
+- `scripts/experiments/entry_ev_downside_meta_block_policy_inputs.py` を追加し、selected raw cd15 tradesの realized downsideを対象月より前だけで学び、prediction rowのlong/short両側へ `pred_downside_meta_*_expected_downside` と `*_block_gte_*` を付与した。
+- `scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` に `--side-block-rules` を追加し、dynamic exit replayでもside-block列を使えるようにした。
+- report: `docs/reports/00284_2026-07-02_entry_ev_downside_meta_block_inputs.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| side-block | total pnl | trades | month min | role min | positive roles | decision |
+|---|---:|---:|---:|---:|---:|---|
+| none baseline | `+118.6900` | `266` | `-6.8324` | `+0.0074` | `6/6` | NoTrade |
+| gte1 | `+15.4886` | `231` | `-11.6880` | `-16.6136` | `3/6` | reject |
+| gte3 | `+118.6900` | `266` | `-6.8324` | `+0.0074` | `6/6` | no-op |
+
+判断:
+
+- downside meta prediction-row inputとside-block replay経路はaccepted infrastructure。
+- 単純な expected-downside hard blockはreject。`gte1` は勝ちtradeを削りすぎ、`gte3` は実質no-op。
+- 次はhard blockではなく、soft risk marginまたはmonth/role floorを直接損失に入れるstateful meta selectorへ進む。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_downside_meta_block_policy_inputs.py tests/test_entry_ev_downside_meta_block_policy_inputs.py scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_downside_meta_block_policy_inputs tests.test_entry_ev_quantile_exit_timing_sensitivity`: OK
+- 6 family downside meta input generation: OK
+- baseline / gte1 / gte3 replay: OK

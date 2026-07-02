@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 11:18 JST
+最終更新: 2026-07-02 11:38 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV downside meta block inputsを追加した。00283の方針どおり raw cd15 entry scoreを維持し、supervised shrinkage outputを補助featureにした downside meta headで prediction rowのlong/short両側へ `pred_downside_meta_*_expected_downside` と `*_block_gte_*` を付与した。`entry_ev_quantile_exit_timing_sensitivity.py` には `--side-block-rules` を追加。OOF selected-tradeでは閾値 `3.0` だけ小幅プラスだが2 tradesしか拾わず、`1.0` 以下は勝ちtradeを大きく削る。stateful replayでも baseline `+118.6900`, 266 trades に対し `gte1` は `+15.4886`, role min `-16.6136`, month min `-11.6880` へ悪化、`gte3` はbaselineと完全一致で実質no-op。判断: downside meta inputとside-block replay経路はaccepted infrastructure、単純なexpected-downside hard blockはreject。次はhard blockではなくsoft risk margin / stateful floor-aware meta selectorへ進む。詳細は `docs/reports/00284_2026-07-02_entry_ev_downside_meta_block_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV supervised shrinkage policy inputsを追加した。00282のselected-trade shrinkage headをprediction row側へ戻し、各familyのlong/short両側へ `pred_supervised_shrink_factor_*_best_adjusted_pnl` とquantile列を付ける `scripts/experiments/entry_ev_supervised_shrinkage_policy_inputs.py` を実装した。raw `loss_exit30_cd15` と同じ6 familyでstateful replayしたところ、q95 no-floor + `loss_exit30_cd15` は total `+219.7158`, 899 tradesまで伸びたが、month min `-35.1586` で raw cd15 benchmarkの `-6.8324` より悪化。q96-q99 sweepでも安定台地はなく、q99は month min `-13.8816`, role min `-12.9278` でNoTrade。判断: prediction-row shrinkage inputはaccepted、supervised shrinkage score replacementはreject。次はraw cd15 scoreを残し、shrinkage outputを補助featureとしてdownside-weighted meta selectorへ入れる。詳細は `docs/reports/00283_2026-07-02_entry_ev_supervised_shrinkage_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
