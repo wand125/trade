@@ -5,9 +5,13 @@ import unittest
 import pandas as pd
 
 from scripts.experiments.entry_ev_broad_prior_horizon_choice_replay import (
+    DEFAULT_HORIZON_CATEGORICAL_FEATURES,
+    DEFAULT_HORIZON_NUMERIC_FEATURES,
+    add_residual_prior_columns,
     chronological_ranker_predictions,
     expand_horizon_examples,
     pivot_ranker_predictions,
+    score_predictions,
 )
 
 
@@ -108,12 +112,82 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             delta_weight=0.25,
             beats60_weight=0.5,
             tail_score_weight=2.0,
+            lower_bound_mae_weight=0.25,
+            lower_bound_bias_weight=0.25,
+            lower_bound_tail_miss_weight=5.0,
         )
 
         self.assertAlmostEqual(float(output.iloc[0]["pred_hv_60m_pnl"]), 1.0)
         self.assertAlmostEqual(float(output.iloc[0]["pred_hv_720m_pnl"]), 4.55)
         self.assertAlmostEqual(float(output.iloc[0]["ranker_hv_720m_pred_pnl"]), 4.0)
         self.assertTrue(bool(output.iloc[0]["pred_hv_720m_pnl_model_used"]))
+
+    def test_residual_prior_columns_use_only_prior_months(self) -> None:
+        rows = sample_rows()
+        rows.loc[0, "pred_fixed_720m_adjusted_pnl"] = 1.0
+        train_examples = expand_horizon_examples(
+            rows,
+            horizons=[60, 720],
+            min_executable_pnl=0.0,
+            tail_loss_threshold=-3.0,
+            min_delta_vs_60=0.0,
+        )
+        eval_examples = expand_horizon_examples(
+            rows.iloc[[2]],
+            horizons=[60, 720],
+            min_executable_pnl=0.0,
+            tail_loss_threshold=-3.0,
+            min_delta_vs_60=0.0,
+        )
+
+        output = add_residual_prior_columns(
+            eval_examples,
+            train_examples,
+            context_specs=[["horizon_bucket", "side"], []],
+            min_prior_rows=1,
+            min_prior_months=1,
+            shrinkage_count=0.0,
+            tail_loss_threshold=-3.0,
+            min_executable_pnl=0.0,
+        )
+
+        row_720 = output[output["hv_chosen_horizon_minutes"].eq(720.0)].iloc[0]
+        self.assertEqual(int(row_720["residual_prior_count"]), 1)
+        self.assertEqual(int(row_720["residual_prior_months"]), 1)
+        self.assertAlmostEqual(float(row_720["residual_prior_bias"]), 6.0)
+        self.assertAlmostEqual(float(row_720["residual_prior_mae"]), 6.0)
+        self.assertAlmostEqual(float(row_720["residual_prior_tail_miss_rate"]), 1.0)
+
+    def test_lower_bound_score_subtracts_residual_uncertainty(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "ranker_pred_pnl": [10.0],
+                "ranker_pred_delta_vs_60": [4.0],
+                "ranker_pred_beats60_prob": [0.5],
+                "ranker_pred_tail_loss_prob": [0.2],
+                "residual_prior_mae": [3.0],
+                "residual_prior_bias": [2.0],
+                "residual_prior_tail_miss_rate": [0.4],
+            }
+        )
+
+        score = score_predictions(
+            frame,
+            score_mode="pnl_delta_tail_lower",
+            delta_weight=0.25,
+            beats60_weight=0.5,
+            tail_score_weight=2.0,
+            lower_bound_mae_weight=0.5,
+            lower_bound_bias_weight=0.25,
+            lower_bound_tail_miss_weight=5.0,
+        )
+
+        self.assertAlmostEqual(float(score.iloc[0]), 6.85)
+
+    def test_residual_prior_columns_are_score_only_by_default(self) -> None:
+        self.assertNotIn("residual_prior_mae", DEFAULT_HORIZON_NUMERIC_FEATURES)
+        self.assertNotIn("residual_prior_tail_miss_rate", DEFAULT_HORIZON_NUMERIC_FEATURES)
+        self.assertNotIn("residual_prior_context_spec", DEFAULT_HORIZON_CATEGORICAL_FEATURES)
 
 
 if __name__ == "__main__":

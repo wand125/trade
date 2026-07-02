@@ -86,6 +86,16 @@ DEFAULT_SCORE_MODES = "pnl,pnl_delta,pnl_delta_tail"
 DEFAULT_PROB_THRESHOLDS = "0.50,0.60,0.70"
 DEFAULT_EV_THRESHOLDS = "-2,0,2"
 DEFAULT_TAIL_PROB_THRESHOLDS = "0.30,0.50"
+DEFAULT_RESIDUAL_CONTEXT_SPECS = (
+    "horizon_bucket,side,combined_regime,session_regime,near_miss_bucket;"
+    "horizon_bucket,side,combined_regime,session_regime;"
+    "horizon_bucket,side,combined_regime;"
+    "horizon_bucket,side,session_regime;"
+    "horizon_bucket,combined_regime,session_regime;"
+    "horizon_bucket,side;"
+    "horizon_bucket;"
+    "global"
+)
 
 
 def local_json_default(value: Any) -> Any:
@@ -193,6 +203,9 @@ def expand_horizon_examples(
         output["horizon_actual_pnl"] = actual
         output["horizon_actual_delta_vs_60"] = actual - fixed60_actual
         output["horizon_pred_fixed_pnl"] = pred
+        output["horizon_pred_fixed_error"] = pred - actual
+        output["horizon_pred_fixed_abs_error"] = (pred - actual).abs()
+        output["horizon_pred_fixed_overestimate"] = pred.gt(actual)
         output["horizon_pred_delta_vs_60"] = pred - fixed60_pred
         output["horizon_pred_gap_vs_pred_best"] = pred - pred_best
         output["horizon_is_pred_fixed_best"] = pred_best_horizon.eq(float(horizon)).astype(float)
@@ -249,6 +262,217 @@ def add_prior_features_to_examples(
     return output
 
 
+def shrink_metric(value: float, global_value: float, count: float, shrinkage_count: float) -> float:
+    if not np.isfinite(value):
+        return global_value if np.isfinite(global_value) else 0.0
+    if shrinkage_count <= 0 or not np.isfinite(global_value):
+        return value
+    return float((count * value + shrinkage_count * global_value) / (count + shrinkage_count))
+
+
+def residual_prior_metrics(
+    group: pd.DataFrame,
+    *,
+    tail_loss_threshold: float,
+    min_executable_pnl: float,
+) -> dict[str, float]:
+    pred = numeric_series(group, "horizon_pred_fixed_pnl", default=np.nan)
+    actual = numeric_series(group, "horizon_actual_pnl", default=np.nan)
+    valid = pred.notna() & actual.notna()
+    if not valid.any():
+        return {
+            "prior_count": 0.0,
+            "prior_months": 0.0,
+            "prior_bias": np.nan,
+            "prior_mae": np.nan,
+            "prior_rmse": np.nan,
+            "prior_overestimate_rate": np.nan,
+            "prior_tail_miss_rate": np.nan,
+        }
+    error = pred[valid] - actual[valid]
+    tail_miss = actual[valid].le(tail_loss_threshold) & pred[valid].ge(min_executable_pnl)
+    return {
+        "prior_count": float(valid.sum()),
+        "prior_months": float(group.loc[valid, "month"].astype(str).nunique()),
+        "prior_bias": float(error.mean()),
+        "prior_mae": float(error.abs().mean()),
+        "prior_rmse": float(np.sqrt((error**2).mean())),
+        "prior_overestimate_rate": float(error.gt(0.0).mean()),
+        "prior_tail_miss_rate": float(tail_miss.mean()),
+    }
+
+
+def select_residual_prior(
+    row: pd.Series,
+    prior: pd.DataFrame,
+    *,
+    context_specs: list[list[str]],
+    min_prior_rows: int,
+    min_prior_months: int,
+    shrinkage_count: float,
+    tail_loss_threshold: float,
+    min_executable_pnl: float,
+) -> dict[str, Any]:
+    if prior.empty:
+        return {
+            "residual_prior_context_spec": "none",
+            "residual_prior_context_key": "",
+            "residual_prior_count": 0,
+            "residual_prior_months": 0,
+            "residual_prior_bias": 0.0,
+            "residual_prior_mae": 0.0,
+            "residual_prior_rmse": 0.0,
+            "residual_prior_overestimate_rate": 0.0,
+            "residual_prior_tail_miss_rate": 0.0,
+            "residual_prior_used": False,
+        }
+
+    global_metrics = residual_prior_metrics(
+        prior,
+        tail_loss_threshold=tail_loss_threshold,
+        min_executable_pnl=min_executable_pnl,
+    )
+    selected_spec: list[str] = []
+    selected_metrics = global_metrics
+    used = False
+    for spec in context_specs:
+        group = prior
+        missing_column = False
+        for column in spec:
+            if column not in group.columns or column not in row.index:
+                missing_column = True
+                break
+            group = group[group[column].astype(str).eq(str(row[column]))]
+        if missing_column:
+            continue
+        metrics = residual_prior_metrics(
+            group,
+            tail_loss_threshold=tail_loss_threshold,
+            min_executable_pnl=min_executable_pnl,
+        )
+        if (
+            int(metrics["prior_count"]) >= min_prior_rows
+            and int(metrics["prior_months"]) >= min_prior_months
+        ):
+            selected_spec = spec
+            selected_metrics = metrics
+            used = True
+            break
+
+    if not used and int(global_metrics["prior_count"]) > 0:
+        selected_spec = []
+        selected_metrics = global_metrics
+        used = int(global_metrics["prior_months"]) >= min_prior_months
+
+    count = float(selected_metrics["prior_count"])
+    bias = shrink_metric(
+        float(selected_metrics["prior_bias"]),
+        float(global_metrics["prior_bias"]),
+        count,
+        shrinkage_count,
+    )
+    mae = shrink_metric(
+        float(selected_metrics["prior_mae"]),
+        float(global_metrics["prior_mae"]),
+        count,
+        shrinkage_count,
+    )
+    rmse = shrink_metric(
+        float(selected_metrics["prior_rmse"]),
+        float(global_metrics["prior_rmse"]),
+        count,
+        shrinkage_count,
+    )
+    overestimate_rate = shrink_metric(
+        float(selected_metrics["prior_overestimate_rate"]),
+        float(global_metrics["prior_overestimate_rate"]),
+        count,
+        shrinkage_count,
+    )
+    tail_miss_rate = shrink_metric(
+        float(selected_metrics["prior_tail_miss_rate"]),
+        float(global_metrics["prior_tail_miss_rate"]),
+        count,
+        shrinkage_count,
+    )
+    key = "|".join(str(row[column]) for column in selected_spec) if selected_spec else "global"
+    return {
+        "residual_prior_context_spec": ",".join(selected_spec) if selected_spec else "global",
+        "residual_prior_context_key": key,
+        "residual_prior_count": int(selected_metrics["prior_count"]),
+        "residual_prior_months": int(selected_metrics["prior_months"]),
+        "residual_prior_bias": bias,
+        "residual_prior_mae": mae,
+        "residual_prior_rmse": rmse,
+        "residual_prior_overestimate_rate": overestimate_rate,
+        "residual_prior_tail_miss_rate": tail_miss_rate,
+        "residual_prior_used": bool(used),
+    }
+
+
+def add_residual_prior_columns(
+    examples: pd.DataFrame,
+    reference_examples: pd.DataFrame,
+    *,
+    context_specs: list[list[str]],
+    min_prior_rows: int,
+    min_prior_months: int,
+    shrinkage_count: float,
+    tail_loss_threshold: float,
+    min_executable_pnl: float,
+) -> pd.DataFrame:
+    output = examples.copy()
+    reference = reference_examples.copy()
+    reference_periods = pd.Series(
+        pd.PeriodIndex(reference["month"].astype(str), freq="M"),
+        index=reference.index,
+    )
+    context_columns = sorted({column for spec in context_specs for column in spec})
+    key_columns = [
+        "month",
+        "hv_chosen_horizon_minutes",
+        *[column for column in context_columns if column in output.columns],
+    ]
+    prior_rows: list[dict[str, Any]] = []
+    for _, row in output[key_columns].drop_duplicates().iterrows():
+        target_period = pd.Period(str(row["month"]), freq="M")
+        prior = reference[reference_periods < target_period]
+        metrics = select_residual_prior(
+            row,
+            prior,
+            context_specs=context_specs,
+            min_prior_rows=min_prior_rows,
+            min_prior_months=min_prior_months,
+            shrinkage_count=shrinkage_count,
+            tail_loss_threshold=tail_loss_threshold,
+            min_executable_pnl=min_executable_pnl,
+        )
+        prior_rows.append(
+            {
+                **{column: row[column] for column in key_columns},
+                **metrics,
+            }
+        )
+    prior_frame = pd.DataFrame(prior_rows)
+    output = output.merge(prior_frame, on=key_columns, how="left")
+    for column in [
+        "residual_prior_count",
+        "residual_prior_months",
+        "residual_prior_bias",
+        "residual_prior_mae",
+        "residual_prior_rmse",
+        "residual_prior_overestimate_rate",
+        "residual_prior_tail_miss_rate",
+    ]:
+        output[column] = numeric_series(output, column, default=0.0)
+    output["residual_prior_context_spec"] = text_series(
+        output,
+        "residual_prior_context_spec",
+        default="none",
+    )
+    return output
+
+
 def score_predictions(
     frame: pd.DataFrame,
     *,
@@ -256,6 +480,9 @@ def score_predictions(
     delta_weight: float,
     beats60_weight: float,
     tail_score_weight: float,
+    lower_bound_mae_weight: float,
+    lower_bound_bias_weight: float,
+    lower_bound_tail_miss_weight: float,
 ) -> pd.Series:
     pnl = numeric_series(frame, "ranker_pred_pnl", default=0.0)
     if score_mode == "pnl":
@@ -267,6 +494,25 @@ def score_predictions(
         return pnl + delta_weight * delta + beats60_weight * beats60
     if score_mode == "pnl_delta_tail":
         return pnl + delta_weight * delta + beats60_weight * beats60 - tail_score_weight * tail
+    lower_bound_penalty = (
+        lower_bound_mae_weight * numeric_series(frame, "residual_prior_mae", default=0.0)
+        + lower_bound_bias_weight
+        * numeric_series(frame, "residual_prior_bias", default=0.0).clip(lower=0.0)
+        + lower_bound_tail_miss_weight
+        * numeric_series(frame, "residual_prior_tail_miss_rate", default=0.0)
+    )
+    if score_mode == "pnl_lower":
+        return pnl - lower_bound_penalty
+    if score_mode == "pnl_delta_lower":
+        return pnl + delta_weight * delta + beats60_weight * beats60 - lower_bound_penalty
+    if score_mode == "pnl_delta_tail_lower":
+        return (
+            pnl
+            + delta_weight * delta
+            + beats60_weight * beats60
+            - tail_score_weight * tail
+            - lower_bound_penalty
+        )
     raise ValueError(f"unknown score mode: {score_mode}")
 
 
@@ -549,6 +795,9 @@ def pivot_ranker_predictions(
     delta_weight: float,
     beats60_weight: float,
     tail_score_weight: float,
+    lower_bound_mae_weight: float,
+    lower_bound_bias_weight: float,
+    lower_bound_tail_miss_weight: float,
 ) -> pd.DataFrame:
     output = normalize_source_rows(base_rows)
     stale_prediction_columns = [
@@ -566,8 +815,21 @@ def pivot_ranker_predictions(
         delta_weight=delta_weight,
         beats60_weight=beats60_weight,
         tail_score_weight=tail_score_weight,
+        lower_bound_mae_weight=lower_bound_mae_weight,
+        lower_bound_bias_weight=lower_bound_bias_weight,
+        lower_bound_tail_miss_weight=lower_bound_tail_miss_weight,
     )
     for horizon in horizons:
+        for column, default in {
+            "residual_prior_count": 0.0,
+            "residual_prior_months": 0.0,
+            "residual_prior_bias": 0.0,
+            "residual_prior_mae": 0.0,
+            "residual_prior_overestimate_rate": 0.0,
+            "residual_prior_tail_miss_rate": 0.0,
+        }.items():
+            if column not in scored.columns:
+                scored[column] = default
         horizon_rows = scored[
             numeric_series(scored, "hv_chosen_horizon_minutes").eq(float(horizon))
         ][
@@ -586,6 +848,12 @@ def pivot_ranker_predictions(
                 "duration_prior_delta_vs_60_mean",
                 "duration_prior_tail_loss_rate",
                 "repair_duration_risk_score",
+                "residual_prior_count",
+                "residual_prior_months",
+                "residual_prior_bias",
+                "residual_prior_mae",
+                "residual_prior_overestimate_rate",
+                "residual_prior_tail_miss_rate",
             ]
         ].copy()
         rename = {
@@ -602,6 +870,16 @@ def pivot_ranker_predictions(
             "duration_prior_delta_vs_60_mean": f"ranker_hv_{horizon}m_prior_delta_vs_60_mean",
             "duration_prior_tail_loss_rate": f"ranker_hv_{horizon}m_prior_tail_loss_rate",
             "repair_duration_risk_score": f"ranker_hv_{horizon}m_prior_risk_score",
+            "residual_prior_count": f"ranker_hv_{horizon}m_residual_count",
+            "residual_prior_months": f"ranker_hv_{horizon}m_residual_months",
+            "residual_prior_bias": f"ranker_hv_{horizon}m_residual_bias",
+            "residual_prior_mae": f"ranker_hv_{horizon}m_residual_mae",
+            "residual_prior_overestimate_rate": (
+                f"ranker_hv_{horizon}m_residual_overestimate_rate"
+            ),
+            "residual_prior_tail_miss_rate": (
+                f"ranker_hv_{horizon}m_residual_tail_miss_rate"
+            ),
         }
         horizon_rows = horizon_rows.rename(columns=rename)
         horizon_rows[f"pred_hv_{horizon}m_pnl_model_used"] = horizon_rows[
@@ -660,6 +938,7 @@ def summarize_ranker_choices(scored_examples: pd.DataFrame, *, score_mode: str) 
 def run_experiment(args: argparse.Namespace) -> Path:
     horizons = parse_int_csv(args.horizons)
     context_specs = parse_context_specs(args.context_specs)
+    residual_context_specs = parse_context_specs(args.residual_context_specs)
     score_modes = parse_csv(args.score_modes)
     broad_train_rows = pd.read_csv(args.broad_train_rows)
     eval_rows = pd.read_csv(args.predictions)
@@ -703,6 +982,26 @@ def run_experiment(args: argparse.Namespace) -> Path:
         underperform_weight=args.underperform_weight,
         loss_rate_weight=args.loss_rate_weight,
         tail_loss_rate_weight=args.tail_loss_rate_weight,
+    )
+    train_examples = add_residual_prior_columns(
+        train_examples,
+        train_examples,
+        context_specs=residual_context_specs,
+        min_prior_rows=args.min_residual_prior_rows,
+        min_prior_months=args.min_residual_prior_months,
+        shrinkage_count=args.residual_shrinkage_count,
+        tail_loss_threshold=args.tail_loss_threshold,
+        min_executable_pnl=args.min_executable_pnl,
+    )
+    eval_examples = add_residual_prior_columns(
+        eval_examples,
+        train_examples,
+        context_specs=residual_context_specs,
+        min_prior_rows=args.min_residual_prior_rows,
+        min_prior_months=args.min_residual_prior_months,
+        shrinkage_count=args.residual_shrinkage_count,
+        tail_loss_threshold=args.tail_loss_threshold,
+        min_executable_pnl=args.min_executable_pnl,
     )
     numeric_features = available_features(
         train_examples,
@@ -761,6 +1060,9 @@ def run_experiment(args: argparse.Namespace) -> Path:
             delta_weight=args.delta_weight,
             beats60_weight=args.beats60_weight,
             tail_score_weight=args.tail_score_weight,
+            lower_bound_mae_weight=args.lower_bound_mae_weight,
+            lower_bound_bias_weight=args.lower_bound_bias_weight,
+            lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
         )
         choice_summary_frames.append(
             summarize_ranker_choices(scored_for_mode, score_mode=score_mode)
@@ -773,6 +1075,9 @@ def run_experiment(args: argparse.Namespace) -> Path:
             delta_weight=args.delta_weight,
             beats60_weight=args.beats60_weight,
             tail_score_weight=args.tail_score_weight,
+            lower_bound_mae_weight=args.lower_bound_mae_weight,
+            lower_bound_bias_weight=args.lower_bound_bias_weight,
+            lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
         )
         prediction_path = run_dir / f"ranker_predictions_{score_mode}.csv"
         prediction_rows.to_csv(prediction_path, index=False)
@@ -869,6 +1174,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "max_leaf_nodes": args.max_leaf_nodes,
         "random_state": args.random_state,
         "context_specs": context_specs,
+        "residual_context_specs": residual_context_specs,
         "min_prior_rows": args.min_prior_rows,
         "min_prior_months": args.min_prior_months,
         "shrinkage_count": args.shrinkage_count,
@@ -877,9 +1183,15 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "underperform_weight": args.underperform_weight,
         "loss_rate_weight": args.loss_rate_weight,
         "tail_loss_rate_weight": args.tail_loss_rate_weight,
+        "min_residual_prior_rows": args.min_residual_prior_rows,
+        "min_residual_prior_months": args.min_residual_prior_months,
+        "residual_shrinkage_count": args.residual_shrinkage_count,
         "delta_weight": args.delta_weight,
         "beats60_weight": args.beats60_weight,
         "tail_score_weight": args.tail_score_weight,
+        "lower_bound_mae_weight": args.lower_bound_mae_weight,
+        "lower_bound_bias_weight": args.lower_bound_bias_weight,
+        "lower_bound_tail_miss_weight": args.lower_bound_tail_miss_weight,
         "prob_thresholds": args.prob_thresholds,
         "ev_thresholds": args.ev_thresholds,
         "tail_prob_thresholds": args.tail_prob_thresholds,
@@ -945,6 +1257,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tail-prob-thresholds", default=DEFAULT_TAIL_PROB_THRESHOLDS)
     parser.add_argument("--require-model-used-options", default="true")
     parser.add_argument("--context-specs", default=DEFAULT_CONTEXT_SPECS)
+    parser.add_argument("--residual-context-specs", default=DEFAULT_RESIDUAL_CONTEXT_SPECS)
     parser.add_argument("--min-prior-rows", type=int, default=20)
     parser.add_argument("--min-prior-months", type=int, default=2)
     parser.add_argument("--shrinkage-count", type=float, default=20.0)
@@ -955,9 +1268,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--underperform-weight", type=float, default=1.0)
     parser.add_argument("--loss-rate-weight", type=float, default=0.0)
     parser.add_argument("--tail-loss-rate-weight", type=float, default=5.0)
+    parser.add_argument("--min-residual-prior-rows", type=int, default=20)
+    parser.add_argument("--min-residual-prior-months", type=int, default=2)
+    parser.add_argument("--residual-shrinkage-count", type=float, default=20.0)
     parser.add_argument("--delta-weight", type=float, default=0.25)
     parser.add_argument("--beats60-weight", type=float, default=0.5)
     parser.add_argument("--tail-score-weight", type=float, default=2.0)
+    parser.add_argument("--lower-bound-mae-weight", type=float, default=0.25)
+    parser.add_argument("--lower-bound-bias-weight", type=float, default=0.25)
+    parser.add_argument("--lower-bound-tail-miss-weight", type=float, default=5.0)
     parser.add_argument("--min-train-months", type=int, default=2)
     parser.add_argument("--min-train-rows", type=int, default=200)
     parser.add_argument("--max-train-rows", type=int, default=80000)

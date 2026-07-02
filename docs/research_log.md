@@ -4,6 +4,37 @@
 
 ## 2026-07-03 JST
 
+### 06:54 Entry EV horizon choice lower-bound residual score
+
+作業:
+
+- 00329の次アクションとして、horizon/context別のprior residualからlower-bound scoreを作った。
+- `entry_ev_broad_prior_horizon_choice_replay.py` に `pnl_lower`, `pnl_delta_lower`, `pnl_delta_tail_lower` を追加した。
+- residual priorはtarget月より前のhorizon prediction errorだけで作り、`bias / mae / rmse / overestimate_rate / tail_miss_rate` を出す。
+- 公平な比較のため、residual prior列はデフォルトではranker学習featureに入れず、score-only / diagnosticsとして扱うようにした。
+- report: `docs/reports/00330_2026-07-03_entry_ev_horizon_choice_lower_bound.md`
+
+結果:
+
+- strong penalty (`mae=0.25`, `bias=0.25`, `tail_miss=5.0`) は `pnl_lower` と `pnl_delta_tail_lower` の追加を0件まで抑え、best combinedはbaseline `+403.2680` に対して `+339.2910` まで悪化した。
+- light penalty (`0.05/0.05/1.0`) は `pnl_delta_lower` best combined `+376.8110`、`pnl_lower` `+366.7520` でbaselineを超えなかった。
+- tiny penalty (`0.01/0.01/0.2`) は `pnl_lower` がbaselineと同じ `+403.2680`、`pnl_delta_lower` は `+400.6740`。改善ではなくほぼno-opだった。
+- lower-boundは720mを抑えるが、現support-repair surfaceでは720mが利益修復の大きな部分を持つため、勝ち候補を削る副作用が大きい。
+
+判断:
+
+- chronological residual prior computationとlower-bound score mode infrastructureはaccepted。
+- 現weightのlower-bound scoreはpolicy候補としてreject。
+- residual priorはまず診断/featuresとして残し、globalな720m抑制には使わない。
+- 次は harmful overestimate と profitable high-variance 720m を分離するtarget、およびthin month/supportを明示的にrewardする目的関数へ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00330 strong / light / tiny lower-bound score-only replays: OK
+
 ### 06:32 Entry EV broad prior horizon-choice ranker
 
 作業:
