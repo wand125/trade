@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 11:18 Entry EV supervised shrinkage policy inputs
+
+作業:
+
+- 00282の次アクションとして、selected-trade supervised shrinkage headをprediction row側へ戻すpolicy input生成を実装した。
+- `scripts/experiments/entry_ev_supervised_shrinkage_policy_inputs.py` を追加し、selected tradesの実現PnL/factorを対象月より前だけで学び、各prediction parquetのlong/short両側へ `pred_supervised_shrink_factor_*_best_adjusted_pnl` とquantile列を付与した。
+- raw `loss_exit30_cd15` と同じ6 familyへfactor shrinkage scoreを付与し、`entry_ev_quantile_exit_timing_sensitivity.py` でstateful replayした。
+- q95/q96/q97/q98/q99近傍も確認し、最高点ではなく安定台地があるかを診断した。
+- report: `docs/reports/00283_2026-07-02_entry_ev_supervised_shrinkage_policy_inputs.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- q95 no-floor + `loss_exit30_cd15` は total `+219.7158`, 899 tradesまで伸びたが、month min `-35.1586` でraw cd15 benchmarkの `-6.8324` より悪い。
+- q95 floor5は shrunk score scaleと合わず、total `+45.5674`, 44 trades, month min `-53.4046`。
+- q96-q99 no-floor sweepでは、q96 total `+192.4624`, month min `-38.1026`、q99 total `+113.8160`, role min `-12.9278`, month min `-13.8816`。
+- total改善はあるが、role/month floorが不安定で、NoTrade-first gateは通らない。
+
+判断:
+
+- supervised shrinkage prediction-row policy input generationはaccepted infrastructure。
+- supervised shrinkage scoreをmain entry scoreへ直接置き換えることはreject。
+- raw `loss_exit30_cd15` は固定診断benchmarkとして維持する。
+- 次はraw cd15 score pathを残したまま、shrinkage outputを補助featureとしてdownside-weighted meta selectorへ入れる。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_supervised_shrinkage_policy_inputs.py tests/test_entry_ev_supervised_shrinkage_policy_inputs.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_supervised_shrinkage_policy_inputs`: OK
+- supervised shrinkage factor policy input generation: OK
+- supervised shrinkage factor replay: OK
+- q96-q99 quantile sweep: OK
+
 ### 10:51 Entry EV selected-trade supervised shrinkage
 
 作業:

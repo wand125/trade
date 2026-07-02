@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 10:51 JST
+最終更新: 2026-07-02 11:18 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV supervised shrinkage policy inputsを追加した。00282のselected-trade shrinkage headをprediction row側へ戻し、各familyのlong/short両側へ `pred_supervised_shrink_factor_*_best_adjusted_pnl` とquantile列を付ける `scripts/experiments/entry_ev_supervised_shrinkage_policy_inputs.py` を実装した。raw `loss_exit30_cd15` と同じ6 familyでstateful replayしたところ、q95 no-floor + `loss_exit30_cd15` は total `+219.7158`, 899 tradesまで伸びたが、month min `-35.1586` で raw cd15 benchmarkの `-6.8324` より悪化。q96-q99 sweepでも安定台地はなく、q99は month min `-13.8816`, role min `-12.9278` でNoTrade。判断: prediction-row shrinkage inputはaccepted、supervised shrinkage score replacementはreject。次はraw cd15 scoreを残し、shrinkage outputを補助featureとしてdownside-weighted meta selectorへ入れる。詳細は `docs/reports/00283_2026-07-02_entry_ev_supervised_shrinkage_policy_inputs.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV selected-trade supervised shrinkageを追加した。00281でrejectしたdirect capture shrinkの代わりに、selected raw `loss_exit30_cd15` trades上で `adjusted_pnl` 直接回帰と `adjusted_pnl / pred_taken_ev` factor回帰をchronological foldで評価した。`scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py` とテストを追加。scale correctionは改善し、raw EV MAE `10.3692`、prior capture calibrated EV MAE `3.6264` に対し、supervised factor EV MAE `2.2447`、supervised PnL EV MAE `2.3511`。ただし低score除外ではプラスPnL集合を削り、supervised factor `< -2` の改善は1 trade / `+0.2760`だけ、実用coverageでは悪化。判断: supervised shrinkage infrastructureはaccepted、直接threshold gateはreject。次はcandidate-row / dense side-row featureとして戻し、stateful replayで検証する。詳細は `docs/reports/00282_2026-07-02_entry_ev_selected_trade_supervised_shrinkage.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
