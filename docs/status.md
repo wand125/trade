@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 20:12 JST
+最終更新: 2026-07-02 20:26 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV near-miss exit target diagnosticsを追加した。00318の次アクションとして、near-miss support candidatesをexit timing / EV calibration targetへ変換した。00318のgreedy selected 11本はfuture-labelでfixed horizonを最適選択できればfixed-best合計 `+77.1400` だが、単純fixed60は `-26.4512`、fixed240は `-31.5870`、fixed720は `-46.0898`。現prediction parquetのfixed-horizon予測で選ぶと実現合計は `-6.8562`、one-fail strict 8本では `-41.1822` まで悪化する。available candidates 132本はfixed-best合計 `+572.2276`、oracle best `+1676.3210` とtarget poolは豊富だが、actual at predicted horizonは `-681.7860`。判断: near-miss exit target diagnosticsはaccepted infrastructure、actual fixed-bestは教師labelとして有望だが、現predicted fixed horizon choiceはpolicy evidenceではなくreject。次はnear-miss pool用のchronological exit-viability / horizon headを作る。標準policyはNoTrade。詳細は `docs/reports/00319_2026-07-02_entry_ev_near_miss_exit_target.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV thin month opposite candidate diagnosticsを追加した。00317の次アクションとして、thin monthに反対側candidateがprediction rows上に存在するか、現行trade intervalと重ねて診断した。strict条件では8 repair target中 `refit2025_validation 2025-08 short` の1件しか埋まらない。`one_failed_strict_stage` まで緩めると8 targetすべてに候補は存在するが、8本合計のfixed60実現は `-17.7984`、fixed240は `-31.7138`、fixed720は `-80.4158`。oracle bestだけは `+86.0590`。fresh2024の3ヶ月はscore floor `5` 未満のnear-missで、fixed60は `-14.1240`, `-11.0604`, `+0.3000`。判断: thin-month opposite candidate diagnosticsはaccepted infrastructure、side-balanced support overlayはまだ標準候補にせず、near-miss support candidate用のexit timing / EV calibration targetへ進む。標準policyはNoTrade。詳細は `docs/reports/00318_2026-07-02_entry_ev_thin_month_opposite_candidates.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

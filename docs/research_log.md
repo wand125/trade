@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 20:26 Entry EV near-miss exit target
+
+作業:
+
+- 00318の次アクションとして、near-miss support candidatesをexit timing / EV calibration targetへ変換した。
+- `scripts/experiments/entry_ev_near_miss_exit_target_diagnostics.py` を追加し、00318候補へfixed 60/240/720の最良target、oracle gap、prediction parquet上のfixed-horizon予測選択をjoinした。
+- report: `docs/reports/00319_2026-07-02_entry_ev_near_miss_exit_target.md`
+
+結果:
+
+- greedy selected 11本は、future-labelでfixed horizonを最適選択できればfixed-best合計 `+77.1400`。
+- 同じ11本の単純fixed60は `-26.4512`、fixed240は `-31.5870`、fixed720は `-46.0898`。
+- 現prediction parquetのfixed-horizon予測で選ぶと実現合計は `-6.8562`。one-fail strict 8本では `-41.1822` まで悪化する。
+- available candidates 132本はfixed-best合計 `+572.2276`、oracle best `+1676.3210` とtarget poolは豊富だが、actual at predicted horizonは `-681.7860`。
+
+判断:
+
+- near-miss exit target diagnosticsはaccepted infrastructure。
+- actual fixed-bestは教師labelとして有望だが、現predicted fixed horizon choiceはpolicy evidenceではなくreject。
+- 次はnear-miss pool用のchronological exit-viability / horizon headを作る。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_near_miss_exit_target_diagnostics.py tests/test_entry_ev_near_miss_exit_target_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_near_miss_exit_target_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_near_miss_exit_target_diagnostics tests.test_entry_ev_thin_month_opposite_candidate_diagnostics tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- 00319 near-miss exit target diagnostics run: OK
+
 ### 20:12 Entry EV thin month opposite candidates
 
 作業:
