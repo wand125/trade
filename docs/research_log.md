@@ -4,6 +4,37 @@
 
 ## 2026-07-02 JST
 
+### 10:51 Entry EV selected-trade supervised shrinkage
+
+作業:
+
+- 00281の次アクションとして、prior capture factorを直接scoreに掛けるのではなく、selected raw `loss_exit30_cd15` trades上でsupervised realized-PnL shrinkageを試した。
+- `scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py` を追加し、対象月より前のselected tradesだけで `adjusted_pnl` 直接回帰と `adjusted_pnl / pred_taken_ev` factor回帰を学習するchronological foldを実装した。
+- 特徴量はprediction / prior-risk系に限定し、実現 `adjusted_pnl`、oracle、exit regretはtarget/evaluation専用としてfeatureから除外した。
+- report: `docs/reports/00282_2026-07-02_entry_ev_selected_trade_supervised_shrinkage.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- raw EVは MAE `10.3692`, RMSE `12.2233`。prior capture calibrated EVは MAE `3.6264`, RMSE `6.6097`。
+- supervised PnL EVは MAE `2.3511`, RMSE `5.5028`、supervised factor EVは MAE `2.2447`, RMSE `5.2871` までscale correctionを改善した。
+- ただしSpearmanは supervised factor EV `0.1063` と弱く、ranking signalとしては不十分。
+- `supervised factor EV < -2.0` の除外は1 tradeだけで `+0.2760` 改善するが、実用coverageのthresholdではflagged集合のPnLが大きくプラスになり、勝ちtradeを削る。
+
+判断:
+
+- selected-trade supervised shrinkage diagnosticsはaccepted infrastructure。
+- selected-trade supervised shrinkageを低score gateとして直接使うことはreject。
+- shrinkage headはstandalone policy overlayではなく、candidate-row / dense side-row featureへ戻してstateful replayで評価する。
+- raw `loss_exit30_cd15` は固定診断benchmarkとして維持する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py tests/test_entry_ev_selected_trade_supervised_shrinkage.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_supervised_shrinkage`: OK
+- selected-trade supervised shrinkage run: OK
+
 ### 10:35 Entry EV capture shrink overlay
 
 作業:

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 10:35 JST
+最終更新: 2026-07-02 10:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV selected-trade supervised shrinkageを追加した。00281でrejectしたdirect capture shrinkの代わりに、selected raw `loss_exit30_cd15` trades上で `adjusted_pnl` 直接回帰と `adjusted_pnl / pred_taken_ev` factor回帰をchronological foldで評価した。`scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py` とテストを追加。scale correctionは改善し、raw EV MAE `10.3692`、prior capture calibrated EV MAE `3.6264` に対し、supervised factor EV MAE `2.2447`、supervised PnL EV MAE `2.3511`。ただし低score除外ではプラスPnL集合を削り、supervised factor `< -2` の改善は1 trade / `+0.2760`だけ、実用coverageでは悪化。判断: supervised shrinkage infrastructureはaccepted、直接threshold gateはreject。次はcandidate-row / dense side-row featureとして戻し、stateful replayで検証する。詳細は `docs/reports/00282_2026-07-02_entry_ev_selected_trade_supervised_shrinkage.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV capture shrink overlayを検証した。raw `loss_exit30_cd15` を固定benchmarkにし、prior-only exit-capture risk、executable EV calibration、direct score shrinkを比較。`entry_ev_exit_capture_target_diagnostics.py` と `entry_ev_executable_ev_*` 系に `--context-columns` を追加し、`entry_ev_executable_ev_policy_inputs.py` には `--capture-shrink-strength` を追加した。prior riskはfailure precisionが高い一方でflagged集合のPnLがプラスで、hard blockには向かない。executable EV calibrationはMAEを改善するが、low-EV thresholdもプラスPnL集合を削る。score shrink overlayは full side/regime/session、full family/side/regime/session、weak `strength=0.25` の全てで raw benchmark `+118.6900` を下回った。判断: direct multiplicative capture shrinkはreject。capture factorはsupervised EV shrinkage / exit-capture modelの特徴量として使う。標準policyはNoTrade。詳細は `docs/reports/00281_2026-07-02_entry_ev_capture_shrink_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
