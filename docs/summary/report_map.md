@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 12:18 JST
+最終更新: 2026-07-02 12:32 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00287` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで改善し、00278でdynamic exit cooldownが過剰回転を抑えた。00279でglobal expanding quantile化を試したがtail/role floorを壊し、raw cd15維持。00280でraw cd15残存損失はentry無価値ではなくexit-capture failure / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkをreject。00282でselected-trade supervised shrinkageはscale補正として有効だが、低score gateでは勝ちtradeを削ると確認。00283でprediction-row shrinkage inputはacceptedだが、direct score replacementはmonth floorを壊すためreject。00284でdownside meta hard blockを試したが、実効thresholdは悪化、保守thresholdはno-op。00285でdownside soft risk marginもbaselineを大幅に下回りreject。00286でstateful floor selectorを追加し、現候補群はfloor-onlyでもNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。 |
+| `00258`..`00288` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで改善し、00278でdynamic exit cooldownが過剰回転を抑えた。00279でglobal expanding quantile化を試したがtail/role floorを壊し、raw cd15維持。00280でraw cd15残存損失はentry無価値ではなくexit-capture failure / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkをreject。00282でselected-trade supervised shrinkageはscale補正として有効だが、低score gateでは勝ちtradeを削ると確認。00283でprediction-row shrinkage inputはacceptedだが、direct score replacementはmonth floorを壊すためreject。00284でdownside meta hard blockを試したが、実効thresholdは悪化、保守thresholdはno-op。00285でdownside soft risk marginもbaselineを大幅に下回りreject。00286でstateful floor selectorを追加し、現候補群はfloor-onlyでもNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。00288でisolated large-loss capture failureを特定し、一律fixed horizonはfloor悪化でreject。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00287` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。00274のcoarse `direction_regime` tail-riskは00275の外部HGB固定適用で再現せずdiagnosticへ降格。00278で q95 + raw `loss_exit30_cd15` が combined total +118.6900 / positive roles 6/6 / month min -6.8324 まで改善。00279のglobal quantile版はtotal改善と引き換えにtail/roleを壊すため、固定診断候補はraw cd15のまま。00280でloss trade 122件の大半が同方向oracle利益ありと分かり、00281でprior capture factorのhard block/direct shrinkはraw benchmarkを下回ると確認。00282でsupervised shrinkageはMAE/RMSEを改善したがrank/gateは弱い。00283でprediction-row inputへ戻したがscore replacementはtailを壊した。00284でdownside meta hard blockも `gte1` が +15.4886 へ悪化、`gte3` はno-op。00285のsoft risk marginもbest `w0.25` が +23.7938 でbaselineを大きく下回った。00286でcandidate-level stateful floor selectorを追加し、現候補群はfloor-onlyでもNoTrade。00287でpost-exit pathを分解し、`prev_loss` 後tradeは +122.9292 と強く、広いpost-loss cooldownはreject。次は初回/孤立大損と前回勝ち後の大損に対するexit-capture改善へ戻る。 |
+| Latest decision | `00258`..`00288` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。00274のcoarse `direction_regime` tail-riskは00275の外部HGB固定適用で再現せずdiagnosticへ降格。00278で q95 + raw `loss_exit30_cd15` が combined total +118.6900 / positive roles 6/6 / month min -6.8324 まで改善。00279のglobal quantile版はtotal改善と引き換えにtail/roleを壊すため、固定診断候補はraw cd15のまま。00280でloss trade 122件の大半が同方向oracle利益ありと分かり、00281でprior capture factorのhard block/direct shrinkはraw benchmarkを下回ると確認。00282でsupervised shrinkageはMAE/RMSEを改善したがrank/gateは弱い。00283でprediction-row inputへ戻したがscore replacementはtailを壊した。00284でdownside meta hard blockも `gte1` が +15.4886 へ悪化、`gte3` はno-op。00285のsoft risk marginもbest `w0.25` が +23.7938 でbaselineを大きく下回った。00286でcandidate-level stateful floor selectorを追加し、現候補群はfloor-onlyでもNoTrade。00287でpost-exit pathを分解し、`prev_loss` 後tradeは +122.9292 と強く、広いpost-loss cooldownはreject。00288でisolated large-loss capture failure 23件 / -125.5752を特定したが、一律fixed horizonはfloor悪化でreject。次はfixed-horizon/hold-extension choiceを学習する。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -63,6 +63,7 @@
 28. `00285_2026-07-02_entry_ev_downside_meta_risk_margin.md`
 29. `00286_2026-07-02_entry_ev_stateful_floor_meta_selector.md`
 30. `00287_2026-07-02_entry_ev_post_exit_path_diagnostics.md`
+31. `00288_2026-07-02_entry_ev_isolated_exit_capture_diagnostics.md`
 
 component targetの流れを読む:
 
@@ -109,10 +110,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00287 Entry EV Post-Exit Path Diagnostics
-Status: accepted infrastructure / broad cooldown rejected
-Question: raw cd15 losing monthsはpost-loss re-entryを止めれば直るか
-Best evidence: prev_loss trades total +122.9292; best no-replacement prev<=-2/cd60 improves total to +127.1674 but month floor remains -6.7236
+Report: 00288 Entry EV Isolated Exit Capture Diagnostics
+Status: accepted infrastructure / fixed-horizon replacement rejected
+Question: 初回/孤立大損はfixed horizonへ置き換えれば直るか
+Best evidence: isolated large-loss capture failure 23 trades / -125.5752; fixed replacement improves total but worsens month floor, e.g. fixed60 total +184.1282 but month min -22.0794
 Decision: 標準policyはNoTrade
-Next: 初回/孤立大損と前回勝ち後の大損に対するexit-capture targetを作る
+Next: fixed-horizon/hold-extension choiceをchronological supervised targetとして作る
 ```

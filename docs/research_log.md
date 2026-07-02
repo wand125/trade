@@ -7164,3 +7164,33 @@ trade delta:
 - `uv run python -m py_compile scripts/experiments/entry_ev_post_exit_path_diagnostics.py tests/test_entry_ev_post_exit_path_diagnostics.py`: OK
 - `uv run python -m unittest tests.test_entry_ev_post_exit_path_diagnostics`: OK
 - raw cd15 post-exit diagnostics run: OK
+
+### 2026-07-02 12:32 JST Entry EV isolated exit-capture diagnostics
+
+作業:
+
+- 00287で特定した初回/孤立大損と前回勝ち後の大損を exit-capture target として分解した。
+- `scripts/experiments/entry_ev_isolated_exit_capture_diagnostics.py` を追加し、enriched tradeに post-exit path、same-side oracle edge、exit-capture failure、oracle hold gap、fixed 60/240/720m のno-replay置換推定を付与した。
+- report: `docs/reports/00288_2026-07-02_entry_ev_isolated_exit_capture_diagnostics.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| set / replacement | count | PnL / total after | month min | reading |
+|---|---:|---:|---:|---|
+| isolated large-loss capture failure | `23` | `-125.5752` | n/a | 濃い教師候補 |
+| oracle after actual exit | `22/23` | n/a | n/a | hold-extension側の問題が強い |
+| isolated large-loss capture failure -> fixed60 | `23` | `+184.1282` | `-22.0794` | total改善だがfloor悪化 |
+| first large loss -> fixed720 | `6` | `+195.9166` | `-8.9100` | baseline floor `-6.8324` より悪い |
+
+判断:
+
+- isolated exit-capture diagnostic infrastructureはaccepted。
+- 一律fixed-horizon置換はreject。actual fixed horizonを使ってもmonth floorが悪化する。
+- 次はfixed-horizon/hold-extension choiceをchronological supervised targetとして学習し、prediction-row feature化してからstateful selectorで評価する。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_isolated_exit_capture_diagnostics.py tests/test_entry_ev_isolated_exit_capture_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_isolated_exit_capture_diagnostics`: OK
+- isolated exit-capture diagnostics run: OK

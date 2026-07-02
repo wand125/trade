@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 12:18 JST
+最終更新: 2026-07-02 12:32 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV isolated exit-capture diagnosticsを追加した。00287で特定した初回/孤立大損と前回勝ち後の大損に対し、enriched trade上で post-exit path、same-side oracle edge、exit-capture failure、oracle hold gap、fixed 60/240/720m のno-replay置換推定を出す `scripts/experiments/entry_ev_isolated_exit_capture_diagnostics.py` を実装した。isolated large-loss capture failureは23件 / `-125.5752` で、22/23件はoracle best holdが実exitより後。totalだけならfixed置換で伸びるが、`isolated_large_loss_capture_failure -> fixed60` は total `+184.1282` でも month min `-22.0794`、`first_large_loss -> fixed720` も total `+195.9166` だが month min `-8.9100` でbaseline `-6.8324` より悪い。判断: isolated exit-capture diagnostic infrastructureはaccepted、一律fixed-horizon置換はreject。次はfixed-horizon/hold-extension choiceをchronological supervised targetとして学習し、stateful selectorでfloorを確認する。詳細は `docs/reports/00288_2026-07-02_entry_ev_isolated_exit_capture_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV post-exit path diagnosticsを追加した。00286の次アクションとして、raw `loss_exit30_cd15` benchmarkのtrade CSVを統合し、前回trade結果、前回exitからの経過分、同方向再入、月別PnL、cooldown no-replacement estimateを診断する `scripts/experiments/entry_ev_post_exit_path_diagnostics.py` を実装した。合計は266 trades / total `+118.6900` で00286と一致。`prev_loss` 後のtradeは `+122.9292` と強く、広いpost-loss blockは勝ちを削る。最良のno-replacement診断 `prev_adjusted_pnl <= -2` かつ60分以内の再入除去は flagged PnL `-8.4774`, kept total `+127.1674` だが、month floorは `-6.7236` のまま負。判断: post-exit path diagnostic infrastructureはaccepted、単純なpost-loss cooldown拡張はreject。次はentry削除ではなく、初回/孤立大損と前回勝ち後の大損に対するexit-capture改善へ戻る。詳細は `docs/reports/00287_2026-07-02_entry_ev_post_exit_path_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
