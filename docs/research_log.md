@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 15:27 Entry EV path compensation diagnostics
+
+作業:
+
+- 00302でlarge-loss probabilityのdirect hard gateが勝ちtradeを削ると分かったため、同じrisk scoreを「同じcontext-month内で大損が勝ちに補償されるか」というpath-aware軸で分解した。
+- `scripts/experiments/entry_ev_selected_trade_path_compensation_diagnostics.py` を追加し、selected-trade large-loss head predictionsから context-month PnL、compensated large loss、risk threshold別のflagged context PnLを出せるようにした。
+- `tests/test_entry_ev_selected_trade_path_compensation_diagnostics.py` を追加した。
+- report: `docs/reports/00303_2026-07-02_entry_ev_path_compensation_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00302 large-loss head predictions。
+- 実大損23件のうち、同じ `direction|combined_regime|session_regime` / month内でnet positiveに補償されたものは1件だけ。
+- 補償例は `2025-11 short|down_normal_vol|london` で、`-7.9800` large loss と `+62.0800` winnerが同context-monthにあり、context totalは `+54.1000`。
+- risk threshold除去は20本すべて悪化。最大でも `block_delta_if_removed = -15.0000` で、positive deltaは0本。
+- 最小悪化の `factor base_prior prob_ge_0.4` は2 trades / flagged PnL `+15.0000`、flagged context monthsは2/2 positive。
+- `pnl base prob_ge_0.2` は17 trades / flagged PnL `+58.1320`、flagged context months 14中8がpositive。
+
+判断:
+
+- path compensation diagnosticsはaccepted infrastructure。
+- direct risk hard gate、high-risk quantile removal、riskが高いcontextを丸ごと避ける解釈はreject。
+- 次は `is_large_loss` ではなく `large_loss_uncompensated_by_context` / negative path contextを教師候補にする。ただし同月実現PnLは未来情報なので、実行時はprior-only context、candidate-level state、entry/exit featuresで代理する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_trade_path_compensation_diagnostics.py tests/test_entry_ev_selected_trade_path_compensation_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_path_compensation_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_path_compensation_diagnostics tests.test_entry_ev_selected_trade_large_loss_head tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- path compensation diagnostics run: OK
+
 ### 15:15 Entry EV prior pressure large-loss head
 
 作業:
