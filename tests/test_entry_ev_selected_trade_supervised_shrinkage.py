@@ -30,6 +30,7 @@ class EntryEvSelectedTradeSupervisedShrinkageTests(unittest.TestCase):
                 "role": ["cal", "fresh", "refit"],
                 "month": ["2024-01", "2024-02", "2024-03"],
                 "candidate": ["q95", "q95", "q95"],
+                "selector_variant": ["v1", "v1", "v2"],
                 "direction": ["long", "long", "short"],
                 "entry_decision_timestamp": [
                     "2024-01-10T00:00:00Z",
@@ -39,6 +40,7 @@ class EntryEvSelectedTradeSupervisedShrinkageTests(unittest.TestCase):
                 "adjusted_pnl": [2.0, 4.0, -3.0],
                 "pred_taken_ev": [10.0, 10.0, 10.0],
                 "pred_side_confidence_gap": [0.1, 0.2, 0.3],
+                "entry_blocked": [False, True, False],
                 "combined_regime": ["range", "range", "down"],
                 "session_regime": ["asia", "asia", "london"],
             }
@@ -48,8 +50,10 @@ class EntryEvSelectedTradeSupervisedShrinkageTests(unittest.TestCase):
         frame = entry_ev_selected_trade_supervised_shrinkage.normalize_trade_frame(
             self.trade_frame(),
             candidates=set(),
+            selector_variants=set(),
             roles=set(),
             months=set(),
+            exclude_entry_blocked=False,
         )
         scored, folds = entry_ev_selected_trade_supervised_shrinkage.chronological_predictions(
             frame,
@@ -90,6 +94,20 @@ class EntryEvSelectedTradeSupervisedShrinkageTests(unittest.TestCase):
         self.assertEqual(feb_factor["pred_supervised_factor_ev"], 2.0)
         self.assertEqual(feb_fold["train_rows"], 1)
         self.assertEqual(feb_fold["train_months"], 1)
+
+    def test_normalize_trade_frame_filters_selector_variant_and_entry_blocked(self):
+        frame = entry_ev_selected_trade_supervised_shrinkage.normalize_trade_frame(
+            self.trade_frame(),
+            candidates={"q95"},
+            selector_variants={"v1"},
+            roles=set(),
+            months=set(),
+            exclude_entry_blocked=True,
+        )
+
+        self.assertEqual(len(frame), 1)
+        self.assertEqual(frame.iloc[0]["selector_variant"], "v1")
+        self.assertEqual(frame.iloc[0]["month"], "2024-01")
 
     def test_threshold_summary_reports_removed_pnl(self):
         frame = pd.DataFrame(

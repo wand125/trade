@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 14:31 JST
+最終更新: 2026-07-02 14:40 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV residual combo selected-trade calibrationを追加した。00298でconfidence hard gateをrejectしたため、00293 residual combo diagnostic branchのunblocked selected tradesだけを対象に、chronological OOF expected PnL calibrationを再診断した。`entry_ev_selected_trade_supervised_shrinkage.py` に `--selector-variants` と `--exclude-entry-blocked` を追加。raw EVは実績平均 `+1.4200` に対してscore平均 `+10.1991`, MAE `10.7256` と過大評価が大きいが、OOF補正後は factor EV MAE `2.9448`, PnL EV MAE `3.0165` まで縮んだ。一方でSpearmanは factor `0.1329`, PnL `0.1072` と低く、factor `< 0` gateも `+7.8728` の小幅改善、PnL低score gateは勝ちtradeを削る。判断: selected-trade calibration diagnosticsはaccepted infrastructure、直接OOF score hard gateはreject、標準policyはNoTrade。詳細は `docs/reports/00299_2026-07-02_entry_ev_residual_combo_selected_trade_calibration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV confidence gate overlayを追加した。00297の次アクションとして、thin-support residual monthsを月内順序削除ではなくモデル出力confidenceで扱えるか診断する `scripts/experiments/entry_ev_confidence_gate_overlay.py` を実装した。00296 diagnostic benchmark branchに対し、`taken_ev_ge10` は month minを `-0.7200 -> 0.0000` へ上げるが、total `+329.4348 -> +36.0280`, trades `232 -> 111` へ低活動化し、standard blockersは `role_trades_low,month_trades_low`。rank/side-gap/lossprob/fixed-horizon predicted PnL gateはmonth/role floorを悪化。判断: confidence gate diagnosticsはaccepted infrastructure、現confidence hard gateはreject、標準policyはNoTrade。詳細は `docs/reports/00298_2026-07-02_entry_ev_confidence_gate_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

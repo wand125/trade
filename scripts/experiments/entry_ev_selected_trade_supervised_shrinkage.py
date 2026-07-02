@@ -141,8 +141,10 @@ def normalize_trade_frame(
     frame: pd.DataFrame,
     *,
     candidates: set[str],
+    selector_variants: set[str],
     roles: set[str],
     months: set[str],
+    exclude_entry_blocked: bool,
 ) -> pd.DataFrame:
     required = {
         "month",
@@ -159,6 +161,12 @@ def normalize_trade_frame(
     output = frame.copy()
     output["month"] = output["month"].astype(str).str.slice(0, 7)
     output["candidate"] = output["candidate"].astype(str)
+    if "selector_variant" in output.columns:
+        output["selector_variant"] = output["selector_variant"].astype(str)
+    elif "variant" in output.columns:
+        output["selector_variant"] = output["variant"].astype(str)
+    else:
+        output["selector_variant"] = ""
     output["role"] = output["role"].astype(str)
     output["family"] = text_series(output, "family")
     output["direction"] = output["direction"].astype(str).str.lower()
@@ -170,10 +178,22 @@ def normalize_trade_frame(
     output["pred_taken_ev"] = numeric_series(output, "pred_taken_ev", default=np.nan)
     if candidates:
         output = output[output["candidate"].isin(candidates)].copy()
+    if selector_variants:
+        output = output[output["selector_variant"].isin(selector_variants)].copy()
     if roles:
         output = output[output["role"].isin(roles)].copy()
     if months:
         output = output[output["month"].isin(months)].copy()
+    if exclude_entry_blocked and "entry_blocked" in output.columns:
+        blocked = output["entry_blocked"]
+        if pd.api.types.is_bool_dtype(blocked):
+            output = output[~blocked.fillna(False)].copy()
+        elif pd.api.types.is_numeric_dtype(blocked):
+            output = output[~blocked.fillna(0).astype(float).ne(0.0)].copy()
+        else:
+            output = output[
+                ~blocked.astype(str).str.lower().str.strip().isin({"true", "1", "yes", "y"})
+            ].copy()
     if output.empty:
         raise ValueError("no trades remain after filters")
     return output.sort_values(["month", "entry_decision_timestamp"]).reset_index(drop=True)
@@ -610,8 +630,10 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
     frame = normalize_trade_frame(
         read_trade_frames(args.trades),
         candidates=set(parse_csv(args.candidates)),
+        selector_variants=set(parse_csv(args.selector_variants)),
         roles=set(parse_csv(args.roles)),
         months=set(parse_csv(args.months)),
+        exclude_entry_blocked=args.exclude_entry_blocked,
     )
     frame = add_baseline_scores(frame)
     numeric_features = available_columns(
@@ -683,8 +705,10 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
         "numeric_features": numeric_features,
         "categorical_features": categorical_features,
         "candidates": args.candidates,
+        "selector_variants": args.selector_variants,
         "roles": args.roles,
         "months": args.months,
+        "exclude_entry_blocked": args.exclude_entry_blocked,
         "thresholds": thresholds,
         "min_train_months": args.min_train_months,
         "min_train_rows": args.min_train_rows,
@@ -735,8 +759,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--numeric-features", default="")
     parser.add_argument("--categorical-features", default="")
     parser.add_argument("--candidates", default="")
+    parser.add_argument("--selector-variants", default="")
     parser.add_argument("--roles", default="")
     parser.add_argument("--months", default="")
+    parser.add_argument("--exclude-entry-blocked", action="store_true")
     parser.add_argument("--thresholds", default=DEFAULT_THRESHOLDS)
     parser.add_argument("--min-train-months", type=int, default=2)
     parser.add_argument("--min-train-rows", type=int, default=30)

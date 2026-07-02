@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 14:40 Entry EV residual combo selected-trade calibration
+
+作業:
+
+- 00298でconfidence hard gateをrejectしたため、同じ00293 residual combo diagnostic branchを対象に、selected-trade expected PnL calibrationをchronological OOFで再診断した。
+- `scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py` に `--selector-variants` と `--exclude-entry-blocked` を追加し、entry-block overlay後の採用branchだけを抽出できるようにした。
+- `tests/test_entry_ev_selected_trade_supervised_shrinkage.py` にselector variant / entry blocked filterのテストを追加した。
+- report: `docs/reports/00299_2026-07-02_entry_ev_residual_combo_selected_trade_calibration.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00293 residual combo branchのunblocked selected trades 232件、total `+329.4348`。
+- raw EVは実績平均 `+1.4200` に対してscore平均 `+10.1991` で、MAE `10.7256`。
+- OOF補正後は factor EV平均 `+0.4363`, MAE `2.9448`、PnL EV平均 `+1.0681`, MAE `3.0165` までscale errorを縮めた。
+- Spearmanは factor `0.1329`、PnL `0.1072` と低く、rank/gate品質は弱い。
+- factor `< 0` の低score除外は31 tradesをflagして `+7.8728` の小幅改善だけ。loss precision `0.3548`、loss recall `0.1134`。
+- PnL scoreの低score領域は勝ちtradeを多く含み、`pred_supervised_pnl_ev < 0` はflagged PnL `+133.3716` で悪化する。
+
+判断:
+
+- residual combo selected-trade calibration diagnosticsはaccepted infrastructure。
+- OOF scale correctionは有効だが、直接hard gateとしてはreject。
+- calibration scoreはuncertainty / regime diagnostics / admission explanationへ回す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py tests/test_entry_ev_selected_trade_supervised_shrinkage.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_supervised_shrinkage`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_supervised_shrinkage tests.test_entry_ev_confidence_gate_overlay tests.test_entry_ev_month_warmup_overlay tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- residual combo selected-trade calibration run: OK
+
 ### 14:31 Entry EV confidence gate overlay
 
 作業:
