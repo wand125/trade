@@ -2,6 +2,35 @@
 
 時系列の作業記録。判断、実験、失敗、次の行動を追記する。
 
+## 2026-07-03 JST
+
+### 05:15 Entry EV support repair target coverage
+
+作業:
+
+- 00323で残った `fresh2024 2024-03`, `fresh2024 2024-11`, `refit2025 2025-07` のsupport repair target月について、00322 s2 predictions上のcoverageを分解した。
+- `scripts/experiments/entry_ev_support_repair_target_coverage_diagnostics.py` を追加し、target summary、row x horizon detail、threshold gate coverage、best candidatesを出力する診断を実装した。
+- report: `docs/reports/00324_2026-07-03_entry_ev_support_repair_target_coverage.md`
+
+結果:
+
+- `refit2025 2025-07 short` は available candidatesにfixed-best positive 3本、oracle non-overlap `+31.8900` があり、p0.5 / EV0 / tail0.3 / model-used yesで `2025-07-21 06:38 UTC` の240m `+4.6900` を選べる。
+- `fresh2024 2024-03 long` はavailable candidatesにfixed-best positive 12本、fixed-best max `+13.4900`、positive sum `+68.2230` があるが、全horizonが `model_used=0` かつpredicted EV負。require-model-usedを外してp0.3 / EV-2まで緩めると17 choices / `-137.9060` になり、winnerを分離できない。
+- `fresh2024 2024-11 long` は候補1本だけで、actual 240mは `+2.4500` だが、p0.3 / EV-2 / tail0.5まで緩めると720m `-5.2800` を選ぶ。
+
+判断:
+
+- support-repair target coverage diagnosticsはaccepted。
+- `refit2025 2025-07` はtarget-aware utilityで改善候補にする。
+- `fresh2024 2024-03` と `fresh2024 2024-11` は単純threshold緩和で拾わない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_target_coverage_diagnostics.py tests/test_entry_ev_support_repair_target_coverage_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_target_coverage_diagnostics`: OK
+- 00324 target coverage diagnostics run: OK
+
 ## 2026-07-02 JST
 
 ### 21:40 Entry EV support repair horizon replay

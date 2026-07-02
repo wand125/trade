@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 21:40 JST
+最終更新: 2026-07-03 05:15 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair target coverage diagnosticsを追加した。00323で残った `fresh2024 2024-03`, `fresh2024 2024-11`, `refit2025 2025-07` を00322 s2 predictions上で分解した。`refit2025 2025-07 short` はavailable candidatesにfixed-best positive 3本、oracle non-overlap `+31.8900` があり、p0.5 / EV0 / tail0.3 / model-used yesで240m `+4.6900` を選べる。一方、`fresh2024 2024-03 long` はfixed-best positive 12本 / max `+13.4900` があるが全horizon `model_used=0` かつpredicted EV負で、require-model-usedを外しp0.3 / EV-2まで緩めると17 choices / `-137.9060`。`fresh2024 2024-11 long` は候補1本でactual 240m `+2.4500` だが、緩めると720m `-5.2800` を選ぶ。判断: target coverage diagnosticsはaccepted、次はtarget-aware repair utilityへ進む。ただしfresh2024側は単純threshold緩和で拾わない。標準policyはNoTrade。詳細は `docs/reports/00324_2026-07-03_entry_ev_support_repair_target_coverage.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV support repair horizon replayを追加した。00322の次アクションとして、q90 + one-failed broad horizon viability outputを00314 best branchのsupport repairへ接続した。best totalは available candidates / prob `0.6` / EV `0` / tail `0.3` / model-used yesで、5本追加、added PnL `+23.4090`、combined total `+362.7000`。ただしmonth min `-0.6120`、remaining extra trades `3`、remaining month PnL hurdle `+1.4486` で、blockersは `month_pnl_below_floor,side_share_high`。repair targetを最も減らすEV `-2` は6本追加でremaining extra trades `2` まで縮むが、refit2025 2025-07 short `-4.9356` を拾ってmonth min `-2.8532` へ悪化する。判断: support-repair horizon replay infrastructureはaccepted、00322 s2 support additionsは標準policy / support overlayとしてreject。次はtarget-aware repair utilityと残るtarget月coverage診断へ進む。標準policyはNoTrade。詳細は `docs/reports/00323_2026-07-02_entry_ev_support_repair_horizon_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 21:40 JST
+最終更新: 2026-07-03 05:15 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00323` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318から00322で反対側near-missをexit target化し、広いcandidate universeのhorizon viabilityを試した。00322 q90 + one-failedは available raw `+71.3850`、非重複後 `+18.4790` まで改善したが、overlapping cluster依存。00323でsupport repairへ接続すると、best totalは5本追加 / added PnL `+23.4090` / combined `+362.7000` まで伸びたが、month min `-0.6120`、remaining extra trades `3`、blockers `month_pnl_below_floor,side_share_high` が残った。標準policyはNoTrade。 |
+| `00258`..`00324` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318から00322で反対側near-missをexit target化し、広いcandidate universeのhorizon viabilityを試した。00323でsupport repairへ接続するとbest totalは5本追加 / added PnL `+23.4090` / combined `+362.7000` まで伸びたがstandard blockersが残る。00324で残存target coverageを分解し、`refit2025 2025-07` はtarget-aware候補あり、`fresh2024 2024-03/2024-11` は単純threshold緩和では壊れると確認。標準policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00323` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00322 q90 + one-failed trainingはrow-levelでは前進した。00323でstateful-compatible support repairへ接続すると、best totalは5本追加 / added PnL `+23.4090` / combined `+362.7000` まで伸びたが、month min `-0.6120`、remaining extra trades `3`、remaining PnL hurdle `+1.4486` でstandard gateは未通過。EV-2でrepair countは縮むがrefit2025 2025-07 short `-4.9356` を拾ってfloorを悪化させる。次はtarget-aware repair utilityと残るtarget月coverage診断。標準policyはNoTrade。 |
+| Latest decision | `00258`..`00324` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00324では残存target月を分解し、refit2025 2025-07 shortはp0.5 / EV0 / tail0.3で240m `+4.6900` を拾える一方、fresh2024 2024-03はfallback/EV負のclusterで単純緩和が `-137.9060`、fresh2024 2024-11も緩和時に720m `-5.2800` を選ぶ。次はtarget-aware repair utility。標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -99,6 +99,7 @@
 64. `00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`
 65. `00322_2026-07-02_entry_ev_broad_horizon_viability.md`
 66. `00323_2026-07-02_entry_ev_support_repair_horizon_replay.md`
+67. `00324_2026-07-03_entry_ev_support_repair_target_coverage.md`
 
 component targetの流れを読む:
 
@@ -145,10 +146,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00323 Entry EV Support Repair Horizon Replay
+Report: 00324 Entry EV Support Repair Target Coverage
 Status: accepted infrastructure / standard NoTrade
-Question: 00322 s2 horizon choicesを00314 best branchのsupport repairへ接続するとstandard blockersを解けるか
-Best evidence: best totalは5本追加 / added PnL +23.4090 / combined +362.7000。ただしmonth min -0.6120、remaining extra trades 3、blockers month_pnl_below_floor,side_share_high。EV-2はrepair countを減らすが2025-07 short -4.9356でfloor悪化。
+Question: 00323で残ったtarget月は候補不足なのか、モデルgate/choiceが落としているのか
+Best evidence: refit2025 2025-07 shortはp0.5 / EV0 / tail0.3で240m +4.6900を拾える。fresh2024 2024-03はfixed-best positive 12本だがfallback/EV負で、緩和すると17 choices / -137.9060。fresh2024 2024-11は緩和時に720m -5.2800を選ぶ。
 Decision: 標準policyはNoTrade
-Next: target-aware repair utilityと残るtarget月coverage診断へ進む
+Next: target-aware repair utilityを00323 replayへ接続する
 ```
