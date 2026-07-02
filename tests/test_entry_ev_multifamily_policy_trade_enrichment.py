@@ -180,6 +180,78 @@ class EntryEvMultifamilyPolicyTradeEnrichmentTests(unittest.TestCase):
         self.assertAlmostEqual(first["selected_ev_overestimate_risk"], 0.20)
         self.assertAlmostEqual(second["selected_ev_overestimate_risk"], 0.80)
         self.assertTrue(matches["matched_prediction_share"].eq(1.0).all())
+        self.assertTrue(enriched["variant"].eq("base").all())
+
+    def test_build_enrichment_filters_exit_timing_variant_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            decision_time = "2024-01-01 00:00:00Z"
+            prediction_path = tmp_path / "fam_a.parquet"
+            prediction_frame(
+                decision_time=decision_time,
+                regime="loss_exit30_cd15_regime",
+                long_ev_risk=0.20,
+                short_ev_risk=0.30,
+            ).to_parquet(prediction_path, index=False)
+
+            run_dir = tmp_path / "exit_timing"
+            run_dir.mkdir()
+            pd.DataFrame(
+                [
+                    {
+                        "family": "fam_a",
+                        "role": "cal",
+                        "month": "2024-01",
+                        "candidate": "candidate_a",
+                        "variant": "loss_exit30_cd15",
+                    },
+                    {
+                        "family": "fam_a",
+                        "role": "cal",
+                        "month": "2024-01",
+                        "candidate": "candidate_a",
+                        "variant": "loss_exit30_cd30",
+                    },
+                ]
+            ).to_csv(run_dir / "monthly_exit_timing_metrics.csv", index=False)
+            keep_dir = run_dir / "trades" / "fam_a" / "loss_exit30_cd15" / "candidate_a"
+            skip_dir = run_dir / "trades" / "fam_a" / "loss_exit30_cd30" / "candidate_a"
+            keep_dir.mkdir(parents=True)
+            skip_dir.mkdir(parents=True)
+            pd.DataFrame([trade_row(decision_time, "long", 3.0)]).to_csv(
+                keep_dir / "2024-01.csv",
+                index=False,
+            )
+            pd.DataFrame([trade_row(decision_time, "short", -9.0)]).to_csv(
+                skip_dir / "2024-01.csv",
+                index=False,
+            )
+
+            args = argparse.Namespace(
+                policy_run=[f"exit_timing={run_dir}"],
+                family_predictions=[f"fam_a={prediction_path}"],
+                long_column="pred_side_prior_pressure_s0p5_long_best_adjusted_pnl",
+                short_column="pred_side_prior_pressure_s0p5_short_best_adjusted_pnl",
+                extra_columns="",
+                families="",
+                roles="",
+                months="",
+                candidates="",
+                variants="loss_exit30_cd15",
+                output_dir=tmp_path,
+                label="unit_exit_timing_enrichment",
+            )
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                output_dir = entry_ev_multifamily_policy_trade_enrichment.build_enrichment(args)
+            enriched = pd.read_csv(output_dir / "residual_enriched_trades.csv")
+            matches = pd.read_csv(output_dir / "prediction_match_summary.csv")
+
+        self.assertEqual(len(enriched), 1)
+        self.assertEqual(enriched["variant"].iloc[0], "loss_exit30_cd15")
+        self.assertEqual(enriched["direction"].iloc[0], "long")
+        self.assertAlmostEqual(enriched["adjusted_pnl"].iloc[0], 3.0)
+        self.assertTrue(matches["matched_prediction_share"].eq(1.0).all())
 
 
 if __name__ == "__main__":

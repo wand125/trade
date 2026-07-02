@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 09:54 JST
+最終更新: 2026-07-02 10:07 JST
 
 ## 結論
 
@@ -8,7 +8,7 @@
 
 現在の標準判断は NoTrade-first。候補policyは、複数chronological window、role/month PnL floor、trade support、side balance、NoTrade比較を通らない限り標準化しない。
 
-直近で最も進んだ候補は exit-regret系から、capture-adjusted score上のcoarse side/regime tail-risk headへ移ったが、外部HGB chronologyで弱い再現に留まった。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたがNoTrade未満。`00273` ではselector前base scoreへ移してq95 `-12.1040` まで戻したが、まだNoTrade未満だった。`00274` では `direction_regime` tail-riskを重ねるとq99が `+3.1260` まで改善したが、3 trades / all-long / month floor未達でadmissionはNoTradeだった。`00275` で外部HGBへ固定適用すると、bestはoverall `-9.1956` と00269比 `+0.3800` の小幅改善に留まり、標準化を支持しなかった。`00276` でexit timingへ戻り、低いloss-first dynamic exit thresholdを検証した。HGB単体では q95 + `loss_exit20/25` がgateを通ったが、hybridでは最良閾値が `0.35` 付近へずれた。統合では q95 + `loss_exit30` が total `+44.5308`, role min `+2.6780`, positive roles `3/3` まで改善したが、month min `-4.1460` が残った。`00277` で q95 + `loss_exit30` を内部chronologyへ再探索なしで固定適用し、base `-14.6536` から `+67.5682` へ改善、00276外部と統合して total `+112.0990`, positive roles `6/6` になった。ただし month min `-11.3450` と追加entry負けが残った。`00278` でdynamic exit後cooldownを追加し、q95 + `loss_exit30_cd15` は内部+外部統合 total `+118.6900`, positive roles `6/6`, month min `-6.8324`, trades `266` へ改善した。ただしmonth floorはまだ負、fresh/hybrid supportも薄いため標準採用はしない。`00279` でraw `0.30` をglobal expanding loss-first quantileへ置き換えたが、best totalの `lfq60_cd15` は total `+135.3536` でも positive roles `4/6`, month min `-28.9404` で崩れた。単純なglobal quantile thresholdは採用せず、raw `loss_exit30_cd15` を固定診断候補として維持する。
+直近で最も進んだ候補は exit-regret系から、capture-adjusted score上のcoarse side/regime tail-risk headへ移ったが、外部HGB chronologyで弱い再現に留まった。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたがNoTrade未満。`00273` ではselector前base scoreへ移してq95 `-12.1040` まで戻したが、まだNoTrade未満だった。`00274` では `direction_regime` tail-riskを重ねるとq99が `+3.1260` まで改善したが、3 trades / all-long / month floor未達でadmissionはNoTradeだった。`00275` で外部HGBへ固定適用すると、bestはoverall `-9.1956` と00269比 `+0.3800` の小幅改善に留まり、標準化を支持しなかった。`00276` でexit timingへ戻り、低いloss-first dynamic exit thresholdを検証した。HGB単体では q95 + `loss_exit20/25` がgateを通ったが、hybridでは最良閾値が `0.35` 付近へずれた。統合では q95 + `loss_exit30` が total `+44.5308`, role min `+2.6780`, positive roles `3/3` まで改善したが、month min `-4.1460` が残った。`00277` で q95 + `loss_exit30` を内部chronologyへ再探索なしで固定適用し、base `-14.6536` から `+67.5682` へ改善、00276外部と統合して total `+112.0990`, positive roles `6/6` になった。ただし month min `-11.3450` と追加entry負けが残った。`00278` でdynamic exit後cooldownを追加し、q95 + `loss_exit30_cd15` は内部+外部統合 total `+118.6900`, positive roles `6/6`, month min `-6.8324`, trades `266` へ改善した。ただしmonth floorはまだ負、fresh/hybrid supportも薄いため標準採用はしない。`00279` でraw `0.30` をglobal expanding loss-first quantileへ置き換えたが、best totalの `lfq60_cd15` は total `+135.3536` でも positive roles `4/6`, month min `-28.9404` で崩れた。`00280` で raw `loss_exit30_cd15` の残存損失をprediction文脈へjoinして分解し、loss trade 122件 `-229.4220` のうち no-edge entryは3件 `-34.6800` だけ、119件 `-194.7420` は同方向oracle利益ありと確認した。単純なglobal quantileや方向分類強化ではなく、side/family/regime-conditioned exit-capture calibrationとEV shrinkageを次の本流にする。
 
 ## 現在の判断
 
@@ -16,8 +16,8 @@
 |---|---|
 | Standard policy | なし。NoTrade-firstを維持 |
 | Current diagnostic candidate | q95 + raw `loss_exit30_cd15` dynamic exit cooldown。pre-standard diagnostic candidate。global quantile版はdiagnostic infrastructure止まり |
-| Why not standard | `00278/00279` 統合では raw `loss_exit30_cd15` が positive roles `6/6` だが month min `-6.8324` が残る。fresh/hybrid supportが薄く、hybrid 2025-12 `-4.1460` はcooldownでは消えない |
-| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / profit-barrier miss |
+| Why not standard | raw `loss_exit30_cd15` は positive roles `6/6` だが month min `-6.8324` が残る。fresh/hybrid supportが薄く、loss-only分解では同方向oracle利益ありのexit-capture failureが主因 |
+| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / profit-barrier miss / selected-side capture ratio |
 | Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May/September tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足 |
 
 ## 研究レーン
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00279` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。 |
+| Component / exit-regret | `00240`..`00280` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。 |
 
 ## 採用済みインフラ
 
@@ -53,6 +53,7 @@
 - variant trade delta diagnostics
 - dynamic exit minimum-hold / cooldown hooks
 - chronological loss-first quantile input generation
+- multifamily exit-timing trade enrichment and raw cd15 residual loss diagnostics
 
 ## 採用しないもの
 
@@ -80,12 +81,14 @@
 - q95 + `loss_exit30_cd15` をmonth floor負のまま標準採用すること
 - minimum hold overlayをtotal改善だけで採用すること
 - global expanding loss-first quantileをtotal改善だけで採用すること
+- raw `loss_exit30_cd15` の残存損失を単純なentry方向問題として扱うこと
+- single month/contextのworst tradeから静的blacklistを作ること
 
 ## 次にやること
 
-1. q95 + `loss_exit30_cd15` を固定し、残る負け月を refit churn / hybrid sparse residual / fresh sparse residual に分けて診断する。
-2. loss-first calibrationを再訪するなら、global CDFではなくside/family/regime-conditioned calibrationまたはsupervised exit-capture calibrationにする。
-3. hybrid 2025-11/12の残存損失はcooldownでは消えないため、direction / exit-capture featureへ戻して分解する。
+1. q95 + raw `loss_exit30_cd15` を固定benchmarkにしたまま、side/family/regime-conditioned exit-capture calibrationを作る。
+2. supervised expected-PnL shrinkageで `pred_taken_ev` を realized/captured PnL に縮める。
+3. no-edge entryはrare-event guardとして別枠にし、3件だけでcontext blacklistを作らない。
 4. score headをselector後に重ねる場合は `--side-gap-source-score-kind` でpre-block side-gap gateを明示的に継承する。
 5. `direction_regime` tail-riskはdiagnostic featureとして保持し、policy candidateにはしない。
 6. role trade support、role PnL、month floor、side share、NoTrade-first比較を標準採用ゲートとして維持する。
@@ -114,3 +117,4 @@
 20. `00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`
 21. `00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`
 22. `00279_2026-07-02_entry_ev_loss_first_global_expanding_quantile.md`
+23. `00280_2026-07-02_entry_ev_raw_cd15_residual_loss_diagnostics.md`

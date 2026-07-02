@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 10:07 Entry EV raw cd15 residual loss diagnostics
+
+作業:
+
+- 00279の次アクションとして、q95 + raw `loss_exit30_cd15` を固定したまま、internal / external HGB / external hybrid の実行tradeをprediction文脈へjoinした。
+- `entry_ev_multifamily_policy_trade_enrichment.py` を `monthly_exit_timing_metrics.csv`、variant付きtrade path、`--variants` / `--candidates` などのフィルタに対応させた。
+- raw `loss_exit30_cd15` のenrichmentを3系統で実行し、統合 residual loss diagnostics を作成した。
+- report: `docs/reports/00280_2026-07-02_entry_ev_raw_cd15_residual_loss_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 統合結果は total `+118.6900`, 266 tradesで00278と一致し、prediction matchは全系統で `1.0`。
+- loss tradesは122件、損失合計 `-229.4220`。
+- no-edge entryは3件 / `-34.6800` のみ。
+- 119件 / `-194.7420` は同方向oracle利益があり、exit regret合計は `+2937.1700`。
+- 残存負け月は refit2025 2025-09/06/02、hybrid 2025-12、fresh 2024-03/11 などだが、主因はsingle contextではなくexit-capture failureとEV過大評価。
+
+判断:
+
+- raw `loss_exit30_cd15` は固定診断benchmarkとして維持する。
+- 残存損失を単純なentry方向問題として扱わない。
+- single month/contextの静的blacklistは過学習しやすいため採用しない。
+- 次は side/family/regime-conditioned exit-capture calibration と supervised expected-PnL shrinkageを試す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `python3 -m unittest tests.test_entry_ev_multifamily_policy_trade_enrichment tests.test_entry_ev_direction_residual_loss_diagnostics`: OK
+- raw cd15 internal / HGB / hybrid enrichment: OK
+- raw cd15 combined residual diagnostics: OK
+
 ### 09:54 Entry EV loss-first global expanding quantile
 
 作業:

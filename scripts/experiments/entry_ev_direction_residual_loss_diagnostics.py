@@ -93,6 +93,11 @@ TARGET_FLAGS = [
     "low_replacement_quality_loss_target",
 ]
 
+MONTHLY_METRIC_FILENAMES = (
+    "monthly_policy_metrics.csv",
+    "monthly_exit_timing_metrics.csv",
+)
+
 
 def local_json_default(value: Any) -> Any:
     try:
@@ -187,7 +192,13 @@ def selected_side_text(
 
 
 def read_monthly_metrics(run_dir: Path) -> pd.DataFrame:
-    path = run_dir / "monthly_policy_metrics.csv"
+    path = next(
+        (run_dir / name for name in MONTHLY_METRIC_FILENAMES if (run_dir / name).exists()),
+        None,
+    )
+    if path is None:
+        expected = ", ".join(MONTHLY_METRIC_FILENAMES)
+        raise FileNotFoundError(f"{run_dir} has none of: {expected}")
     frame = pd.read_csv(path)
     required = {"family", "role", "month", "candidate"}
     missing = sorted(required - set(frame.columns))
@@ -197,7 +208,15 @@ def read_monthly_metrics(run_dir: Path) -> pd.DataFrame:
 
 
 def trade_path(run_dir: Path, row: pd.Series) -> Path:
-    return run_dir / "trades" / str(row["family"]) / str(row["candidate"]) / f"{row['month']}.csv"
+    family = str(row["family"])
+    candidate = str(row["candidate"])
+    month = str(row["month"])
+    variant = str(row.get("variant", "")).strip()
+    if variant and variant.lower() != "nan":
+        variant_path = run_dir / "trades" / family / variant / candidate / f"{month}.csv"
+        if variant_path.exists():
+            return variant_path
+    return run_dir / "trades" / family / candidate / f"{month}.csv"
 
 
 def read_policy_run_trades(
@@ -234,8 +253,9 @@ def read_policy_run_trades(
         enriched.insert(0, "run_name", run_name)
         enriched.insert(1, "family", str(row["family"]))
         enriched.insert(2, "role", str(row["role"]))
-        enriched.insert(3, "month", str(row["month"]))
-        enriched.insert(4, "candidate", str(row["candidate"]))
+        enriched.insert(3, "variant", str(row.get("variant", "base")))
+        enriched.insert(4, "month", str(row["month"]))
+        enriched.insert(5, "candidate", str(row["candidate"]))
         frames.append(enriched)
     if missing_paths:
         preview = ", ".join(str(path) for path in missing_paths[:5])

@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 09:54 JST
+最終更新: 2026-07-02 10:07 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00279` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで改善し、00278でdynamic exit cooldownが過剰回転を抑えた。00279でglobal expanding quantile化を試したがtail/role floorを壊し、raw cd15維持。 |
+| `00258`..`00280` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで改善し、00278でdynamic exit cooldownが過剰回転を抑えた。00279でglobal expanding quantile化を試したがtail/role floorを壊し、raw cd15維持。00280でraw cd15残存損失はentry無価値ではなくexit-capture failure / EV過大評価が中心と確認。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00279` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。00274のcoarse `direction_regime` tail-riskは00275の外部HGB固定適用で再現せずdiagnosticへ降格。00278で q95 + raw `loss_exit30_cd15` が combined total +118.6900 / positive roles 6/6 / month min -6.8324 まで改善。00279のglobal quantile版はtotal改善と引き換えにtail/roleを壊すため、固定診断候補はraw cd15のまま。 |
+| Latest decision | `00258`..`00280` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。00274のcoarse `direction_regime` tail-riskは00275の外部HGB固定適用で再現せずdiagnosticへ降格。00278で q95 + raw `loss_exit30_cd15` が combined total +118.6900 / positive roles 6/6 / month min -6.8324 まで改善。00279のglobal quantile版はtotal改善と引き換えにtail/roleを壊すため、固定診断候補はraw cd15のまま。00280でloss trade 122件の大半が同方向oracle利益ありと分かり、次はexit-capture calibration / EV shrinkageへ進む。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -55,6 +55,7 @@
 20. `00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`
 21. `00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`
 22. `00279_2026-07-02_entry_ev_loss_first_global_expanding_quantile.md`
+23. `00280_2026-07-02_entry_ev_raw_cd15_residual_loss_diagnostics.md`
 
 component targetの流れを読む:
 
@@ -101,10 +102,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00279 Entry EV Loss First Global Expanding Quantile
+Report: 00280 Entry EV Raw Cd15 Residual Loss Diagnostics
 Status: pre-standard diagnostic candidate / policy not standardized
-Question: raw loss-first 0.30 をglobal expanding quantile thresholdへ置き換えられるか
-Best evidence: lfq60_cd15 は combined total +135.3536 だが positive roles 4/6、month min -28.9404。raw loss_exit30_cd15 は total +118.6900、positive roles 6/6、month min -6.8324
+Question: raw loss_exit30_cd15 の残存負け月はentry方向問題か、exit/capture問題か
+Best evidence: loss trades 122件 / -229.4220 のうち no-edge entryは3件 / -34.6800だけ。119件 / -194.7420 は同方向oracle利益あり
 Decision: 標準policyはNoTrade
-Next: raw loss_exit30_cd15固定で残る負け月を分解する。calibrationを再訪するならglobal CDFではなくside/family/regime-conditionedまたはsupervised exit-capture calibrationにする
+Next: raw loss_exit30_cd15を固定benchmarkにし、side/family/regime-conditioned exit-capture calibrationとsupervised EV shrinkageを試す
 ```

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 09:54 JST
+最終更新: 2026-07-02 10:07 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV raw cd15 residual loss diagnosticsを追加した。raw `loss_exit30_cd15` のinternal / external HGB / external hybrid tradesをprediction文脈へjoinし、残存負け月を分解した。`entry_ev_multifamily_policy_trade_enrichment.py` は `monthly_exit_timing_metrics.csv`、variant付きtrade path、`--variants` などのフィルタに対応した。統合診断では total `+118.6900`, 266 tradesで00278と一致。loss tradesは122件 / `-229.4220` だが、no-edge entryは3件 / `-34.6800` のみで、119件 / `-194.7420` は同方向oracle利益あり。主因はentry方向より exit-capture failure とEV過大評価。判断: raw `loss_exit30_cd15` は固定診断benchmarkとして維持し、標準policyはNoTrade。次は side/family/regime-conditioned exit-capture calibration と supervised expected-PnL shrinkage。詳細は `docs/reports/00280_2026-07-02_entry_ev_raw_cd15_residual_loss_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV loss-first global expanding quantileを追加した。raw `loss_first_exit_threshold=0.30` を絶対確率として扱う弱さに対し、各評価月より前の全prediction rowだけをfit分布にしたempirical-CDF quantile列を生成する `scripts/experiments/entry_ev_loss_first_quantile_inputs.py` を追加した。`entry_ev_quantile_exit_timing_sensitivity.py` には `--long-loss-first-column` / `--short-loss-first-column` を追加し、dynamic exitの入力列を差し替えられるようにした。fit不足月をNaNにするとrequired column欠損でentry自体が消えるため、fit不足時はquantile `0.0` で埋め、dynamic exitだけを無効化する扱いに修正。内部+外部統合では raw `loss_exit30_cd15` が total `+118.6900`, positive roles `6/6`, month min `-6.8324`。quantile版は `lfq60_cd15` が total `+135.3536` まで伸びるが positive roles `4/6`, month min `-28.9404` でreject。`lfq30/50` はpositive roles `6/6` だがmonth floorがrawより悪い。判断: quantile input infrastructureはaccepted、単純なglobal expanding loss-first quantile thresholdはpolicy候補にしない。詳細は `docs/reports/00279_2026-07-02_entry_ev_loss_first_global_expanding_quantile.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

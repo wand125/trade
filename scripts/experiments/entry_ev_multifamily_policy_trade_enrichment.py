@@ -119,8 +119,20 @@ def read_multifamily_policy_run_trades(
     run_dir: Path,
     analysis_predictions: dict[str, pd.DataFrame],
     extra_prediction_columns: list[str],
+    families: set[str],
+    roles: set[str],
+    months: set[str],
+    candidates: set[str],
+    variants: set[str],
 ) -> pd.DataFrame:
-    monthly = read_monthly_metrics(run_dir)
+    monthly = filter_monthly_metrics(
+        read_monthly_metrics(run_dir),
+        families=families,
+        roles=roles,
+        months=months,
+        candidates=candidates,
+        variants=variants,
+    )
     frames: list[pd.DataFrame] = []
     missing_paths: list[Path] = []
     missing_families: set[str] = set()
@@ -144,8 +156,9 @@ def read_multifamily_policy_run_trades(
         enriched.insert(0, "run_name", run_name)
         enriched.insert(1, "family", family)
         enriched.insert(2, "role", str(row["role"]))
-        enriched.insert(3, "month", str(row["month"]))
-        enriched.insert(4, "candidate", str(row["candidate"]))
+        enriched.insert(3, "variant", str(row.get("variant", "base")))
+        enriched.insert(4, "month", str(row["month"]))
+        enriched.insert(5, "candidate", str(row["candidate"]))
         frames.append(enriched)
     if missing_families:
         raise ValueError(f"missing family predictions: {', '.join(sorted(missing_families))}")
@@ -158,17 +171,47 @@ def read_multifamily_policy_run_trades(
     return pd.concat(frames, ignore_index=True)
 
 
+def filter_monthly_metrics(
+    monthly: pd.DataFrame,
+    *,
+    families: set[str],
+    roles: set[str],
+    months: set[str],
+    candidates: set[str],
+    variants: set[str],
+) -> pd.DataFrame:
+    filtered = monthly.copy()
+    if "variant" not in filtered.columns:
+        filtered["variant"] = "base"
+    filtered["variant"] = filtered["variant"].fillna("base").astype(str)
+    filter_specs = [
+        ("family", families),
+        ("role", roles),
+        ("month", months),
+        ("candidate", candidates),
+        ("variant", variants),
+    ]
+    for column, allowed in filter_specs:
+        if allowed:
+            filtered = filtered[filtered[column].astype(str).isin(allowed)].copy()
+    return filtered.reset_index(drop=True)
+
+
 def match_summary(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame()
-    grouped = frame.groupby(["run_name", "family", "candidate", "month"], dropna=False)
+    grouped = frame.groupby(
+        ["run_name", "family", "variant", "candidate", "month"],
+        dropna=False,
+    )
     rows: list[dict[str, Any]] = []
     for keys, group in grouped:
-        run_name, family, candidate, month = keys
+        run_name, family, variant, candidate, month = keys
         rows.append(
             {
                 "run_name": run_name,
                 "family": family,
+                "variant": variant,
                 "candidate": candidate,
                 "month": month,
                 "trade_count": int(len(group)),
@@ -186,6 +229,11 @@ def build_enrichment(args: argparse.Namespace) -> Path:
     policy_runs = parse_policy_runs(args.policy_run)
     family_predictions = parse_family_predictions(args.family_predictions)
     extra_columns = list(dict.fromkeys([*DEFAULT_EXTRA_COLUMNS, *parse_csv(args.extra_columns)]))
+    families = set(parse_csv(getattr(args, "families", "")))
+    roles = set(parse_csv(getattr(args, "roles", "")))
+    months = set(parse_csv(getattr(args, "months", "")))
+    candidates = set(parse_csv(getattr(args, "candidates", "")))
+    variants = set(parse_csv(getattr(args, "variants", "")))
     analysis_predictions = load_analysis_predictions(
         family_predictions,
         long_column=args.long_column,
@@ -200,13 +248,18 @@ def build_enrichment(args: argparse.Namespace) -> Path:
             run_dir=run_dir,
             analysis_predictions=analysis_predictions,
             extra_prediction_columns=extra_columns,
+            families=families,
+            roles=roles,
+            months=months,
+            candidates=candidates,
+            variants=variants,
         )
         frames.append(trades)
     combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     combined = add_selected_residual_features(combined)
 
-    candidate = summarize_by(combined, ["run_name", "family", "candidate"])
-    month = summarize_by(combined, ["run_name", "family", "candidate", "month"])
+    candidate = summarize_by(combined, ["run_name", "family", "variant", "candidate"])
+    month = summarize_by(combined, ["run_name", "family", "variant", "candidate", "month"])
     matches = match_summary(combined)
 
     run_dir = make_run_dir(args.output_dir, args.label)
@@ -220,7 +273,15 @@ def build_enrichment(args: argparse.Namespace) -> Path:
         "long_column": args.long_column,
         "short_column": args.short_column,
         "extra_columns": extra_columns,
-        "note": "each trade CSV is joined with predictions for its monthly_policy_metrics family",
+        "families": sorted(families),
+        "roles": sorted(roles),
+        "months": sorted(months),
+        "candidates": sorted(candidates),
+        "variants": sorted(variants),
+        "note": (
+            "each trade CSV is joined with predictions for its monthly metrics family; "
+            "monthly_policy_metrics.csv and monthly_exit_timing_metrics.csv are supported"
+        ),
     }
     (run_dir / "config.json").write_text(
         json.dumps(config, indent=2, default=local_json_default),
@@ -248,6 +309,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="pred_side_prior_pressure_s0p5_short_best_adjusted_pnl",
     )
     parser.add_argument("--extra-columns", default="")
+    parser.add_argument("--families", default="")
+    parser.add_argument("--roles", default="")
+    parser.add_argument("--months", default="")
+    parser.add_argument("--candidates", default="")
+    parser.add_argument("--variants", default="")
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     parser.add_argument("--label", default="entry_ev_multifamily_policy_trade_enrichment")
     return parser
