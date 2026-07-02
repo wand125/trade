@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 19:53 JST
+最終更新: 2026-07-02 20:12 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV thin month opposite candidate diagnosticsを追加した。00317の次アクションとして、thin monthに反対側candidateがprediction rows上に存在するか、現行trade intervalと重ねて診断した。strict条件では8 repair target中 `refit2025_validation 2025-08 short` の1件しか埋まらない。`one_failed_strict_stage` まで緩めると8 targetすべてに候補は存在するが、8本合計のfixed60実現は `-17.7984`、fixed240は `-31.7138`、fixed720は `-80.4158`。oracle bestだけは `+86.0590`。fresh2024の3ヶ月はscore floor `5` 未満のnear-missで、fixed60は `-14.1240`, `-11.0604`, `+0.3000`。判断: thin-month opposite candidate diagnosticsはaccepted infrastructure、side-balanced support overlayはまだ標準候補にせず、near-miss support candidate用のexit timing / EV calibration targetへ進む。標準policyはNoTrade。詳細は `docs/reports/00318_2026-07-02_entry_ev_thin_month_opposite_candidates.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV admission repair target diagnosticsを追加した。00316の次アクションとして、support-limited negative months と side-share blockersを、standard admissionへ近づくための修復targetに分解した。00314 best overlay (`fixed60_margin_w5 + holdext/position-quality`) ではmonth PnL不足は合計 `+2.1686` と小さい一方、support/side修復には月別に `8` extra trades が必要で、内訳は long `5` / short `3`。00310 referenceと00314 w5は同じrepair targetであり、00314はtotalを改善したがstandard admission readinessは改善していない。判断: admission repair target diagnosticsはaccepted infrastructure、次はrow削除ではなくthin monthへ反対側候補を作れるentry coverage / side-balance designを検証する。標準policyはNoTrade。詳細は `docs/reports/00317_2026-07-02_entry_ev_admission_repair_targets.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

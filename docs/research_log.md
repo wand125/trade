@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 20:12 Entry EV thin month opposite candidates
+
+作業:
+
+- 00317の次アクションとして、thin monthに反対側candidateがprediction rows上に存在するかを診断した。
+- `scripts/experiments/entry_ev_thin_month_opposite_candidate_diagnostics.py` を追加し、repair target、現行trade interval、prediction parquetを突き合わせた。
+- report: `docs/reports/00318_2026-07-02_entry_ev_thin_month_opposite_candidates.md`
+
+結果:
+
+- strict条件では8 repair target中 `refit2025_validation 2025-08 short` の1件しか埋まらない。
+- `one_failed_strict_stage` まで緩めると8 targetすべてに候補は存在する。
+- ただし8本合計のfixed60実現は `-17.7984`、fixed240は `-31.7138`、fixed720は `-80.4158`。oracle bestだけは `+86.0590`。
+- fresh2024の3ヶ月はscore floor `5` 未満のnear-missで、fixed60は `-14.1240`, `-11.0604`, `+0.3000`。
+
+判断:
+
+- thin-month opposite candidate diagnosticsはaccepted infrastructure。
+- side-balanced support overlayはまだ標準候補にしない。
+- 次はnear-miss support candidate用のexit timing / EV calibration targetを作る。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_thin_month_opposite_candidate_diagnostics.py tests/test_entry_ev_thin_month_opposite_candidate_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_thin_month_opposite_candidate_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_thin_month_opposite_candidate_diagnostics tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- 00318 thin-month opposite candidate diagnostics runs: OK
+
 ### 19:53 Entry EV admission repair targets
 
 作業:
