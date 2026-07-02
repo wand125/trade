@@ -20,7 +20,7 @@ if str(SRC) not in sys.path:
 from trade_data.backtest import json_default, make_run_dir  # noqa: E402
 
 
-CONTEXT_COLUMNS = ["direction", "combined_regime", "session_regime"]
+DEFAULT_CONTEXT_COLUMNS = ["direction", "combined_regime", "session_regime"]
 DEFAULT_RISK_THRESHOLDS = "0.25,0.50,0.75"
 DEFAULT_RISK_BUCKETS = "-inf,0,0.25,0.50,0.75,inf"
 
@@ -185,15 +185,20 @@ def add_exit_capture_targets(
     return output
 
 
-def dedupe_prior_trades(prior: pd.DataFrame) -> pd.DataFrame:
+def dedupe_prior_trades(
+    prior: pd.DataFrame,
+    *,
+    context_columns: list[str] | None = None,
+) -> pd.DataFrame:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     dedupe_columns = [
         "month",
         "entry_decision_timestamp",
-        "direction",
-        "combined_regime",
-        "session_regime",
+        *context_columns,
     ]
-    return prior.drop_duplicates(subset=dedupe_columns).reset_index(drop=True)
+    dedupe_columns = list(dict.fromkeys(dedupe_columns))
+    existing = [column for column in dedupe_columns if column in prior.columns]
+    return prior.drop_duplicates(subset=existing).reset_index(drop=True)
 
 
 def build_prior_exit_capture_stats(
@@ -202,7 +207,9 @@ def build_prior_exit_capture_stats(
     target_month: str,
     min_prior_months: int,
     recent_month_count: int,
+    context_columns: list[str] | None = None,
 ) -> pd.DataFrame:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     if prior.empty:
         return pd.DataFrame()
     target_period = pd.Period(target_month, freq="M")
@@ -224,7 +231,7 @@ def build_prior_exit_capture_stats(
         errors="coerce",
     ).where(frame["same_side_oracle_edge"].astype(bool))
     grouped = (
-        frame.groupby(CONTEXT_COLUMNS, dropna=False)
+        frame.groupby(context_columns, dropna=False)
         .agg(
             prior_exit_trade_count=("adjusted_pnl", "size"),
             prior_exit_month_count=("month", "nunique"),
@@ -284,7 +291,9 @@ def build_all_prior_exit_capture_stats(
     *,
     min_prior_months: int,
     recent_month_count: int,
+    context_columns: list[str] | None = None,
 ) -> pd.DataFrame:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     frames: list[pd.DataFrame] = []
     for month in target_months:
         stats = build_prior_exit_capture_stats(
@@ -292,6 +301,7 @@ def build_all_prior_exit_capture_stats(
             target_month=month,
             min_prior_months=min_prior_months,
             recent_month_count=recent_month_count,
+            context_columns=context_columns,
         )
         if not stats.empty:
             frames.append(stats)
@@ -308,7 +318,9 @@ def add_prior_exit_capture_risk(
     recent_month_count: int,
     support_scale: float,
     regret_scale: float,
+    context_columns: list[str] | None = None,
 ) -> pd.DataFrame:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     target = target.copy()
     target_months = sorted(target["month"].astype(str).unique().tolist())
     stats = build_all_prior_exit_capture_stats(
@@ -316,6 +328,7 @@ def add_prior_exit_capture_risk(
         target_months,
         min_prior_months=min_prior_months,
         recent_month_count=recent_month_count,
+        context_columns=context_columns,
     )
     if stats.empty:
         enriched = target
@@ -323,8 +336,8 @@ def add_prior_exit_capture_risk(
         enriched = target.merge(
             stats,
             how="left",
-            left_on=["month", *CONTEXT_COLUMNS],
-            right_on=["target_month", *CONTEXT_COLUMNS],
+            left_on=["month", *context_columns],
+            right_on=["target_month", *context_columns],
         )
     numeric_defaults = {
         "prior_exit_trade_count": 0.0,
@@ -524,6 +537,7 @@ def summarize_thresholds(
 
 
 def build_diagnostics(args: argparse.Namespace) -> Path:
+    context_columns = parse_optional_csv(args.context_columns) or DEFAULT_CONTEXT_COLUMNS
     target = normalize_trade_frame(
         read_trade_frames(args.target_enriched_trades),
         name="target",
@@ -544,6 +558,13 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
     )
     if target.empty:
         raise ValueError("no target trades remain after filters")
+    missing_context = sorted(
+        column
+        for column in context_columns
+        if column not in target.columns or column not in prior.columns
+    )
+    if missing_context:
+        raise ValueError(f"context columns missing from target/prior: {', '.join(missing_context)}")
     target = add_exit_capture_targets(
         target,
         min_oracle_edge=args.min_oracle_edge,
@@ -557,7 +578,7 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
         large_exit_regret_threshold=args.large_exit_regret_threshold,
     )
     if args.dedupe_prior:
-        prior = dedupe_prior_trades(prior)
+        prior = dedupe_prior_trades(prior, context_columns=context_columns)
 
     enriched = add_prior_exit_capture_risk(
         target,
@@ -566,6 +587,7 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
         recent_month_count=args.recent_month_count,
         support_scale=args.support_scale,
         regret_scale=args.regret_scale,
+        context_columns=context_columns,
     )
     enriched = add_risk_bucket(enriched, parse_float_csv(args.risk_buckets))
     thresholds = parse_float_csv(args.risk_thresholds)
@@ -609,6 +631,7 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
         "candidates": args.candidates,
         "months": args.months,
         "dedupe_prior": args.dedupe_prior,
+        "context_columns": context_columns,
         "min_oracle_edge": args.min_oracle_edge,
         "low_capture_threshold": args.low_capture_threshold,
         "large_exit_regret_threshold": args.large_exit_regret_threshold,
@@ -669,6 +692,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidates", default="")
     parser.add_argument("--months", default="")
     parser.add_argument("--dedupe-prior", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--context-columns",
+        default=",".join(DEFAULT_CONTEXT_COLUMNS),
+        help="comma-separated prior context columns used to condition exit-capture stats",
+    )
     parser.add_argument("--min-oracle-edge", type=float, default=0.0)
     parser.add_argument("--low-capture-threshold", type=float, default=0.25)
     parser.add_argument("--large-exit-regret-threshold", type=float, default=10.0)

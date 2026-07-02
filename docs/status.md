@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 10:07 JST
+最終更新: 2026-07-02 10:35 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV capture shrink overlayを検証した。raw `loss_exit30_cd15` を固定benchmarkにし、prior-only exit-capture risk、executable EV calibration、direct score shrinkを比較。`entry_ev_exit_capture_target_diagnostics.py` と `entry_ev_executable_ev_*` 系に `--context-columns` を追加し、`entry_ev_executable_ev_policy_inputs.py` には `--capture-shrink-strength` を追加した。prior riskはfailure precisionが高い一方でflagged集合のPnLがプラスで、hard blockには向かない。executable EV calibrationはMAEを改善するが、low-EV thresholdもプラスPnL集合を削る。score shrink overlayは full side/regime/session、full family/side/regime/session、weak `strength=0.25` の全てで raw benchmark `+118.6900` を下回った。判断: direct multiplicative capture shrinkはreject。capture factorはsupervised EV shrinkage / exit-capture modelの特徴量として使う。標準policyはNoTrade。詳細は `docs/reports/00281_2026-07-02_entry_ev_capture_shrink_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV raw cd15 residual loss diagnosticsを追加した。raw `loss_exit30_cd15` のinternal / external HGB / external hybrid tradesをprediction文脈へjoinし、残存負け月を分解した。`entry_ev_multifamily_policy_trade_enrichment.py` は `monthly_exit_timing_metrics.csv`、variant付きtrade path、`--variants` などのフィルタに対応した。統合診断では total `+118.6900`, 266 tradesで00278と一致。loss tradesは122件 / `-229.4220` だが、no-edge entryは3件 / `-34.6800` のみで、119件 / `-194.7420` は同方向oracle利益あり。主因はentry方向より exit-capture failure とEV過大評価。判断: raw `loss_exit30_cd15` は固定診断benchmarkとして維持し、標準policyはNoTrade。次は side/family/regime-conditioned exit-capture calibration と supervised expected-PnL shrinkage。詳細は `docs/reports/00280_2026-07-02_entry_ev_raw_cd15_residual_loss_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

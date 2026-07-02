@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 10:35 Entry EV capture shrink overlay
+
+作業:
+
+- 00280の次アクションとして、raw `loss_exit30_cd15` を固定benchmarkにし、prior exit-capture risk、executable EV calibration、direct score shrink overlayを検証した。
+- `entry_ev_exit_capture_target_diagnostics.py` と `entry_ev_executable_ev_*` 系に `--context-columns` を追加し、`direction,combined_regime,session_regime` と `family,direction,combined_regime,session_regime` を切り替えられるようにした。
+- `entry_ev_executable_ev_policy_inputs.py` に `--capture-shrink-strength` を追加し、historical capture factorをそのまま掛けるfull shrinkと、`strength=0.25` の弱いshrinkを比較した。
+- report: `docs/reports/00281_2026-07-02_entry_ev_capture_shrink_overlay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- prior exit-capture riskはfailure precisionが高いが、flagged PnLがプラスだった。例: side/regime/session risk `0.50` は90 tradesをflagし、PnL `+71.2176`, precision `0.9000`。
+- executable EV calibrationはMAEを大きく改善した。例: HGB 2025-08は raw MAE `26.8483` から calibrated MAE `0.8909`。
+- ただしlow EV thresholdもプラスPnL集合を削るため、hard gateにはしない。
+- direct score shrinkはraw benchmark `+118.6900` に届かない。full side/regime/session bestは `+10.8662`, full family/side/regime/session bestは `+10.8600`, weak `strength=0.25` bestは `-0.2380`。
+
+判断:
+
+- prior capture factorのhard block / direct multiplicative score shrinkはreject。
+- capture factorは、supervised exit-capture / realized-PnL shrinkage headの特徴量として使う。
+- raw `loss_exit30_cd15` は固定診断benchmarkとして維持する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_executable_ev_calibration_diagnostics.py scripts/experiments/entry_ev_executable_ev_policy_inputs.py scripts/experiments/entry_ev_exit_capture_target_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_executable_ev_policy_inputs tests.test_entry_ev_executable_ev_calibration_diagnostics tests.test_entry_ev_exit_capture_target_diagnostics`: OK
+- prior exit-capture risk / executable EV calibration / score shrink replay: OK
+
 ### 10:07 Entry EV raw cd15 residual loss diagnostics
 
 作業:

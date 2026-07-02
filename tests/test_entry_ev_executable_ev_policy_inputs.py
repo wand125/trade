@@ -98,6 +98,101 @@ class EntryEvExecutableEvPolicyInputsTests(unittest.TestCase):
         self.assertAlmostEqual(april["pred_executable_long_capture_factor"], 0.25)
         self.assertAlmostEqual(april["long_exec"], 2.5)
 
+    def test_add_executable_ev_scores_can_condition_on_family(self):
+        predictions = self.prediction_frame()
+        predictions["family"] = ["fam_a", "fam_b"]
+        prior = pd.DataFrame(
+            {
+                "family": ["fam_a", "fam_b"],
+                "role": ["cal", "cal"],
+                "candidate": ["q95", "q95"],
+                "month": ["2024-02", "2024-02"],
+                "direction": ["long", "long"],
+                "entry_decision_timestamp": [
+                    "2024-02-10T00:00:00Z",
+                    "2024-02-11T00:00:00Z",
+                ],
+                "combined_regime": ["range", "range"],
+                "session_regime": ["asia", "asia"],
+                "adjusted_pnl": [2.0, 8.0],
+                "actual_taken_best_adjusted_pnl": [10.0, 10.0],
+            }
+        )
+        normalized = entry_ev_executable_ev_policy_inputs.normalize_prior_trades(prior)
+        normalized = entry_ev_executable_ev_policy_inputs.add_capture_ratio_columns(
+            normalized,
+            min_oracle_edge=0.0,
+            min_capture_factor=0.0,
+            max_capture_factor=1.0,
+        )
+
+        enriched, _context, _global = (
+            entry_ev_executable_ev_policy_inputs.add_executable_ev_scores(
+                predictions,
+                normalized,
+                long_column="pred_calibrated_long_best_adjusted_pnl",
+                short_column="pred_calibrated_short_best_adjusted_pnl",
+                long_output_column="long_exec",
+                short_output_column="short_exec",
+                min_prior_months=1,
+                recent_month_count=0,
+                support_scale=1.0,
+                default_capture_factor=1.0,
+                min_capture_factor=0.0,
+                max_capture_factor=1.0,
+                context_columns=["family", "direction", "combined_regime", "session_regime"],
+            )
+        )
+
+        fam_a = enriched[enriched["family"].eq("fam_a")].iloc[0]
+        fam_b = enriched[enriched["family"].eq("fam_b")].iloc[0]
+        self.assertAlmostEqual(fam_a["pred_executable_long_capture_factor"], 0.2)
+        self.assertAlmostEqual(fam_b["pred_executable_long_capture_factor"], 0.8)
+
+    def test_add_executable_ev_scores_can_apply_partial_shrink(self):
+        predictions = self.prediction_frame().iloc[:1].copy()
+        prior = pd.DataFrame(
+            {
+                "role": ["cal"],
+                "candidate": ["q95"],
+                "month": ["2024-02"],
+                "direction": ["long"],
+                "entry_decision_timestamp": ["2024-02-10T00:00:00Z"],
+                "combined_regime": ["range"],
+                "session_regime": ["asia"],
+                "adjusted_pnl": [2.0],
+                "actual_taken_best_adjusted_pnl": [10.0],
+            }
+        )
+        normalized = entry_ev_executable_ev_policy_inputs.normalize_prior_trades(prior)
+        normalized = entry_ev_executable_ev_policy_inputs.add_capture_ratio_columns(
+            normalized,
+            min_oracle_edge=0.0,
+            min_capture_factor=0.0,
+            max_capture_factor=1.0,
+        )
+
+        enriched, _context, _global = (
+            entry_ev_executable_ev_policy_inputs.add_executable_ev_scores(
+                predictions,
+                normalized,
+                long_column="pred_calibrated_long_best_adjusted_pnl",
+                short_column="pred_calibrated_short_best_adjusted_pnl",
+                long_output_column="long_exec",
+                short_output_column="short_exec",
+                min_prior_months=1,
+                recent_month_count=0,
+                support_scale=1.0,
+                default_capture_factor=1.0,
+                min_capture_factor=0.0,
+                max_capture_factor=1.0,
+                capture_shrink_strength=0.5,
+            )
+        )
+
+        self.assertAlmostEqual(enriched["pred_executable_long_capture_factor"].iloc[0], 0.6)
+        self.assertAlmostEqual(enriched["long_exec"].iloc[0], 6.0)
+
     def test_add_executable_quantile_columns_writes_score_kind_columns(self):
         enriched, _context, _global = (
             entry_ev_executable_ev_policy_inputs.add_executable_ev_scores(

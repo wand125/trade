@@ -39,7 +39,7 @@ from entry_ev_scale_quantile_diagnostics import (  # noqa: E402
 )
 
 
-CONTEXT_COLUMNS = ["direction", "combined_regime", "session_regime"]
+DEFAULT_CONTEXT_COLUMNS = ["direction", "combined_regime", "session_regime"]
 DEFAULT_LONG_OUTPUT_COLUMN = "pred_executable_calibrated_long_best_adjusted_pnl"
 DEFAULT_SHORT_OUTPUT_COLUMN = "pred_executable_calibrated_short_best_adjusted_pnl"
 
@@ -161,46 +161,43 @@ def side_capture_lookup(
     side: str,
     context_stats: pd.DataFrame,
     global_stats: pd.DataFrame,
+    context_columns: list[str],
     support_scale: float,
     default_capture_factor: float,
     min_capture_factor: float,
     max_capture_factor: float,
+    capture_shrink_strength: float,
 ) -> pd.DataFrame:
     if support_scale <= 0:
         raise ValueError("support_scale must be positive")
     if min_capture_factor > max_capture_factor:
         raise ValueError("min_capture_factor must be <= max_capture_factor")
+    if not 0.0 <= capture_shrink_strength <= 1.0:
+        raise ValueError("capture_shrink_strength must be between 0 and 1")
 
-    lookup = pd.DataFrame(
-        {
-            "_row_id": np.arange(len(predictions)),
-            "target_month": month_series(predictions).astype(str),
-            "direction": side,
-            "combined_regime": predictions.get(
-                "combined_regime",
-                pd.Series("__missing__", index=predictions.index),
+    lookup_data: dict[str, Any] = {
+        "_row_id": np.arange(len(predictions)),
+        "target_month": month_series(predictions).astype(str),
+    }
+    for column in context_columns:
+        if column == "direction":
+            lookup_data[column] = side
+        elif column in predictions.columns:
+            lookup_data[column] = (
+                predictions[column].astype(str).fillna("__missing__").to_numpy()
             )
-            .astype(str)
-            .fillna("__missing__")
-            .to_numpy(),
-            "session_regime": predictions.get(
-                "session_regime",
-                pd.Series("__missing__", index=predictions.index),
-            )
-            .astype(str)
-            .fillna("__missing__")
-            .to_numpy(),
-        }
-    )
+        else:
+            raise ValueError(f"predictions missing context column: {column}")
+    lookup = pd.DataFrame(lookup_data)
     if global_stats.empty:
         merged = lookup.copy()
     else:
         merged = lookup.merge(global_stats, how="left", on="target_month")
-    if not context_stats.empty:
+    if not context_stats.empty and context_columns:
         merged = merged.merge(
             context_stats,
             how="left",
-            on=["target_month", *CONTEXT_COLUMNS],
+            on=["target_month", *context_columns],
         )
     merged = merged.sort_values("_row_id").reset_index(drop=True)
 
@@ -238,6 +235,8 @@ def side_capture_lookup(
     capture_factor = (
         (1.0 - support_weight) * global_factor + support_weight * context_factor
     ).clip(lower=min_capture_factor, upper=max_capture_factor)
+    capture_factor = 1.0 - capture_shrink_strength * (1.0 - capture_factor)
+    capture_factor = capture_factor.clip(lower=min_capture_factor, upper=max_capture_factor)
 
     return pd.DataFrame(
         {
@@ -273,10 +272,20 @@ def add_executable_ev_scores(
     default_capture_factor: float,
     min_capture_factor: float,
     max_capture_factor: float,
+    capture_shrink_strength: float = 1.0,
+    context_columns: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     missing = sorted({long_column, short_column} - set(predictions.columns))
     if missing:
         raise ValueError(f"predictions missing columns: {', '.join(missing)}")
+    missing_context = sorted(
+        column
+        for column in context_columns
+        if column != "direction" and column not in predictions.columns
+    )
+    if missing_context:
+        raise ValueError(f"predictions missing context columns: {', '.join(missing_context)}")
 
     output = predictions.copy()
     target_months = sorted(month_series(output).dropna().astype(str).unique().tolist())
@@ -285,6 +294,7 @@ def add_executable_ev_scores(
         target_months,
         min_prior_months=min_prior_months,
         recent_month_count=recent_month_count,
+        context_columns=context_columns,
     )
 
     long_lookup = side_capture_lookup(
@@ -292,20 +302,24 @@ def add_executable_ev_scores(
         side="long",
         context_stats=context_stats,
         global_stats=global_stats,
+        context_columns=context_columns,
         support_scale=support_scale,
         default_capture_factor=default_capture_factor,
         min_capture_factor=min_capture_factor,
         max_capture_factor=max_capture_factor,
+        capture_shrink_strength=capture_shrink_strength,
     )
     short_lookup = side_capture_lookup(
         output,
         side="short",
         context_stats=context_stats,
         global_stats=global_stats,
+        context_columns=context_columns,
         support_scale=support_scale,
         default_capture_factor=default_capture_factor,
         min_capture_factor=min_capture_factor,
         max_capture_factor=max_capture_factor,
+        capture_shrink_strength=capture_shrink_strength,
     )
     for column in long_lookup.columns:
         output[column] = long_lookup[column].to_numpy()
@@ -469,6 +483,7 @@ def summarize_prediction_effect(
 def build_policy_inputs(args: argparse.Namespace) -> Path:
     families = parse_family_predictions(args.family_predictions)
     quantile_scopes = parse_scope_csv(args.quantile_scopes)
+    context_columns = parse_csv(args.context_columns) or DEFAULT_CONTEXT_COLUMNS
     prior = normalize_prior_trades(read_trade_frames(args.prior_trades))
     prior = filter_prior_trades(
         prior,
@@ -477,6 +492,9 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
     )
     if prior.empty:
         raise ValueError("no prior trades remain after filters")
+    missing_prior_context = sorted(column for column in context_columns if column not in prior.columns)
+    if missing_prior_context:
+        raise ValueError(f"prior trades missing context columns: {', '.join(missing_prior_context)}")
     prior = add_capture_ratio_columns(
         prior,
         min_oracle_edge=args.min_oracle_edge,
@@ -484,7 +502,7 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
         max_capture_factor=args.max_capture_factor,
     )
     if args.dedupe_prior:
-        prior = dedupe_prior_trades(prior)
+        prior = dedupe_prior_trades(prior, context_columns=context_columns)
 
     run_dir = make_run_dir(args.output_dir, args.label)
     enriched_dir = run_dir / "enriched_predictions"
@@ -498,6 +516,9 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
 
     for family, path in families.items():
         raw = pd.read_parquet(path)
+        if "family" not in raw.columns:
+            raw = raw.copy()
+            raw["family"] = family
         enriched, context_stats, global_stats = add_executable_ev_scores(
             raw,
             prior,
@@ -511,6 +532,8 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
             default_capture_factor=args.default_capture_factor,
             min_capture_factor=args.min_capture_factor,
             max_capture_factor=args.max_capture_factor,
+            capture_shrink_strength=args.capture_shrink_strength,
+            context_columns=context_columns,
         )
         enriched = add_executable_quantile_columns(
             enriched,
@@ -528,7 +551,10 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
 
         if not context_stats.empty:
             context_frame = context_stats.copy()
-            context_frame.insert(0, "family", family)
+            family_label_column = (
+                "prediction_family" if "family" in context_frame.columns else "family"
+            )
+            context_frame.insert(0, family_label_column, family)
             all_context_stats.append(context_frame)
         if not global_stats.empty:
             global_frame = global_stats.copy()
@@ -582,6 +608,7 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
         "prior_roles": parse_csv(args.prior_roles),
         "prior_candidates": parse_csv(args.prior_candidates),
         "dedupe_prior": args.dedupe_prior,
+        "context_columns": context_columns,
         "score_kind": args.score_kind,
         "long_column": args.long_column,
         "short_column": args.short_column,
@@ -597,6 +624,7 @@ def build_policy_inputs(args: argparse.Namespace) -> Path:
         "default_capture_factor": args.default_capture_factor,
         "min_capture_factor": args.min_capture_factor,
         "max_capture_factor": args.max_capture_factor,
+        "capture_shrink_strength": args.capture_shrink_strength,
         "prior_trade_count": int(len(prior)),
     }
     (run_dir / "config.json").write_text(
@@ -632,6 +660,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prior-roles", default="")
     parser.add_argument("--prior-candidates", default="")
     parser.add_argument("--dedupe-prior", action="store_true")
+    parser.add_argument(
+        "--context-columns",
+        default=",".join(DEFAULT_CONTEXT_COLUMNS),
+        help="comma-separated prior context columns used to condition capture stats",
+    )
     parser.add_argument("--score-kind", default="executable")
     parser.add_argument("--long-column", default="pred_calibrated_long_best_adjusted_pnl")
     parser.add_argument("--short-column", default="pred_calibrated_short_best_adjusted_pnl")
@@ -650,6 +683,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-capture-factor", type=float, default=1.0)
     parser.add_argument("--min-capture-factor", type=float, default=0.0)
     parser.add_argument("--max-capture-factor", type=float, default=1.0)
+    parser.add_argument("--capture-shrink-strength", type=float, default=1.0)
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
     parser.add_argument("--label", default="entry_ev_executable_ev_policy_inputs")
     return parser

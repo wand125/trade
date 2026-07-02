@@ -120,6 +120,81 @@ class EntryEvExecutableEvCalibrationDiagnosticsTests(unittest.TestCase):
         self.assertAlmostEqual(april["context_executable_capture_factor"], 0.0)
         self.assertAlmostEqual(april["executable_capture_factor"], 0.0)
 
+    def test_add_executable_ev_calibration_can_condition_on_family(self):
+        target = pd.DataFrame(
+            {
+                "family": ["fam_a", "fam_b"],
+                "role": ["fresh", "fresh"],
+                "candidate": ["q95", "q95"],
+                "month": ["2024-04", "2024-04"],
+                "direction": ["short", "short"],
+                "entry_decision_timestamp": [
+                    "2024-04-10T00:00:00Z",
+                    "2024-04-11T00:00:00Z",
+                ],
+                "combined_regime": ["range", "range"],
+                "session_regime": ["asia", "asia"],
+                "adjusted_pnl": [1.0, 1.0],
+                "actual_taken_best_adjusted_pnl": [10.0, 10.0],
+                "pred_taken_ev": [10.0, 10.0],
+            }
+        )
+        prior = pd.DataFrame(
+            {
+                "family": ["fam_a", "fam_b"],
+                "role": ["cal", "cal"],
+                "candidate": ["q95", "q95"],
+                "month": ["2024-03", "2024-03"],
+                "direction": ["short", "short"],
+                "entry_decision_timestamp": [
+                    "2024-03-10T00:00:00Z",
+                    "2024-03-11T00:00:00Z",
+                ],
+                "combined_regime": ["range", "range"],
+                "session_regime": ["asia", "asia"],
+                "adjusted_pnl": [-5.0, 5.0],
+                "actual_taken_best_adjusted_pnl": [10.0, 10.0],
+                "pred_taken_ev": [10.0, 10.0],
+            }
+        )
+        target = entry_ev_executable_ev_calibration_diagnostics.normalize_trade_frame(
+            target,
+            name="target",
+        )
+        prior = entry_ev_executable_ev_calibration_diagnostics.normalize_trade_frame(
+            prior,
+            name="prior",
+        )
+        target = entry_ev_executable_ev_calibration_diagnostics.add_capture_ratio_columns(
+            target,
+            min_oracle_edge=0.0,
+            min_capture_factor=-1.0,
+            max_capture_factor=1.0,
+        )
+        prior = entry_ev_executable_ev_calibration_diagnostics.add_capture_ratio_columns(
+            prior,
+            min_oracle_edge=0.0,
+            min_capture_factor=-1.0,
+            max_capture_factor=1.0,
+        )
+
+        enriched = entry_ev_executable_ev_calibration_diagnostics.add_executable_ev_calibration(
+            target,
+            prior,
+            min_prior_months=1,
+            recent_month_count=0,
+            support_scale=1.0,
+            default_capture_factor=1.0,
+            min_capture_factor=-1.0,
+            max_capture_factor=1.0,
+            context_columns=["family", "direction", "combined_regime", "session_regime"],
+        )
+
+        fam_a = enriched[enriched["family"].eq("fam_a")].iloc[0]
+        fam_b = enriched[enriched["family"].eq("fam_b")].iloc[0]
+        self.assertAlmostEqual(fam_a["context_executable_capture_factor"], -0.5)
+        self.assertAlmostEqual(fam_b["context_executable_capture_factor"], 0.5)
+
     def test_summarize_thresholds_blocks_low_calibrated_ev(self):
         frame = pd.DataFrame(
             {

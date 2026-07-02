@@ -20,7 +20,7 @@ if str(SRC) not in sys.path:
 from trade_data.backtest import json_default, make_run_dir  # noqa: E402
 
 
-CONTEXT_COLUMNS = ["direction", "combined_regime", "session_regime"]
+DEFAULT_CONTEXT_COLUMNS = ["direction", "combined_regime", "session_regime"]
 DEFAULT_EXEC_EV_THRESHOLDS = "0,5,10"
 
 
@@ -166,15 +166,20 @@ def add_capture_ratio_columns(
     return output
 
 
-def dedupe_prior_trades(prior: pd.DataFrame) -> pd.DataFrame:
+def dedupe_prior_trades(
+    prior: pd.DataFrame,
+    *,
+    context_columns: list[str] | None = None,
+) -> pd.DataFrame:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     dedupe_columns = [
         "month",
         "entry_decision_timestamp",
-        "direction",
-        "combined_regime",
-        "session_regime",
+        *context_columns,
     ]
-    return prior.drop_duplicates(subset=dedupe_columns).reset_index(drop=True)
+    dedupe_columns = list(dict.fromkeys(dedupe_columns))
+    existing = [column for column in dedupe_columns if column in prior.columns]
+    return prior.drop_duplicates(subset=existing).reset_index(drop=True)
 
 
 def build_context_capture_stats(
@@ -183,7 +188,9 @@ def build_context_capture_stats(
     target_month: str,
     min_prior_months: int,
     recent_month_count: int,
+    context_columns: list[str] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     target_period = pd.Period(target_month, freq="M")
     prior_periods = pd.PeriodIndex(prior["month"].astype(str), freq="M")
     mask = prior_periods < target_period
@@ -204,11 +211,11 @@ def build_context_capture_stats(
         else np.nan,
         "prior_global_adjusted_pnl_mean": float(frame["adjusted_pnl"].astype(float).mean()),
     }
-    if capture_rows.empty:
+    if capture_rows.empty or not context_columns:
         return pd.DataFrame(), global_stats
 
     grouped = (
-        capture_rows.groupby(CONTEXT_COLUMNS, dropna=False)
+        capture_rows.groupby(context_columns, dropna=False)
         .agg(
             prior_context_capture_count=("capture_ratio_clipped", "size"),
             prior_context_month_count=("month", "nunique"),
@@ -232,7 +239,9 @@ def build_all_capture_stats(
     *,
     min_prior_months: int,
     recent_month_count: int,
+    context_columns: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     context_frames: list[pd.DataFrame] = []
     global_rows: list[dict[str, float]] = []
     for month in target_months:
@@ -241,6 +250,7 @@ def build_all_capture_stats(
             target_month=month,
             min_prior_months=min_prior_months,
             recent_month_count=recent_month_count,
+            context_columns=context_columns,
         )
         if not context_stats.empty:
             context_frames.append(context_stats)
@@ -261,7 +271,9 @@ def add_executable_ev_calibration(
     default_capture_factor: float,
     min_capture_factor: float,
     max_capture_factor: float,
+    context_columns: list[str] | None = None,
 ) -> pd.DataFrame:
+    context_columns = context_columns or DEFAULT_CONTEXT_COLUMNS
     target = target.copy()
     target_months = sorted(target["month"].astype(str).unique().tolist())
     context_stats, global_stats = build_all_capture_stats(
@@ -269,6 +281,7 @@ def add_executable_ev_calibration(
         target_months,
         min_prior_months=min_prior_months,
         recent_month_count=recent_month_count,
+        context_columns=context_columns,
     )
     enriched = target
     if not global_stats.empty:
@@ -278,12 +291,12 @@ def add_executable_ev_calibration(
             left_on="month",
             right_on="target_month",
         )
-    if not context_stats.empty:
+    if not context_stats.empty and context_columns:
         enriched = enriched.merge(
             context_stats,
             how="left",
-            left_on=["month", *CONTEXT_COLUMNS],
-            right_on=["target_month", *CONTEXT_COLUMNS],
+            left_on=["month", *context_columns],
+            right_on=["target_month", *context_columns],
             suffixes=("", "_context"),
         )
     numeric_defaults = {
@@ -478,6 +491,7 @@ def summarize_thresholds(
 
 
 def build_diagnostics(args: argparse.Namespace) -> Path:
+    context_columns = parse_optional_csv(args.context_columns) or DEFAULT_CONTEXT_COLUMNS
     target = normalize_trade_frame(read_trade_frames(args.target_trades), name="target")
     prior_paths = args.prior_trades or args.target_trades
     prior = normalize_trade_frame(read_trade_frames(prior_paths), name="prior")
@@ -495,6 +509,13 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
     )
     if target.empty:
         raise ValueError("no target trades remain after filters")
+    missing_context = sorted(
+        column
+        for column in context_columns
+        if column not in target.columns or column not in prior.columns
+    )
+    if missing_context:
+        raise ValueError(f"context columns missing from target/prior: {', '.join(missing_context)}")
     target = add_capture_ratio_columns(
         target,
         min_oracle_edge=args.min_oracle_edge,
@@ -508,7 +529,7 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
         max_capture_factor=args.max_capture_factor,
     )
     if args.dedupe_prior:
-        prior = dedupe_prior_trades(prior)
+        prior = dedupe_prior_trades(prior, context_columns=context_columns)
 
     enriched = add_executable_ev_calibration(
         target,
@@ -519,6 +540,7 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
         default_capture_factor=args.default_capture_factor,
         min_capture_factor=args.min_capture_factor,
         max_capture_factor=args.max_capture_factor,
+        context_columns=context_columns,
     )
     thresholds = parse_float_csv(args.executable_ev_thresholds)
 
@@ -580,6 +602,7 @@ def build_diagnostics(args: argparse.Namespace) -> Path:
         "candidates": args.candidates,
         "months": args.months,
         "dedupe_prior": args.dedupe_prior,
+        "context_columns": context_columns,
         "min_oracle_edge": args.min_oracle_edge,
         "min_prior_months": args.min_prior_months,
         "recent_month_count": args.recent_month_count,
@@ -640,6 +663,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidates", default="")
     parser.add_argument("--months", default="")
     parser.add_argument("--dedupe-prior", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--context-columns",
+        default=",".join(DEFAULT_CONTEXT_COLUMNS),
+        help="comma-separated prior context columns used to condition capture stats",
+    )
     parser.add_argument("--min-oracle-edge", type=float, default=0.0)
     parser.add_argument("--min-prior-months", type=int, default=1)
     parser.add_argument("--recent-month-count", type=int, default=0)
