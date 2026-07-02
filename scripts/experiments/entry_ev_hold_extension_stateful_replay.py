@@ -23,6 +23,7 @@ from trade_data.backtest import json_default, make_run_dir  # noqa: E402
 DEFAULT_THRESHOLDS = "5,10"
 DEFAULT_APPLY_UNIVERSES = "isolated_large_loss"
 DEFAULT_HORIZON_MODES = "predicted"
+DEFAULT_EXTENSION_VETO_RULES = "none"
 DEFAULT_GROUP_COLUMNS = [
     "source",
     "role",
@@ -221,6 +222,27 @@ def horizon_model_used(row: pd.Series, horizon_minutes: int) -> bool:
     return str(value).strip().lower() in {"true", "1", "yes", "y"}
 
 
+def row_text(row: pd.Series, column: str, default: str = "") -> str:
+    value = row.get(column, default)
+    if pd.isna(value):
+        return default
+    return str(value)
+
+
+def extension_veto_applies(row: pd.Series, horizon_minutes: int, rule: str) -> bool:
+    normalized = rule.strip()
+    if normalized == "none":
+        return False
+    if normalized == "holdext_long_range_normal_ny":
+        return (
+            str(row.get("direction", "")).lower() == "long"
+            and row_text(row, "combined_regime") == "range_normal_vol"
+            and row_text(row, "session_regime") == "ny_overlap"
+            and int(horizon_minutes) >= 720
+        )
+    raise ValueError(f"unknown extension veto rule: {rule}")
+
+
 def raw_from_adjusted(adjusted_pnl: float, *, profit_multiplier: float, loss_multiplier: float) -> float:
     if adjusted_pnl > 0:
         return adjusted_pnl / profit_multiplier if profit_multiplier != 0 else adjusted_pnl
@@ -303,6 +325,7 @@ def replay_group(
     threshold: float,
     horizon_mode: str,
     require_model_used: bool,
+    extension_veto_rule: str,
     profit_multiplier: float,
     loss_multiplier: float,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -321,7 +344,7 @@ def replay_group(
         horizon, predicted_score, score_column = horizon_and_score(row, horizon_mode)
         extension_exit = entry_timestamp + pd.Timedelta(minutes=horizon)
         model_used = horizon_model_used(row, horizon)
-        can_extend = (
+        can_extend_before_veto = (
             bool(apply_mask.loc[index])
             and np.isfinite(predicted_score)
             and predicted_score >= threshold
@@ -331,6 +354,12 @@ def replay_group(
             and pd.notna(row[f"actual_taken_fixed_{horizon}m_adjusted_pnl"])
             and extension_exit > pd.Timestamp(row["exit_timestamp"])
         )
+        extension_vetoed = can_extend_before_veto and extension_veto_applies(
+            row,
+            horizon,
+            extension_veto_rule,
+        )
+        can_extend = can_extend_before_veto and not extension_vetoed
         if can_extend:
             output = extended_trade_row(
                 row,
@@ -343,6 +372,9 @@ def replay_group(
             )
         else:
             output = base_trade_row(row)
+        output["hold_extension_veto_rule"] = extension_veto_rule
+        output["hold_extension_vetoed"] = bool(extension_vetoed)
+        output["hold_extension_veto_reason"] = extension_veto_rule if extension_vetoed else "none"
         output_rows.append(output)
         occupied_until = pd.Timestamp(output["exit_timestamp"])
     return output_rows, skipped_rows
@@ -402,6 +434,17 @@ def summarize_stateful(
                 )
                 if trade_count
                 else 0,
+                "vetoed_extension_count": int(
+                    trade_group.get(
+                        "hold_extension_vetoed",
+                        pd.Series(False, index=trade_group.index, dtype=bool),
+                    )
+                    .fillna(False)
+                    .astype(bool)
+                    .sum()
+                )
+                if trade_count
+                else 0,
                 "extension_delta_vs_base_sum": float(
                     trade_group["hold_extension_delta_vs_base"].astype(float).sum()
                 )
@@ -432,8 +475,13 @@ def summarize_selection(monthly: pd.DataFrame) -> pd.DataFrame:
     monthly = monthly.copy()
     if "horizon_mode" not in monthly.columns:
         monthly["horizon_mode"] = "predicted"
-    for key, group in monthly.groupby(["apply_universe", "threshold", "horizon_mode"], dropna=False):
-        apply_universe, threshold, horizon_mode = key
+    if "extension_veto_rule" not in monthly.columns:
+        monthly["extension_veto_rule"] = "none"
+    for key, group in monthly.groupby(
+        ["apply_universe", "threshold", "horizon_mode", "extension_veto_rule"],
+        dropna=False,
+    ):
+        apply_universe, threshold, horizon_mode, extension_veto_rule = key
         role_group = group.groupby("role", dropna=False).agg(
             role_total_pnl=("total_adjusted_pnl", "sum"),
             role_trade_count=("trade_count", "sum"),
@@ -443,12 +491,18 @@ def summarize_selection(monthly: pd.DataFrame) -> pd.DataFrame:
                 "apply_universe": apply_universe,
                 "threshold": float(threshold),
                 "horizon_mode": horizon_mode,
+                "extension_veto_rule": extension_veto_rule,
                 "total_adjusted_pnl_sum": float(group["total_adjusted_pnl"].sum()),
                 "base_total_adjusted_pnl_sum": float(group["base_total_adjusted_pnl"].sum()),
                 "pnl_delta_vs_base_sum": float(group["pnl_delta_vs_base"].sum()),
                 "trade_count_sum": int(group["trade_count"].sum()),
                 "base_trade_count_sum": int(group["base_trade_count"].sum()),
                 "extended_trade_count_sum": int(group["extended_trade_count"].sum()),
+                "vetoed_extension_count_sum": int(
+                    group.get("vetoed_extension_count", pd.Series(0, index=group.index))
+                    .astype(float)
+                    .sum()
+                ),
                 "skipped_trade_count_sum": int(group["skipped_trade_count"].sum()),
                 "skipped_adjusted_pnl_sum": float(group["skipped_adjusted_pnl"].sum()),
                 "month_pnl_min": float(group["total_adjusted_pnl"].min()),
@@ -475,6 +529,8 @@ def selector_compatible_monthly_metrics(monthly: pd.DataFrame) -> pd.DataFrame:
     output = monthly.copy()
     if "horizon_mode" not in output.columns:
         output["horizon_mode"] = "predicted"
+    if "extension_veto_rule" not in output.columns:
+        output["extension_veto_rule"] = "none"
     threshold_label = (
         output["threshold"].astype(float).map(lambda value: f"{value:g}".replace(".", "p"))
     )
@@ -487,6 +543,12 @@ def selector_compatible_monthly_metrics(monthly: pd.DataFrame) -> pd.DataFrame:
         + "_h"
         + output["horizon_mode"].astype(str)
     )
+    non_default_veto = output["extension_veto_rule"].astype(str).ne("none")
+    output.loc[non_default_veto, "variant"] = (
+        output.loc[non_default_veto, "variant"].astype(str)
+        + "__veto_"
+        + output.loc[non_default_veto, "extension_veto_rule"].astype(str)
+    )
     return output
 
 
@@ -495,6 +557,7 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
     thresholds = parse_float_csv(args.thresholds)
     apply_universes = parse_csv(args.apply_universes)
     horizon_modes = parse_horizon_modes(args.horizon_modes)
+    extension_veto_rules = parse_csv(args.extension_veto_rules)
     group_columns = DEFAULT_GROUP_COLUMNS
     run_dir = make_run_dir(args.output_dir, args.label)
     monthly_frames: list[pd.DataFrame] = []
@@ -506,42 +569,46 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
         mask = universe_mask(scored, universe)
         for threshold in thresholds:
             for horizon_mode in horizon_modes:
-                trade_rows: list[dict[str, Any]] = []
-                skipped_rows: list[dict[str, Any]] = []
-                for _, group in scored.groupby(group_columns, dropna=False, sort=False):
-                    group_trades, group_skipped = replay_group(
-                        group,
-                        apply_mask=mask,
-                        threshold=threshold,
-                        horizon_mode=horizon_mode,
-                        require_model_used=args.require_model_used,
-                        profit_multiplier=args.profit_multiplier,
-                        loss_multiplier=args.loss_multiplier,
+                for extension_veto_rule in extension_veto_rules:
+                    trade_rows: list[dict[str, Any]] = []
+                    skipped_rows: list[dict[str, Any]] = []
+                    for _, group in scored.groupby(group_columns, dropna=False, sort=False):
+                        group_trades, group_skipped = replay_group(
+                            group,
+                            apply_mask=mask,
+                            threshold=threshold,
+                            horizon_mode=horizon_mode,
+                            require_model_used=args.require_model_used,
+                            extension_veto_rule=extension_veto_rule,
+                            profit_multiplier=args.profit_multiplier,
+                            loss_multiplier=args.loss_multiplier,
+                        )
+                        trade_rows.extend(group_trades)
+                        skipped_rows.extend(group_skipped)
+                    trades = pd.DataFrame(trade_rows)
+                    skipped = pd.DataFrame(skipped_rows)
+                    for frame in (trades, skipped):
+                        if frame.empty:
+                            continue
+                        frame["apply_universe"] = universe
+                        frame["threshold"] = float(threshold)
+                        frame["horizon_mode"] = horizon_mode
+                        frame["extension_veto_rule"] = extension_veto_rule
+                    monthly = summarize_stateful(
+                        trades,
+                        base=scored,
+                        skipped=skipped,
+                        group_columns=group_columns,
                     )
-                    trade_rows.extend(group_trades)
-                    skipped_rows.extend(group_skipped)
-                trades = pd.DataFrame(trade_rows)
-                skipped = pd.DataFrame(skipped_rows)
-                for frame in (trades, skipped):
-                    if frame.empty:
-                        continue
-                    frame["apply_universe"] = universe
-                    frame["threshold"] = float(threshold)
-                    frame["horizon_mode"] = horizon_mode
-                monthly = summarize_stateful(
-                    trades,
-                    base=scored,
-                    skipped=skipped,
-                    group_columns=group_columns,
-                )
-                monthly["apply_universe"] = universe
-                monthly["threshold"] = float(threshold)
-                monthly["horizon_mode"] = horizon_mode
-                monthly_frames.append(monthly)
-                selection_frames.append(summarize_selection(monthly))
-                all_trade_frames.append(trades)
-                if not skipped.empty:
-                    all_skipped_frames.append(skipped)
+                    monthly["apply_universe"] = universe
+                    monthly["threshold"] = float(threshold)
+                    monthly["horizon_mode"] = horizon_mode
+                    monthly["extension_veto_rule"] = extension_veto_rule
+                    monthly_frames.append(monthly)
+                    selection_frames.append(summarize_selection(monthly))
+                    all_trade_frames.append(trades)
+                    if not skipped.empty:
+                        all_skipped_frames.append(skipped)
 
     stateful_trades = (
         pd.concat(all_trade_frames, ignore_index=True) if all_trade_frames else pd.DataFrame()
@@ -571,6 +638,7 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
         "thresholds": thresholds,
         "apply_universes": apply_universes,
         "horizon_modes": horizon_modes,
+        "extension_veto_rules": extension_veto_rules,
         "require_model_used": args.require_model_used,
         "profit_multiplier": args.profit_multiplier,
         "loss_multiplier": args.loss_multiplier,
@@ -582,21 +650,23 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
     )
 
     print("Stateful hold-extension selection summary:")
+    print_columns = [
+        "apply_universe",
+        "threshold",
+        "horizon_mode",
+        "extension_veto_rule",
+        "total_adjusted_pnl_sum",
+        "pnl_delta_vs_base_sum",
+        "month_pnl_min",
+        "role_total_pnl_min",
+        "extended_trade_count_sum",
+        "vetoed_extension_count_sum",
+        "skipped_trade_count_sum",
+        "skipped_adjusted_pnl_sum",
+    ]
+    print_columns = [column for column in print_columns if column in selection_summary.columns]
     print(
-        selection_summary[
-            [
-                "apply_universe",
-                "threshold",
-                "horizon_mode",
-                "total_adjusted_pnl_sum",
-                "pnl_delta_vs_base_sum",
-                "month_pnl_min",
-                "role_total_pnl_min",
-                "extended_trade_count_sum",
-                "skipped_trade_count_sum",
-                "skipped_adjusted_pnl_sum",
-            ]
-        ]
+        selection_summary[print_columns]
         .head(args.print_top)
         .to_string(index=False)
     )
@@ -610,6 +680,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--thresholds", default=DEFAULT_THRESHOLDS)
     parser.add_argument("--apply-universes", default=DEFAULT_APPLY_UNIVERSES)
     parser.add_argument("--horizon-modes", default=DEFAULT_HORIZON_MODES)
+    parser.add_argument("--extension-veto-rules", default=DEFAULT_EXTENSION_VETO_RULES)
     parser.add_argument("--require-model-used", action="store_true")
     parser.add_argument("--profit-multiplier", type=float, default=1.0)
     parser.add_argument("--loss-multiplier", type=float, default=1.2)

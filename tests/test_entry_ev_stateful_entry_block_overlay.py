@@ -19,10 +19,11 @@ def stateful_row(
     month: str = "2025-12",
     hold_extension_applied: bool = False,
     holding_minutes: float = 1.0,
+    extension_veto_rule: str | None = None,
 ) -> dict[str, object]:
     start = pd.Timestamp("2025-12-01 00:00:00+00:00")
     entry_time = start + pd.Timedelta(minutes=entry_minute)
-    return {
+    output = {
         "source": "unit",
         "role": "unit_role",
         "family": "unit_family",
@@ -40,6 +41,9 @@ def stateful_row(
         "holding_minutes": holding_minutes,
         "hold_extension_applied": hold_extension_applied,
     }
+    if extension_veto_rule is not None:
+        output["extension_veto_rule"] = extension_veto_rule
+    return output
 
 
 def feature_row(
@@ -223,6 +227,55 @@ class EntryEvStatefulEntryBlockOverlayTest(unittest.TestCase):
         self.assertAlmostEqual(monthly["blocked_adjusted_pnl"].iloc[0], -4.0)
         self.assertAlmostEqual(monthly["total_adjusted_pnl"].iloc[0], 1.0)
         self.assertIn("__entryblock_short_rollover_lossprob_ge0p4", monthly["variant"].iloc[0])
+
+    def test_summarize_overlay_keeps_extension_veto_rule_separate(self) -> None:
+        stateful = pd.DataFrame(
+            [
+                stateful_row(
+                    direction="long",
+                    entry_minute=1,
+                    pnl=1.0,
+                    extension_veto_rule="none",
+                ),
+                stateful_row(
+                    direction="long",
+                    entry_minute=5,
+                    pnl=2.0,
+                    extension_veto_rule="holdext_long_range_normal_ny",
+                ),
+            ]
+        )
+        features = pd.DataFrame(
+            [
+                feature_row(
+                    direction="long",
+                    entry_minute=1,
+                    session="asia",
+                    combined="range_high_vol",
+                    loss_first=0.1,
+                    side_gap=0.1,
+                    entry_rank=0.8,
+                ),
+                feature_row(
+                    direction="long",
+                    entry_minute=5,
+                    session="asia",
+                    combined="range_high_vol",
+                    loss_first=0.1,
+                    side_gap=0.1,
+                    entry_rank=0.8,
+                ),
+            ]
+        )
+        annotated = attach_features(stateful, features)
+
+        _, monthly = summarize_overlay(annotated, ["none"])
+
+        self.assertEqual(len(monthly), 2)
+        self.assertIn(
+            "__veto_holdext_long_range_normal_ny__entryblock_none",
+            monthly["variant"].tolist()[1],
+        )
 
 
 if __name__ == "__main__":

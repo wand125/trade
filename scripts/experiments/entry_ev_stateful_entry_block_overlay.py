@@ -43,6 +43,7 @@ DEFAULT_BLOCK_RULES = (
     "short_rollover_or_london_midloss_or_holdext_range_ny"
 )
 DEFAULT_GROUP_EXTRA_COLUMNS = ["apply_universe", "threshold", "horizon_mode"]
+OPTIONAL_GROUP_EXTRA_COLUMNS = ["extension_veto_rule"]
 FEATURE_COLUMNS = [
     "trend_regime",
     "volatility_regime",
@@ -71,6 +72,12 @@ REQUIRED_STATEFUL_COLUMNS = {
     "entry_decision_timestamp",
     "adjusted_pnl",
 }
+
+
+def group_extra_columns(frame: pd.DataFrame) -> list[str]:
+    return DEFAULT_GROUP_EXTRA_COLUMNS + [
+        column for column in OPTIONAL_GROUP_EXTRA_COLUMNS if column in frame.columns
+    ]
 
 
 def local_json_default(value: Any) -> Any:
@@ -115,13 +122,14 @@ def read_stateful_trades(path: Path) -> pd.DataFrame:
     for column in ["entry_timestamp", "entry_decision_timestamp", "exit_timestamp"]:
         if column in output.columns:
             output[column] = pd.to_datetime(output[column], utc=True, errors="coerce")
-    for column in DEFAULT_GROUP_COLUMNS + DEFAULT_GROUP_EXTRA_COLUMNS + ["direction"]:
+    extras = group_extra_columns(output)
+    for column in DEFAULT_GROUP_COLUMNS + extras + ["direction"]:
         output[column] = output[column].astype(str)
     output["month"] = output["month"].astype(str).str.slice(0, 7)
     output["threshold"] = numeric_series(output, "threshold", default=0.0)
     output["adjusted_pnl"] = numeric_series(output, "adjusted_pnl", default=0.0)
     return output.sort_values(
-        DEFAULT_GROUP_COLUMNS + DEFAULT_GROUP_EXTRA_COLUMNS + ["entry_decision_timestamp"]
+        DEFAULT_GROUP_COLUMNS + extras + ["entry_decision_timestamp"]
     ).reset_index(drop=True)
 
 
@@ -220,7 +228,7 @@ def threshold_label(value: float) -> str:
 
 
 def overlay_variant(row: pd.Series, rule: str) -> str:
-    return (
+    variant = (
         str(row["variant"])
         + "__holdext_"
         + str(row["apply_universe"])
@@ -228,15 +236,17 @@ def overlay_variant(row: pd.Series, rule: str) -> str:
         + threshold_label(float(row["threshold"]))
         + "_h"
         + str(row["horizon_mode"])
-        + "__entryblock_"
-        + rule
     )
+    extension_veto_rule = str(row.get("extension_veto_rule", "none"))
+    if extension_veto_rule != "none":
+        variant += "__veto_" + extension_veto_rule
+    return variant + "__entryblock_" + rule
 
 
 def summarize_overlay(annotated: pd.DataFrame, rules: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
     monthly_rows: list[dict[str, Any]] = []
     annotated_frames: list[pd.DataFrame] = []
-    group_columns = DEFAULT_GROUP_COLUMNS + DEFAULT_GROUP_EXTRA_COLUMNS
+    group_columns = DEFAULT_GROUP_COLUMNS + group_extra_columns(annotated)
     for rule in rules:
         frame = annotated.copy()
         frame["entry_block_rule"] = rule

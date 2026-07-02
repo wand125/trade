@@ -4,6 +4,37 @@
 
 ## 2026-07-02 JST
 
+### 17:08 Entry EV hold-extension veto diagnostics
+
+作業:
+
+- 00308 branchをdefault / support2 / shallow025のsupport-aware admissionで再評価した。
+- `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` に `--extension-veto-rules` を追加し、`holdext_long_range_normal_ny` を実行時extension vetoとして検証した。
+- `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` は `extension_veto_rule` を任意group次元として扱うようにした。
+- report: `docs/reports/00309_2026-07-02_entry_ev_hold_extension_veto_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 00308 best post-hold block branchはdefault support-awareでは `support_aware_only` だが、support2では `too_many_support_limited_negative_months`、shallow025では `structural_negative_months` でblocked。
+- extension vetoは `long + range_normal_vol + ny_overlap + horizon>=720` の延長だけを止める実行時proxyとして実装できた。
+- ただし対象tradeはbase exit `-2.5152`、fixed720 `-0.8832` なので、延長を止めると悪化する。
+- `isolated_large_loss_long / t-5 / h720` は no veto `+326.1098`, month min `-0.8832` に対し、vetoあり `+325.2078`, month min `-1.7852`。
+- post-hold no-replacement blockの改善は「延長が悪い」からではなく「trade全体を消した」ためだった。
+
+判断:
+
+- `--extension-veto-rules` と `extension_veto_rule` groupingはaccepted infrastructure。
+- `holdext_long_range_normal_ny` extension vetoはpost-hold blockの代替としてreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_hold_extension_stateful_replay.py scripts/experiments/entry_ev_stateful_entry_block_overlay.py tests/test_entry_ev_hold_extension_stateful_replay.py tests/test_entry_ev_stateful_entry_block_overlay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_hold_extension_stateful_replay tests.test_entry_ev_stateful_entry_block_overlay`: OK
+- 00308 support-aware default/support2/shallow025 runs: OK
+- extension veto replay / overlay grouping check: OK
+
 ### 16:51 Entry EV replacement hold-extension integration
 
 作業:

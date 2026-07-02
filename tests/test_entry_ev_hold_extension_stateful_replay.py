@@ -5,6 +5,7 @@ import unittest
 import pandas as pd
 
 from scripts.experiments.entry_ev_hold_extension_stateful_replay import (
+    extension_veto_applies,
     horizon_model_used,
     parse_horizon_modes,
     replay_group,
@@ -94,6 +95,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             threshold=5.0,
             horizon_mode="predicted",
             require_model_used=False,
+            extension_veto_rule="none",
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -135,6 +137,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             threshold=5.0,
             horizon_mode="predicted",
             require_model_used=False,
+            extension_veto_rule="none",
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -250,6 +253,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             threshold=-5.0,
             horizon_mode="720",
             require_model_used=False,
+            extension_veto_rule="none",
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -287,6 +291,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             threshold=-5.0,
             horizon_mode="720",
             require_model_used=True,
+            extension_veto_rule="none",
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -295,10 +300,136 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
         self.assertFalse(trades[0]["hold_extension_applied"])
         self.assertAlmostEqual(trades[0]["adjusted_pnl"], -3.0)
 
+    def test_extension_veto_blocks_matching_extension_and_keeps_base_trade(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    **row(
+                        entry_minute=1,
+                        exit_minute=2,
+                        adjusted_pnl=-3.0,
+                        pred_delta=0.0,
+                        horizon=60,
+                        fixed_pnl=8.0,
+                        isolated_large_loss=True,
+                    ),
+                    "combined_regime": "range_normal_vol",
+                    "session_regime": "ny_overlap",
+                    "pred_hold_extension_delta_720m": 10.0,
+                    "actual_taken_fixed_720m_adjusted_pnl": 12.0,
+                }
+            ]
+        )
+
+        trades, skipped = replay_group(
+            frame,
+            apply_mask=universe_mask(frame, "isolated_large_loss_long"),
+            threshold=-5.0,
+            horizon_mode="720",
+            require_model_used=False,
+            extension_veto_rule="holdext_long_range_normal_ny",
+            profit_multiplier=1.0,
+            loss_multiplier=1.2,
+        )
+
+        self.assertFalse(skipped)
+        self.assertFalse(trades[0]["hold_extension_applied"])
+        self.assertTrue(trades[0]["hold_extension_vetoed"])
+        self.assertEqual(trades[0]["hold_extension_veto_reason"], "holdext_long_range_normal_ny")
+        self.assertAlmostEqual(trades[0]["adjusted_pnl"], -3.0)
+
+    def test_extension_veto_nonmatching_context_allows_extension(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    **row(
+                        entry_minute=1,
+                        exit_minute=2,
+                        adjusted_pnl=-3.0,
+                        pred_delta=0.0,
+                        horizon=60,
+                        fixed_pnl=8.0,
+                        isolated_large_loss=True,
+                    ),
+                    "combined_regime": "trend_normal_vol",
+                    "session_regime": "ny_overlap",
+                    "pred_hold_extension_delta_720m": 10.0,
+                    "actual_taken_fixed_720m_adjusted_pnl": 12.0,
+                }
+            ]
+        )
+
+        trades, skipped = replay_group(
+            frame,
+            apply_mask=universe_mask(frame, "isolated_large_loss_long"),
+            threshold=-5.0,
+            horizon_mode="720",
+            require_model_used=False,
+            extension_veto_rule="holdext_long_range_normal_ny",
+            profit_multiplier=1.0,
+            loss_multiplier=1.2,
+        )
+
+        self.assertFalse(skipped)
+        self.assertTrue(trades[0]["hold_extension_applied"])
+        self.assertFalse(trades[0]["hold_extension_vetoed"])
+        self.assertAlmostEqual(trades[0]["adjusted_pnl"], 12.0)
+
+    def test_selector_compatible_monthly_metrics_includes_nondefault_veto(self) -> None:
+        monthly = pd.DataFrame(
+            {
+                "variant": ["loss_exit30_cd15"],
+                "apply_universe": ["isolated_large_loss_long"],
+                "threshold": [-5.0],
+                "horizon_mode": ["720"],
+                "extension_veto_rule": ["holdext_long_range_normal_ny"],
+            }
+        )
+
+        output = selector_compatible_monthly_metrics(monthly)
+
+        self.assertEqual(
+            output["variant"].tolist(),
+            [
+                (
+                    "loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720"
+                    "__veto_holdext_long_range_normal_ny"
+                )
+            ],
+        )
+
     def test_horizon_model_used_parses_bool_like_values(self) -> None:
         self.assertTrue(horizon_model_used(pd.Series({"pred_hold_extension_model_used_720m": "true"}), 720))
         self.assertFalse(horizon_model_used(pd.Series({"pred_hold_extension_model_used_720m": "false"}), 720))
         self.assertFalse(horizon_model_used(pd.Series({}), 720))
+
+    def test_extension_veto_applies_to_long_range_normal_ny_720(self) -> None:
+        self.assertTrue(
+            extension_veto_applies(
+                pd.Series(
+                    {
+                        "direction": "long",
+                        "combined_regime": "range_normal_vol",
+                        "session_regime": "ny_overlap",
+                    }
+                ),
+                720,
+                "holdext_long_range_normal_ny",
+            )
+        )
+        self.assertFalse(
+            extension_veto_applies(
+                pd.Series(
+                    {
+                        "direction": "short",
+                        "combined_regime": "range_normal_vol",
+                        "session_regime": "ny_overlap",
+                    }
+                ),
+                720,
+                "holdext_long_range_normal_ny",
+            )
+        )
 
 
 if __name__ == "__main__":
