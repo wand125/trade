@@ -8724,3 +8724,36 @@ trade delta:
 - `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_singleton_abstention_diagnostics.py tests/test_entry_ev_support_repair_singleton_abstention_diagnostics.py`: OK
 - `uv run python -m unittest tests.test_entry_ev_support_repair_singleton_abstention_diagnostics`: OK
 - best / EV -2 singleton abstention diagnostics run: OK
+
+### 2026-07-03 08:51 JST Entry EV support repair singleton surface diagnostics
+
+作業:
+
+- 00337のsingleton abstentionを、00335 leak-free replayの複数scenario surfaceへ広げた。
+- `scripts/experiments/entry_ev_support_repair_singleton_surface_diagnostics.py` を追加し、scenarioごとに `selected + quota_full/overlap` candidate universeを再構成した。
+- singleton groupを抽出し、scenario-weighted集計と `role/month/side/decision_timestamp/horizon` によるunique dedup集計を分けて出した。
+- report: `docs/reports/00338_2026-07-03_entry_ev_support_repair_singleton_surface.md`
+
+主要結果:
+
+| scope | scenarios | singleton rows | unique singletons | best rule reading |
+|---|---:|---:|---:|---|
+| all scopes | `72` | `79` | `7` | `singleton_720_pred_pnl_lt2` は24 rows / unique 1 / positive damage 0 |
+| available only | `36` | `46` | `4` | prior系 / pred PnL / pred fixed-best 60m は24 rows / unique 1 / positive damage 0 |
+
+判断:
+
+- singleton surface diagnosticsはaccepted infrastructure。
+- available-onlyでは、条件付きruleが `fresh2024_validation 2024-08 long -29.1360` だけをflagし、positive damage 0。
+- ただしunique負例は1件だけ。scenario-weighted 24 rowsはthreshold違いの重複なので、独立supportとして扱わない。
+- all scopesではprior mean/tail/risk ruleがpositive 720m singletonもflagするため、prior riskだけのhard policy化は危険。
+- `singleton_720_pred_pnl_lt2` は次のpre-registered diagnostic guard候補。ただし標準policyではない。
+- 次はsingleton事例を別family / 別期間 / 追加surfaceで増やし、fresh/thin month代替候補生成へ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_singleton_surface_diagnostics.py tests/test_entry_ev_support_repair_singleton_surface_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_singleton_surface_diagnostics`: OK
+- all-scenarios singleton surface diagnostics run: OK
+- available-only singleton surface diagnostics run: OK

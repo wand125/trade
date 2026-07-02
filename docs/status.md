@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 08:39 JST
+最終更新: 2026-07-03 08:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair singleton surface diagnosticsを追加した。00337のsingleton abstentionを00335 leak-free replayの複数scenarioへ広げ、`selected + quota_full/overlap` candidate universeからsingleton groupをscenario-weighted / unique dedupの両方で集計した。all scopesは72 scenarios / 2218 candidate rows / 79 singleton rows / 7 unique、available-onlyは36 scenarios / 2047 rows / 46 singleton rows / 4 unique。available-onlyではprior mean/tail/risk、pred PnL、pred fixed-best 60m ruleがいずれも `fresh2024_validation 2024-08 long -29.1360` だけをflagし、scenario-weighted 24 rows / unique 1 / positive damage 0。ただしunique負例は1件だけなので標準policyにはしない。all scopesではprior系がpositive 720m singletonもflagするため、hard policy化は危険。判断: singleton surface diagnosticsはaccepted infrastructure、`singleton_720_pred_pnl_lt2` は次のdiagnostic guard候補、標準policyはNoTrade。詳細は `docs/reports/00338_2026-07-03_entry_ev_support_repair_singleton_surface.md`。
 
 Entry EV support repair singleton abstention diagnosticsを追加した。00336でreranking不能と分かったsingleton negativeを、listwise rerankerではなくobservable abstentionとして診断した。baseline bestでは唯一のsingletonが `hybrid2025_0912_external 2025-10 long +10.9530` なので、`singleton_any` はadded PnLを `+60.8530 -> +49.9000` に悪化させる。一方EV -2では `fresh2024_validation 2024-08 long -29.1360` を `720m prior mean < 0`, `prior tail >= 0.35`, `prior risk >= 5`, `pred_pnl < 2`, `pred fixed best 60m` が弾き、added PnLを `+31.7170 -> +60.8530`、combinedを `+371.0080 -> +400.1440` に戻した。ただしbaseline best相当へ戻るだけで、blockersは `month_pnl_below_floor,role_trades_low,side_share_high` のまま。判断: singleton abstention diagnosticsはaccepted infrastructure、`singleton_any` はreject、risk-conditioned abstentionはdiagnostic signalで標準policyではない。標準policyはNoTrade。詳細は `docs/reports/00337_2026-07-03_entry_ev_support_repair_singleton_abstention.md`。
 
