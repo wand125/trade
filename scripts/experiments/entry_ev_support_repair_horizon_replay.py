@@ -395,6 +395,11 @@ def expand_row_horizon_candidates(frame: pd.DataFrame) -> pd.DataFrame:
             f"pred_hv_{horizon}m_tail_loss_prob",
             default=1.0,
         )
+        output["hv_chosen_pred_harmful_overestimate_prob"] = numeric_series(
+            output,
+            f"ranker_hv_{horizon}m_pred_harmful_overestimate_prob",
+            default=0.0,
+        )
         output["hv_chosen_pred_model_used"] = (
             bool_series(output, f"pred_hv_{horizon}m_executable_model_used")
             & bool_series(output, f"pred_hv_{horizon}m_pnl_model_used")
@@ -448,6 +453,7 @@ def add_chosen_prediction_columns(frame: pd.DataFrame) -> pd.DataFrame:
     output["hv_chosen_pred_executable_prob"] = np.nan
     output["hv_chosen_pred_pnl"] = np.nan
     output["hv_chosen_pred_tail_loss_prob"] = np.nan
+    output["hv_chosen_pred_harmful_overestimate_prob"] = 0.0
     output["hv_chosen_pred_model_used"] = False
     if "hv_chosen_horizon_minutes" not in output.columns:
         return output
@@ -459,6 +465,7 @@ def add_chosen_prediction_columns(frame: pd.DataFrame) -> pd.DataFrame:
         prob_column = f"pred_hv_{horizon}m_executable_prob"
         pnl_column = f"pred_hv_{horizon}m_pnl"
         tail_column = f"pred_hv_{horizon}m_tail_loss_prob"
+        harmful_column = f"ranker_hv_{horizon}m_pred_harmful_overestimate_prob"
         executable_model_column = f"pred_hv_{horizon}m_executable_model_used"
         pnl_model_column = f"pred_hv_{horizon}m_pnl_model_used"
         tail_model_column = f"pred_hv_{horizon}m_tail_model_used"
@@ -473,6 +480,11 @@ def add_chosen_prediction_columns(frame: pd.DataFrame) -> pd.DataFrame:
             output.loc[mask, "hv_chosen_pred_tail_loss_prob"] = numeric_series(
                 output,
                 tail_column,
+            )[mask]
+        if harmful_column in output.columns:
+            output.loc[mask, "hv_chosen_pred_harmful_overestimate_prob"] = numeric_series(
+                output,
+                harmful_column,
             )[mask]
         model_used = (
             bool_series(output, executable_model_column)
@@ -518,6 +530,8 @@ def add_repair_utility_columns(
     repair_expected_pnl_weight: float,
     repair_tail_penalty_weight: float,
     repair_horizon_penalty_weight: float,
+    repair_harmful_penalty_weight: float = 0.0,
+    repair_harmful_penalty_threshold: float = 0.0,
 ) -> pd.DataFrame:
     output = choices.copy()
     lookup = {
@@ -583,12 +597,39 @@ def add_repair_utility_columns(
         default=0.0,
     ).fillna(0.0)
     output["repair_duration_risk_penalty_amount"] = duration_risk_penalty
+    support_success_proxy = (
+        numeric_series(output, "support_reduction_value", default=0.0).clip(0.0, 1.0)
+        * numeric_series(output, "hv_chosen_pred_executable_prob", default=0.0).clip(0.0, 1.0)
+        * (1.0 - tail_prob.fillna(0.0).clip(0.0, 1.0))
+    )
+    raw_harmful_penalty = numeric_series(
+        output,
+        "hv_chosen_pred_harmful_overestimate_prob",
+        default=0.0,
+    ).clip(0.0, 1.0)
+    harmful_threshold = min(max(float(repair_harmful_penalty_threshold), 0.0), 0.999999)
+    if harmful_threshold > 0.0:
+        harmful_penalty = (raw_harmful_penalty - harmful_threshold).clip(lower=0.0) / (
+            1.0 - harmful_threshold
+        )
+    else:
+        harmful_penalty = raw_harmful_penalty
+    output["repair_support_success_proxy"] = support_success_proxy
+    output["repair_harmful_penalty_raw"] = raw_harmful_penalty
+    output["repair_harmful_penalty"] = harmful_penalty
+    output["repair_harmful_penalty_threshold"] = harmful_threshold
+    output["repair_harmful_penalty_amount"] = (
+        repair_harmful_penalty_weight
+        * harmful_penalty
+        * (1.0 - support_success_proxy)
+    )
     output["repair_score"] = (
         repair_support_weight * numeric_series(output, "support_reduction_value")
         + repair_expected_pnl_weight * output["repair_expected_pnl"]
         - repair_tail_penalty_weight * output["repair_tail_penalty"]
         - output["repair_horizon_penalty_amount"]
         - output["repair_duration_risk_penalty_amount"]
+        - output["repair_harmful_penalty_amount"]
     )
     return output
 
@@ -1003,6 +1044,8 @@ def replay_scenarios(
     repair_expected_pnl_weight: float = 1.0,
     repair_tail_penalty_weight: float = 1.0,
     repair_horizon_penalty_weight: float = 0.0,
+    repair_harmful_penalty_weight: float = 0.0,
+    repair_harmful_penalty_threshold: float = 0.0,
     min_chosen_pred_pnl: float | None = None,
     min_chosen_actual_pnl: float | None = None,
     max_chosen_tail_prob: float | None = None,
@@ -1022,6 +1065,8 @@ def replay_scenarios(
             repair_expected_pnl_weight=repair_expected_pnl_weight,
             repair_tail_penalty_weight=repair_tail_penalty_weight,
             repair_horizon_penalty_weight=repair_horizon_penalty_weight,
+            repair_harmful_penalty_weight=repair_harmful_penalty_weight,
+            repair_harmful_penalty_threshold=repair_harmful_penalty_threshold,
         )
     for key, group in choices.groupby(SCENARIO_COLUMNS, dropna=False, sort=False):
         scenario = dict(zip(SCENARIO_COLUMNS, key, strict=True))
@@ -1189,6 +1234,8 @@ def run_replay(args: argparse.Namespace) -> Path:
         repair_expected_pnl_weight=args.repair_expected_pnl_weight,
         repair_tail_penalty_weight=args.repair_tail_penalty_weight,
         repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
+        repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
+        repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
         min_chosen_pred_pnl=args.min_chosen_pred_pnl,
         min_chosen_actual_pnl=args.min_chosen_actual_pnl,
         max_chosen_tail_prob=args.max_chosen_tail_prob,
@@ -1221,6 +1268,8 @@ def run_replay(args: argparse.Namespace) -> Path:
                 "repair_expected_pnl_weight": args.repair_expected_pnl_weight,
                 "repair_tail_penalty_weight": args.repair_tail_penalty_weight,
                 "repair_horizon_penalty_weight": args.repair_horizon_penalty_weight,
+                "repair_harmful_penalty_weight": args.repair_harmful_penalty_weight,
+                "repair_harmful_penalty_threshold": args.repair_harmful_penalty_threshold,
                 "min_chosen_pred_pnl": args.min_chosen_pred_pnl,
                 "min_chosen_actual_pnl": args.min_chosen_actual_pnl,
                 "max_chosen_tail_prob": args.max_chosen_tail_prob,
@@ -1306,6 +1355,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-expected-pnl-weight", type=float, default=1.0)
     parser.add_argument("--repair-tail-penalty-weight", type=float, default=1.0)
     parser.add_argument("--repair-horizon-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--repair-harmful-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--repair-harmful-penalty-threshold", type=float, default=0.0)
     parser.add_argument("--min-chosen-pred-pnl", type=float)
     parser.add_argument("--min-chosen-actual-pnl", type=float)
     parser.add_argument("--max-chosen-tail-prob", type=float)

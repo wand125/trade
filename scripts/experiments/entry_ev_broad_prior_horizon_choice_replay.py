@@ -491,6 +491,7 @@ def score_predictions(
     delta_weight: float,
     beats60_weight: float,
     tail_score_weight: float,
+    support_score_weight: float,
     harmful_score_weight: float,
     lower_bound_mae_weight: float,
     lower_bound_bias_weight: float,
@@ -507,6 +508,18 @@ def score_predictions(
     if score_mode == "pnl_delta_tail":
         return pnl + delta_weight * delta + beats60_weight * beats60 - tail_score_weight * tail
     harmful = numeric_series(frame, "ranker_pred_harmful_overestimate_prob", default=0.0)
+    support_needed = (
+        text_series(frame, "side", default="")
+        .eq(text_series(frame, "needed_side", default=""))
+        .astype(float)
+        * numeric_series(frame, "extra_side_needed", default=0.0).clip(lower=0.0, upper=1.0)
+    )
+    support_success_proxy = (
+        support_needed
+        * numeric_series(frame, "ranker_pred_executable_prob", default=0.0).clip(0.0, 1.0)
+        * (1.0 - tail.clip(0.0, 1.0))
+    )
+    support_harmful_penalty = harmful_score_weight * harmful * (1.0 - support_success_proxy)
     if score_mode == "pnl_harmful_guard":
         return pnl - harmful_score_weight * harmful
     if score_mode == "pnl_delta_harmful_guard":
@@ -518,6 +531,25 @@ def score_predictions(
             + beats60_weight * beats60
             - tail_score_weight * tail
             - harmful_score_weight * harmful
+        )
+    if score_mode == "pnl_support_harmful_guard":
+        return pnl + support_score_weight * support_success_proxy - support_harmful_penalty
+    if score_mode == "pnl_delta_support_harmful_guard":
+        return (
+            pnl
+            + delta_weight * delta
+            + beats60_weight * beats60
+            + support_score_weight * support_success_proxy
+            - support_harmful_penalty
+        )
+    if score_mode == "pnl_delta_tail_support_harmful_guard":
+        return (
+            pnl
+            + delta_weight * delta
+            + beats60_weight * beats60
+            - tail_score_weight * tail
+            + support_score_weight * support_success_proxy
+            - support_harmful_penalty
         )
     lower_bound_penalty = (
         lower_bound_mae_weight * numeric_series(frame, "residual_prior_mae", default=0.0)
@@ -832,6 +864,7 @@ def pivot_ranker_predictions(
     delta_weight: float,
     beats60_weight: float,
     tail_score_weight: float,
+    support_score_weight: float,
     harmful_score_weight: float,
     lower_bound_mae_weight: float,
     lower_bound_bias_weight: float,
@@ -853,6 +886,7 @@ def pivot_ranker_predictions(
         delta_weight=delta_weight,
         beats60_weight=beats60_weight,
         tail_score_weight=tail_score_weight,
+        support_score_weight=support_score_weight,
         harmful_score_weight=harmful_score_weight,
         lower_bound_mae_weight=lower_bound_mae_weight,
         lower_bound_bias_weight=lower_bound_bias_weight,
@@ -1107,6 +1141,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
             delta_weight=args.delta_weight,
             beats60_weight=args.beats60_weight,
             tail_score_weight=args.tail_score_weight,
+            support_score_weight=args.support_score_weight,
             harmful_score_weight=args.harmful_score_weight,
             lower_bound_mae_weight=args.lower_bound_mae_weight,
             lower_bound_bias_weight=args.lower_bound_bias_weight,
@@ -1123,6 +1158,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
             delta_weight=args.delta_weight,
             beats60_weight=args.beats60_weight,
             tail_score_weight=args.tail_score_weight,
+            support_score_weight=args.support_score_weight,
             harmful_score_weight=args.harmful_score_weight,
             lower_bound_mae_weight=args.lower_bound_mae_weight,
             lower_bound_bias_weight=args.lower_bound_bias_weight,
@@ -1150,6 +1186,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
             repair_expected_pnl_weight=args.repair_expected_pnl_weight,
             repair_tail_penalty_weight=args.repair_tail_penalty_weight,
             repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
+            repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
+            repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
         )
         choices.to_csv(run_dir / f"ranker_replay_candidates_{score_mode}.csv", index=False)
         summary, monthly, additions, rejections = replay_scenarios(
@@ -1170,6 +1208,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
             repair_expected_pnl_weight=args.repair_expected_pnl_weight,
             repair_tail_penalty_weight=args.repair_tail_penalty_weight,
             repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
+            repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
+            repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
             min_chosen_pred_pnl=args.min_chosen_pred_pnl,
             min_chosen_actual_pnl=None,
             max_chosen_tail_prob=args.max_chosen_tail_prob,
@@ -1240,6 +1280,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "delta_weight": args.delta_weight,
         "beats60_weight": args.beats60_weight,
         "tail_score_weight": args.tail_score_weight,
+        "support_score_weight": args.support_score_weight,
         "harmful_score_weight": args.harmful_score_weight,
         "lower_bound_mae_weight": args.lower_bound_mae_weight,
         "lower_bound_bias_weight": args.lower_bound_bias_weight,
@@ -1253,6 +1294,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "candidate": args.candidate,
         "variant_contains": args.variant_contains,
         "base_entry_block_rule": args.base_entry_block_rule,
+        "repair_harmful_penalty_weight": args.repair_harmful_penalty_weight,
+        "repair_harmful_penalty_threshold": args.repair_harmful_penalty_threshold,
     }
     (run_dir / "config.json").write_text(
         json.dumps(config, indent=2, sort_keys=True, default=local_json_default) + "\n",
@@ -1328,6 +1371,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delta-weight", type=float, default=0.25)
     parser.add_argument("--beats60-weight", type=float, default=0.5)
     parser.add_argument("--tail-score-weight", type=float, default=2.0)
+    parser.add_argument("--support-score-weight", type=float, default=2.0)
     parser.add_argument("--harmful-score-weight", type=float, default=5.0)
     parser.add_argument("--lower-bound-mae-weight", type=float, default=0.25)
     parser.add_argument("--lower-bound-bias-weight", type=float, default=0.25)
@@ -1348,6 +1392,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-expected-pnl-weight", type=float, default=1.0)
     parser.add_argument("--repair-tail-penalty-weight", type=float, default=1.0)
     parser.add_argument("--repair-horizon-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--repair-harmful-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--repair-harmful-penalty-threshold", type=float, default=0.0)
     parser.add_argument("--target-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--cap-to-extra-side-needed",

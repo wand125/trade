@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 07:13 JST
+最終更新: 2026-07-03 07:38 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-aware harmful objectiveを追加した。00331の次アクションとして、harmful probabilityをsupport-aware objectiveへ入れた。horizon-choice score側の `pnl_support_harmful_guard` 系modeはbest `+370.0040` で00329/00331 baseline `+403.2680` を超えない。support repair層には `hv_chosen_pred_harmful_overestimate_prob`, `repair_support_success_proxy`, `repair_harmful_penalty_weight`, `repair_harmful_penalty_threshold` を追加したが、continuous penaltyはweight `0.1` 以上で勝ち候補を落としbest `+396.9280` へ悪化。threshold `0.5/0.7` はbaseline維持だがno-opだった。判断: support-aware harmful infrastructureはaccepted、現形のscore-side / repair-side harmful penaltyはpolicy候補としてreject。次はscalar penaltyではなくpairwise/listwise switching targetとcontext別harmful calibrationへ進む。標準policyはNoTrade。詳細は `docs/reports/00332_2026-07-03_entry_ev_support_aware_harmful_objective.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV harmful overestimate target diagnosticsを追加した。00330の次アクションとして、harmful overestimate と profitable high-variance 720m を分離するtarget診断を実装し、既存horizon-choice rankerへ `target_horizon_harmful_overestimate` classifier headと `pnl_harmful_guard` 系score modeを追加した。available candidatesのharmful head AUCは60m `0.8859`、240m `0.9391`、720m `0.8758` とsignalはある。一方、direct penalty replayはweight 1 best `+397.3780`、weight 5 best `+394.7840` で、00329 baseline `+403.2680` を超えない。判断: harmful-overestimate target/head infrastructureはaccepted、direct harmful penaltyはpolicy候補としてreject。次はharmful probabilityをsupport-aware objectiveのfeatureとして使う。標準policyはNoTrade。詳細は `docs/reports/00331_2026-07-03_entry_ev_harmful_overestimate_target.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

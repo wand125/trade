@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 07:38 Entry EV support-aware harmful objective
+
+作業:
+
+- 00331の次アクションとして、harmful probabilityをsupport-aware objectiveへ入れた。
+- horizon-choice score側に `pnl_support_harmful_guard` 系modeを追加した。
+- support repair層に `hv_chosen_pred_harmful_overestimate_prob`, `repair_support_success_proxy`, `repair_harmful_penalty_weight`, `repair_harmful_penalty_threshold` を追加した。
+- report: `docs/reports/00332_2026-07-03_entry_ev_support_aware_harmful_objective.md`
+
+結果:
+
+- score-side support harmful objectiveはbaseline `+403.2680` を超えず、bestでも `+370.0040`。
+- repair-side continuous harmful penaltyはweight `0.1` 以上で勝ち候補を落とし、best `+396.9280` へ悪化した。
+- threshold `0.5` / `0.7` はbaseline `+403.2680` を維持したが、改善ではなくno-opだった。
+- continuous penaltyで落ちた2025-11 short tradeはactual `+10.4400` だがharmful probability `0.4101` で、headの中程度false positiveがpolicy変換で問題になった。
+
+判断:
+
+- support-aware harmful objective infrastructureはaccepted。
+- score-side / repair-side harmful penaltyは現policy候補としてreject。
+- 次はscalar penaltyではなく、同一decision cluster内のpairwise/listwise switching targetとcontext別harmful calibrationへ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_support_repair_horizon_replay tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00332 support harmful score / repair harmful penalty / thresholded repair penalty experiments: OK
+
 ### 07:13 Entry EV harmful overestimate target diagnostics
 
 作業:

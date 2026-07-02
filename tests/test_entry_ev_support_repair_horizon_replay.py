@@ -5,6 +5,7 @@ import unittest
 import pandas as pd
 
 from scripts.experiments.entry_ev_support_repair_horizon_replay import (
+    add_repair_utility_columns,
     read_choice_candidates,
     replay_scenarios,
     select_support_additions,
@@ -102,6 +103,64 @@ class EntryEvSupportRepairHorizonReplayTest(unittest.TestCase):
         self.assertEqual(float(selected.iloc[0]["repair_score"]), 10.0)
         self.assertEqual(float(selected.iloc[0]["adjusted_pnl"]), 2.0)
         self.assertEqual(rejected.iloc[0]["reject_reason"], "quota_full")
+
+    def test_repair_score_penalizes_harmful_probability_after_support_relief(self) -> None:
+        base_monthly = pd.DataFrame(
+            {
+                "role": ["r"],
+                "family": ["f"],
+                "month": ["2026-01"],
+                "total_adjusted_pnl": [1.0],
+                "trade_count": [1],
+                "long_trade_count": [0],
+                "short_trade_count": [1],
+                "max_drawdown": [0.0],
+            }
+        )
+        choices = pd.DataFrame(
+            {
+                "role": ["r", "r"],
+                "family": ["f", "f"],
+                "month": ["2026-01", "2026-01"],
+                "side": ["long", "long"],
+                "hv_chosen_horizon_minutes": [60, 60],
+                "hv_chosen_pred_pnl": [3.0, 3.0],
+                "hv_chosen_pred_executable_prob": [0.8, 0.8],
+                "hv_chosen_pred_tail_loss_prob": [0.1, 0.1],
+                "hv_chosen_pred_harmful_overestimate_prob": [0.1, 0.9],
+            }
+        )
+
+        scored = add_repair_utility_columns(
+            base_monthly,
+            choices,
+            min_month_trades=1,
+            max_side_trade_share=0.95,
+            repair_support_weight=1.0,
+            repair_expected_pnl_weight=1.0,
+            repair_tail_penalty_weight=1.0,
+            repair_horizon_penalty_weight=0.0,
+            repair_harmful_penalty_weight=5.0,
+        )
+
+        self.assertGreater(float(scored.iloc[0]["repair_score"]), float(scored.iloc[1]["repair_score"]))
+        self.assertLess(float(scored.iloc[0]["repair_harmful_penalty_amount"]), 0.2)
+
+        thresholded = add_repair_utility_columns(
+            base_monthly,
+            choices,
+            min_month_trades=1,
+            max_side_trade_share=0.95,
+            repair_support_weight=1.0,
+            repair_expected_pnl_weight=1.0,
+            repair_tail_penalty_weight=1.0,
+            repair_horizon_penalty_weight=0.0,
+            repair_harmful_penalty_weight=5.0,
+            repair_harmful_penalty_threshold=0.5,
+        )
+
+        self.assertAlmostEqual(float(thresholded.iloc[0]["repair_harmful_penalty"]), 0.0)
+        self.assertAlmostEqual(float(thresholded.iloc[1]["repair_harmful_penalty"]), 0.8)
 
     def test_update_monthly_metrics_adds_side_counts_and_pnl(self) -> None:
         base_monthly = pd.DataFrame(
@@ -359,18 +418,21 @@ class EntryEvSupportRepairHorizonReplayTest(unittest.TestCase):
             "pred_hv_60m_executable_model_used": [True],
             "pred_hv_60m_pnl_model_used": [True],
             "pred_hv_60m_tail_model_used": [True],
+            "ranker_hv_60m_pred_harmful_overestimate_prob": [0.1],
             "pred_hv_240m_executable_prob": [0.6],
             "pred_hv_240m_pnl": [2.0],
             "pred_hv_240m_tail_loss_prob": [0.1],
             "pred_hv_240m_executable_model_used": [True],
             "pred_hv_240m_pnl_model_used": [True],
             "pred_hv_240m_tail_model_used": [True],
+            "ranker_hv_240m_pred_harmful_overestimate_prob": [0.2],
             "pred_hv_720m_executable_prob": [0.6],
             "pred_hv_720m_pnl": [10.0],
             "pred_hv_720m_tail_loss_prob": [0.1],
             "pred_hv_720m_executable_model_used": [True],
             "pred_hv_720m_pnl_model_used": [True],
             "pred_hv_720m_tail_model_used": [True],
+            "ranker_hv_720m_pred_harmful_overestimate_prob": [0.9],
         }
         path = self.create_temp_csv(pd.DataFrame(prediction_row))
 
@@ -388,6 +450,14 @@ class EntryEvSupportRepairHorizonReplayTest(unittest.TestCase):
             choices["hv_chosen_horizon_minutes"].astype(int).tolist(),
             [60, 240, 720],
         )
+        harmful_by_horizon = dict(
+            zip(
+                choices["hv_chosen_horizon_minutes"].astype(int),
+                choices["hv_chosen_pred_harmful_overestimate_prob"].astype(float),
+                strict=True,
+            )
+        )
+        self.assertAlmostEqual(harmful_by_horizon[720], 0.9)
 
         summary, _, additions, rejections = replay_scenarios(
             base_monthly,

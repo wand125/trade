@@ -113,6 +113,7 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             delta_weight=0.25,
             beats60_weight=0.5,
             tail_score_weight=2.0,
+            support_score_weight=2.0,
             harmful_score_weight=5.0,
             lower_bound_mae_weight=0.25,
             lower_bound_bias_weight=0.25,
@@ -166,11 +167,11 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
                 "ranker_pred_pnl": [10.0],
                 "ranker_pred_delta_vs_60": [4.0],
                 "ranker_pred_beats60_prob": [0.5],
-            "ranker_pred_tail_loss_prob": [0.2],
-            "ranker_pred_harmful_overestimate_prob": [0.0],
-            "residual_prior_mae": [3.0],
-            "residual_prior_bias": [2.0],
-            "residual_prior_tail_miss_rate": [0.4],
+                "ranker_pred_tail_loss_prob": [0.2],
+                "ranker_pred_harmful_overestimate_prob": [0.0],
+                "residual_prior_mae": [3.0],
+                "residual_prior_bias": [2.0],
+                "residual_prior_tail_miss_rate": [0.4],
             }
         )
 
@@ -180,6 +181,7 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             delta_weight=0.25,
             beats60_weight=0.5,
             tail_score_weight=2.0,
+            support_score_weight=2.0,
             harmful_score_weight=5.0,
             lower_bound_mae_weight=0.5,
             lower_bound_bias_weight=0.25,
@@ -187,6 +189,36 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
         )
 
         self.assertAlmostEqual(float(score.iloc[0]), 6.85)
+
+    def test_support_harmful_score_relaxes_penalty_for_support_success_proxy(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "side": ["long", "short"],
+                "needed_side": ["long", "long"],
+                "extra_side_needed": [1.0, 1.0],
+                "ranker_pred_pnl": [4.0, 4.0],
+                "ranker_pred_delta_vs_60": [0.0, 0.0],
+                "ranker_pred_beats60_prob": [0.0, 0.0],
+                "ranker_pred_executable_prob": [0.8, 0.8],
+                "ranker_pred_tail_loss_prob": [0.1, 0.1],
+                "ranker_pred_harmful_overestimate_prob": [0.5, 0.5],
+            }
+        )
+
+        score = score_predictions(
+            frame,
+            score_mode="pnl_support_harmful_guard",
+            delta_weight=0.25,
+            beats60_weight=0.5,
+            tail_score_weight=2.0,
+            support_score_weight=2.0,
+            harmful_score_weight=5.0,
+            lower_bound_mae_weight=0.25,
+            lower_bound_bias_weight=0.25,
+            lower_bound_tail_miss_weight=5.0,
+        )
+
+        self.assertGreater(float(score.iloc[0]), float(score.iloc[1]))
 
     def test_residual_prior_columns_are_score_only_by_default(self) -> None:
         self.assertNotIn("residual_prior_mae", DEFAULT_HORIZON_NUMERIC_FEATURES)
