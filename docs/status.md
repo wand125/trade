@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 14:51 JST
+最終更新: 2026-07-02 15:02 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV prior residual pressureを追加した。00300で見えた危険contextを、同一windowのstatic blacklistではなく対象月より前だけで作るprior residual pressureとして診断する `scripts/experiments/entry_ev_selected_trade_prior_residual_pressure.py` を実装した。最良診断ruleは factor mode / `direction,combined_regime,session_regime` / `prior_count_ge5_lossrate_ge0p5_bias_pos` で、6 tradesをflagし flagged PnL `-10.8380`, kept PnL `+340.2728`, loss precision `0.6667`。ただし同じruleはPnL modeでは flagged PnL `+1.5620` と悪化し、広いdirection/session ruleは69 trades / flagged PnL `+152.2132` と勝ちを大きく削る。判断: prior residual pressure diagnosticsはaccepted infrastructure、best ruleはdiagnostic candidate、hard gate標準化はreject。次はfeatureとしてuncertainty / large-loss headやcandidate-level selectorへ入れる。詳細は `docs/reports/00301_2026-07-02_entry_ev_prior_residual_pressure.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV calibration residual context diagnosticsを追加した。00299でOOF calibrationはscale補正に有効だがdirect gateには弱いと分かったため、calibration residualをcontext / support / score binへ分解する `scripts/experiments/entry_ev_selected_trade_calibration_diagnostics.py` を実装した。00299 residual combo artifactでは、`short|ny_late` が17 trades / total `-13.0136`, pnl bias `+2.4593`, large loss 5件、`long|range_normal_vol|ny_overlap` が9 trades / total `-12.5040`, overestimate rate `0.8889`, train rows平均 `160.8` と、support十分でも外すcontextが出た。PnL score最低binは total `+144.3950` で、low-score gateが勝ちを削る理由も再確認した。判断: calibration residual context diagnosticsはaccepted infrastructure、post-hoc static blacklistはreject、次はprior-only context residual pressure / uncertainty headへ戻す。詳細は `docs/reports/00300_2026-07-02_entry_ev_calibration_residual_context_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

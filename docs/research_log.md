@@ -4,6 +4,41 @@
 
 ## 2026-07-02 JST
 
+### 15:02 Entry EV prior residual pressure
+
+作業:
+
+- 00300で見えた危険contextを、同一windowのstatic blacklistではなく、対象月より前だけで作るprior residual pressureとして診断した。
+- `scripts/experiments/entry_ev_selected_trade_prior_residual_pressure.py` を追加し、context別に `month < target_month` のみで prior PnL、loss rate、large-loss rate、bias、pressureを作るようにした。同月内のtrade結果はpriorに含めない。
+- `tests/test_entry_ev_selected_trade_prior_residual_pressure.py` を追加した。
+- report: `docs/reports/00301_2026-07-02_entry_ev_prior_residual_pressure.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00299 residual combo selected-trade calibration artifact。
+- 最良診断ruleは factor mode / `direction,combined_regime,session_regime` / `prior_count_ge5_lossrate_ge0p5_bias_pos`。
+- このruleは6 tradesをflagし、flagged PnL `-10.8380`、kept PnL `+340.2728`、loss precision `0.6667`、large-loss recall `0.0870`。
+- 同じ細粒度contextでも PnL modeでは同ruleが flagged PnL `+1.5620` と悪化。
+- `prior_count_ge5_total_neg_bias_pos` はfactor/PnLとも 9 trades / flagged PnL `-4.3360` の小幅改善。
+- 広いdirection/sessionやdirection/combined rulesは勝ちtradeを大きく削る。例: `direction,session_regime` の `prior_count_ge3_lossrate_ge0p5` は69 trades / flagged PnL `+152.2132`。
+
+判断:
+
+- prior-only residual pressure diagnosticsはaccepted infrastructure。
+- best factor fine-context ruleはdiagnostic candidateだが、mode依存とcoverage薄さにより標準policyにはしない。
+- pressure quantile hard gateやbroad prior context gateはreject。
+- 次はprior residual pressureをfeatureとしてuncertainty / large-loss headやcandidate-level selectorへ入れる。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_trade_prior_residual_pressure.py tests/test_entry_ev_selected_trade_prior_residual_pressure.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_prior_residual_pressure`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_prior_residual_pressure tests.test_entry_ev_selected_trade_calibration_diagnostics tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- prior residual pressure diagnostics run: OK
+
 ### 14:51 Entry EV calibration residual context diagnostics
 
 作業:
