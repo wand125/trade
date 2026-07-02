@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 05:55 JST
+最終更新: 2026-07-03 06:11 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV broad duration prior repair replayを追加した。00327でsupport-repair-only priorが疎すぎると分かったため、00322 s2 broad candidate universeをtrain rows付きで再生成し、target月より前のbroad rowsからcontext別duration priorを作った。fresh2024 2024-08の `long / down_low_vol / asia / one_failed` priorは48 rows / 6 monthsで、60m mean `+0.9061`、240m mean `+1.7885`、720m mean `-3.4993`、720m delta vs 60m `-4.4053`、tail-loss rate `0.4145`。悪い720mを事前に警告できる。一方、direct penalty replayのbestはadded PnL `+23.7960`、combined `+363.0870` で、00326 hpen0.25の `+374.6110` には届かない。p0.4系では2024-08を720m `-29.1360` から60m `+2.9500` へ切り替えられるが、勝ち候補も削る。判断: broad duration prior infrastructureはaccepted、current direct penaltyはreject、次はpriorを特徴量としてchronological horizon-choice ranker/headへ入れる。標準policyはNoTrade。詳細は `docs/reports/00328_2026-07-03_entry_ev_broad_duration_prior_repair_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV horizon duration penalty calibrationを追加した。00326のhpen0.25を同一repair set診断のまま採用しないため、target monthより前の候補だけで `repair_horizon_penalty_weight_effective` を選ぶchronological calibrationを実装した。strict校正(min prior 10 rows / 2 months)もloose校正(min prior 1 row / 1 month)も、added PnL `+3.2340`、combined `+342.5250`、month min `-19.8260`、role min `-20.8016` でpred-only no-penaltyと同じ失敗。fresh2024 2024-08はprior候補0件で `0.00` fallbackとなり、720m `-29.1360` を止められなかった。fallback `0.25` を事前固定するとcombined `+374.6110` を再現するが、これはlearned evidenceではない。判断: chronological calibration infrastructureはaccepted、support-repair対象行だけでduration penaltyを学ぶ方針はreject、次は広いcandidate universeでduration riskを学習する。標準policyはNoTrade。詳細は `docs/reports/00327_2026-07-03_entry_ev_horizon_duration_penalty_calibration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

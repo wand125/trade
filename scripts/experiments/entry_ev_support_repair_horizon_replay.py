@@ -577,11 +577,18 @@ def add_repair_utility_columns(
     output["repair_horizon_penalty_amount"] = (
         output["repair_horizon_penalty_weight_effective"] * output["repair_horizon_penalty"]
     )
+    duration_risk_penalty = numeric_series(
+        output,
+        "repair_duration_risk_penalty_amount",
+        default=0.0,
+    ).fillna(0.0)
+    output["repair_duration_risk_penalty_amount"] = duration_risk_penalty
     output["repair_score"] = (
         repair_support_weight * numeric_series(output, "support_reduction_value")
         + repair_expected_pnl_weight * output["repair_expected_pnl"]
         - repair_tail_penalty_weight * output["repair_tail_penalty"]
         - output["repair_horizon_penalty_amount"]
+        - output["repair_duration_risk_penalty_amount"]
     )
     return output
 

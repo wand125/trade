@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 06:11 Entry EV broad duration prior repair replay
+
+作業:
+
+- 00327でsupport-repair-only priorが疎すぎると分かったため、00322 s2 broad candidate universeを `--write-train-rows` で再生成し、9697 train rowsを保存した。
+- `scripts/experiments/entry_ev_broad_duration_prior_repair_replay.py` を追加し、target月より前のbroad rowsからcontext別duration priorを作り、support repair replayへ接続した。
+- report: `docs/reports/00328_2026-07-03_entry_ev_broad_duration_prior_repair_replay.md`
+
+結果:
+
+- fresh2024 2024-08の `long / down_low_vol / asia / one_failed` priorは48 rows / 6 monthsで、60m mean `+0.9061`、240m mean `+1.7885`、720m mean `-3.4993`、720m delta vs 60m `-4.4053`、tail-loss rate `0.4145`。悪い720mを事前に警告できる。
+- composite duration risk bestは5本追加、added PnL `+23.7960`、combined `+363.0870`、month min `-0.6120`、remaining extra trades `3`。
+- tail-only riskもbestは同じ `+363.0870`。
+- p0.4系ではrisk weight `0.5` 以上でfresh2024 2024-08を720m `-29.1360` から60m `+2.9500` へ切り替えるが、refit2025 2025-07などの勝ち候補も削り、added PnLは `+16.6340` に留まる。
+
+判断:
+
+- broad duration prior infrastructureと `repair_duration_risk_penalty_amount` hookはaccepted。
+- current direct broad duration prior penaltyはpolicy候補としてreject。
+- broad priorは特徴量としては有望だが、静的penaltyではなくchronological horizon-choice ranker/headへ入れる。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_duration_prior_repair_replay.py scripts/experiments/entry_ev_support_repair_horizon_replay.py tests/test_entry_ev_broad_duration_prior_repair_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_duration_prior_repair_replay tests.test_entry_ev_support_repair_horizon_replay`: OK
+- 00322 s2 train rows re-run / 00328 composite / tail-only replays: OK
+
 ### 05:55 Entry EV horizon duration penalty calibration
 
 作業:
