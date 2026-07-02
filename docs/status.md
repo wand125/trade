@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 14:21 JST
+最終更新: 2026-07-02 14:31 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV confidence gate overlayを追加した。00297の次アクションとして、thin-support residual monthsを月内順序削除ではなくモデル出力confidenceで扱えるか診断する `scripts/experiments/entry_ev_confidence_gate_overlay.py` を実装した。00296 diagnostic benchmark branchに対し、`taken_ev_ge10` は month minを `-0.7200 -> 0.0000` へ上げるが、total `+329.4348 -> +36.0280`, trades `232 -> 111` へ低活動化し、standard blockersは `role_trades_low,month_trades_low`。rank/side-gap/lossprob/fixed-horizon predicted PnL gateはmonth/role floorを悪化。判断: confidence gate diagnosticsはaccepted infrastructure、現confidence hard gateはreject、標準policyはNoTrade。詳細は `docs/reports/00298_2026-07-02_entry_ev_confidence_gate_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV month warmup overlayを追加した。00296の次アクションとして、remaining thin-support negative monthsを単発blacklistではなく月内サポート形成待ちで扱えるか診断する `scripts/experiments/entry_ev_month_warmup_overlay.py` を実装した。00296 diagnostic benchmark branchに対し、`skip_first_1` は total `+329.4348 -> +275.3470`, month min `-0.7200 -> -1.9596` へ悪化し、`wait_opposite_seen` / `wait_both_sides_seen` はさらに悪化。判断: month-warmup overlay diagnosticsはaccepted infrastructure、現warmup rulesはreject、標準policyはNoTrade。詳細は `docs/reports/00297_2026-07-02_entry_ev_month_warmup_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

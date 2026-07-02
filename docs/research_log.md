@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 14:31 Entry EV confidence gate overlay
+
+作業:
+
+- 00297の次アクションとして、thin-support residual monthsを月内順序削除ではなくモデル出力confidenceで扱えるか診断した。
+- `scripts/experiments/entry_ev_confidence_gate_overlay.py` を追加し、既存entry-block overlay trade pathへ rank / side-gap / loss-first probability / predicted EV / fixed-horizon predicted PnL のgateをno-replacementで重ねられるようにした。
+- `tests/test_entry_ev_confidence_gate_overlay.py` を追加した。
+- report: `docs/reports/00298_2026-07-02_entry_ev_confidence_gate_overlay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00296 diagnostic benchmark branch。
+- `taken_ev_ge10` は month minを `-0.7200 -> 0.0000` へ上げたが、totalは `+329.4348 -> +36.0280`、tradesは `232 -> 111` まで落ちた。
+- support-aware上は `taken_ev_ge10` も `support_aware_only` だが、strict blockersは `role_trades_low,month_trades_low`。
+- rank/side-gap/lossprob/fixed-horizon predicted PnL gateはmonth floorやrole floorを悪化させた。
+- feature binでも `pred_taken_ev` 高位binが強いわけではなく、confidence特徴の単調性は弱い。
+
+判断:
+
+- confidence gate overlay diagnosticsはaccepted infrastructure。
+- 現confidence hard gateはreject。
+- confidence特徴は直接hard gateではなく、chronological calibrationやuncertainty診断へ回す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_confidence_gate_overlay.py tests/test_entry_ev_confidence_gate_overlay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_confidence_gate_overlay`: OK
+- confidence gate overlay run: OK
+- support-aware check run: OK
+
 ### 14:21 Entry EV month warmup overlay
 
 作業:
