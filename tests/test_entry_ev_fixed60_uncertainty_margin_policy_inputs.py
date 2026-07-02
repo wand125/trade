@@ -24,6 +24,22 @@ class EntryEvFixed60UncertaintyMarginPolicyInputsTest(unittest.TestCase):
             "fixed60_uncertainty_margin_famdirregsess_w0p5",
         )
 
+    def test_score_kind_for_margin_names_shrinkage_context(self) -> None:
+        self.assertEqual(
+            score_kind_for_margin(
+                "fixed60_uncertainty_margin",
+                ["family", "direction", "combined_regime", "session_regime"],
+                2.0,
+                shrink_parent_columns=[
+                    "direction",
+                    "combined_regime",
+                    "session_regime",
+                ],
+                shrink_strength=5.0,
+            ),
+            "fixed60_uncertainty_margin_famdirregsess_to_dirregsess_s5_w2",
+        )
+
     def test_build_prior_table_uses_only_previous_months(self) -> None:
         trades = normalize_trade_rows(
             pd.DataFrame(
@@ -115,6 +131,79 @@ class EntryEvFixed60UncertaintyMarginPolicyInputsTest(unittest.TestCase):
         self.assertIn(f"pred_{score_kind}_selected_score_pct_month", output.columns)
         self.assertEqual(summary.loc[0, "score_kind"], score_kind)
         self.assertAlmostEqual(summary.loc[0, "long_risk_q95"], 1.9)
+
+    def test_add_margin_columns_can_shrink_child_prior_to_parent_prior(self) -> None:
+        predictions = pd.DataFrame(
+            {
+                "dataset_month": ["2026-02"],
+                "combined_regime": ["range"],
+                "session_regime": ["ny"],
+                "raw_long": [10.0],
+                "raw_short": [8.0],
+                "pred_long_fixed_60m_adjusted_pnl": [4.0],
+                "pred_short_fixed_60m_adjusted_pnl": [3.0],
+                "pred_long_entry_local_rank": [0.1],
+                "pred_short_entry_local_rank": [0.3],
+            }
+        )
+        trades = normalize_trade_rows(
+            pd.DataFrame(
+                {
+                    "month": ["2026-01", "2026-01"],
+                    "family": ["fam", "other"],
+                    "direction": ["long", "long"],
+                    "combined_regime": ["range", "range"],
+                    "session_regime": ["ny", "ny"],
+                    "adjusted_pnl": [-1.0, 1.0],
+                    "fixed_pred_pnl": [1.0, 1.0],
+                    "fixed_actual_pnl": [-1.0, 1.0],
+                }
+            )
+        )
+
+        output, summary = add_fixed60_uncertainty_margin_columns(
+            predictions,
+            family="fam",
+            trade_rows=trades,
+            group_specs=[["family", "direction", "combined_regime", "session_regime"]],
+            score_kind_prefix="fixed60_uncertainty_margin",
+            weights=[1.0],
+            long_column="raw_long",
+            short_column="raw_short",
+            long_fixed_pred_column="pred_long_fixed_60m_adjusted_pnl",
+            short_fixed_pred_column="pred_short_fixed_60m_adjusted_pnl",
+            long_rank_column="pred_long_entry_local_rank",
+            short_rank_column="pred_short_entry_local_rank",
+            quantile_scopes=["month"],
+            min_prior_trades=2.0,
+            risk_mode="fp_rate_times_positive_fixed_pred",
+            default_risk=0.0,
+            shrinkage_specs=[
+                (
+                    ["family", "direction", "combined_regime", "session_regime"],
+                    ["direction", "combined_regime", "session_regime"],
+                )
+            ],
+            shrinkage_strengths=[3.0],
+        )
+
+        score_kind = "fixed60_uncertainty_margin_famdirregsess_to_dirregsess_s3_w1"
+        self.assertEqual(
+            output[f"pred_{score_kind}_long_best_adjusted_pnl"].tolist(),
+            [7.5],
+        )
+        self.assertAlmostEqual(
+            output[
+                "pred_fixed60_uncertainty_margin_famdirregsess_to_dirregsess_s3_long_shrunk_prior_fp_rate"
+            ].iloc[0],
+            0.625,
+        )
+        shrink_summary = summary[summary["score_kind"].eq(score_kind)].iloc[0]
+        self.assertEqual(
+            shrink_summary["shrink_parent_group_spec"],
+            "direction,combined_regime,session_regime",
+        )
+        self.assertEqual(shrink_summary["shrink_strength"], 3.0)
 
     def test_copy_side_gap_quantiles_uses_source_score_kind(self) -> None:
         frame = pd.DataFrame(

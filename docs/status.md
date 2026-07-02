@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 19:04 JST
+最終更新: 2026-07-02 19:40 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV fixed60 margin prior shrinkageを追加した。00315の次アクションとして、00314 family-aware w5のrefit集中改善を粗いpriorへ寄せても再現できるか検証した。`scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py` に prior shrinkageを追加し、child `family,direction,combined_regime,session_regime` を parent `direction,combined_regime,session_regime` へ疑似カウントalphaで寄せるscore kindを生成できるようにした。w0 controlは baseline `+126.8118` を再現したが、best shrink raw replayは `s2_w5` の `+107.0324` / 242 trades / month min `-6.8324` で、00314 family-aware w5 raw `+139.1098` を大きく下回った。判断: prior shrinkage実装はaccepted infrastructure、current shrinkage policyはreject、標準policyはNoTrade。詳細は `docs/reports/00316_2026-07-02_entry_ev_fixed60_margin_prior_shrinkage.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV fixed60 margin trade-set delta diagnosticsを追加した。00314のfamily-aware w5改善源を00310 referenceと比較し、entry-block overlay trade setを `added / removed / common_changed` に分解した。`entryblock_none` は `+326.1098 -> +338.4078`、差分 `+12.2980` で、added 0 / removed 5 / common_changed 0。`long_range_normal_ny_fixed60_pred_gt0` は `+337.6010 -> +339.2910`、差分 `+1.6900` で、added 0 / removed 2 / common_changed 0。removed 5本は全て `refit2025_validation` に集中し、00310でblockedされた4本のうち3本は00314ではw5で先に消えていた。判断: trade-set delta diagnosticsはaccepted infrastructure、00314 w5の改善源は理解できたがrefit集中は解消していない、標準policyはNoTrade。詳細は `docs/reports/00315_2026-07-02_entry_ev_fixed60_margin_trade_set_delta.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

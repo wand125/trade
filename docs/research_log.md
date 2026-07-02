@@ -4,6 +4,37 @@
 
 ## 2026-07-02 JST
 
+### 19:40 Entry EV fixed60 margin prior shrinkage
+
+作業:
+
+- 00315の次アクションとして、00314 family-aware w5のrefit集中改善を粗いpriorへ寄せても再現できるか検証した。
+- `scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py` に prior shrinkageを追加した。
+- child `family,direction,combined_regime,session_regime` を parent `direction,combined_regime,session_regime` へ疑似カウントalphaで寄せるscore kindを生成した。
+- report: `docs/reports/00316_2026-07-02_entry_ev_fixed60_margin_prior_shrinkage.md`
+
+結果:
+
+- w0 controlは baseline `+126.8118` / 254 trades / month min `-6.8324` を再現した。
+- best shrink raw replayは `s2_w5` の `+107.0324` / 242 trades / month min `-6.8324` で、00314 family-aware w5 raw `+139.1098` を大きく下回った。
+- `s2/s5 w2/w5` はmax drawdownを `21.1634` へ下げるが、totalとmonth floorが悪化するため採用根拠にしない。
+- raw replay gateが失敗したため、hold-extension / overlay / support-aware admissionへの下流展開は実施しない判断にした。
+
+判断:
+
+- prior shrinkage実装はaccepted infrastructure。
+- current shrinkage policyはreject。
+- 00314 w5の改善は粗いpriorへ寄せると消えるため、family/refit依存問題は未解決。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py tests/test_entry_ev_fixed60_uncertainty_margin_policy_inputs.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_fixed60_uncertainty_margin_policy_inputs`: OK
+- `uv run python -m unittest tests.test_entry_ev_fixed60_uncertainty_margin_policy_inputs tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- 00316 fixed60 margin shrink input generation / raw replay sweep: OK
+
 ### 19:04 Entry EV fixed60 margin trade-set delta
 
 作業:

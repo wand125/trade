@@ -87,6 +87,29 @@ def parse_group_specs(value: str) -> list[list[str]]:
     return specs
 
 
+def parse_shrinkage_specs(value: str) -> list[tuple[list[str], list[str]]]:
+    if not value.strip():
+        return []
+    pairs: list[tuple[list[str], list[str]]] = []
+    for part in value.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        if ">" not in part:
+            raise argparse.ArgumentTypeError(
+                "shrinkage specs must use child_spec>parent_spec"
+            )
+        child, parent = part.split(">", 1)
+        child_columns = parse_csv(child)
+        parent_columns = parse_csv(parent)
+        if not child_columns or not parent_columns:
+            raise argparse.ArgumentTypeError(
+                "shrinkage specs require non-empty child and parent specs"
+            )
+        pairs.append((child_columns, parent_columns))
+    return pairs
+
+
 def group_spec_label(group_columns: list[str]) -> str:
     aliases = {
         "family": "fam",
@@ -102,8 +125,35 @@ def weight_label(value: float) -> str:
     return f"{value:g}".replace("-", "neg").replace(".", "p")
 
 
-def score_kind_for_margin(prefix: str, group_columns: list[str], weight: float) -> str:
-    return f"{prefix}_{group_spec_label(group_columns)}_w{weight_label(weight)}"
+def margin_context_label(
+    group_columns: list[str],
+    *,
+    shrink_parent_columns: list[str] | None = None,
+    shrink_strength: float = 0.0,
+) -> str:
+    label = group_spec_label(group_columns)
+    if shrink_parent_columns is None:
+        return label
+    return (
+        f"{label}_to_{group_spec_label(shrink_parent_columns)}"
+        f"_s{weight_label(shrink_strength)}"
+    )
+
+
+def score_kind_for_margin(
+    prefix: str,
+    group_columns: list[str],
+    weight: float,
+    *,
+    shrink_parent_columns: list[str] | None = None,
+    shrink_strength: float = 0.0,
+) -> str:
+    context = margin_context_label(
+        group_columns,
+        shrink_parent_columns=shrink_parent_columns,
+        shrink_strength=shrink_strength,
+    )
+    return f"{prefix}_{context}_w{weight_label(weight)}"
 
 
 def margin_output_columns(score_kind: str) -> tuple[str, str]:
@@ -333,6 +383,33 @@ def side_prior_lookup(
     return merged.reset_index(drop=True)
 
 
+def bounded_prior_fp_rate(
+    prior: pd.DataFrame,
+    *,
+    min_prior_trades: float,
+    default_risk: float,
+) -> pd.Series:
+    supported = prior["prior_trade_count"].astype(float).ge(min_prior_trades)
+    fp_rate = prior["prior_fixed_false_positive_rate"].astype(float).where(
+        np.isfinite(prior["prior_fixed_false_positive_rate"].astype(float)),
+        default_risk,
+    )
+    return fp_rate.clip(lower=0.0, upper=1.0).where(supported, default_risk)
+
+
+def risk_input_from_fp_rate(
+    *,
+    fp_rate: pd.Series,
+    fixed_pred: pd.Series,
+    risk_mode: str,
+) -> pd.Series:
+    if risk_mode == "fp_rate":
+        return fp_rate
+    if risk_mode == "fp_rate_times_positive_fixed_pred":
+        return fp_rate * fixed_pred.clip(lower=0.0)
+    raise ValueError(f"unknown risk mode: {risk_mode}")
+
+
 def uncertainty_risk_input(
     *,
     prior: pd.DataFrame,
@@ -341,17 +418,77 @@ def uncertainty_risk_input(
     risk_mode: str,
     default_risk: float,
 ) -> pd.Series:
-    supported = prior["prior_trade_count"].astype(float).ge(min_prior_trades)
-    fp_rate = prior["prior_fixed_false_positive_rate"].astype(float).where(
-        np.isfinite(prior["prior_fixed_false_positive_rate"].astype(float)),
+    fp_rate = bounded_prior_fp_rate(
+        prior,
+        min_prior_trades=min_prior_trades,
+        default_risk=default_risk,
+    )
+    return risk_input_from_fp_rate(
+        fp_rate=fp_rate,
+        fixed_pred=fixed_pred,
+        risk_mode=risk_mode,
+    )
+
+
+def shrunk_prior_fp_rate(
+    *,
+    child_prior: pd.DataFrame,
+    parent_prior: pd.DataFrame,
+    shrink_strength: float,
+    min_prior_trades: float,
+    default_risk: float,
+) -> pd.Series:
+    if shrink_strength <= 0.0:
+        raise ValueError("shrink_strength must be positive")
+    child_den = child_prior["prior_fixed_pred_positive_count"].astype(float).clip(
+        lower=0.0
+    )
+    child_false = child_prior["prior_fixed_false_positive_count"].astype(float).clip(
+        lower=0.0
+    )
+    parent_rate = bounded_prior_fp_rate(
+        parent_prior,
+        min_prior_trades=min_prior_trades,
+        default_risk=default_risk,
+    )
+    child_supported = child_prior["prior_trade_count"].astype(float).ge(min_prior_trades)
+    parent_supported = parent_prior["prior_trade_count"].astype(float).ge(
+        min_prior_trades
+    )
+    shrunk = (child_false + shrink_strength * parent_rate) / (
+        child_den + shrink_strength
+    )
+    return shrunk.clip(lower=0.0, upper=1.0).where(
+        child_supported | parent_supported,
         default_risk,
     )
-    fp_rate = fp_rate.clip(lower=0.0, upper=1.0).where(supported, default_risk)
-    if risk_mode == "fp_rate":
-        return fp_rate
-    if risk_mode == "fp_rate_times_positive_fixed_pred":
-        return fp_rate * fixed_pred.clip(lower=0.0)
-    raise ValueError(f"unknown risk mode: {risk_mode}")
+
+
+def shrunk_uncertainty_risk_input(
+    *,
+    child_prior: pd.DataFrame,
+    parent_prior: pd.DataFrame,
+    fixed_pred: pd.Series,
+    shrink_strength: float,
+    min_prior_trades: float,
+    risk_mode: str,
+    default_risk: float,
+) -> tuple[pd.Series, pd.Series]:
+    fp_rate = shrunk_prior_fp_rate(
+        child_prior=child_prior,
+        parent_prior=parent_prior,
+        shrink_strength=shrink_strength,
+        min_prior_trades=min_prior_trades,
+        default_risk=default_risk,
+    )
+    return (
+        risk_input_from_fp_rate(
+            fp_rate=fp_rate,
+            fixed_pred=fixed_pred,
+            risk_mode=risk_mode,
+        ),
+        fp_rate,
+    )
 
 
 def add_fixed60_uncertainty_margin_columns(
@@ -372,6 +509,8 @@ def add_fixed60_uncertainty_margin_columns(
     min_prior_trades: float,
     risk_mode: str,
     default_risk: float,
+    shrinkage_specs: list[tuple[list[str], list[str]]] | None = None,
+    shrinkage_strengths: list[float] | None = None,
     side_gap_source_score_kind: str = "",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     missing = sorted(
@@ -389,6 +528,12 @@ def add_fixed60_uncertainty_margin_columns(
         raise ValueError(f"{family} predictions missing columns: {', '.join(missing)}")
     if any(weight < 0.0 for weight in weights):
         raise ValueError("weights must be non-negative")
+    shrinkage_specs = shrinkage_specs or []
+    shrinkage_strengths = shrinkage_strengths or []
+    if shrinkage_specs and not shrinkage_strengths:
+        raise ValueError("shrinkage_strengths are required when shrinkage_specs are set")
+    if any(strength <= 0.0 for strength in shrinkage_strengths):
+        raise ValueError("shrinkage strengths must be positive")
 
     output = prepare_predictions(predictions, family=family)
     months = sorted(output["_fixed60_uncertainty_month"].astype(str).unique())
@@ -397,13 +542,20 @@ def add_fixed60_uncertainty_margin_columns(
     long_fixed_pred = numeric_series(output, long_fixed_pred_column, default=0.0)
     short_fixed_pred = numeric_series(output, short_fixed_pred_column, default=0.0)
     summary_rows: list[dict[str, Any]] = []
+    prior_tables: dict[tuple[str, ...], pd.DataFrame] = {}
+
+    def prior_table_for(group_columns: list[str]) -> pd.DataFrame:
+        key = tuple(group_columns)
+        if key not in prior_tables:
+            prior_tables[key] = build_prior_table_for_group_spec(
+                trade_rows,
+                group_columns=group_columns,
+                months=months,
+            )
+        return prior_tables[key]
 
     for group_columns in group_specs:
-        prior_table = build_prior_table_for_group_spec(
-            trade_rows,
-            group_columns=group_columns,
-            months=months,
-        )
+        prior_table = prior_table_for(group_columns)
         label = group_spec_label(group_columns)
         long_prior = side_prior_lookup(
             output,
@@ -486,6 +638,140 @@ def add_fixed60_uncertainty_margin_columns(
                 )
             )
 
+    for child_columns, parent_columns in shrinkage_specs:
+        child_prior_table = prior_table_for(child_columns)
+        parent_prior_table = prior_table_for(parent_columns)
+        long_child_prior = side_prior_lookup(
+            output,
+            side="long",
+            prior_table=child_prior_table,
+            group_columns=child_columns,
+            default=0.0,
+        )
+        short_child_prior = side_prior_lookup(
+            output,
+            side="short",
+            prior_table=child_prior_table,
+            group_columns=child_columns,
+            default=0.0,
+        )
+        long_parent_prior = side_prior_lookup(
+            output,
+            side="long",
+            prior_table=parent_prior_table,
+            group_columns=parent_columns,
+            default=0.0,
+        )
+        short_parent_prior = side_prior_lookup(
+            output,
+            side="short",
+            prior_table=parent_prior_table,
+            group_columns=parent_columns,
+            default=0.0,
+        )
+        for shrink_strength in shrinkage_strengths:
+            label = margin_context_label(
+                child_columns,
+                shrink_parent_columns=parent_columns,
+                shrink_strength=shrink_strength,
+            )
+            long_risk, long_fp_rate = shrunk_uncertainty_risk_input(
+                child_prior=long_child_prior,
+                parent_prior=long_parent_prior,
+                fixed_pred=long_fixed_pred,
+                shrink_strength=shrink_strength,
+                min_prior_trades=min_prior_trades,
+                risk_mode=risk_mode,
+                default_risk=default_risk,
+            )
+            short_risk, short_fp_rate = shrunk_uncertainty_risk_input(
+                child_prior=short_child_prior,
+                parent_prior=short_parent_prior,
+                fixed_pred=short_fixed_pred,
+                shrink_strength=shrink_strength,
+                min_prior_trades=min_prior_trades,
+                risk_mode=risk_mode,
+                default_risk=default_risk,
+            )
+            output[f"pred_{score_kind_prefix}_{label}_long_uncertainty_input"] = long_risk
+            output[f"pred_{score_kind_prefix}_{label}_short_uncertainty_input"] = short_risk
+            output[f"pred_{score_kind_prefix}_{label}_long_prior_trade_count"] = (
+                long_child_prior["prior_trade_count"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_short_prior_trade_count"] = (
+                short_child_prior["prior_trade_count"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_long_parent_prior_trade_count"] = (
+                long_parent_prior["prior_trade_count"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_short_parent_prior_trade_count"] = (
+                short_parent_prior["prior_trade_count"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_long_prior_fp_rate"] = (
+                long_child_prior["prior_fixed_false_positive_rate"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_short_prior_fp_rate"] = (
+                short_child_prior["prior_fixed_false_positive_rate"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_long_parent_prior_fp_rate"] = (
+                long_parent_prior["prior_fixed_false_positive_rate"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_short_parent_prior_fp_rate"] = (
+                short_parent_prior["prior_fixed_false_positive_rate"].to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_long_shrunk_prior_fp_rate"] = (
+                long_fp_rate.to_numpy()
+            )
+            output[f"pred_{score_kind_prefix}_{label}_short_shrunk_prior_fp_rate"] = (
+                short_fp_rate.to_numpy()
+            )
+
+            for weight in weights:
+                score_kind = score_kind_for_margin(
+                    score_kind_prefix,
+                    child_columns,
+                    weight,
+                    shrink_parent_columns=parent_columns,
+                    shrink_strength=shrink_strength,
+                )
+                long_output_column, short_output_column = margin_output_columns(score_kind)
+                output[long_output_column] = long_base - weight * long_risk
+                output[short_output_column] = short_base - weight * short_risk
+                output = add_executable_quantile_columns(
+                    output,
+                    family=family,
+                    score_kind=score_kind,
+                    long_output_column=long_output_column,
+                    short_output_column=short_output_column,
+                    long_rank_column=long_rank_column,
+                    short_rank_column=short_rank_column,
+                    quantile_scopes=quantile_scopes,
+                )
+                if side_gap_source_score_kind:
+                    output = copy_side_gap_quantiles(
+                        output,
+                        source_score_kind=side_gap_source_score_kind,
+                        target_score_kind=score_kind,
+                        quantile_scopes=quantile_scopes,
+                    )
+                summary_rows.append(
+                    summarize_margin_effect_for_score(
+                        output,
+                        family=family,
+                        group_spec=",".join(child_columns),
+                        score_kind=score_kind,
+                        weight=weight,
+                        long_column=long_column,
+                        short_column=short_column,
+                        long_output_column=long_output_column,
+                        short_output_column=short_output_column,
+                        long_risk=long_risk,
+                        short_risk=short_risk,
+                        shrink_parent_group_spec=",".join(parent_columns),
+                        shrink_strength=shrink_strength,
+                    )
+                )
+
     return output.drop(columns=["_fixed60_uncertainty_month"]), pd.DataFrame(summary_rows)
 
 
@@ -519,6 +805,8 @@ def summarize_margin_effect_for_score(
     short_output_column: str,
     long_risk: pd.Series,
     short_risk: pd.Series,
+    shrink_parent_group_spec: str = "",
+    shrink_strength: float = 0.0,
 ) -> dict[str, Any]:
     base_long = numeric_series(frame, long_column)
     base_short = numeric_series(frame, short_column)
@@ -531,6 +819,8 @@ def summarize_margin_effect_for_score(
     return {
         "family": family,
         "group_spec": group_spec,
+        "shrink_parent_group_spec": shrink_parent_group_spec,
+        "shrink_strength": float(shrink_strength),
         "weight": float(weight),
         "score_kind": score_kind,
         "row_count": int(len(frame)),
@@ -562,6 +852,12 @@ def run_margin_input_generation(args: argparse.Namespace) -> Path:
     trade_rows = normalize_trade_rows(read_trade_rows(args.trade_rows))
     group_specs = parse_group_specs(args.group_specs)
     weights = parse_float_csv(args.weights)
+    shrinkage_specs = parse_shrinkage_specs(args.shrinkage_specs)
+    shrinkage_strengths = (
+        parse_float_csv(args.shrinkage_strengths)
+        if args.shrinkage_strengths.strip()
+        else []
+    )
     quantile_scopes = parse_scope_csv(args.quantile_scopes)
 
     run_dir = make_run_dir(args.output_dir, args.label)
@@ -589,6 +885,8 @@ def run_margin_input_generation(args: argparse.Namespace) -> Path:
             min_prior_trades=args.min_prior_trades,
             risk_mode=args.risk_mode,
             default_risk=args.default_risk,
+            shrinkage_specs=shrinkage_specs,
+            shrinkage_strengths=shrinkage_strengths,
             side_gap_source_score_kind=args.side_gap_source_score_kind,
         )
         output_path = (
@@ -609,12 +907,28 @@ def run_margin_input_generation(args: argparse.Namespace) -> Path:
         "output_paths": output_paths,
         "group_specs": group_specs,
         "weights": weights,
+        "shrinkage_specs": shrinkage_specs,
+        "shrinkage_strengths": shrinkage_strengths,
         "score_kind_prefix": args.score_kind_prefix,
-        "score_kinds": [
-            score_kind_for_margin(args.score_kind_prefix, group_columns, weight)
-            for group_columns in group_specs
-            for weight in weights
-        ],
+        "score_kinds": (
+            [
+                score_kind_for_margin(args.score_kind_prefix, group_columns, weight)
+                for group_columns in group_specs
+                for weight in weights
+            ]
+            + [
+                score_kind_for_margin(
+                    args.score_kind_prefix,
+                    child_columns,
+                    weight,
+                    shrink_parent_columns=parent_columns,
+                    shrink_strength=shrink_strength,
+                )
+                for child_columns, parent_columns in shrinkage_specs
+                for shrink_strength in shrinkage_strengths
+                for weight in weights
+            ]
+        ),
         "long_column": args.long_column,
         "short_column": args.short_column,
         "long_fixed_pred_column": args.long_fixed_pred_column,
@@ -641,6 +955,8 @@ def run_margin_input_generation(args: argparse.Namespace) -> Path:
                 [
                     "family",
                     "group_spec",
+                    "shrink_parent_group_spec",
+                    "shrink_strength",
                     "weight",
                     "side_switch_share",
                     "score_delta_mean",
@@ -659,6 +975,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trade-rows", type=Path, action="append", required=True)
     parser.add_argument("--group-specs", default=DEFAULT_GROUP_SPECS)
     parser.add_argument("--weights", default=DEFAULT_WEIGHTS)
+    parser.add_argument(
+        "--shrinkage-specs",
+        default="",
+        help="Optional child_spec>parent_spec pairs separated by semicolons.",
+    )
+    parser.add_argument(
+        "--shrinkage-strengths",
+        default="",
+        help="Pseudo-count strengths for shrinkage specs.",
+    )
     parser.add_argument("--score-kind-prefix", default=DEFAULT_SCORE_KIND_PREFIX)
     parser.add_argument("--long-column", required=True)
     parser.add_argument("--short-column", required=True)
