@@ -4,6 +4,37 @@
 
 ## 2026-07-02 JST
 
+### 13:12 Entry EV hold-extension side horizon replay
+
+作業:
+
+- 00290で残った2025-09/2025-06 isolated large-loss long recall不足に対し、stateful hold-extension replayへ side suffix universe と fixed horizon mode を追加した。
+- `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` に `--horizon-modes` を追加し、`isolated_large_loss_long` / `isolated_large_loss_short` のようなside-aware apply universeを扱えるようにした。
+- predicted best horizonだけでなく、fixed `720` horizonを使ってthreshold評価列 `pred_hold_extension_delta_720m` と実行horizonを揃えた。
+- report: `docs/reports/00291_2026-07-02_entry_ev_hold_extension_side_horizon_replay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- best diagnosticは `isolated_large_loss_long`, threshold `-5`, horizon `720`。
+- stateful total `+318.8540`, delta vs base `+200.1640`, month min `-4.1460`, role min `+0.0074`, extended `10`, skipped `10`。
+- 全isolated large-lossへ低thresholdやfixed 720を広げるとfloorが崩れた。特に `isolated_large_loss` threshold `-5`, horizon `720` はmonth min `-112.1634`。
+- strict selectorもfloor-only selectorもNoTrade。残るworstはhybrid 2025-12 `-4.1460` で、00290診断上 `target_best_delta=0.0` のためhold-extensionでは直せない。
+
+判断:
+
+- side suffix universeとfixed horizon modeはaccepted infrastructure。
+- `isolated_large_loss_long + fixed720 + threshold -5` は00290より強いdiagnostic branchだが、標準policyにはしない。
+- 次はhold-extensionではなく、hybrid 2025-12 short lossのentry/no-entry、early stop、short-side block diagnosticsへ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_hold_extension_stateful_replay.py tests/test_entry_ev_hold_extension_stateful_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_hold_extension_stateful_replay tests.test_docs_reports`: OK
+- side-aware fixed-horizon replay: OK
+- strict / floor-only 00286 selector: OK
+
 ### 11:18 Entry EV supervised shrinkage policy inputs
 
 作業:

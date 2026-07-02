@@ -5,6 +5,7 @@ import unittest
 import pandas as pd
 
 from scripts.experiments.entry_ev_hold_extension_stateful_replay import (
+    parse_horizon_modes,
     replay_group,
     selector_compatible_monthly_metrics,
     summarize_selection,
@@ -90,6 +91,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             frame,
             apply_mask=apply_mask,
             threshold=5.0,
+            horizon_mode="predicted",
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -129,6 +131,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
             base,
             apply_mask=universe_mask(base, "isolated_large_loss"),
             threshold=5.0,
+            horizon_mode="predicted",
             profit_multiplier=1.0,
             loss_multiplier=1.2,
         )
@@ -156,6 +159,7 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
                 "variant": ["loss_exit30_cd15", "loss_exit30_cd15"],
                 "apply_universe": ["isolated_large_loss", "isolated_large_loss"],
                 "threshold": [5.0, 10.0],
+                "horizon_mode": ["predicted", "720"],
             }
         )
 
@@ -164,10 +168,94 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
         self.assertEqual(
             output["variant"].tolist(),
             [
-                "loss_exit30_cd15__holdext_isolated_large_loss_t5",
-                "loss_exit30_cd15__holdext_isolated_large_loss_t10",
+                "loss_exit30_cd15__holdext_isolated_large_loss_t5_hpredicted",
+                "loss_exit30_cd15__holdext_isolated_large_loss_t10_h720",
             ],
         )
+
+    def test_selector_compatible_monthly_metrics_defaults_missing_horizon_mode(self) -> None:
+        monthly = pd.DataFrame(
+            {
+                "variant": ["loss_exit30_cd15"],
+                "apply_universe": ["isolated_large_loss"],
+                "threshold": [5.0],
+            }
+        )
+
+        output = selector_compatible_monthly_metrics(monthly)
+
+        self.assertEqual(
+            output["variant"].tolist(),
+            ["loss_exit30_cd15__holdext_isolated_large_loss_t5_hpredicted"],
+        )
+
+    def test_universe_mask_supports_side_suffix(self) -> None:
+        frame = pd.DataFrame(
+            [
+                row(
+                    entry_minute=1,
+                    exit_minute=2,
+                    adjusted_pnl=-3.0,
+                    pred_delta=6.0,
+                    horizon=60,
+                    fixed_pnl=8.0,
+                    isolated_large_loss=True,
+                ),
+                {
+                    **row(
+                        entry_minute=3,
+                        exit_minute=4,
+                        adjusted_pnl=-3.0,
+                        pred_delta=6.0,
+                        horizon=60,
+                        fixed_pnl=8.0,
+                        isolated_large_loss=True,
+                    ),
+                    "direction": "short",
+                },
+            ]
+        )
+
+        self.assertEqual(universe_mask(frame, "isolated_large_loss_long").tolist(), [True, False])
+        self.assertEqual(universe_mask(frame, "isolated_large_loss_short").tolist(), [False, True])
+
+    def test_parse_horizon_modes_accepts_predicted_and_fixed_minutes(self) -> None:
+        self.assertEqual(parse_horizon_modes("predicted,720,240"), ["predicted", "720", "240"])
+
+    def test_fixed_horizon_mode_uses_matching_prediction_score(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    **row(
+                        entry_minute=1,
+                        exit_minute=2,
+                        adjusted_pnl=-3.0,
+                        pred_delta=0.0,
+                        horizon=60,
+                        fixed_pnl=8.0,
+                        isolated_large_loss=True,
+                    ),
+                    "pred_hold_extension_delta_720m": -4.0,
+                    "actual_taken_fixed_720m_adjusted_pnl": 12.0,
+                }
+            ]
+        )
+
+        trades, skipped = replay_group(
+            frame,
+            apply_mask=universe_mask(frame, "isolated_large_loss_long"),
+            threshold=-5.0,
+            horizon_mode="720",
+            profit_multiplier=1.0,
+            loss_multiplier=1.2,
+        )
+
+        self.assertFalse(skipped)
+        self.assertTrue(trades[0]["hold_extension_applied"])
+        self.assertEqual(trades[0]["hold_extension_horizon_mode"], "720")
+        self.assertEqual(trades[0]["hold_extension_score_column"], "pred_hold_extension_delta_720m")
+        self.assertAlmostEqual(trades[0]["hold_extension_pred_delta"], -4.0)
+        self.assertAlmostEqual(trades[0]["adjusted_pnl"], 12.0)
 
 
 if __name__ == "__main__":

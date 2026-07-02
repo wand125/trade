@@ -22,6 +22,7 @@ from trade_data.backtest import json_default, make_run_dir  # noqa: E402
 
 DEFAULT_THRESHOLDS = "5,10"
 DEFAULT_APPLY_UNIVERSES = "isolated_large_loss"
+DEFAULT_HORIZON_MODES = "predicted"
 DEFAULT_GROUP_COLUMNS = [
     "source",
     "role",
@@ -141,6 +142,12 @@ def read_scored_trades(path: Path) -> pd.DataFrame:
 
 
 def universe_mask(frame: pd.DataFrame, universe: str) -> pd.Series:
+    for suffix, side in (("_long", "long"), ("_short", "short")):
+        if universe.endswith(suffix):
+            base_universe = universe[: -len(suffix)]
+            if not base_universe:
+                raise ValueError(f"unknown universe: {universe}")
+            return universe_mask(frame, base_universe) & frame["direction"].astype(str).eq(side)
     if universe == "all":
         return pd.Series(True, index=frame.index, dtype=bool)
     if universe == "loss":
@@ -164,6 +171,42 @@ def universe_mask(frame: pd.DataFrame, universe: str) -> pd.Series:
     raise ValueError(f"unknown universe: {universe}")
 
 
+def parse_horizon_modes(value: str) -> list[str]:
+    modes = parse_csv(value)
+    if not modes:
+        raise argparse.ArgumentTypeError("at least one horizon mode is required")
+    normalized: list[str] = []
+    for mode in modes:
+        text = mode.strip().lower()
+        if text == "predicted":
+            normalized.append(text)
+            continue
+        try:
+            horizon = int(text)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(
+                "horizon modes must be 'predicted' or fixed minute integers"
+            ) from exc
+        if horizon <= 0:
+            raise argparse.ArgumentTypeError("fixed horizon modes must be positive")
+        normalized.append(str(horizon))
+    return normalized
+
+
+def horizon_and_score(row: pd.Series, horizon_mode: str) -> tuple[int, float, str]:
+    if horizon_mode == "predicted":
+        return (
+            int(row["pred_hold_extension_best_horizon_minutes"]),
+            float(row["pred_hold_extension_best_delta"]),
+            "pred_hold_extension_best_delta",
+        )
+    horizon = int(horizon_mode)
+    score_column = f"pred_hold_extension_delta_{horizon}m"
+    if score_column not in row.index:
+        raise ValueError(f"missing fixed-horizon score column: {score_column}")
+    return horizon, float(row[score_column]), score_column
+
+
 def raw_from_adjusted(adjusted_pnl: float, *, profit_multiplier: float, loss_multiplier: float) -> float:
     if adjusted_pnl > 0:
         return adjusted_pnl / profit_multiplier if profit_multiplier != 0 else adjusted_pnl
@@ -176,6 +219,9 @@ def extended_trade_row(
     row: pd.Series,
     *,
     horizon_minutes: int,
+    predicted_score: float,
+    score_column: str,
+    horizon_mode: str,
     profit_multiplier: float,
     loss_multiplier: float,
 ) -> dict[str, Any]:
@@ -212,8 +258,10 @@ def extended_trade_row(
         "base_exit_timestamp": pd.Timestamp(row["exit_timestamp"]),
         "base_exit_decision_timestamp": pd.Timestamp(row["exit_decision_timestamp"]),
         "hold_extension_applied": True,
+        "hold_extension_horizon_mode": horizon_mode,
         "hold_extension_horizon_minutes": int(horizon_minutes),
-        "hold_extension_pred_delta": float(row["pred_hold_extension_best_delta"]),
+        "hold_extension_score_column": score_column,
+        "hold_extension_pred_delta": float(predicted_score),
         "hold_extension_delta_vs_base": float(adjusted - float(row["adjusted_pnl"])),
     }
 
@@ -226,7 +274,9 @@ def base_trade_row(row: pd.Series) -> dict[str, Any]:
         "base_exit_timestamp": pd.Timestamp(row["exit_timestamp"]),
         "base_exit_decision_timestamp": pd.Timestamp(row["exit_decision_timestamp"]),
         "hold_extension_applied": False,
+        "hold_extension_horizon_mode": "none",
         "hold_extension_horizon_minutes": 0,
+        "hold_extension_score_column": "pred_hold_extension_best_delta",
         "hold_extension_pred_delta": float(row["pred_hold_extension_best_delta"]),
         "hold_extension_delta_vs_base": 0.0,
     }
@@ -237,6 +287,7 @@ def replay_group(
     *,
     apply_mask: pd.Series,
     threshold: float,
+    horizon_mode: str,
     profit_multiplier: float,
     loss_multiplier: float,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -252,11 +303,12 @@ def replay_group(
             skipped_rows.append(skipped)
             continue
 
-        horizon = int(row["pred_hold_extension_best_horizon_minutes"])
+        horizon, predicted_score, score_column = horizon_and_score(row, horizon_mode)
         extension_exit = entry_timestamp + pd.Timedelta(minutes=horizon)
         can_extend = (
             bool(apply_mask.loc[index])
-            and float(row["pred_hold_extension_best_delta"]) >= threshold
+            and np.isfinite(predicted_score)
+            and predicted_score >= threshold
             and horizon > 0
             and f"actual_taken_fixed_{horizon}m_adjusted_pnl" in row.index
             and pd.notna(row[f"actual_taken_fixed_{horizon}m_adjusted_pnl"])
@@ -266,6 +318,9 @@ def replay_group(
             output = extended_trade_row(
                 row,
                 horizon_minutes=horizon,
+                predicted_score=predicted_score,
+                score_column=score_column,
+                horizon_mode=horizon_mode,
                 profit_multiplier=profit_multiplier,
                 loss_multiplier=loss_multiplier,
             )
@@ -357,8 +412,11 @@ def summarize_selection(monthly: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     if monthly.empty:
         return pd.DataFrame()
-    for key, group in monthly.groupby(["apply_universe", "threshold"], dropna=False):
-        apply_universe, threshold = key
+    monthly = monthly.copy()
+    if "horizon_mode" not in monthly.columns:
+        monthly["horizon_mode"] = "predicted"
+    for key, group in monthly.groupby(["apply_universe", "threshold", "horizon_mode"], dropna=False):
+        apply_universe, threshold, horizon_mode = key
         role_group = group.groupby("role", dropna=False).agg(
             role_total_pnl=("total_adjusted_pnl", "sum"),
             role_trade_count=("trade_count", "sum"),
@@ -367,6 +425,7 @@ def summarize_selection(monthly: pd.DataFrame) -> pd.DataFrame:
             {
                 "apply_universe": apply_universe,
                 "threshold": float(threshold),
+                "horizon_mode": horizon_mode,
                 "total_adjusted_pnl_sum": float(group["total_adjusted_pnl"].sum()),
                 "base_total_adjusted_pnl_sum": float(group["base_total_adjusted_pnl"].sum()),
                 "pnl_delta_vs_base_sum": float(group["pnl_delta_vs_base"].sum()),
@@ -397,6 +456,8 @@ def selector_compatible_monthly_metrics(monthly: pd.DataFrame) -> pd.DataFrame:
     if monthly.empty:
         return pd.DataFrame()
     output = monthly.copy()
+    if "horizon_mode" not in output.columns:
+        output["horizon_mode"] = "predicted"
     threshold_label = (
         output["threshold"].astype(float).map(lambda value: f"{value:g}".replace(".", "p"))
     )
@@ -406,6 +467,8 @@ def selector_compatible_monthly_metrics(monthly: pd.DataFrame) -> pd.DataFrame:
         + output["apply_universe"].astype(str)
         + "_t"
         + threshold_label
+        + "_h"
+        + output["horizon_mode"].astype(str)
     )
     return output
 
@@ -414,6 +477,7 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
     scored = read_scored_trades(args.scored_trades)
     thresholds = parse_float_csv(args.thresholds)
     apply_universes = parse_csv(args.apply_universes)
+    horizon_modes = parse_horizon_modes(args.horizon_modes)
     group_columns = DEFAULT_GROUP_COLUMNS
     run_dir = make_run_dir(args.output_dir, args.label)
     monthly_frames: list[pd.DataFrame] = []
@@ -424,38 +488,42 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
     for universe in apply_universes:
         mask = universe_mask(scored, universe)
         for threshold in thresholds:
-            trade_rows: list[dict[str, Any]] = []
-            skipped_rows: list[dict[str, Any]] = []
-            for _, group in scored.groupby(group_columns, dropna=False, sort=False):
-                group_trades, group_skipped = replay_group(
-                    group,
-                    apply_mask=mask,
-                    threshold=threshold,
-                    profit_multiplier=args.profit_multiplier,
-                    loss_multiplier=args.loss_multiplier,
+            for horizon_mode in horizon_modes:
+                trade_rows: list[dict[str, Any]] = []
+                skipped_rows: list[dict[str, Any]] = []
+                for _, group in scored.groupby(group_columns, dropna=False, sort=False):
+                    group_trades, group_skipped = replay_group(
+                        group,
+                        apply_mask=mask,
+                        threshold=threshold,
+                        horizon_mode=horizon_mode,
+                        profit_multiplier=args.profit_multiplier,
+                        loss_multiplier=args.loss_multiplier,
+                    )
+                    trade_rows.extend(group_trades)
+                    skipped_rows.extend(group_skipped)
+                trades = pd.DataFrame(trade_rows)
+                skipped = pd.DataFrame(skipped_rows)
+                for frame in (trades, skipped):
+                    if frame.empty:
+                        continue
+                    frame["apply_universe"] = universe
+                    frame["threshold"] = float(threshold)
+                    frame["horizon_mode"] = horizon_mode
+                monthly = summarize_stateful(
+                    trades,
+                    base=scored,
+                    skipped=skipped,
+                    group_columns=group_columns,
                 )
-                trade_rows.extend(group_trades)
-                skipped_rows.extend(group_skipped)
-            trades = pd.DataFrame(trade_rows)
-            skipped = pd.DataFrame(skipped_rows)
-            for frame in (trades, skipped):
-                if frame.empty:
-                    continue
-                frame["apply_universe"] = universe
-                frame["threshold"] = float(threshold)
-            monthly = summarize_stateful(
-                trades,
-                base=scored,
-                skipped=skipped,
-                group_columns=group_columns,
-            )
-            monthly["apply_universe"] = universe
-            monthly["threshold"] = float(threshold)
-            monthly_frames.append(monthly)
-            selection_frames.append(summarize_selection(monthly))
-            all_trade_frames.append(trades)
-            if not skipped.empty:
-                all_skipped_frames.append(skipped)
+                monthly["apply_universe"] = universe
+                monthly["threshold"] = float(threshold)
+                monthly["horizon_mode"] = horizon_mode
+                monthly_frames.append(monthly)
+                selection_frames.append(summarize_selection(monthly))
+                all_trade_frames.append(trades)
+                if not skipped.empty:
+                    all_skipped_frames.append(skipped)
 
     stateful_trades = (
         pd.concat(all_trade_frames, ignore_index=True) if all_trade_frames else pd.DataFrame()
@@ -484,6 +552,7 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
         "scored_trades": args.scored_trades,
         "thresholds": thresholds,
         "apply_universes": apply_universes,
+        "horizon_modes": horizon_modes,
         "profit_multiplier": args.profit_multiplier,
         "loss_multiplier": args.loss_multiplier,
         "group_columns": group_columns,
@@ -499,6 +568,7 @@ def replay_stateful_extensions(args: argparse.Namespace) -> Path:
             [
                 "apply_universe",
                 "threshold",
+                "horizon_mode",
                 "total_adjusted_pnl_sum",
                 "pnl_delta_vs_base_sum",
                 "month_pnl_min",
@@ -520,6 +590,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scored-trades", type=Path, required=True)
     parser.add_argument("--thresholds", default=DEFAULT_THRESHOLDS)
     parser.add_argument("--apply-universes", default=DEFAULT_APPLY_UNIVERSES)
+    parser.add_argument("--horizon-modes", default=DEFAULT_HORIZON_MODES)
     parser.add_argument("--profit-multiplier", type=float, default=1.0)
     parser.add_argument("--loss-multiplier", type=float, default=1.2)
     parser.add_argument("--output-dir", type=Path, default=Path("data/reports/backtests"))
