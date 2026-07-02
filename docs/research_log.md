@@ -4,6 +4,41 @@
 
 ## 2026-07-02 JST
 
+### 15:41 Entry EV uncompensated-loss head
+
+作業:
+
+- 00303の次アクションどおり、`is_large_loss` ではなく `large_loss_uncompensated_by_context` を教師候補にしたchronological OOF headを追加した。
+- `scripts/experiments/entry_ev_selected_trade_uncompensated_loss_head.py` を追加し、00303 path compensation rowsから「同context-month内で補償されない大損」を予測できるか診断した。
+- `tests/test_entry_ev_selected_trade_uncompensated_loss_head.py` を追加した。
+- report: `docs/reports/00304_2026-07-02_entry_ev_uncompensated_loss_head.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00303 path compensation rows。
+- feature setは `base`, `base_prior`, `base_risk`, `base_prior_risk`。`base_risk` は00302 large-loss headのOOF `pred_large_loss_prob` を補助featureとして入れる。
+- best APは `pnl / source base / base` の `0.1463` で、00302 large-loss headのbest AP `0.2146` より低い。
+- target rowの予測平均はbest `0.0774`、non-target平均 `0.0529` 程度で分離が弱い。
+- threshold除去は160本すべて悪化。positive block deltaは0本、最小悪化でも flagged PnL `+5.6900`。
+- top predicted rowsは依然として2025-11 `short|down_normal_vol|london` の補償済みpair (`-7.9800`, `+62.0800`, context total `+54.1000`) を拾う。
+
+判断:
+
+- `large_loss_uncompensated_by_context` target generationとchronological head infrastructureはaccepted。
+- 現feature/headのdirect hard gateはreject。
+- risk probabilityを足しただけでpositive pathを分離できるという仮説もreject。
+- 次はpointwise classifierを増やすより、candidate-level selector / stateful replayへ戻す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_trade_uncompensated_loss_head.py tests/test_entry_ev_selected_trade_uncompensated_loss_head.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_uncompensated_loss_head`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_uncompensated_loss_head tests.test_entry_ev_selected_trade_path_compensation_diagnostics tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- uncompensated-loss head run: OK
+
 ### 15:27 Entry EV path compensation diagnostics
 
 作業:

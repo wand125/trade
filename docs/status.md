@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 15:27 JST
+最終更新: 2026-07-02 15:41 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV uncompensated-loss headを追加した。00303の次アクションどおり、`is_large_loss` ではなく `large_loss_uncompensated_by_context` を教師候補にしたchronological OOF head `scripts/experiments/entry_ev_selected_trade_uncompensated_loss_head.py` を実装した。best APは `pnl / source base / base` の `0.1463` で、00302 large-loss headのbest AP `0.2146` より低い。threshold除去は160本すべて悪化し、positive block deltaは0本、最小悪化でも flagged PnL `+5.6900`。top predicted rowsは依然として2025-11 `short|down_normal_vol|london` の補償済みpair (`-7.9800`, `+62.0800`, context total `+54.1000`) を拾う。判断: target generationとhead infrastructureはaccepted、現feature/headのdirect hard gateはreject。次はcandidate-level selector / stateful replayへ戻す。詳細は `docs/reports/00304_2026-07-02_entry_ev_uncompensated_loss_head.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV path compensation diagnosticsを追加した。00302でlarge-loss probabilityのdirect hard gateが勝ちtradeを削ると分かったため、同じrisk scoreを「同じcontext-month内で大損が勝ちに補償されるか」というpath-aware軸で分解する `scripts/experiments/entry_ev_selected_trade_path_compensation_diagnostics.py` を実装した。実大損23件のうち同context-month内でnet positiveに補償されたものは1件だけだが、risk threshold除去は20本すべて悪化し、positive deltaは0本。最小悪化の `factor base_prior prob_ge_0.4` は2 trades / flagged PnL `+15.0000`、`pnl base prob_ge_0.2` は17 trades / flagged PnL `+58.1320`。判断: path compensation diagnosticsはaccepted、direct risk hard gateとhigh-risk quantile removalはreject。次は `large_loss_uncompensated_by_context` / negative path contextを教師候補にする。詳細は `docs/reports/00303_2026-07-02_entry_ev_path_compensation_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
