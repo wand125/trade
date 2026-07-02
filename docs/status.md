@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 09:05 JST
+最終更新: 2026-07-02 09:28 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV loss_exit30 dynamic exit cooldownを追加した。00277で見えた `loss_exit30` の過剰回転と悪い追加entryに対して、`ModelPolicyConfig` に `dynamic_exit_min_holding_minutes` / `dynamic_exit_cooldown_minutes` を追加し、signal生成段階でdynamic exit後の再entryを制限できるようにした。内部chronologyではminimum hold単独はtailを悪化させたが、cooldownは有効で、`loss_exit30_cd15` は total `+83.5766`, worst `-6.8324`, 164 trades、`loss_exit30_cd60` は total `+82.9864`, worst `-5.9400`, 123 trades。外部HGBでは `cd15` が total `+28.4894`, month min `+0.0074` でselector passしたが、外部hybridでは2025-12 `-4.1460` が残った。内部+外部統合では q95 + `loss_exit30_cd15` が total `+118.6900`, positive roles `6/6`, role min `+0.0074`, month min `-6.8324`, 266 trades。判断: cooldown hookはaccepted infrastructure、`loss_exit30_cd15` は次の固定診断候補。ただし標準policyはNoTrade。詳細は `docs/reports/00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV loss_exit30 fixed internal chronologyを追加した。00276でpre-register候補にした q95 + `loss_exit30` を、threshold再探索なしで内部chronology `cal2024/fresh2024/refit2025` へ固定適用した。内部baseは total `-14.6536`, worst `-140.8024`, 119 trades だったが、`loss_exit30` は total `+67.5682`, worst `-11.3450`, 353 trades に改善。00276外部HGB/hybridと統合すると q95 + `loss_exit30` は total `+112.0990`, positive roles `6/6`, role min `+2.6780`, 494 trades。ただし month min `-11.3450` が残り、内部admissionもNoTrade。`scripts/experiments/entry_ev_variant_trade_delta_diagnostics.py` を追加し、base vs loss_exit30を分解したところ、common trade改善 `+33.0386` とonly-candidate追加entry net `+47.3832` の合算で、added negative `-123.0768` も大きい。判断: `loss_exit30` はpre-standard diagnostic candidateへ昇格するが、標準policyはNoTrade。次は悪いonly-candidate追加entryを抑えるか、loss-first thresholdをquantile/calibrated thresholdへ置き換える。詳細は `docs/reports/00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

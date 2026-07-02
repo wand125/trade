@@ -21,10 +21,24 @@ class EntryEvQuantileExitTimingSensitivityTest(unittest.TestCase):
         self.assertEqual(variant.loss_first_holding_shrink, 0.25)
         self.assertTrue(math.isinf(variant.time_exit_exit_threshold))
         self.assertEqual(variant.loss_first_exit_threshold, 0.75)
+        self.assertEqual(variant.dynamic_exit_min_holding_minutes, 0.0)
+        self.assertEqual(variant.dynamic_exit_cooldown_minutes, 0.0)
+
+    def test_parse_exit_timing_variant_with_dynamic_exit_guards(self) -> None:
+        variant = parse_exit_timing_variant("loss_exit30_cd15:0:0:inf:0.30:5:15")
+
+        self.assertEqual(variant.label, "loss_exit30_cd15")
+        self.assertEqual(variant.loss_first_exit_threshold, 0.30)
+        self.assertEqual(variant.dynamic_exit_min_holding_minutes, 5.0)
+        self.assertEqual(variant.dynamic_exit_cooldown_minutes, 15.0)
 
     def test_parse_exit_timing_variants_rejects_duplicate_labels(self) -> None:
         with self.assertRaises(Exception):
             parse_exit_timing_variants("base:0:0:inf:inf,base:0.25:0:inf:inf")
+
+    def test_parse_exit_timing_variant_rejects_negative_guard(self) -> None:
+        with self.assertRaises(Exception):
+            parse_exit_timing_variant("bad:0:0:inf:0.30:-1:0")
 
     def test_summarize_candidates_requires_positive_roles_and_trade_support(self) -> None:
         monthly = pd.DataFrame(

@@ -399,6 +399,8 @@ class ModelPolicyConfig:
     holding_shortening_cap_minutes: float = 60.0
     time_exit_exit_threshold: float = float("inf")
     loss_first_exit_threshold: float = float("inf")
+    dynamic_exit_min_holding_minutes: float = 0.0
+    dynamic_exit_cooldown_minutes: float = 0.0
     side_confidence_penalty: float = 0.0
     side_confidence_penalty_rules: tuple[str, ...] = ()
     side_confidence_overfit_penalty_rules: tuple[str, ...] = ()
@@ -954,6 +956,10 @@ def model_signal_from_predictions(
         raise ValueError("time_exit_exit_threshold must be between 0 and 1 or inf")
     if np.isfinite(config.loss_first_exit_threshold) and not 0 <= config.loss_first_exit_threshold <= 1:
         raise ValueError("loss_first_exit_threshold must be between 0 and 1 or inf")
+    if config.dynamic_exit_min_holding_minutes < 0:
+        raise ValueError("dynamic_exit_min_holding_minutes must be non-negative")
+    if config.dynamic_exit_cooldown_minutes < 0:
+        raise ValueError("dynamic_exit_cooldown_minutes must be non-negative")
     if config.side_confidence_penalty < 0:
         raise ValueError("side_confidence_penalty must be non-negative")
     if not 0 <= config.min_side_confidence <= 1:
@@ -1493,6 +1499,8 @@ def model_signal_from_predictions(
 
     current = 0
     planned_exit_timestamp: pd.Timestamp | None = None
+    current_entry_timestamp: pd.Timestamp | None = None
+    dynamic_exit_cooldown_until: pd.Timestamp | None = None
     values: list[int] = []
     long_values = long_ev.tolist()
     short_values = short_ev.tolist()
@@ -1512,6 +1520,7 @@ def model_signal_from_predictions(
         if not has_prediction:
             current = 0
             planned_exit_timestamp = None
+            current_entry_timestamp = None
             values.append(current)
             continue
 
@@ -1520,29 +1529,42 @@ def model_signal_from_predictions(
             if decision_timestamp >= planned_exit_timestamp:
                 current = 0
                 planned_exit_timestamp = None
+                current_entry_timestamp = None
                 values.append(current)
                 continue
         if current != 0:
             dynamic_exit = False
-            if np.isfinite(config.time_exit_exit_threshold):
-                time_exit_value = (
-                    long_time_exit_values[idx] if current == 1 else short_time_exit_values[idx]
-                )
-                dynamic_exit |= (
-                    np.isfinite(time_exit_value)
-                    and float(time_exit_value) >= config.time_exit_exit_threshold
-                )
-            if np.isfinite(config.loss_first_exit_threshold):
-                loss_first_value = (
-                    long_loss_first_values[idx] if current == 1 else short_loss_first_values[idx]
-                )
-                dynamic_exit |= (
-                    np.isfinite(loss_first_value)
-                    and float(loss_first_value) >= config.loss_first_exit_threshold
-                )
+            held_minutes = (
+                float("inf")
+                if current_entry_timestamp is None
+                else (decision_timestamp - current_entry_timestamp).total_seconds() / 60.0
+            )
+            dynamic_exit_allowed = held_minutes >= config.dynamic_exit_min_holding_minutes
+            if dynamic_exit_allowed:
+                if np.isfinite(config.time_exit_exit_threshold):
+                    time_exit_value = (
+                        long_time_exit_values[idx] if current == 1 else short_time_exit_values[idx]
+                    )
+                    dynamic_exit |= (
+                        np.isfinite(time_exit_value)
+                        and float(time_exit_value) >= config.time_exit_exit_threshold
+                    )
+                if np.isfinite(config.loss_first_exit_threshold):
+                    loss_first_value = (
+                        long_loss_first_values[idx] if current == 1 else short_loss_first_values[idx]
+                    )
+                    dynamic_exit |= (
+                        np.isfinite(loss_first_value)
+                        and float(loss_first_value) >= config.loss_first_exit_threshold
+                    )
             if dynamic_exit:
                 current = 0
                 planned_exit_timestamp = None
+                current_entry_timestamp = None
+                if config.dynamic_exit_cooldown_minutes > 0:
+                    dynamic_exit_cooldown_until = decision_timestamp + pd.Timedelta(
+                        minutes=config.dynamic_exit_cooldown_minutes,
+                    )
                 values.append(current)
                 continue
 
@@ -1554,12 +1576,18 @@ def model_signal_from_predictions(
         candidate_entry_threshold = required_entry_threshold_values[idx]
 
         if current == 0:
+            cooldown_active = (
+                dynamic_exit_cooldown_until is not None
+                and decision_timestamp < dynamic_exit_cooldown_until
+            )
             if (
-                quality_ok_values[idx]
+                not cooldown_active
+                and quality_ok_values[idx]
                 and candidate_score > candidate_entry_threshold
                 and candidate_gap >= required_side_margin_values[idx]
             ):
                 current = candidate_side
+                current_entry_timestamp = decision_timestamp
                 if config.policy in {"timed_ev", "fixed_horizon_ev"}:
                     holding_value = (
                         long_holding_values[idx] if current == 1 else short_holding_values[idx]
@@ -1589,6 +1617,7 @@ def model_signal_from_predictions(
             if should_exit or should_flip:
                 current = 0
                 planned_exit_timestamp = None
+                current_entry_timestamp = None
         values.append(current)
     return pd.Series(values, index=df.index, dtype="int8")
 

@@ -1,6 +1,6 @@
 # Trade Research Summary
 
-最終更新: 2026-07-02 09:05 JST
+最終更新: 2026-07-02 09:28 JST
 
 `docs/reports/` を読む前の入口。summaryでは詳細な実験ログを再掲せず、現在の判断、研究レーン、読む順番だけを管理する。
 
@@ -10,7 +10,7 @@
    今の採用判断、主な失敗構造、次アクション。
 
 2. [Report Map](report_map.md)
-   `00001` から `00277` までのレポートを研究レーン別に圧縮した地図。
+   `00001` から `00278` までのレポートを研究レーン別に圧縮した地図。
 
 3. 詳細が必要なときだけ [../reports](../reports) の個別レポートを読む。
 
@@ -18,7 +18,7 @@
 
 標準採用できる利益最大化policyはまだない。標準判断は NoTrade-first のまま。
 
-最新の有望軸だった `exit_regret_selector_confidenceexit_bucket_t0p4` とprior direction_regime guardは、`00267` でstateful replay上は改善したが、strict / relaxed admissionではrole support不足で NoTrade。`00274` のcoarse `direction_regime` tail-riskは外部HGB再現が弱くdiagnosticへ降格。`00276` / `00277` でlow loss-first dynamic exitを試し、q95 + `loss_exit30` は外部+内部統合で total `+112.0990`, positive roles `6/6` まで改善した。ただし month min `-11.3450` と追加entry負けが残るため、標準判断はNoTrade。
+最新の有望軸だった `exit_regret_selector_confidenceexit_bucket_t0p4` とprior direction_regime guardは、`00267` でstateful replay上は改善したが、strict / relaxed admissionではrole support不足で NoTrade。`00274` のcoarse `direction_regime` tail-riskは外部HGB再現が弱くdiagnosticへ降格。`00276` / `00277` でlow loss-first dynamic exitを試し、`00278` でdynamic exit後cooldownを追加した。q95 + `loss_exit30_cd15` は外部+内部統合で total `+118.6900`, positive roles `6/6`, month min `-6.8324` まで改善した。ただし month floorはまだ負で、fresh/hybrid supportも薄いため、標準判断はNoTrade。
 
 ## 更新ルール
 

@@ -4,6 +4,41 @@
 
 ## 2026-07-02 JST
 
+### 09:28 Entry EV loss_exit30 dynamic exit cooldown
+
+作業:
+
+- 00277で残った `loss_exit30` の過剰回転 / 悪い追加entryを狙い、dynamic exit後の minimum hold / cooldown overlayを実装した。
+- `ModelPolicyConfig` に `dynamic_exit_min_holding_minutes` と `dynamic_exit_cooldown_minutes` を追加し、post-processではなくsignal生成段階でstatefulに再entryを制限した。
+- `entry_ev_quantile_exit_timing_sensitivity.py` のvariant形式を後方互換のまま7要素へ拡張した。
+- 内部chronologyで `loss_exit30` に `mh5/15/30/60`, `cd5/15/30/60`, `mh+cd` を固定overlayとして比較した。
+- 内部で良かった `cd15/cd60` を外部HGBと外部hybridへ再探索なしで固定適用した。
+- report: `docs/reports/00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 内部chronologyでは `loss_exit30` total `+67.5682`, worst `-11.3450`, 353 tradesに対し、`loss_exit30_cd15` は `+83.5766`, worst `-6.8324`, 164 trades、`loss_exit30_cd60` は `+82.9864`, worst `-5.9400`, 123 trades。
+- `cd15` deltaは削った負け `-102.3084` が削った勝ち `+91.1700` を上回り、追加負けも `-1.9800` まで縮んだ。
+- `cd60` deltaは追加entryを作らず、削った負け `-122.2212` が削った勝ち `+106.8030` を上回った。
+- 外部HGBでは `loss_exit30_cd15` が total `+28.4894`, month min `+0.0074`, 96 tradesでselector pass。
+- 外部hybridでは `cd15/cd60` とも2025-12 `-4.1460` を消せず、totalは `loss_exit30` より低下。
+- 内部+外部統合では `loss_exit30_cd15` が total `+118.6900`, positive roles `6/6`, role min `+0.0074`, month min `-6.8324`, 266 trades。
+
+判断:
+
+- dynamic exit cooldown hookはaccepted infrastructure。
+- q95 + `loss_exit30_cd15` は次の固定診断候補。
+- minimum hold単独、`mh30_cd15`、`cd60` は現時点の本流候補にしない。
+- month floorがまだ負で、fresh/hybrid supportも薄いため標準policyはNoTrade。
+- 次は `loss_exit30_cd15` 固定で残る負け月を分解し、loss-first thresholdをquantile/calibrated thresholdへ置き換える。
+
+検証:
+
+- `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py tests/test_backtest.py tests/test_entry_ev_quantile_exit_timing_sensitivity.py`: OK
+- `python3 -m unittest tests.test_entry_ev_quantile_exit_timing_sensitivity tests.test_backtest`: OK
+- internal cooldown sweep / internal deltas / external HGB fixed check / external hybrid fixed check: OK
+
 ### 08:36 Entry EV external HGB side regime tail check
 
 作業:

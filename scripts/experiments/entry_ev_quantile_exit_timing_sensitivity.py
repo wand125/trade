@@ -72,6 +72,8 @@ class ExitTimingVariant:
     loss_first_holding_shrink: float
     time_exit_exit_threshold: float
     loss_first_exit_threshold: float
+    dynamic_exit_min_holding_minutes: float = 0.0
+    dynamic_exit_cooldown_minutes: float = 0.0
 
 
 def parse_float_token(value: str) -> float:
@@ -92,10 +94,11 @@ def validate_probability_or_inf(value: float, *, name: str) -> None:
 
 def parse_exit_timing_variant(value: str) -> ExitTimingVariant:
     parts = [part.strip() for part in value.split(":")]
-    if len(parts) != 5:
+    if len(parts) not in {5, 7}:
         raise argparse.ArgumentTypeError(
             "variant must use label:time_shrink:loss_shrink:time_exit_threshold:"
-            "loss_exit_threshold"
+            "loss_exit_threshold[:dynamic_exit_min_holding_minutes:"
+            "dynamic_exit_cooldown_minutes]"
         )
     label = parts[0]
     if not label:
@@ -106,18 +109,26 @@ def parse_exit_timing_variant(value: str) -> ExitTimingVariant:
     loss_shrink = parse_float_token(parts[2])
     time_exit = parse_float_token(parts[3])
     loss_exit = parse_float_token(parts[4])
+    min_hold_minutes = float(parts[5]) if len(parts) == 7 else 0.0
+    cooldown_minutes = float(parts[6]) if len(parts) == 7 else 0.0
     validate_probability_or_inf(time_shrink, name="time_shrink")
     validate_probability_or_inf(loss_shrink, name="loss_shrink")
     validate_probability_or_inf(time_exit, name="time_exit_threshold")
     validate_probability_or_inf(loss_exit, name="loss_exit_threshold")
     if math.isinf(time_shrink) or math.isinf(loss_shrink):
         raise argparse.ArgumentTypeError("holding shrinks must be finite 0..1 values")
+    if min_hold_minutes < 0:
+        raise argparse.ArgumentTypeError("dynamic_exit_min_holding_minutes must be non-negative")
+    if cooldown_minutes < 0:
+        raise argparse.ArgumentTypeError("dynamic_exit_cooldown_minutes must be non-negative")
     return ExitTimingVariant(
         label=label,
         time_exit_holding_shrink=time_shrink,
         loss_first_holding_shrink=loss_shrink,
         time_exit_exit_threshold=time_exit,
         loss_first_exit_threshold=loss_exit,
+        dynamic_exit_min_holding_minutes=min_hold_minutes,
+        dynamic_exit_cooldown_minutes=cooldown_minutes,
     )
 
 
@@ -270,6 +281,10 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
                     loss_first_holding_shrink=variant.loss_first_holding_shrink,
                     time_exit_exit_threshold=variant.time_exit_exit_threshold,
                     loss_first_exit_threshold=variant.loss_first_exit_threshold,
+                    dynamic_exit_min_holding_minutes=(
+                        variant.dynamic_exit_min_holding_minutes
+                    ),
+                    dynamic_exit_cooldown_minutes=variant.dynamic_exit_cooldown_minutes,
                 )
                 for month in months:
                     role = role_lookup.get((family, month), family)

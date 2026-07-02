@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 09:05 JST
+最終更新: 2026-07-02 09:28 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00277` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが強く改善し、q95 + loss_exit30は全role positiveだがmonth floor未達。 |
+| `00258`..`00278` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00263でpost-block side-gap quantile汚染を確認し、00264でpre-block quantileを実装。00265/00266で追加refit rowsとprior guardを分解し、00267でq99 prior guardをstateful replayへ接続。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreはNoTrade未満の負の対照。00273でselector前capture補正もNoTrade未満。00274でcoarse direction_regime tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱くdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで改善し、00278でdynamic exit cooldownが過剰回転を抑えたがmonth floor未達。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00277` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。00274のcoarse `direction_regime` tail-riskは00275の外部HGB固定適用で再現せずdiagnosticへ降格。00276/00277のlow loss-first dynamic exitは追加chronologyでも再現し、q95 + `loss_exit30` が combined total +112.0990 / positive roles 6/6 まで改善したが、month min -11.3450 と追加entry負けが残りNoTrade。 |
+| Latest decision | `00258`..`00278` | q99 pre-block prior direction_regime guardはstateful replayで overall +55.6750 まで改善。ただしstrict/relaxed admissionはrole support不足でNoTrade。00274のcoarse `direction_regime` tail-riskは00275の外部HGB固定適用で再現せずdiagnosticへ降格。00276/00277のlow loss-first dynamic exitは追加chronologyでも再現し、00278で q95 + `loss_exit30_cd15` が combined total +118.6900 / positive roles 6/6 / month min -6.8324 まで改善したが、month floorと薄いsupportが残りNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -53,6 +53,7 @@
 18. `00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`
 19. `00276_2026-07-02_entry_ev_exit_timing_loss_exit_threshold.md`
 20. `00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`
+21. `00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`
 
 component targetの流れを読む:
 
@@ -99,10 +100,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00277 Entry EV Loss Exit30 Fixed Internal Chronology
+Report: 00278 Entry EV Loss Exit30 Dynamic Exit Cooldown
 Status: pre-standard diagnostic candidate / policy not standardized
-Question: q95 + loss_exit30は追加chronologyへ再探索なし固定適用しても崩れないか
-Best evidence: external+internal combined total +112.0990、positive roles 6/6。ただし month min -11.3450、added negative -123.0768
+Question: q95 + loss_exit30の過剰回転をdynamic exit後cooldownで抑えられるか
+Best evidence: q95 + loss_exit30_cd15 は external+internal combined total +118.6900、positive roles 6/6、month min -6.8324、266 trades
 Decision: 標準policyはNoTrade
-Next: bad only-candidate追加entryを抑え、loss-first thresholdをquantile/calibrated thresholdへ置き換える
+Next: loss_exit30_cd15固定で残る負け月を分解し、loss-first thresholdをquantile/calibrated thresholdへ置き換える
 ```
