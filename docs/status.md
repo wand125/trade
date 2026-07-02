@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 20:26 JST
+最終更新: 2026-07-02 20:38 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV near-miss exit headを追加した。00319の次アクションとして、near-miss fixed-best targetをchronological exit-viability / horizon headへ接続した。default headはgreedy selectedで viability AUC `0.5556`、head選択horizonの実現平均 `-13.7712`、best thresholdでも `-17.8948`。available candidates側も全設定で大きく負で、bestでも `-232.0894`。available-only trainingはgreedy selectedのbest thresholdが `+3.1230` になるが、flagged 1件、`model_used=0` のfallback由来。判断: chronological near-miss exit head infrastructureはaccepted、current PnL-regression argmax horizon selectorはreject、次はhorizon-specific binary viability / abstention-first decisionへ切り替える。標準policyはNoTrade。詳細は `docs/reports/00320_2026-07-02_entry_ev_near_miss_exit_head.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV near-miss exit target diagnosticsを追加した。00318の次アクションとして、near-miss support candidatesをexit timing / EV calibration targetへ変換した。00318のgreedy selected 11本はfuture-labelでfixed horizonを最適選択できればfixed-best合計 `+77.1400` だが、単純fixed60は `-26.4512`、fixed240は `-31.5870`、fixed720は `-46.0898`。現prediction parquetのfixed-horizon予測で選ぶと実現合計は `-6.8562`、one-fail strict 8本では `-41.1822` まで悪化する。available candidates 132本はfixed-best合計 `+572.2276`、oracle best `+1676.3210` とtarget poolは豊富だが、actual at predicted horizonは `-681.7860`。判断: near-miss exit target diagnosticsはaccepted infrastructure、actual fixed-bestは教師labelとして有望だが、現predicted fixed horizon choiceはpolicy evidenceではなくreject。次はnear-miss pool用のchronological exit-viability / horizon headを作る。標準policyはNoTrade。詳細は `docs/reports/00319_2026-07-02_entry_ev_near_miss_exit_target.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

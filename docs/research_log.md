@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 20:38 Entry EV near-miss exit head
+
+作業:
+
+- 00319の次アクションとして、near-miss fixed-best targetをchronological exit-viability / horizon headへ接続した。
+- `scripts/experiments/entry_ev_near_miss_exit_head.py` を追加し、評価月より前のnear-miss rowsだけで `target_fixed_executable` と `side_fixed_60/240/720m_adjusted_pnl` を予測した。
+- report: `docs/reports/00320_2026-07-02_entry_ev_near_miss_exit_head.md`
+
+結果:
+
+- default headはgreedy selectedで viability AUC `0.5556`、head選択horizonの実現平均 `-13.7712`。best thresholdでも `-17.8948`。
+- available candidates側は全設定で大きく負。bestでも `-232.0894`。
+- available-only trainingはgreedy selectedのbest thresholdが `+3.1230` になるが、flagged 1件、`model_used=0` のfallback由来。
+- headはpositive 720m機会を抑制し、hybrid 2025-11 shortの悪い720mを拾う。
+
+判断:
+
+- chronological near-miss exit head infrastructureはaccepted。
+- current PnL-regression argmax horizon selectorはreject。
+- 次はhorizon-specific binary viability / abstention-first decisionへ切り替える。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_near_miss_exit_head.py tests/test_entry_ev_near_miss_exit_head.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_near_miss_exit_head`: OK
+- `uv run python -m unittest tests.test_entry_ev_near_miss_exit_head tests.test_entry_ev_near_miss_exit_target_diagnostics tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- 00320 near-miss exit head runs: OK
+
 ### 20:26 Entry EV near-miss exit target
 
 作業:
