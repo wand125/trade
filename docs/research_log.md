@@ -7101,3 +7101,35 @@ trade delta:
 - `uv run python -m unittest tests.test_entry_ev_downside_meta_risk_margin_policy_inputs`: OK
 - 6 family / 7 weights margin input generation: OK
 - 7 weights replay: OK
+
+### 2026-07-02 12:07 JST Entry EV stateful floor meta selector
+
+作業:
+
+- 00285でscore arithmeticをrejectしたため、candidate-levelで stateful month/role floor を明示評価する横断selector診断を追加した。
+- `scripts/experiments/entry_ev_stateful_floor_meta_selector.py` を追加し、複数runの `monthly_exit_timing_metrics.csv` をsource単位で結合して candidate summary / role summary / worst months / selected policy を出力する。
+- raw cd15 baseline、downside hard block、downside soft margin、supervised shrinkage replacement / quantile sweepを同じfloor-aware selectorで比較した。
+- report: `docs/reports/00286_2026-07-02_entry_ev_stateful_floor_meta_selector.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| source | total | role min | month min | trades | decision |
+|---|---:|---:|---:|---:|---|
+| raw cd15 baseline | `+118.6900` | `+0.0074` | `-6.8324` | `266` | NoTrade |
+| downside gte3 | `+118.6900` | `+0.0074` | `-6.8324` | `266` | no-op / NoTrade |
+| supervised shrink q95 no-floor | `+219.7158` | `0.0000` | `-35.1586` | `899` | reject |
+| margin w1 | `+18.9676` | `-3.9590` | `-5.6864` | `160` | reject |
+
+判断:
+
+- candidate-level selector infrastructureはaccepted。
+- strict gate通過候補なし。support/sideを緩和したfloor-onlyでも通過候補なし。
+- 次はscore gatingではなく、raw cd15 losing monthsのstateful path改善へ進む。対象は exit timing / cooldown / post-exit re-entry quality。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_stateful_floor_meta_selector.py tests/test_entry_ev_stateful_floor_meta_selector.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_stateful_floor_meta_selector`: OK
+- stateful floor selector run: OK
+- floor-only audit run: OK

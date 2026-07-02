@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 11:57 JST
+最終更新: 2026-07-02 12:07 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV stateful floor meta selectorを追加した。00285の結論どおりscore arithmeticを止め、複数runの `monthly_exit_timing_metrics.csv` をsource単位で結合し、candidateごとに total PnL、role min、month min、support、side share、floor-aware utilityを集計する横断selectorを実装した。raw cd15 baseline、downside hard block、soft margin、supervised shrinkage replacement / q96-q99 sweepを比較したところ、strict gate通過候補はなし。floor-only条件でも候補なし。最上位は raw cd15 baseline と no-opの `gte3` で total `+118.6900`, role min `+0.0074`, month min `-6.8324`。判断: candidate-level selector infrastructureはaccepted、現候補群ではNoTrade。次はscore gatingではなく、raw cd15 losing monthsのstateful path、特にexit timing/cooldown/post-exit re-entry qualityを改善する。詳細は `docs/reports/00286_2026-07-02_entry_ev_stateful_floor_meta_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV downside meta risk marginを追加した。00284でrejectしたhard blockの代わりに、`raw_score - weight * pred_downside_meta_expected_downside` のsoft margin scoreを生成し、weight `0.1/0.25/0.5/1/2/5/10` をrecomputed quantile付きでreplayした。best totalは `w0.25` の `+23.7938` で、baseline raw cd15 `+118.6900` を大きく下回る。`w1` はmonth minを `-5.6864` へ少し改善するが、total `+18.9676`, role min `-3.9590`, positive roles `3/6` でNoTrade。判断: downside metaをentry scoreへ直接足し引きする経路もreject。downside metaはscore arithmeticではなく、stateful replayのmonth/role floorを目的に含むcandidate-level selector / diagnostic featureとして使う。詳細は `docs/reports/00285_2026-07-02_entry_ev_downside_meta_risk_margin.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
