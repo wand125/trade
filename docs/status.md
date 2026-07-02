@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 05:27 JST
+最終更新: 2026-07-03 05:42 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV row x horizon support repairを追加した。00325で残ったpre-chosen horizon問題に対し、prediction rowsから60/240/720mを別候補として展開する `--choice-input-mode row_horizon_grid` を実装した。actual-floor upper-boundは6本追加、added PnL `+35.3200`、combined total `+374.6110` で、00325 upper-boundから `+2.9500` 改善。pred-only / no horizon penaltyはfresh2024 2024-08 long 720m `-29.1360` を拾い `+3.2340` に留まるが、observable proxyのhorizon penalty `0.25` を入れると同rowを60m `+2.9500` に切り替え、actual-floorなしでadded PnL `+35.3200` に到達した。ただしhpen0.25は同じrepair set上の診断値で、`0.5/1.0` では良い長期候補も削るため標準policyにはしない。次はduration risk / horizon choiceをchronological OOFでcalibrateする。標準policyはNoTrade。詳細は `docs/reports/00326_2026-07-03_entry_ev_row_horizon_support_repair.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV target-aware support repair replayを追加した。00324のcoverage診断を00323 replayへ接続し、`repair_score = support_reduction_value + hv_chosen_pred_pnl - hv_chosen_pred_tail_loss_prob` で候補を並べられるようにした。actual-floor diagnosticでは available candidates / p0.5 / EV0 / tail0.3 / model-used yesが5本追加、added PnL `+32.3700`、combined total `+371.6610` まで伸び、00323 bestから `+8.9610` 改善した。ただしmonth min `-0.6120`、remaining extra trades `3`、remaining month PnL hurdle `+1.4486` でstandard gateは通らない。pred-only対照ではfresh2024 2024-08 long 720m `-29.1360` を拾い、month min `-19.8260` へ悪化した。判断: target-aware repair utility infrastructureはaccepted、actual-floor runは上限診断のみ、pred-only repair_score replayはpolicy候補としてreject。次はrow x horizon候補をrepair utilityで採点してからhorizonを選ぶ。標準policyはNoTrade。詳細は `docs/reports/00325_2026-07-03_entry_ev_target_aware_support_repair_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

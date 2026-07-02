@@ -311,6 +311,107 @@ class EntryEvSupportRepairHorizonReplayTest(unittest.TestCase):
         self.assertEqual(int(summary.iloc[0]["rejected_actual_pnl_floor_count"]), 1)
         self.assertEqual(rejections.iloc[0]["reject_reason"], "actual_pnl_floor")
 
+    def test_row_horizon_grid_expands_before_replay_and_filters_by_horizon_actual(self) -> None:
+        base_monthly = pd.DataFrame(
+            {
+                "source": ["s"],
+                "role": ["r"],
+                "family": ["f"],
+                "variant": ["v"],
+                "candidate": ["c"],
+                "entry_block_rule": ["rule"],
+                "month": ["2026-01"],
+                "total_adjusted_pnl": [1.0],
+                "trade_count": [1],
+                "long_trade_count": [0],
+                "short_trade_count": [1],
+                "max_side_trade_share": [1.0],
+                "max_drawdown": [0.0],
+            }
+        )
+        base_trades = pd.DataFrame(
+            {
+                "role": ["r"],
+                "family": ["f"],
+                "month": ["2026-01"],
+                "direction": ["short"],
+                "entry_timestamp": [pd.Timestamp("2026-01-01T00:00:00Z")],
+                "exit_timestamp": [pd.Timestamp("2026-01-01T00:10:00Z")],
+                "adjusted_pnl": [1.0],
+                "repair_source": ["base"],
+            }
+        )
+        prediction_row = {
+            "role": ["r"],
+            "family": ["f"],
+            "month": ["2026-01"],
+            "decision_timestamp": ["2026-01-01T01:00:00Z"],
+            "side": ["long"],
+            "needed_side": ["long"],
+            "extra_side_needed": [1],
+            "row_scope": ["available_candidates"],
+            "side_fixed_60m_adjusted_pnl": [-5.0],
+            "side_fixed_240m_adjusted_pnl": [4.0],
+            "side_fixed_720m_adjusted_pnl": [-8.0],
+            "pred_hv_60m_executable_prob": [0.6],
+            "pred_hv_60m_pnl": [1.0],
+            "pred_hv_60m_tail_loss_prob": [0.1],
+            "pred_hv_60m_executable_model_used": [True],
+            "pred_hv_60m_pnl_model_used": [True],
+            "pred_hv_60m_tail_model_used": [True],
+            "pred_hv_240m_executable_prob": [0.6],
+            "pred_hv_240m_pnl": [2.0],
+            "pred_hv_240m_tail_loss_prob": [0.1],
+            "pred_hv_240m_executable_model_used": [True],
+            "pred_hv_240m_pnl_model_used": [True],
+            "pred_hv_240m_tail_model_used": [True],
+            "pred_hv_720m_executable_prob": [0.6],
+            "pred_hv_720m_pnl": [10.0],
+            "pred_hv_720m_tail_loss_prob": [0.1],
+            "pred_hv_720m_executable_model_used": [True],
+            "pred_hv_720m_pnl_model_used": [True],
+            "pred_hv_720m_tail_model_used": [True],
+        }
+        path = self.create_temp_csv(pd.DataFrame(prediction_row))
+
+        choices = read_choice_candidates(
+            path,
+            row_scopes=["available_candidates"],
+            target_only=True,
+            choice_input_mode="row_horizon_grid",
+            prob_thresholds=[0.5],
+            ev_thresholds=[0.0],
+            tail_prob_thresholds=[0.3],
+            require_model_used_options=[True],
+        )
+        self.assertCountEqual(
+            choices["hv_chosen_horizon_minutes"].astype(int).tolist(),
+            [60, 240, 720],
+        )
+
+        summary, _, additions, rejections = replay_scenarios(
+            base_monthly,
+            base_trades,
+            choices,
+            min_total_pnl=0.0,
+            min_role_total_pnl=0.0,
+            month_floor=0.0,
+            shallow_month_floor=-1.0,
+            min_role_trades=1,
+            min_month_trades=1,
+            max_side_trade_share=0.95,
+            cap_to_extra_side_needed=True,
+            overlap_key_columns=["role"],
+            selection_mode="repair_score",
+            min_chosen_actual_pnl=0.0,
+        )
+
+        self.assertEqual(len(additions), 1)
+        self.assertEqual(int(additions.iloc[0]["hv_chosen_horizon_minutes"]), 240)
+        self.assertEqual(float(additions.iloc[0]["adjusted_pnl"]), 4.0)
+        self.assertEqual(int(summary.iloc[0]["rejected_actual_pnl_floor_count"]), 2)
+        self.assertTrue(rejections["reject_reason"].eq("actual_pnl_floor").all())
+
     def test_read_choice_candidates_filters_unchosen_and_non_target_rows(self) -> None:
         frame = pd.DataFrame(
             {

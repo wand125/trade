@@ -66,6 +66,16 @@ CHOICE_COLUMNS = {
     "actual_pnl_at_hv_chosen_horizon",
     *SCENARIO_COLUMNS,
 }
+COMMON_CHOICE_COLUMNS = {
+    "role",
+    "month",
+    "decision_timestamp",
+    "side",
+    "needed_side",
+    "extra_side_needed",
+    "row_scope",
+}
+ROW_HORIZON_FIXED_PREFIX = "side_fixed_"
 
 
 def local_json_default(value: Any) -> Any:
@@ -107,6 +117,23 @@ def bool_series(frame: pd.DataFrame, column: str, default: bool = False) -> pd.S
 
 def threshold_label(value: float) -> str:
     return f"{float(value):g}".replace(".", "p").replace("-", "m")
+
+
+def parse_float_csv(value: str) -> list[float]:
+    return [float(item) for item in parse_csv(value)]
+
+
+def parse_bool_csv(value: str) -> list[bool]:
+    output: list[bool] = []
+    for item in parse_csv(value):
+        lowered = item.lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            output.append(True)
+        elif lowered in {"false", "0", "no", "n"}:
+            output.append(False)
+        else:
+            raise ValueError(f"invalid boolean value: {item}")
+    return output
 
 
 def scenario_label(row: pd.Series) -> str:
@@ -214,13 +241,28 @@ def read_choice_candidates(
     *,
     row_scopes: list[str],
     target_only: bool,
+    choice_input_mode: str = "chosen",
+    prob_thresholds: list[float] | None = None,
+    ev_thresholds: list[float] | None = None,
+    tail_prob_thresholds: list[float] | None = None,
+    require_model_used_options: list[bool] | None = None,
 ) -> pd.DataFrame:
     frame = pd.read_csv(path)
-    missing = sorted(CHOICE_COLUMNS - set(frame.columns))
+    if choice_input_mode == "chosen":
+        required_columns = CHOICE_COLUMNS
+    elif choice_input_mode == "row_horizon":
+        required_columns = COMMON_CHOICE_COLUMNS | set(SCENARIO_COLUMNS)
+    elif choice_input_mode == "row_horizon_grid":
+        required_columns = COMMON_CHOICE_COLUMNS
+    else:
+        raise ValueError(f"unknown choice input mode: {choice_input_mode}")
+    missing = sorted(required_columns - set(frame.columns))
     if missing:
         raise ValueError(f"{path} missing columns: {', '.join(missing)}")
     output = frame.copy()
     output["role"] = output["role"].astype(str)
+    if "family" not in output.columns:
+        output["family"] = ""
     output["family"] = output["family"].astype(str)
     output["month"] = output["month"].astype(str).str.slice(0, 7)
     output["side"] = output["side"].astype(str)
@@ -233,6 +275,26 @@ def read_choice_candidates(
         utc=True,
         errors="coerce",
     )
+    output = output[output["decision_timestamp"].notna()].copy()
+    output["extra_side_needed"] = numeric_series(output, "extra_side_needed")
+    if target_only:
+        output = output[
+            output["side"].eq(output["needed_side"]) & output["extra_side_needed"].gt(0.0)
+        ].copy()
+    if choice_input_mode == "row_horizon_grid":
+        output = add_scenario_grid(
+            output,
+            prob_thresholds=prob_thresholds or [0.5],
+            ev_thresholds=ev_thresholds or [0.0],
+            tail_prob_thresholds=tail_prob_thresholds or [0.3],
+            require_model_used_options=require_model_used_options or [True],
+        )
+    if choice_input_mode in {"row_horizon", "row_horizon_grid"}:
+        for column in ["prob_threshold", "ev_threshold", "tail_prob_threshold"]:
+            output[column] = numeric_series(output, column)
+        output["require_model_used"] = bool_series(output, "require_model_used")
+        return expand_row_horizon_candidates(output).reset_index(drop=True)
+
     output["hv_chosen_horizon_minutes"] = numeric_series(
         output,
         "hv_chosen_horizon_minutes",
@@ -247,13 +309,8 @@ def read_choice_candidates(
         output[column] = numeric_series(output, column)
     output["require_model_used"] = bool_series(output, "require_model_used")
     output = output[
-        output["decision_timestamp"].notna()
-        & output["hv_chosen_horizon_minutes"].gt(0.0)
+        output["hv_chosen_horizon_minutes"].gt(0.0)
     ].copy()
-    if target_only:
-        output = output[
-            output["side"].eq(output["needed_side"]) & output["extra_side_needed"].gt(0.0)
-        ].copy()
     output["entry_timestamp"] = output["decision_timestamp"]
     output["exit_timestamp"] = output["decision_timestamp"] + pd.to_timedelta(
         output["hv_chosen_horizon_minutes"],
@@ -263,6 +320,28 @@ def read_choice_candidates(
     output["adjusted_pnl"] = output["actual_pnl_at_hv_chosen_horizon"]
     output = add_chosen_prediction_columns(output)
     return output.reset_index(drop=True)
+
+
+def add_scenario_grid(
+    frame: pd.DataFrame,
+    *,
+    prob_thresholds: list[float],
+    ev_thresholds: list[float],
+    tail_prob_thresholds: list[float],
+    require_model_used_options: list[bool],
+) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for prob_threshold in prob_thresholds:
+        for ev_threshold in ev_thresholds:
+            for tail_prob_threshold in tail_prob_thresholds:
+                for require_model_used in require_model_used_options:
+                    scenario = frame.copy()
+                    scenario["prob_threshold"] = float(prob_threshold)
+                    scenario["ev_threshold"] = float(ev_threshold)
+                    scenario["tail_prob_threshold"] = float(tail_prob_threshold)
+                    scenario["require_model_used"] = bool(require_model_used)
+                    frames.append(scenario)
+    return pd.concat(frames, ignore_index=True) if frames else frame.iloc[0:0].copy()
 
 
 def infer_horizons(frame: pd.DataFrame) -> list[int]:
@@ -276,6 +355,92 @@ def infer_horizons(frame: pd.DataFrame) -> list[int]:
         except ValueError:
             continue
     return sorted(set(horizons))
+
+
+def required_row_horizon_columns(horizons: list[int]) -> set[str]:
+    columns: set[str] = set()
+    for horizon in horizons:
+        columns.update(
+            {
+                f"{ROW_HORIZON_FIXED_PREFIX}{horizon}m_adjusted_pnl",
+                f"pred_hv_{horizon}m_executable_prob",
+                f"pred_hv_{horizon}m_pnl",
+                f"pred_hv_{horizon}m_tail_loss_prob",
+                f"pred_hv_{horizon}m_executable_model_used",
+                f"pred_hv_{horizon}m_pnl_model_used",
+                f"pred_hv_{horizon}m_tail_model_used",
+            }
+        )
+    return columns
+
+
+def expand_row_horizon_candidates(frame: pd.DataFrame) -> pd.DataFrame:
+    horizons = infer_horizons(frame)
+    if not horizons:
+        raise ValueError("row-horizon input has no pred_hv_*m_pnl columns")
+    missing = sorted(required_row_horizon_columns(horizons) - set(frame.columns))
+    if missing:
+        raise ValueError("row-horizon input missing columns: " + ", ".join(missing))
+    frames: list[pd.DataFrame] = []
+    for horizon in horizons:
+        output = frame.copy()
+        output["hv_chosen_horizon_minutes"] = float(horizon)
+        output["hv_chosen_pred_executable_prob"] = numeric_series(
+            output,
+            f"pred_hv_{horizon}m_executable_prob",
+        )
+        output["hv_chosen_pred_pnl"] = numeric_series(output, f"pred_hv_{horizon}m_pnl")
+        output["hv_chosen_pred_tail_loss_prob"] = numeric_series(
+            output,
+            f"pred_hv_{horizon}m_tail_loss_prob",
+            default=1.0,
+        )
+        output["hv_chosen_pred_model_used"] = (
+            bool_series(output, f"pred_hv_{horizon}m_executable_model_used")
+            & bool_series(output, f"pred_hv_{horizon}m_pnl_model_used")
+            & bool_series(output, f"pred_hv_{horizon}m_tail_model_used")
+        )
+        output["row_horizon_prob_pass"] = output["hv_chosen_pred_executable_prob"].ge(
+            numeric_series(output, "prob_threshold")
+        )
+        output["row_horizon_ev_pass"] = output["hv_chosen_pred_pnl"].ge(
+            numeric_series(output, "ev_threshold")
+        )
+        output["row_horizon_tail_pass"] = output["hv_chosen_pred_tail_loss_prob"].le(
+            numeric_series(output, "tail_prob_threshold")
+        )
+        output["row_horizon_model_pass"] = (
+            ~bool_series(output, "require_model_used")
+            | output["hv_chosen_pred_model_used"]
+        )
+        output["row_horizon_gate_pass"] = (
+            output["row_horizon_prob_pass"]
+            & output["row_horizon_ev_pass"]
+            & output["row_horizon_tail_pass"]
+            & output["row_horizon_model_pass"]
+        )
+        output = output[output["row_horizon_gate_pass"]].copy()
+        if output.empty:
+            continue
+        output["hv_chosen_score"] = (
+            output["hv_chosen_pred_executable_prob"] * output["hv_chosen_pred_pnl"]
+        )
+        output["actual_pnl_at_hv_chosen_horizon"] = numeric_series(
+            output,
+            f"{ROW_HORIZON_FIXED_PREFIX}{horizon}m_adjusted_pnl",
+        )
+        output["entry_timestamp"] = output["decision_timestamp"]
+        output["exit_timestamp"] = output["decision_timestamp"] + pd.to_timedelta(
+            horizon,
+            unit="m",
+        )
+        output["direction"] = output["side"]
+        output["adjusted_pnl"] = output["actual_pnl_at_hv_chosen_horizon"]
+        output["row_horizon_choice_score"] = output["hv_chosen_score"]
+        frames.append(output)
+    if not frames:
+        return frame.iloc[0:0].copy()
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 def add_chosen_prediction_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -352,6 +517,7 @@ def add_repair_utility_columns(
     repair_support_weight: float,
     repair_expected_pnl_weight: float,
     repair_tail_penalty_weight: float,
+    repair_horizon_penalty_weight: float,
 ) -> pd.DataFrame:
     output = choices.copy()
     lookup = {
@@ -389,12 +555,15 @@ def add_repair_utility_columns(
     if expected_pnl.isna().all():
         expected_pnl = numeric_series(output, "hv_chosen_score", default=0.0)
     tail_prob = numeric_series(output, "hv_chosen_pred_tail_loss_prob", default=0.0)
+    horizon_penalty = numeric_series(output, "hv_chosen_horizon_minutes", default=0.0) / 60.0
     output["repair_expected_pnl"] = expected_pnl.fillna(0.0)
     output["repair_tail_penalty"] = tail_prob.fillna(0.0)
+    output["repair_horizon_penalty"] = horizon_penalty.fillna(0.0)
     output["repair_score"] = (
         repair_support_weight * numeric_series(output, "support_reduction_value")
         + repair_expected_pnl_weight * output["repair_expected_pnl"]
         - repair_tail_penalty_weight * output["repair_tail_penalty"]
+        - repair_horizon_penalty_weight * output["repair_horizon_penalty"]
     )
     return output
 
@@ -808,6 +977,7 @@ def replay_scenarios(
     repair_support_weight: float = 1.0,
     repair_expected_pnl_weight: float = 1.0,
     repair_tail_penalty_weight: float = 1.0,
+    repair_horizon_penalty_weight: float = 0.0,
     min_chosen_pred_pnl: float | None = None,
     min_chosen_actual_pnl: float | None = None,
     max_chosen_tail_prob: float | None = None,
@@ -826,6 +996,7 @@ def replay_scenarios(
             repair_support_weight=repair_support_weight,
             repair_expected_pnl_weight=repair_expected_pnl_weight,
             repair_tail_penalty_weight=repair_tail_penalty_weight,
+            repair_horizon_penalty_weight=repair_horizon_penalty_weight,
         )
     for key, group in choices.groupby(SCENARIO_COLUMNS, dropna=False, sort=False):
         scenario = dict(zip(SCENARIO_COLUMNS, key, strict=True))
@@ -969,6 +1140,11 @@ def run_replay(args: argparse.Namespace) -> Path:
         args.choices,
         row_scopes=row_scopes,
         target_only=args.target_only,
+        choice_input_mode=args.choice_input_mode,
+        prob_thresholds=parse_float_csv(args.prob_thresholds),
+        ev_thresholds=parse_float_csv(args.ev_thresholds),
+        tail_prob_thresholds=parse_float_csv(args.tail_prob_thresholds),
+        require_model_used_options=parse_bool_csv(args.require_model_used_options),
     )
     summary, monthly, additions, rejections = replay_scenarios(
         base_monthly,
@@ -987,6 +1163,7 @@ def run_replay(args: argparse.Namespace) -> Path:
         repair_support_weight=args.repair_support_weight,
         repair_expected_pnl_weight=args.repair_expected_pnl_weight,
         repair_tail_penalty_weight=args.repair_tail_penalty_weight,
+        repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
         min_chosen_pred_pnl=args.min_chosen_pred_pnl,
         min_chosen_actual_pnl=args.min_chosen_actual_pnl,
         max_chosen_tail_prob=args.max_chosen_tail_prob,
@@ -1002,10 +1179,15 @@ def run_replay(args: argparse.Namespace) -> Path:
                 "base_monthly_metrics": args.base_monthly_metrics,
                 "base_trades": args.base_trades,
                 "choices": args.choices,
+                "choice_input_mode": args.choice_input_mode,
                 "candidate": args.candidate,
                 "variant_contains": args.variant_contains,
                 "base_entry_block_rule": args.base_entry_block_rule,
                 "row_scopes": row_scopes,
+                "prob_thresholds": parse_float_csv(args.prob_thresholds),
+                "ev_thresholds": parse_float_csv(args.ev_thresholds),
+                "tail_prob_thresholds": parse_float_csv(args.tail_prob_thresholds),
+                "require_model_used_options": parse_bool_csv(args.require_model_used_options),
                 "target_only": args.target_only,
                 "cap_to_extra_side_needed": args.cap_to_extra_side_needed,
                 "overlap_keys": overlap_keys,
@@ -1013,6 +1195,7 @@ def run_replay(args: argparse.Namespace) -> Path:
                 "repair_support_weight": args.repair_support_weight,
                 "repair_expected_pnl_weight": args.repair_expected_pnl_weight,
                 "repair_tail_penalty_weight": args.repair_tail_penalty_weight,
+                "repair_horizon_penalty_weight": args.repair_horizon_penalty_weight,
                 "min_chosen_pred_pnl": args.min_chosen_pred_pnl,
                 "min_chosen_actual_pnl": args.min_chosen_actual_pnl,
                 "max_chosen_tail_prob": args.max_chosen_tail_prob,
@@ -1063,6 +1246,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-trades", type=Path, required=True)
     parser.add_argument("--choices", type=Path, required=True)
     parser.add_argument(
+        "--choice-input-mode",
+        choices=["chosen", "row_horizon", "row_horizon_grid"],
+        default="chosen",
+        help=(
+            "chosen replays pre-selected threshold choices; row_horizon expands existing "
+            "scenario rows by horizon; row_horizon_grid builds threshold scenarios from "
+            "prediction rows before horizon expansion."
+        ),
+    )
+    parser.add_argument(
         "--candidate",
         default="q95_sg95_rank90_floor5_side_regime_session_month",
     )
@@ -1072,6 +1265,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--base-entry-block-rule", default="long_range_normal_ny_fixed60_pred_gt0")
     parser.add_argument("--row-scopes", default="available_candidates,greedy_selected")
+    parser.add_argument("--prob-thresholds", default="0.3,0.4,0.5,0.6")
+    parser.add_argument("--ev-thresholds", default="-2,0,2")
+    parser.add_argument("--tail-prob-thresholds", default="0.3,0.5,0.7")
+    parser.add_argument("--require-model-used-options", default="true,false")
     parser.add_argument("--target-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--cap-to-extra-side-needed",
@@ -1083,6 +1280,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repair-support-weight", type=float, default=1.0)
     parser.add_argument("--repair-expected-pnl-weight", type=float, default=1.0)
     parser.add_argument("--repair-tail-penalty-weight", type=float, default=1.0)
+    parser.add_argument("--repair-horizon-penalty-weight", type=float, default=0.0)
     parser.add_argument("--min-chosen-pred-pnl", type=float)
     parser.add_argument("--min-chosen-actual-pnl", type=float)
     parser.add_argument("--max-chosen-tail-prob", type=float)

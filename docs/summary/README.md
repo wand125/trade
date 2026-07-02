@@ -1,6 +1,6 @@
 # Trade Research Summary
 
-最終更新: 2026-07-03 05:27 JST
+最終更新: 2026-07-03 05:42 JST
 
 `docs/reports/` を読む前の入口。summaryでは詳細な実験ログを再掲せず、現在の判断、研究レーン、読む順番だけを管理する。
 
@@ -10,7 +10,7 @@
    今の採用判断、主な失敗構造、次アクション。
 
 2. [Report Map](report_map.md)
-   `00001` から `00325` までのレポートを研究レーン別に圧縮した地図。
+   `00001` から `00326` までのレポートを研究レーン別に圧縮した地図。
 
 3. 詳細が必要なときだけ [../reports](../reports) の個別レポートを読む。
 
@@ -18,7 +18,7 @@
 
 標準採用できる利益最大化policyはまだない。標準判断は NoTrade-first のまま。
 
-最新の診断bestは、q95 + raw `loss_exit30_cd15` dynamic exit cooldownを土台に、short entry-block replacement、require-model-used hold-extension、fixed60 family-aware uncertainty margin w5、entry-time position-quality overlayを重ねたbranch。`00314` でposition-quality overlay後 `+339.2910` / month min `-0.7200` まで改善したが、`00317` でside/support修復に long `5` / short `3` の `8` extra trades が必要と分かった。`00318` から `00322` でnear-miss support候補をexit target化し、広いcandidate universeでhorizon viabilityを学習した。`00323` でsupport repairへ接続するとcombined `+362.7000` まで伸び、`00324` で残存target月を分解した。`00325` のactual-floor upper-bound診断では5本追加 / added PnL `+32.3700` / combined `+371.6610` まで伸びたが、future realized PnLを使うためpolicy evidenceではない。pred-only対照はfresh2024 2024-08 long 720m `-29.1360` を拾って悪化した。標準policyはNoTradeのまま。
+最新の診断bestは、q95 + raw `loss_exit30_cd15` dynamic exit cooldownを土台に、short entry-block replacement、require-model-used hold-extension、fixed60 family-aware uncertainty margin w5、entry-time position-quality overlayを重ねたbranch。`00318` から `00322` でnear-miss support候補をexit target化し、`00323` でsupport repairへ接続するとcombined `+362.7000` まで伸びた。`00325` のactual-floor upper-boundはcombined `+371.6610`。`00326` ではrow x horizon化とhorizon penalty `0.25` により、actual-floorなしでもfresh2024 2024-08を720m `-29.1360` から60m `+2.9500` に切り替え、combined `+374.6110` まで伸びた。ただしhpen0.25は同じrepair set上の診断値で、chronological calibration前なので標準policyはNoTradeのまま。
 
 ## 更新ルール
 

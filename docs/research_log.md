@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 05:42 Entry EV row x horizon support repair
+
+作業:
+
+- 00325で残った「pre-chosen horizonをrepairする」弱点に対し、prediction rowsから60/240/720mを別候補として展開するrow x horizon replayを実装した。
+- `scripts/experiments/entry_ev_support_repair_horizon_replay.py` に `--choice-input-mode row_horizon_grid` と `--repair-horizon-penalty-weight` を追加した。
+- report: `docs/reports/00326_2026-07-03_entry_ev_row_horizon_support_repair.md`
+
+結果:
+
+- actual-floor upper-boundは6本追加、added PnL `+35.3200`、combined total `+374.6110`。00325 upper-boundから `+2.9500` 改善した。
+- pred-only / no horizon penaltyはfresh2024 2024-08 long 720m `-29.1360` を拾い、added PnL `+3.2340`、combined `+342.5250` に留まった。
+- pred-only / horizon penalty `0.25` はactual-floorなしでfresh2024 2024-08を60m `+2.9500` に切り替え、added PnL `+35.3200`、combined `+374.6110` に到達した。
+- horizon penalty `0.5` はadded PnL `+25.4000`、`1.0` は `+17.7840` まで落ち、強すぎるpenaltyは良い長期候補を削る。
+
+判断:
+
+- row x horizon support repair replay infrastructureはaccepted。
+- horizon penalty hookはobservable proxyとしてaccepted diagnostics。
+- hpen0.25はfollow-up calibration candidateだが、同じrepair set上で見つけた値なので標準policyにはしない。
+- 次はduration risk / horizon choiceをchronological OOFでcalibrateする。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_horizon_replay.py tests/test_entry_ev_support_repair_horizon_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_horizon_replay`: OK
+- 00326 row x horizon actual-floor / pred-only / horizon penalty sensitivity runs: OK
+
 ### 05:27 Entry EV target-aware support repair replay
 
 作業:
