@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 12:32 JST
+最終更新: 2026-07-02 12:44 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV hold-extension target modelを追加した。00288のfixed-horizon / hold-extension choiceをchronological supervised targetにし、actual fixed 60/240/720m deltaを対象月より前だけで学習する `scripts/experiments/entry_ev_hold_extension_target_model.py` を実装した。default `isolated` 学習、`all` 学習、`isolated min120` はmonth floorを壊してreject。`train_universe=isolated_loss` でexit時点観測可能な `isolated_large_loss` に閾値5を適用すると、no-replay診断では flagged 7 trades、actual replacement delta `+128.0630`、total `+246.7530`、month min `-6.8324` でbaseline floorを維持した。ただし2025-09 `-6.8324`、2025-06 `-6.5136`、hybrid 2025-12 `-4.1460` は未改善で、fixed-horizon置換summaryはstateful replayではない。判断: hold-extension target model infrastructureはaccepted、`isolated_loss` training + `isolated_large_loss` threshold 5はdiagnostic candidate、標準policyはNoTrade。次はexit-time hookへ接続し、00286 selectorでfull stateful replayする。詳細は `docs/reports/00289_2026-07-02_entry_ev_hold_extension_target_model.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV isolated exit-capture diagnosticsを追加した。00287で特定した初回/孤立大損と前回勝ち後の大損に対し、enriched trade上で post-exit path、same-side oracle edge、exit-capture failure、oracle hold gap、fixed 60/240/720m のno-replay置換推定を出す `scripts/experiments/entry_ev_isolated_exit_capture_diagnostics.py` を実装した。isolated large-loss capture failureは23件 / `-125.5752` で、22/23件はoracle best holdが実exitより後。totalだけならfixed置換で伸びるが、`isolated_large_loss_capture_failure -> fixed60` は total `+184.1282` でも month min `-22.0794`、`first_large_loss -> fixed720` も total `+195.9166` だが month min `-8.9100` でbaseline `-6.8324` より悪い。判断: isolated exit-capture diagnostic infrastructureはaccepted、一律fixed-horizon置換はreject。次はfixed-horizon/hold-extension choiceをchronological supervised targetとして学習し、stateful selectorでfloorを確認する。詳細は `docs/reports/00288_2026-07-02_entry_ev_isolated_exit_capture_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

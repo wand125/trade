@@ -7194,3 +7194,37 @@ trade delta:
 - `uv run python -m py_compile scripts/experiments/entry_ev_isolated_exit_capture_diagnostics.py tests/test_entry_ev_isolated_exit_capture_diagnostics.py`: OK
 - `uv run python -m unittest tests.test_entry_ev_isolated_exit_capture_diagnostics`: OK
 - isolated exit-capture diagnostics run: OK
+
+### 2026-07-02 12:44 JST Entry EV hold-extension target model
+
+作業:
+
+- 00288の次アクションとして、fixed-horizon / hold-extension choiceをchronological supervised targetとして学習する診断を追加した。
+- `scripts/experiments/entry_ev_hold_extension_target_model.py` を追加し、00288の `isolated_exit_capture_trades.csv` から actual fixed 60/240/720m delta、best horizon、extend-positive targetを作成した。
+- 対象月より前の月だけでhorizon別deltaを回帰し、threshold別・月別のno-replay replacement summaryを出力した。
+- default `isolated`、`all`、`isolated min120`、`isolated_loss` 学習を比較した。
+- report: `docs/reports/00289_2026-07-02_entry_ev_hold_extension_target_model.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| training / apply | threshold | flagged | delta | total after | month min | reading |
+|---|---:|---:|---:|---:|---:|---|
+| isolated -> isolated_loss | `5` | n/a | n/a | `+177.0178` | `-96.9674` | reject |
+| all -> capture-failure | `0` | n/a | n/a | `+252.7124` | `-112.6914` | reject |
+| isolated min120 -> isolated_loss | `2` | n/a | n/a | `+126.9412` | `-96.9674` | reject |
+| isolated_loss -> isolated_large_loss | `5` | `7` | `+128.0630` | `+246.7530` | `-6.8324` | diagnostic candidate |
+
+判断:
+
+- hold-extension target model infrastructureはaccepted。
+- `isolated_loss` training + exit時点観測可能な `isolated_large_loss` threshold 5は次のdiagnostic candidate。
+- no-replay上はtotalを伸ばしbaseline floorを維持するが、2025-09/2025-06/hybrid 2025-12の負け月は未改善。
+- `isolated_large_loss_capture_failure` はfuture labelなのでpolicy evidenceにはしない。
+- 標準policyはNoTrade。次はexit-time hookへ接続し、00286 selectorでfull stateful replayする。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_hold_extension_target_model.py tests/test_entry_ev_hold_extension_target_model.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_hold_extension_target_model`: OK
+- hold-extension chronological diagnostics runs: OK
