@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 13:50 Entry EV overlay residual floor diagnostics
+
+作業:
+
+- 00293で残ったsmall negative monthsを、追加blacklistではなくsupport / side concentration / fixed-horizon rescueの観点で診断した。
+- `scripts/experiments/entry_ev_overlay_residual_floor_diagnostics.py` を追加し、entry-block overlay tradesとmonthly metricsからunblocked tradesだけを対象に残存floor breachを抽出できるようにした。
+- `tests/test_entry_ev_overlay_residual_floor_diagnostics.py` を追加した。
+- report: `docs/reports/00294_2026-07-02_entry_ev_overlay_residual_floor_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 00293 best branchは total `+329.4348`, 232 trades。
+- negative monthは4件で、3件は1 trade monthかつside share `1.0`。
+- negative loss tradesは7件、そのうちfixed-best hindsightで改善するものは5件。
+- refit2025 2025-03の主損失 short `down_normal_vol / ny_overlap` はfixed 60/240/720mでさらに悪化し、hold-extensionでは直せない。
+- `short|down_normal_vol|ny_overlap` contextは全体では `+19.5636` であり、context block化は勝ちを削る。
+
+判断:
+
+- overlay residual floor diagnosticsはaccepted infrastructure。
+- remaining one-trade negative monthsを単発blacklistで追わない。
+- hindsight fixed-horizon rescueをpolicy evidenceとして扱わない。
+- 次はentry-block追加ではなくsupport-aware admission diagnosticsへ寄せる。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_overlay_residual_floor_diagnostics.py tests/test_entry_ev_overlay_residual_floor_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_overlay_residual_floor_diagnostics`: OK
+- overlay residual floor diagnostics run: OK
+
 ### 13:38 Entry EV residual floor combo overlay
 
 作業:
