@@ -277,6 +277,13 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
                 max_predicted_hold_minutes=args.max_predicted_hold_minutes,
                 side_block_rules=tuple(parse_optional_csv(args.side_block_rules)),
             )
+            base_model_config = replace(
+                base_model_config,
+                side_ev_penalty_rules=tuple(parse_optional_csv(args.side_ev_penalty_rules)),
+                side_ev_penalty_replacement_min_margin=(
+                    args.side_ev_penalty_replacement_min_margin
+                ),
+            )
             for variant in variants:
                 model_config = replace(
                     base_model_config,
@@ -378,6 +385,10 @@ def run_sensitivity(args: argparse.Namespace) -> Path:
         "long_loss_first_column": args.long_loss_first_column,
         "short_loss_first_column": args.short_loss_first_column,
         "side_block_rules": parse_optional_csv(args.side_block_rules),
+        "side_ev_penalty_rules": parse_optional_csv(args.side_ev_penalty_rules),
+        "side_ev_penalty_replacement_min_margin": (
+            args.side_ev_penalty_replacement_min_margin
+        ),
         "min_valid_predicted_hold_minutes": args.min_valid_predicted_hold_minutes,
         "max_predicted_hold_minutes": args.max_predicted_hold_minutes,
         "max_hold_hours": args.max_hold_hours,
@@ -452,6 +463,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--long-loss-first-column", default="pred_long_exit_event_prob_2")
     parser.add_argument("--short-loss-first-column", default="pred_short_exit_event_prob_2")
     parser.add_argument("--side-block-rules", default="")
+    parser.add_argument("--side-ev-penalty-rules", default="")
+    parser.add_argument(
+        "--side-ev-penalty-replacement-min-margin",
+        type=float,
+        default=-float("inf"),
+    )
     parser.add_argument("--min-valid-predicted-hold-minutes", type=float, default=30.0)
     parser.add_argument("--max-predicted-hold-minutes", type=float, default=260.0)
     parser.add_argument("--max-hold-hours", type=float, default=24.0)

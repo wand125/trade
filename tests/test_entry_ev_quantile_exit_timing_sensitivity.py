@@ -53,6 +53,24 @@ class EntryEvQuantileExitTimingSensitivityTest(unittest.TestCase):
 
         self.assertEqual(args.side_block_rules, "long:guard=1,short:guard=1")
 
+    def test_parser_accepts_side_ev_penalty_replacement_rules(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "--family-predictions",
+                "fam=predictions.parquet",
+                "--side-ev-penalty-rules",
+                "short:entryblock_short_rollover_lossprob_ge0p4=true:1000000",
+                "--side-ev-penalty-replacement-min-margin",
+                "5",
+            ]
+        )
+
+        self.assertEqual(
+            args.side_ev_penalty_rules,
+            "short:entryblock_short_rollover_lossprob_ge0p4=true:1000000",
+        )
+        self.assertEqual(args.side_ev_penalty_replacement_min_margin, 5.0)
+
     def test_summarize_candidates_requires_positive_roles_and_trade_support(self) -> None:
         monthly = pd.DataFrame(
             {

@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 16:32 Entry EV short entry-block replacement replay
+
+作業:
+
+- 00306の次アクションとして、未選択entry候補feedを使うreplacement replayへ戻した。
+- `scripts/experiments/entry_ev_entry_block_prediction_flags.py` を追加し、prediction parquetへentry-block用のobservable flagを付与できるようにした。
+- `scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` に `--side-ev-penalty-rules` と `--side-ev-penalty-replacement-min-margin` を追加し、片側EVをpenaltyして反対側replacementを許せるようにした。
+- report: `docs/reports/00307_2026-07-02_entry_ev_short_entryblock_replacement_replay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象はshort側の `rollover_lossprob_ge0p4 OR london_midloss_sidegap_pos`。00293 comboのうちhold-extension後にしか分からない `holdext_long_range_normal_ny` はまだ含めていない。
+- raw `loss_exit30_cd15` 段階の合算では baseline `+118.6900` / 266 trades / month min `-6.8324` から replacement `+126.8118` / 254 trades / month min `-6.8324` へ `+8.1218` 改善した。
+- hybrid 2025-12は `-4.1460 -> +4.5000` へ改善し、hybrid totalは `+6.6240 -> +15.2700`。
+- internal+hgb側は total `+112.0660 -> +111.5418` と小幅悪化したが、role minは `+0.0074 -> +0.5354` へ改善した。
+- refit2025 2025-09 `-6.8324` と 2025-02 `-6.0104` は未解決で、month floorは変わらない。
+
+判断:
+
+- prediction-row entry-block flag generationはaccepted infrastructure。
+- side EV penalty replacement replayはaccepted infrastructure。
+- short entry-block replacementはdiagnostic candidate。
+- 全family一律のshort block標準化はreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_entry_block_prediction_flags.py scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py tests/test_entry_ev_entry_block_prediction_flags.py tests/test_entry_ev_quantile_exit_timing_sensitivity.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_entry_block_prediction_flags tests.test_entry_ev_quantile_exit_timing_sensitivity`: OK
+- entry-block prediction flag runs: OK
+- short entry-block replacement replay runs: OK
+- policy delta diagnostics runs: OK
+
 ### 16:15 Entry EV uncompensated candidate-path diagnostics
 
 作業:
