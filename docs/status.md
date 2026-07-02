@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 14:40 JST
+最終更新: 2026-07-02 14:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV calibration residual context diagnosticsを追加した。00299でOOF calibrationはscale補正に有効だがdirect gateには弱いと分かったため、calibration residualをcontext / support / score binへ分解する `scripts/experiments/entry_ev_selected_trade_calibration_diagnostics.py` を実装した。00299 residual combo artifactでは、`short|ny_late` が17 trades / total `-13.0136`, pnl bias `+2.4593`, large loss 5件、`long|range_normal_vol|ny_overlap` が9 trades / total `-12.5040`, overestimate rate `0.8889`, train rows平均 `160.8` と、support十分でも外すcontextが出た。PnL score最低binは total `+144.3950` で、low-score gateが勝ちを削る理由も再確認した。判断: calibration residual context diagnosticsはaccepted infrastructure、post-hoc static blacklistはreject、次はprior-only context residual pressure / uncertainty headへ戻す。詳細は `docs/reports/00300_2026-07-02_entry_ev_calibration_residual_context_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV residual combo selected-trade calibrationを追加した。00298でconfidence hard gateをrejectしたため、00293 residual combo diagnostic branchのunblocked selected tradesだけを対象に、chronological OOF expected PnL calibrationを再診断した。`entry_ev_selected_trade_supervised_shrinkage.py` に `--selector-variants` と `--exclude-entry-blocked` を追加。raw EVは実績平均 `+1.4200` に対してscore平均 `+10.1991`, MAE `10.7256` と過大評価が大きいが、OOF補正後は factor EV MAE `2.9448`, PnL EV MAE `3.0165` まで縮んだ。一方でSpearmanは factor `0.1329`, PnL `0.1072` と低く、factor `< 0` gateも `+7.8728` の小幅改善、PnL低score gateは勝ちtradeを削る。判断: selected-trade calibration diagnosticsはaccepted infrastructure、直接OOF score hard gateはreject、標準policyはNoTrade。詳細は `docs/reports/00299_2026-07-02_entry_ev_residual_combo_selected_trade_calibration.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

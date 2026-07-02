@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 14:40 JST
+最終更新: 2026-07-02 14:51 JST
 
 ## 結論
 
@@ -36,15 +36,17 @@
 
 `00299` で00293 residual combo branch上のunblocked selected tradesを対象に、chronological OOF expected PnL calibrationを再診断した。raw EVは実績平均 `+1.4200` に対してscore平均 `+10.1991`, MAE `10.7256` と過大評価が大きいが、OOF補正後は factor EV MAE `2.9448`, PnL EV MAE `3.0165` まで縮んだ。一方でSpearmanは factor `0.1329`, PnL `0.1072` と低く、factor `< 0` gateも `+7.8728` の小幅改善に留まる。PnL低score gateは勝ちtradeを削るため、直接hard gateはreject。calibration scoreはuncertainty / regime diagnostics / admission explanationへ回す。
 
+`00300` で00299 calibration residualをcontext / support / score binへ分解した。`short|ny_late` は17 trades / total `-13.0136`、pnl bias `+2.4593`、large loss 5件。`long|range_normal_vol|ny_overlap` は9 trades / total `-12.5040`、overestimate rate `0.8889`、train rows平均 `160.8`、train months平均 `11.8` で、support十分でも外している。PnL score最低binは total `+144.3950` と強く、low-score gateが勝ちを削る理由も再確認した。危険contextは見えたが、同一branch上のpost-hoc static blacklistはrejectし、prior-only context residual pressure / uncertainty headへ戻す。
+
 ## 現在の判断
 
 | 項目 | 判断 |
 |---|---|
 | Standard policy | なし。NoTrade-firstを維持 |
 | Current diagnostic candidate | q95 + raw `loss_exit30_cd15` dynamic exit cooldown + side-aware hold-extension + residual combo entry-block overlay diagnostic。`isolated_large_loss_long + fixed720 + threshold -5 + short rollover / London mid-loss / hold-extension false-positive block` は total `+329.4348`, role min `+0.5354`, month min `-0.7200`。00296の候補系列比較でもdefault support-awareで通る唯一のbranchだが標準ではNoTrade |
-| Why not standard | 00293 bestもmonth min `-0.7200` でNoTrade-first floorを通らない。00296で進歩は確認したがsupport-aware passはsupport2/shallow025感度で落ち、00297のmonth-warmupも00298のconfidence hard gateも標準gateを通らない。00299のOOF calibrationはscale errorを縮めるがrank/gate品質は弱い。strict blockers `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high` が残る |
-| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / isolated large-loss capture failure / fixed-horizon improvement target / chronological hold-extension predicted delta / side-aware fixed horizon replay / stateful extension skip impact / selected-side capture ratio / short rollover loss-first block diagnostics / London short mid-loss block diagnostics / hold-extension false-positive block diagnostics / overlay residual floor support diagnostics / support-aware admission diagnostics / support-aware progression comparison diagnostics / month-warmup overlay diagnostics / confidence gate overlay diagnostics / confidence feature-bin diagnostics / chronological selected-trade calibration diagnostics / supervised shrinkage and downside meta features |
-| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May/September tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足、no-replay改善をpolicy evidenceと誤読すること、1件/少数件blockを堅牢なedgeと誤読すること、extensionで直せない損失へextensionを無理に当てること、remaining sparse negative monthsを単発blacklistで追うこと、hindsight fixed-horizon rescueを実行可能policyと誤読すること、support-aware diagnostic passを標準admissionと誤読すること、month-warmupのsupport-aware passを改善と誤読すること、confidence gateの低活動floor改善を標準候補と誤読すること、calibration MAE改善をadmission改善と誤読すること |
+| Why not standard | 00293 bestもmonth min `-0.7200` でNoTrade-first floorを通らない。00296で進歩は確認したがsupport-aware passはsupport2/shallow025感度で落ち、00297のmonth-warmupも00298のconfidence hard gateも標準gateを通らない。00299のOOF calibrationはscale errorを縮めるがrank/gate品質は弱い。00300で危険contextは見えたがpost-hoc static blacklistは過学習リスクが高い。strict blockers `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high` が残る |
+| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / isolated large-loss capture failure / fixed-horizon improvement target / chronological hold-extension predicted delta / side-aware fixed horizon replay / stateful extension skip impact / selected-side capture ratio / short rollover loss-first block diagnostics / London short mid-loss block diagnostics / hold-extension false-positive block diagnostics / overlay residual floor support diagnostics / support-aware admission diagnostics / support-aware progression comparison diagnostics / month-warmup overlay diagnostics / confidence gate overlay diagnostics / confidence feature-bin diagnostics / chronological selected-trade calibration diagnostics / calibration residual context diagnostics / supervised shrinkage and downside meta features |
+| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May/September tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足、no-replay改善をpolicy evidenceと誤読すること、1件/少数件blockを堅牢なedgeと誤読すること、extensionで直せない損失へextensionを無理に当てること、remaining sparse negative monthsを単発blacklistで追うこと、hindsight fixed-horizon rescueを実行可能policyと誤読すること、support-aware diagnostic passを標準admissionと誤読すること、month-warmupのsupport-aware passを改善と誤読すること、confidence gateの低活動floor改善を標準候補と誤読すること、calibration MAE改善をadmission改善と誤読すること、calibration residual contextをpost-hoc blacklist化すること |
 
 ## 研究レーン
 
@@ -54,7 +56,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00299` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、00285でdownside soft marginもreject。00286でstateful floor selectorを追加し、現候補群は全てNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。00288でisolated large-loss capture failureを特定し、一律fixed horizonはfloor悪化でreject。00289でhold-extension choice targetを学習し、`isolated_loss` training + `isolated_large_loss` threshold 5を次のfull replay候補にした。00290でstateful replayに接続しtotal改善は維持したがmonth floor未達でNoTrade。00291でside-aware fixed 720mはtotal/floorを改善。00292でhybrid 2025-12 shortをentry block overlayで消し、00293でrefit2025 2025-03/08 residual floorも縮めた。00294で残存floorはthin support中心と確認し、00295でsupport-aware admission診断へ分解。00296で候補系列横断でも00293だけがdefault `support_aware_only` だが、感度で落ちるため標準policyはNoTrade。00297でmonth-warmupはreject。00298でconfidence hard gateも低活動化またはfloor悪化でreject。00299でOOF calibrationはscale補正に有効だが、direct hard gateはreject。 |
+| Component / exit-regret | `00240`..`00300` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、00285でdownside soft marginもreject。00286でstateful floor selectorを追加し、現候補群は全てNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。00288でisolated large-loss capture failureを特定し、一律fixed horizonはfloor悪化でreject。00289でhold-extension choice targetを学習し、`isolated_loss` training + `isolated_large_loss` threshold 5を次のfull replay候補にした。00290でstateful replayに接続しtotal改善は維持したがmonth floor未達でNoTrade。00291でside-aware fixed 720mはtotal/floorを改善。00292でhybrid 2025-12 shortをentry block overlayで消し、00293でrefit2025 2025-03/08 residual floorも縮めた。00294で残存floorはthin support中心と確認し、00295でsupport-aware admission診断へ分解。00296で候補系列横断でも00293だけがdefault `support_aware_only` だが、感度で落ちるため標準policyはNoTrade。00297でmonth-warmupはreject。00298でconfidence hard gateも低活動化またはfloor悪化でreject。00299でOOF calibrationはscale補正に有効だが、direct hard gateはreject。00300でcalibration residual contextを分解し、危険contextはprior-only residual pressureへ戻す。 |
 
 ## 採用済みインフラ
 
@@ -101,6 +103,7 @@
 - confidence gate overlay diagnostics
 - confidence feature-bin diagnostics
 - residual combo selected-trade calibration diagnostics
+- calibration residual context diagnostics
 
 ## 採用しないもの
 
@@ -160,6 +163,7 @@
 - raw predicted EV / rank / side-gap hard gateを標準policyとして扱うこと
 - selected-trade OOF calibrationのMAE改善を標準policy improvementとして扱うこと
 - direct calibrated PnL / factor EV hard gateを標準policyとして扱うこと
+- calibration residual contextをpost-hoc static blacklistとして扱うこと
 
 ## 次にやること
 
@@ -168,8 +172,10 @@
 3. `isolated_large_loss_long + fixed720 + threshold -5 + residual combo block` はdiagnostic branchとして維持し、標準policyにはしない。
 4. thin-support residual monthsはbroad month-warmupやconfidence hard gateではなく、unused chronologyまたはchronological calibration側で確認する。
 5. calibration scoreはgateではなくuncertainty / regime diagnostics / admission explanationへ使う。
-6. fixed-horizon rescueを試す場合は、hindsight deltaではなくchronological prediction/selector replayへ戻す。
-7. role trade support、role PnL、month floor、side share、NoTrade-first比較を標準採用ゲートとして維持する。
+6. context residualを同じwindow内のblacklistではなく、prior-only context residual pressureとして作る。
+7. `short|ny_late` と `long|range_normal_vol|ny_overlap` は次のresidual-risk targetの監査対象にする。
+8. fixed-horizon rescueを試す場合は、hindsight deltaではなくchronological prediction/selector replayへ戻す。
+9. role trade support、role PnL、month floor、side share、NoTrade-first比較を標準採用ゲートとして維持する。
 
 ## 最短で読む順
 
@@ -215,3 +221,4 @@
 40. `00297_2026-07-02_entry_ev_month_warmup_overlay.md`
 41. `00298_2026-07-02_entry_ev_confidence_gate_overlay.md`
 42. `00299_2026-07-02_entry_ev_residual_combo_selected_trade_calibration.md`
+43. `00300_2026-07-02_entry_ev_calibration_residual_context_diagnostics.md`

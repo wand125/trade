@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 14:51 Entry EV calibration residual context diagnostics
+
+作業:
+
+- 00299でOOF calibrationはscale補正に有効だがdirect gateには弱いと分かったため、calibration residualをcontext / support / score binへ分解した。
+- `scripts/experiments/entry_ev_selected_trade_calibration_diagnostics.py` を追加し、selected-trade OOF predictionsからmode別score、bias、MAE、overestimate、loss rate、large loss、train supportをCSV化できるようにした。
+- `tests/test_entry_ev_selected_trade_calibration_diagnostics.py` を追加した。
+- report: `docs/reports/00300_2026-07-02_entry_ev_calibration_residual_context_diagnostics.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00299 residual combo selected-trade calibration artifact。
+- `short|ny_late` は17 trades / total `-13.0136`、pnl bias `+2.4593`、factor bias `+1.4369`、large loss 5件。
+- `long|range_normal_vol|ny_overlap` は9 trades / total `-12.5040`、overestimate rate `0.8889`、train rows平均 `160.8`、train months平均 `11.8`。
+- `short|range_low_vol|asia` は5 trades / total `-6.5482`、pnl bias `+2.4666`。
+- PnL scoreの最低binは total `+144.3950` と強く、low-score gateが勝ちを削る理由を再確認した。
+- supportが十分なbinやcontextでもlarge lossが残るため、support不足だけではcalibration failureを説明できない。
+
+判断:
+
+- calibration residual context diagnosticsはaccepted infrastructure。
+- `short|ny_late` や `long|range_normal_vol|ny_overlap` のpost-hoc static blacklistはreject。
+- 次はprior-only context residual pressure / uncertainty headとしてchronologicalに戻す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_trade_calibration_diagnostics.py tests/test_entry_ev_selected_trade_calibration_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_calibration_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_trade_calibration_diagnostics tests.test_entry_ev_selected_trade_supervised_shrinkage tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- calibration residual context diagnostics run: OK
+
 ### 14:40 Entry EV residual combo selected-trade calibration
 
 作業:
