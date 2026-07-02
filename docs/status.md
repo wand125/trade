@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 20:38 JST
+最終更新: 2026-07-02 20:53 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV near-miss horizon viabilityを追加した。00320の次アクションとして、horizon-specific binary viability / abstention-first decisionを実装した。default runでは available candidates の60m executable AUCが `0.6635`、greedy selectedの240m executable AUCが `0.6167` と一部の識別力は出たが、tail-loss headは弱く、available candidates 60m tail-loss AUC `0.3225`、greedy selected 720m tail-loss AUC `0.3333`。threshold後の実PnLは全runで負で、default bestはgreedy selected `-36.8370`、model-used必須では `-39.9600`、available candidatesでは `-354.5204`。判断: horizon-specific viability diagnosticsはaccepted infrastructure、current direct horizon selector / side-balanced near-miss support overlayはreject。次はdirect selectorではなくfeature化し、より広いcandidate universeでtail-loss / PnL calibrationを改善する。標準policyはNoTrade。詳細は `docs/reports/00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV near-miss exit headを追加した。00319の次アクションとして、near-miss fixed-best targetをchronological exit-viability / horizon headへ接続した。default headはgreedy selectedで viability AUC `0.5556`、head選択horizonの実現平均 `-13.7712`、best thresholdでも `-17.8948`。available candidates側も全設定で大きく負で、bestでも `-232.0894`。available-only trainingはgreedy selectedのbest thresholdが `+3.1230` になるが、flagged 1件、`model_used=0` のfallback由来。判断: chronological near-miss exit head infrastructureはaccepted、current PnL-regression argmax horizon selectorはreject、次はhorizon-specific binary viability / abstention-first decisionへ切り替える。標準policyはNoTrade。詳細は `docs/reports/00320_2026-07-02_entry_ev_near_miss_exit_head.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

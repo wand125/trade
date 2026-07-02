@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 20:53 Entry EV near-miss horizon viability
+
+作業:
+
+- 00320の次アクションとして、horizon-specific binary viability / abstention-first decisionを実装した。
+- `scripts/experiments/entry_ev_near_miss_horizon_viability.py` を追加し、60/240/720mごとに executable classifier、PnL regressor、tail-loss classifierをchronologicalに学習した。
+- report: `docs/reports/00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`
+
+結果:
+
+- default runでは available candidates の60m executable AUCが `0.6635`、greedy selectedの240m executable AUCが `0.6167` と一部の識別力は出た。
+- tail-loss headは弱く、default available candidates 60m tail-loss AUCは `0.3225`、greedy selected 720m tail-loss AUCは `0.3333`。
+- threshold後の実PnLは全runで負。default bestはgreedy selected `-36.8370`、model-used必須では `-39.9600`、available candidatesでは `-354.5204`。
+- greedy selected bestのpositive rowは `model_used=False` のfallbackで、learned rowはhybrid 2025-11 shortの `720m -39.9600` を拾った。
+
+判断:
+
+- horizon-specific viability diagnosticsはaccepted infrastructure。
+- current direct horizon selector / side-balanced near-miss support overlayはreject。
+- 次はこのheadをdirect selectorではなくfeature化し、より広いcandidate universeでtail-loss / PnL calibrationを改善する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_near_miss_horizon_viability.py tests/test_entry_ev_near_miss_horizon_viability.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_near_miss_horizon_viability`: OK
+- `uv run python -m unittest tests.test_entry_ev_near_miss_horizon_viability tests.test_entry_ev_near_miss_exit_head tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- 00321 near-miss horizon viability runs: OK
+
 ### 20:38 Entry EV near-miss exit head
 
 作業:
