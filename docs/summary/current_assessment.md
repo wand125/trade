@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 15:56 JST
+最終更新: 2026-07-02 16:15 JST
 
 ## 結論
 
@@ -48,15 +48,17 @@
 
 `00305` でuncompensated targetをselected-trade path上のsequence/stateへ戻して分解した。`pnl/base/base` は232 trades / total `+329.4348` / target 22件で、targetは `>10` trade月に18/22、次trade勝ちに15/22、前回勝ち後に12/22、short側に16/22が集中した。high-risk threshold除去は96本すべて悪化し、positive block deltaは0本、最小悪化でも flagged PnL `+5.6900`。したがってtargetは「孤立した悪玉」ではなく、前後winnerや高密度pathに埋まっている。sequence-state diagnosticsはaccepted、uncompensated probabilityのdirect gateはreject。次はcandidate-level selector / stateful replayでreplacement / skipped next winner / missed future candidateを明示的に扱う。`next_*` は診断専用で、実行featureにはしない。
 
+`00306` でrealized candidate path variantごとにuncompensated targetを比較した。00293 best branchは232 trades / total `+329.4348` / role min `+0.5354` / month min `-0.7200` / target 22件で、候補群内ではmonth floorが最良。target countとtotal PnLの相関は `+0.0502` と弱く、target countとmonth floorの相関は `+0.5674`。`t-5_hpredicted` はtarget 19件でtotal `+351.2472` だがmonth min `-23.5914`、`t-5_h720` no entry-blockはtarget 20件でもmonth min `-112.1634`。したがってtarget count最小化はreject。realized candidate-path diagnosticsはacceptedだが、full replacement replay evidenceではない。次は未選択entry candidate feedを使うstateful replacement replayへ進む。
+
 ## 現在の判断
 
 | 項目 | 判断 |
 |---|---|
 | Standard policy | なし。NoTrade-firstを維持 |
 | Current diagnostic candidate | q95 + raw `loss_exit30_cd15` dynamic exit cooldown + side-aware hold-extension + residual combo entry-block overlay diagnostic。`isolated_large_loss_long + fixed720 + threshold -5 + short rollover / London mid-loss / hold-extension false-positive block` は total `+329.4348`, role min `+0.5354`, month min `-0.7200`。00296の候補系列比較でもdefault support-awareで通る唯一のbranchだが標準ではNoTrade |
-| Why not standard | 00293 bestもmonth min `-0.7200` でNoTrade-first floorを通らない。00296で進歩は確認したがsupport-aware passはsupport2/shallow025感度で落ち、00297のmonth-warmupも00298のconfidence hard gateも標準gateを通らない。00299のOOF calibrationはscale errorを縮めるがrank/gate品質は弱い。00300で危険contextは見えたがpost-hoc static blacklistは過学習リスクが高い。00301のprior-only best ruleもmode依存・coverage薄で標準候補ではない。00302のlarge-loss headもhigh-risk除去が勝ちtradeを削る。00304のuncompensated headもthreshold除去が全て悪化。00305でtargetは次のwinnerや高密度pathに埋まると分かったため、pointwise除去はさらに危険。strict blockers `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high` が残る |
-| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / isolated large-loss capture failure / fixed-horizon improvement target / chronological hold-extension predicted delta / side-aware fixed horizon replay / stateful extension skip impact / selected-side capture ratio / short rollover loss-first block diagnostics / London short mid-loss block diagnostics / hold-extension false-positive block diagnostics / overlay residual floor support diagnostics / support-aware admission diagnostics / support-aware progression comparison diagnostics / month-warmup overlay diagnostics / confidence gate overlay diagnostics / confidence feature-bin diagnostics / chronological selected-trade calibration diagnostics / calibration residual context diagnostics / prior residual pressure diagnostics / chronological large-loss head diagnostics / path-aware large-loss compensation diagnostics / uncompensated path target diagnostics / uncompensated sequence-state diagnostics / supervised shrinkage and downside meta features |
-| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May/September tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足、no-replay改善をpolicy evidenceと誤読すること、1件/少数件blockを堅牢なedgeと誤読すること、extensionで直せない損失へextensionを無理に当てること、remaining sparse negative monthsを単発blacklistで追うこと、hindsight fixed-horizon rescueを実行可能policyと誤読すること、support-aware diagnostic passを標準admissionと誤読すること、month-warmupのsupport-aware passを改善と誤読すること、confidence gateの低活動floor改善を標準候補と誤読すること、calibration MAE改善をadmission改善と誤読すること、calibration residual contextをpost-hoc blacklist化すること、prior residual pressureの小幅改善を標準policyとして扱うこと、large-loss classifier scoreをdirect hard gateとして扱うこと、positive context-monthをrisk scoreで丸ごと消すこと、uncompensated targetを孤立損失と誤読すること、`next_*` 診断列を実行featureへ混ぜること |
+| Why not standard | 00293 bestもmonth min `-0.7200` でNoTrade-first floorを通らない。00296で進歩は確認したがsupport-aware passはsupport2/shallow025感度で落ち、00297のmonth-warmupも00298のconfidence hard gateも標準gateを通らない。00299のOOF calibrationはscale errorを縮めるがrank/gate品質は弱い。00300で危険contextは見えたがpost-hoc static blacklistは過学習リスクが高い。00301のprior-only best ruleもmode依存・coverage薄で標準候補ではない。00302のlarge-loss headもhigh-risk除去が勝ちtradeを削る。00304のuncompensated headもthreshold除去が全て悪化。00305でtargetは次のwinnerや高密度pathに埋まると分かった。00306でもtarget count最小化はmonth floorを保証しなかった。strict blockers `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high` が残る |
+| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / isolated large-loss capture failure / fixed-horizon improvement target / chronological hold-extension predicted delta / side-aware fixed horizon replay / stateful extension skip impact / selected-side capture ratio / short rollover loss-first block diagnostics / London short mid-loss block diagnostics / hold-extension false-positive block diagnostics / overlay residual floor support diagnostics / support-aware admission diagnostics / support-aware progression comparison diagnostics / month-warmup overlay diagnostics / confidence gate overlay diagnostics / confidence feature-bin diagnostics / chronological selected-trade calibration diagnostics / calibration residual context diagnostics / prior residual pressure diagnostics / chronological large-loss head diagnostics / path-aware large-loss compensation diagnostics / uncompensated path target diagnostics / uncompensated sequence-state diagnostics / uncompensated realized candidate-path diagnostics / supervised shrinkage and downside meta features |
+| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May/September tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足、no-replay改善をpolicy evidenceと誤読すること、1件/少数件blockを堅牢なedgeと誤読すること、extensionで直せない損失へextensionを無理に当てること、remaining sparse negative monthsを単発blacklistで追うこと、hindsight fixed-horizon rescueを実行可能policyと誤読すること、support-aware diagnostic passを標準admissionと誤読すること、month-warmupのsupport-aware passを改善と誤読すること、confidence gateの低活動floor改善を標準候補と誤読すること、calibration MAE改善をadmission改善と誤読すること、calibration residual contextをpost-hoc blacklist化すること、prior residual pressureの小幅改善を標準policyとして扱うこと、large-loss classifier scoreをdirect hard gateとして扱うこと、positive context-monthをrisk scoreで丸ごと消すこと、uncompensated targetを孤立損失と誤読すること、target count最小化をpolicy objectiveにすること、realized path variant診断をfull replacement replay evidenceと誤読すること、`next_*` 診断列を実行featureへ混ぜること |
 
 ## 研究レーン
 
@@ -66,7 +68,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00305` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、00285でdownside soft marginもreject。00286でstateful floor selectorを追加し、現候補群は全てNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。00288でisolated large-loss capture failureを特定し、一律fixed horizonはfloor悪化でreject。00289でhold-extension choice targetを学習し、`isolated_loss` training + `isolated_large_loss` threshold 5を次のfull replay候補にした。00290でstateful replayに接続しtotal改善は維持したがmonth floor未達でNoTrade。00291でside-aware fixed 720mはtotal/floorを改善。00292でhybrid 2025-12 shortをentry block overlayで消し、00293でrefit2025 2025-03/08 residual floorも縮めた。00294で残存floorはthin support中心と確認し、00295でsupport-aware admission診断へ分解。00296で候補系列横断でも00293だけがdefault `support_aware_only` だが、感度で落ちるため標準policyはNoTrade。00297でmonth-warmupはreject。00298でconfidence hard gateも低活動化またはfloor悪化でreject。00299でOOF calibrationはscale補正に有効だが、direct hard gateはreject。00300でcalibration residual contextを分解し、00301のprior-only residual pressure、00302のlarge-loss headはいずれもdirect gateとしてreject。00303でpath-aware補償を分解し、00304でuncompensated target headを試したが、現featureではpositive pathを分離できずdirect gateはreject。00305でuncompensated targetは高密度pathやnext winnerに埋まると確認し、次はcandidate-level selector / stateful replayへ戻す。 |
+| Component / exit-regret | `00240`..`00306` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足はepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、00285でdownside soft marginもreject。00286でstateful floor selectorを追加し、現候補群は全てNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。00288でisolated large-loss capture failureを特定し、一律fixed horizonはfloor悪化でreject。00289でhold-extension choice targetを学習し、`isolated_loss` training + `isolated_large_loss` threshold 5を次のfull replay候補にした。00290でstateful replayに接続しtotal改善は維持したがmonth floor未達でNoTrade。00291でside-aware fixed 720mはtotal/floorを改善。00292でhybrid 2025-12 shortをentry block overlayで消し、00293でrefit2025 2025-03/08 residual floorも縮めた。00294で残存floorはthin support中心と確認し、00295でsupport-aware admission診断へ分解。00296で候補系列横断でも00293だけがdefault `support_aware_only` だが、感度で落ちるため標準policyはNoTrade。00297でmonth-warmupはreject。00298でconfidence hard gateも低活動化またはfloor悪化でreject。00299でOOF calibrationはscale補正に有効だが、direct hard gateはreject。00300でcalibration residual contextを分解し、00301のprior-only residual pressure、00302のlarge-loss headはいずれもdirect gateとしてreject。00303でpath-aware補償を分解し、00304でuncompensated target headを試したが、現featureではpositive pathを分離できずdirect gateはreject。00305でuncompensated targetは高密度pathやnext winnerに埋まると確認。00306でrealized candidate path variantを比較し、target count最小化もreject。次は未選択entry候補feedを使うstateful replacement replayへ戻す。 |
 
 ## 採用済みインフラ
 
@@ -119,6 +121,7 @@
 - path-aware large-loss compensation diagnostics
 - uncompensated path target diagnostics
 - uncompensated sequence-state diagnostics
+- uncompensated realized candidate-path diagnostics
 
 ## 採用しないもの
 
@@ -185,12 +188,14 @@
 - high-risk contextをwinner/positive pathごと丸ごと消すこと
 - uncompensated-loss probabilityをdirect hard gateとして扱うこと
 - uncompensated targetを孤立損失として扱うこと
+- target countの単純最小化をpolicy objectiveにすること
+- realized path variant診断をfull replacement replay evidenceとして扱うこと
 - `next_*` sequence diagnosticsを実行時featureとして使うこと
 
 ## 次にやること
 
-1. Pointwise classifierを増やすより、candidate-level selector / stateful replayへ戻す。
-2. `large_loss_uncompensated_by_context` は教師候補として残し、entry/exit sequence featuresやreplacement stateと組み合わせる。
+1. Pointwise classifierを増やすより、未選択entry候補feedを使うcandidate-level selector / stateful replacement replayへ戻す。
+2. `large_loss_uncompensated_by_context` は教師候補として残し、entry/exit sequence features、replacement state、skipped next winner costと組み合わせる。
 3. large-loss probabilityとuncompensated-loss probabilityはhard gateではなく、candidate-level selector / stateful replay / exit timing targetの補助featureへ回す。
 4. sequence-state診断の `next_*` はerror analysis専用にし、実行時featureは `prev_*`, 月内trade count, prior-only contextに限定する。
 5. `isolated_large_loss_long + fixed720 + threshold -5 + residual combo block` はdiagnostic branchとして維持し、標準policyにはしない。
@@ -250,3 +255,4 @@
 46. `00303_2026-07-02_entry_ev_path_compensation_diagnostics.md`
 47. `00304_2026-07-02_entry_ev_uncompensated_loss_head.md`
 48. `00305_2026-07-02_entry_ev_uncompensated_sequence_state.md`
+49. `00306_2026-07-02_entry_ev_uncompensated_candidate_path.md`

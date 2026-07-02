@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 15:56 JST
+最終更新: 2026-07-02 16:15 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV uncompensated candidate-path diagnosticsを追加した。00305の次アクションとして、uncompensated targetを単発row gateではなく、00293 residual combo overlayのrealized candidate path variantごとに比較する `scripts/experiments/entry_ev_uncompensated_candidate_path_diagnostics.py` を実装した。正式run `s4` は `selector_variant` をpath variantとして扱い、`entry_blocked` を除外する。00293 best branchは232 trades / total `+329.4348` / role min `+0.5354` / month min `-0.7200` / uncompensated target 22件で、候補群内ではmonth floorが最も良い。target数とtotal PnLの相関は `+0.0502` と弱く、target数とmonth floorの相関は `+0.5674`。target countの単純最小化やdirect blockはreject。判断: realized candidate-path diagnosticsはaccepted、次は未選択entry候補feedを使うstateful replacement replayへ進む。詳細は `docs/reports/00306_2026-07-02_entry_ev_uncompensated_candidate_path.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV uncompensated sequence-state diagnosticsを追加した。00304のuncompensated-loss headをdirect gateで押し続けず、selected-trade path上の前後trade結果、月内trade数、前回exitからのgap、同方向/同context継続、target周辺のwinner availabilityを分解する `scripts/experiments/entry_ev_uncompensated_sequence_state_diagnostics.py` を実装した。`pnl/base/base` は232 trades / total `+329.4348` / target 22件で、targetは `>10` trade月に18/22、次trade勝ちに15/22、前回勝ち後に12/22、short側に16/22が集中した。high-risk threshold除去は96本すべて悪化し、positive block deltaは0本、最小悪化でも flagged PnL `+5.6900`。判断: sequence-state diagnosticsはaccepted、uncompensated-risk probabilityのdirect gateはreject。次はcandidate-level selector / stateful replayでreplacement / skipped next winner / missed future candidateを明示的に扱う。詳細は `docs/reports/00305_2026-07-02_entry_ev_uncompensated_sequence_state.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

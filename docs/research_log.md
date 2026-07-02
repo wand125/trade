@@ -4,6 +4,40 @@
 
 ## 2026-07-02 JST
 
+### 16:15 Entry EV uncompensated candidate-path diagnostics
+
+作業:
+
+- 00305の次アクションとして、uncompensated targetを単発row gateではなく、realized candidate path variantごとに比較する診断を追加した。
+- `scripts/experiments/entry_ev_uncompensated_candidate_path_diagnostics.py` を追加し、context-month compensation、sequence state、monthly path summary、candidate summary、target rowsを出せるようにした。
+- `tests/test_entry_ev_uncompensated_candidate_path_diagnostics.py` を追加した。
+- `selector_variant` をpath variantとして扱い、`entry_blocked` はデフォルトで除外するようにした。
+- report: `docs/reports/00306_2026-07-02_entry_ev_uncompensated_candidate_path.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 正式runは `data/reports/backtests/20260702_071443_20260702_entry_ev_uncompensated_candidate_path_s4/`。
+- 入力は00293 residual combo overlayの `entry_block_overlay_trades.csv`。`s1` から `s3` は `entry_blocked` exclusion前またはvariant解釈調整中の中間出力として採用しない。
+- 00293 best branchは232 trades / total `+329.4348` / role min `+0.5354` / month min `-0.7200` / uncompensated target 22件。
+- uncompensated target countとtotal PnLの相関は `+0.0502` と弱く、month PnL minとの相関は `+0.5674`。
+- `t-5_hpredicted` residual comboはtotal `+351.2472` だがmonth min `-23.5914`。`t-5_h720` no entry-blockはtarget 20件でもmonth min `-112.1634`。
+- best branchでもtarget 22件 / target PnL `-115.0848` は残るが、候補群内ではmonth floorが最も安定している。
+
+判断:
+
+- realized candidate-path diagnosticsはaccepted。
+- target countの単純最小化、uncompensated probabilityのdirect hard gateはreject。
+- realized path variant診断をfull replacement replay evidenceとして扱わない。
+- 次は未選択entry候補feedを使うstateful replacement replayへ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_uncompensated_candidate_path_diagnostics.py tests/test_entry_ev_uncompensated_candidate_path_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_uncompensated_candidate_path_diagnostics`: OK
+- uncompensated candidate-path diagnostics run `s4`: OK
+
 ### 15:41 Entry EV uncompensated-loss head
 
 作業:
