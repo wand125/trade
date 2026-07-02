@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 13:26 JST
+最終更新: 2026-07-02 13:38 JST
 
 ## 結論
 
@@ -22,15 +22,17 @@
 
 `00292` で既存stateful pathへ観測可能featureをjoinするentry-block no-replacement overlayを追加した。hybrid 2025-12のproblem short 1件を `short_rollover_lossprob_ge0p4` などの狭い条件で除去すると、best side-horizon candidateは total `+323.5700`, month min `-2.4566` まで改善した。ただし1件blockで過学習リスクが高く、strict/floor-only selectorもNoTrade。次はrefit2025 2025-03/08の残存floorを診断する。
 
+`00293` でrefit2025 2025-03/08と2025-08の残存floorを診断し、London short mid-loss block、hold-extension false-positive block、00292のshort rollover blockを合成した。best comboは total `+329.4348`, role min `+0.5354`, month min `-0.7200` まで改善し、refit2025 2025-03は `-2.4566 -> -0.4730`、refit2025 2025-08は `-2.1480 -> 0.0000` になった。ただし24件blockのno-replacement overlayで、strict selectorは `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high`、floor-only selectorも `month_pnl_below_floor` によりNoTrade。remaining sparse negative monthsを単発blacklistで追わず、full stateful policyへ昇格できる構造か確認する。
+
 ## 現在の判断
 
 | 項目 | 判断 |
 |---|---|
 | Standard policy | なし。NoTrade-firstを維持 |
-| Current diagnostic candidate | q95 + raw `loss_exit30_cd15` dynamic exit cooldown + side-aware hold-extension + entry-block overlay diagnostic。`isolated_large_loss_long + fixed720 + threshold -5 + short rollover block` はtotal/floorを改善するがfloor未達のためdiagnostic止まり |
-| Why not standard | 00292 bestもmonth min `-2.4566` でNoTrade-first floorを通らない。entry blockは1件だけを拾うため過学習リスクが高く、no-replacement overlayはfull stateful replacement replayではない |
-| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / isolated large-loss capture failure / fixed-horizon improvement target / chronological hold-extension predicted delta / side-aware fixed horizon replay / stateful extension skip impact / selected-side capture ratio / short rollover loss-first block diagnostics / supervised shrinkage and downside meta features |
-| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May/September tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足、no-replay改善をpolicy evidenceと誤読すること、1件blockを堅牢なedgeと誤読すること、extensionで直せない `target_best_delta=0.0` の損失へextensionを無理に当てること |
+| Current diagnostic candidate | q95 + raw `loss_exit30_cd15` dynamic exit cooldown + side-aware hold-extension + residual combo entry-block overlay diagnostic。`isolated_large_loss_long + fixed720 + threshold -5 + short rollover / London mid-loss / hold-extension false-positive block` は total `+329.4348`, role min `+0.5354`, month min `-0.7200` まで改善したがfloor未達のためdiagnostic止まり |
+| Why not standard | 00293 bestもmonth min `-0.7200` でNoTrade-first floorを通らない。24件blockのno-replacement overlayで、role/month trade supportとside shareもselector blockerに残るためfull stateful policy evidenceではない |
+| Useful signal | exit-regret / loss-first dynamic exit / replacement-stateful-net / same-side missed loss / low-capture loss / isolated large-loss capture failure / fixed-horizon improvement target / chronological hold-extension predicted delta / side-aware fixed horizon replay / stateful extension skip impact / selected-side capture ratio / short rollover loss-first block diagnostics / London short mid-loss block diagnostics / hold-extension false-positive block diagnostics / supervised shrinkage and downside meta features |
+| Main risk | 勝ちtrade削除、only-candidate replacement悪化、high-score losing tail、May/September tail、q99/q95 same-window selection、support緩和によるrole PnL崩壊、別familyでのPnL再現不足、no-replay改善をpolicy evidenceと誤読すること、1件/少数件blockを堅牢なedgeと誤読すること、extensionで直せない `target_best_delta=0.0` の損失へextensionを無理に当てること、remaining sparse negative monthsを単発blacklistで追うこと |
 
 ## 研究レーン
 
@@ -40,7 +42,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00292` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、00285でdownside soft marginもreject。00286でstateful floor selectorを追加し、現候補群は全てNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。00288でisolated large-loss capture failureを特定し、一律fixed horizonはfloor悪化でreject。00289でhold-extension choice targetを学習し、`isolated_loss` training + `isolated_large_loss` threshold 5を次のfull replay候補にした。00290でstateful replayに接続しtotal改善は維持したがmonth floor未達でNoTrade。00291でside-aware fixed 720mはtotal/floorを改善。00292でhybrid 2025-12 shortをentry block overlayで消したが、1件blockかつfloor未達のためdiagnostic止まり。 |
+| Component / exit-regret | `00240`..`00293` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、00285でdownside soft marginもreject。00286でstateful floor selectorを追加し、現候補群は全てNoTrade。00287でpost-exit pathを分解し、broad post-loss cooldownは勝ちを削ると確認。00288でisolated large-loss capture failureを特定し、一律fixed horizonはfloor悪化でreject。00289でhold-extension choice targetを学習し、`isolated_loss` training + `isolated_large_loss` threshold 5を次のfull replay候補にした。00290でstateful replayに接続しtotal改善は維持したがmonth floor未達でNoTrade。00291でside-aware fixed 720mはtotal/floorを改善。00292でhybrid 2025-12 shortをentry block overlayで消し、00293でrefit2025 2025-03/08 residual floorも縮めたが、no-replacement overlayかつfloor未達のためdiagnostic止まり。 |
 
 ## 採用済みインフラ
 
@@ -79,6 +81,7 @@
 - stateful hold-extension replay and selector-compatible monthly metrics
 - side-aware fixed-horizon hold-extension replay
 - stateful entry-block no-replacement overlay diagnostics
+- residual floor combo entry-block overlay diagnostics
 
 ## 採用しないもの
 
@@ -126,13 +129,15 @@
 - target_best_deltaが `0.0` の損失をhold-extensionで直そうとすること
 - 1件だけを拾うentry block ruleを標準policyとして扱うこと
 - no-replacement entry block overlayをfull stateful replacement replayとして扱うこと
+- residual combo blockをmonth floor未達のまま標準policyとして扱うこと
+- remaining sparse negative monthsを単発blacklistで追うこと
 
 ## 次にやること
 
-1. refit2025 2025-03 `-2.4566` と2025-08 `-2.1480` の残存floorを診断する。
-2. それらが孤立loss、post-exit path、entry block、exit-captureのどれに属するかを分解する。
-3. `isolated_large_loss_long + fixed720 + threshold -5` とshort rollover blockはdiagnostic branchとして維持し、標準policyにはしない。
-4. 新しい対策をno-replacement診断ではなくfull stateful replayと00286 selectorへ戻す。
+1. remaining sparse negative monthsを単発blacklist化せず分析する。
+2. hybrid 2025-11 `-0.7200`、fresh2024 2024-11 `-0.6120`、fresh2024 2024-03 `-0.3636` がentry block、exit-capture、support不足のどれに属するかを分解する。
+3. `isolated_large_loss_long + fixed720 + threshold -5 + residual combo block` はdiagnostic branchとして維持し、標準policyにはしない。
+4. 新しい対策をno-replacement診断ではなくfull stateful replayと00286 selectorへ戻せる場合だけ候補化する。
 5. role trade support、role PnL、month floor、side share、NoTrade-first比較を標準採用ゲートとして維持する。
 
 ## 最短で読む順
@@ -172,3 +177,4 @@
 33. `00290_2026-07-02_entry_ev_hold_extension_stateful_replay.md`
 34. `00291_2026-07-02_entry_ev_hold_extension_side_horizon_replay.md`
 35. `00292_2026-07-02_entry_ev_stateful_entry_block_overlay.md`
+36. `00293_2026-07-02_entry_ev_residual_floor_combo_overlay.md`

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 13:26 JST
+最終更新: 2026-07-02 13:38 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV residual floor combo overlayを追加した。00292で残ったrefit2025 2025-03/08 floorに対し、entry-block overlayへ `short_london_midloss_sidegap_pos`, `holdext_long_range_normal_ny`, `short_rollover_or_london_midloss_or_holdext_range_ny` を追加した。bestは `isolated_large_loss_long_t-5_h720 + combo block` で total `+329.4348`, role min `+0.5354`, month min `-0.7200`。ただし24件blockのno-replacement overlayで、strict/floor-only selectorはNoTrade。判断: residual combo overlayはaccepted diagnostic、標準policyはNoTrade。次はremaining sparse negative monthsを単発blacklist化せず分析し、full stateful replacement replayへ昇格できる条件か確認する。詳細は `docs/reports/00293_2026-07-02_entry_ev_residual_floor_combo_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV stateful entry block overlayを追加した。00291で残ったhybrid 2025-12 short `-4.1460` に対し、既存stateful trade pathへ観測可能featureをjoinし、entry block ruleをno-replacement overlayで月次/selector形式へ戻す `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` を実装した。best side-horizon候補 `isolated_large_loss_long + fixed720 + threshold -5` に狭いshort rollover blockを重ねると、problem trade 1件を除去し total `+318.8540 -> +323.5700`, month min `-4.1460 -> -2.4566` へ改善。ただしstrict/floor-only selectorはNoTradeで、1件blockは過学習リスクが高い。判断: entry block overlay infrastructureはaccepted、ruleはdiagnostic、標準policyはNoTrade。次はrefit2025 2025-03/08の残存floorを診断する。詳細は `docs/reports/00292_2026-07-02_entry_ev_stateful_entry_block_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

@@ -17,6 +17,8 @@ def stateful_row(
     entry_minute: int,
     pnl: float,
     month: str = "2025-12",
+    hold_extension_applied: bool = False,
+    holding_minutes: float = 1.0,
 ) -> dict[str, object]:
     start = pd.Timestamp("2025-12-01 00:00:00+00:00")
     entry_time = start + pd.Timedelta(minutes=entry_minute)
@@ -33,8 +35,10 @@ def stateful_row(
         "direction": direction,
         "entry_timestamp": entry_time,
         "entry_decision_timestamp": entry_time - pd.Timedelta(minutes=1),
-        "exit_timestamp": entry_time + pd.Timedelta(minutes=1),
+        "exit_timestamp": entry_time + pd.Timedelta(minutes=holding_minutes),
         "adjusted_pnl": pnl,
+        "holding_minutes": holding_minutes,
+        "hold_extension_applied": hold_extension_applied,
     }
 
 
@@ -102,6 +106,80 @@ class EntryEvStatefulEntryBlockOverlayTest(unittest.TestCase):
         self.assertEqual(
             entry_block_mask(frame, "short_rollover_sidegap_neg_lossprob_ge0p4").tolist(),
             [True, False],
+        )
+
+    def test_entry_block_mask_supports_residual_floor_rules(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    "direction": "short",
+                    "session_regime": "london",
+                    "combined_regime": "range_low_vol",
+                    "volatility_regime": "low_vol",
+                    "selected_loss_first_prob": 0.4,
+                    "pred_side_confidence_gap": 0.1,
+                    "pred_taken_entry_local_rank": 0.5,
+                    "entry_hour": 9,
+                    "holding_minutes": 1.0,
+                    "hold_extension_applied": False,
+                },
+                {
+                    "direction": "long",
+                    "session_regime": "ny_overlap",
+                    "combined_regime": "range_normal_vol",
+                    "volatility_regime": "normal_vol",
+                    "selected_loss_first_prob": 0.2,
+                    "pred_side_confidence_gap": 0.1,
+                    "pred_taken_entry_local_rank": 0.5,
+                    "entry_hour": 15,
+                    "holding_minutes": 720.0,
+                    "hold_extension_applied": True,
+                },
+                {
+                    "direction": "long",
+                    "session_regime": "ny_overlap",
+                    "combined_regime": "range_normal_vol",
+                    "volatility_regime": "normal_vol",
+                    "selected_loss_first_prob": 0.2,
+                    "pred_side_confidence_gap": 0.1,
+                    "pred_taken_entry_local_rank": 0.5,
+                    "entry_hour": 15,
+                    "holding_minutes": 1.0,
+                    "hold_extension_applied": False,
+                },
+                {
+                    "direction": "short",
+                    "session_regime": "rollover",
+                    "combined_regime": "down_high_vol",
+                    "volatility_regime": "high_vol",
+                    "selected_loss_first_prob": 0.44,
+                    "pred_side_confidence_gap": 0.1,
+                    "pred_taken_entry_local_rank": 0.5,
+                    "entry_hour": 23,
+                    "holding_minutes": 1.0,
+                    "hold_extension_applied": False,
+                },
+            ]
+        )
+
+        self.assertEqual(
+            entry_block_mask(frame, "short_london_midloss_sidegap_pos").tolist(),
+            [True, False, False, False],
+        )
+        self.assertEqual(
+            entry_block_mask(frame, "holdext_long_range_normal_ny").tolist(),
+            [False, True, False, False],
+        )
+        self.assertEqual(
+            entry_block_mask(frame, "short_london_midloss_or_holdext_range_ny").tolist(),
+            [True, True, False, False],
+        )
+        self.assertEqual(
+            entry_block_mask(
+                frame,
+                "short_rollover_or_london_midloss_or_holdext_range_ny",
+            ).tolist(),
+            [True, True, False, True],
         )
 
     def test_summarize_overlay_blocks_matching_trade(self) -> None:

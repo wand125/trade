@@ -36,7 +36,11 @@ DEFAULT_BLOCK_RULES = (
     "short_down_high_vol_rollover,"
     "short_down_high_vol_rollover_lossprob_ge0p4,"
     "short_rollover_entry_rank_lt0p5,"
-    "short_entry_hour_23_lossprob_ge0p4"
+    "short_entry_hour_23_lossprob_ge0p4,"
+    "short_london_midloss_sidegap_pos,"
+    "holdext_long_range_normal_ny,"
+    "short_london_midloss_or_holdext_range_ny,"
+    "short_rollover_or_london_midloss_or_holdext_range_ny"
 )
 DEFAULT_GROUP_EXTRA_COLUMNS = ["apply_universe", "threshold", "horizon_mode"]
 FEATURE_COLUMNS = [
@@ -150,6 +154,7 @@ def entry_block_mask(frame: pd.DataFrame, rule: str) -> pd.Series:
     if rule == "none":
         return pd.Series(False, index=frame.index, dtype=bool)
     short = frame["direction"].astype(str).eq("short")
+    long = frame["direction"].astype(str).eq("long")
     rollover = string_series(frame, "session_regime").eq("rollover")
     high_vol = string_series(frame, "volatility_regime").eq("high_vol")
     down_high_vol = string_series(frame, "combined_regime").eq("down_high_vol")
@@ -157,6 +162,11 @@ def entry_block_mask(frame: pd.DataFrame, rule: str) -> pd.Series:
     side_gap = numeric_series(frame, "pred_side_confidence_gap", default=np.inf)
     entry_rank = numeric_series(frame, "pred_taken_entry_local_rank", default=np.inf)
     entry_hour = numeric_series(frame, "entry_hour", default=-1.0)
+    holding_minutes = numeric_series(frame, "holding_minutes", default=np.inf)
+    hold_extension_applied = frame.get("hold_extension_applied", False)
+    if not isinstance(hold_extension_applied, pd.Series):
+        hold_extension_applied = pd.Series(False, index=frame.index, dtype=bool)
+    hold_extension_applied = hold_extension_applied.fillna(False).astype(bool)
 
     if rule == "short_rollover":
         return short & rollover
@@ -176,6 +186,32 @@ def entry_block_mask(frame: pd.DataFrame, rule: str) -> pd.Series:
         return short & rollover & entry_rank.lt(0.5)
     if rule == "short_entry_hour_23_lossprob_ge0p4":
         return short & entry_hour.eq(23.0) & loss_first.ge(0.4)
+    if rule == "short_london_midloss_sidegap_pos":
+        return (
+            short
+            & string_series(frame, "session_regime").eq("london")
+            & loss_first.between(0.3, 0.45)
+            & side_gap.gt(0.0)
+        )
+    if rule == "holdext_long_range_normal_ny":
+        return (
+            hold_extension_applied
+            & long
+            & string_series(frame, "combined_regime").eq("range_normal_vol")
+            & string_series(frame, "session_regime").eq("ny_overlap")
+            & holding_minutes.ge(720.0)
+        )
+    if rule == "short_london_midloss_or_holdext_range_ny":
+        return entry_block_mask(frame, "short_london_midloss_sidegap_pos") | entry_block_mask(
+            frame,
+            "holdext_long_range_normal_ny",
+        )
+    if rule == "short_rollover_or_london_midloss_or_holdext_range_ny":
+        return (
+            entry_block_mask(frame, "short_rollover_lossprob_ge0p4")
+            | entry_block_mask(frame, "short_london_midloss_sidegap_pos")
+            | entry_block_mask(frame, "holdext_long_range_normal_ny")
+        )
     raise ValueError(f"unknown entry block rule: {rule}")
 
 

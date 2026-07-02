@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 13:38 Entry EV residual floor combo overlay
+
+作業:
+
+- 00292で残ったrefit2025 2025-03/08 floorを、entry-block overlay上で追加診断した。
+- `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` に `short_london_midloss_sidegap_pos`, `holdext_long_range_normal_ny`, `short_rollover_or_london_midloss_or_holdext_range_ny` を追加した。
+- `tests/test_entry_ev_stateful_entry_block_overlay.py` にresidual floor向けruleのmask testを追加した。
+- report: `docs/reports/00293_2026-07-02_entry_ev_residual_floor_combo_overlay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- best branchは `loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720__entryblock_short_rollover_or_london_midloss_or_holdext_range_ny`。
+- total `+323.5700 -> +329.4348`, month min `-2.4566 -> -0.7200`, role min `+0.0074 -> +0.5354`。
+- refit2025 2025-03は `-2.4566 -> -0.4730`、refit2025 2025-08は `-2.1480 -> 0.0000`、hybrid 2025-12は `-4.1460 -> +0.5700`。
+- strict selectorは `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high`、floor-only selectorも `month_pnl_below_floor` でNoTrade。
+
+判断:
+
+- residual floor combo overlay diagnosticsはaccepted。
+- `short_london_midloss_sidegap_pos` と `holdext_long_range_normal_ny` は診断ruleとして残す。
+- 24件blockのno-replacement overlayをfull stateful policy evidenceとは扱わない。
+- remaining sparse negative monthsを単発blacklistで追わない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_stateful_entry_block_overlay.py tests/test_entry_ev_stateful_entry_block_overlay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_stateful_entry_block_overlay`: OK
+- residual combo overlay run: OK
+- strict / floor-only 00286 selector: OK
+
 ### 13:26 Entry EV stateful entry block overlay
 
 作業:
