@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 19:40 JST
+最終更新: 2026-07-02 19:53 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV admission repair target diagnosticsを追加した。00316の次アクションとして、support-limited negative months と side-share blockersを、standard admissionへ近づくための修復targetに分解した。00314 best overlay (`fixed60_margin_w5 + holdext/position-quality`) ではmonth PnL不足は合計 `+2.1686` と小さい一方、support/side修復には月別に `8` extra trades が必要で、内訳は long `5` / short `3`。00310 referenceと00314 w5は同じrepair targetであり、00314はtotalを改善したがstandard admission readinessは改善していない。判断: admission repair target diagnosticsはaccepted infrastructure、次はrow削除ではなくthin monthへ反対側候補を作れるentry coverage / side-balance designを検証する。標準policyはNoTrade。詳細は `docs/reports/00317_2026-07-02_entry_ev_admission_repair_targets.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV fixed60 margin prior shrinkageを追加した。00315の次アクションとして、00314 family-aware w5のrefit集中改善を粗いpriorへ寄せても再現できるか検証した。`scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py` に prior shrinkageを追加し、child `family,direction,combined_regime,session_regime` を parent `direction,combined_regime,session_regime` へ疑似カウントalphaで寄せるscore kindを生成できるようにした。w0 controlは baseline `+126.8118` を再現したが、best shrink raw replayは `s2_w5` の `+107.0324` / 242 trades / month min `-6.8324` で、00314 family-aware w5 raw `+139.1098` を大きく下回った。判断: prior shrinkage実装はaccepted infrastructure、current shrinkage policyはreject、標準policyはNoTrade。詳細は `docs/reports/00316_2026-07-02_entry_ev_fixed60_margin_prior_shrinkage.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

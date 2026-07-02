@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 19:40 JST
+最終更新: 2026-07-02 19:53 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00316` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00312でfixed60 false-positiveをprior-only uncertainty featureへ戻し、00313でuncertainty headのAP改善を確認したがdirect thresholdは勝ちtradeを削るためreject。00314でfixed60 uncertaintyをsoft marginへ戻し、family-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00315でtrade-set deltaを確認し、00314改善はrefit2025の少数removed tradeに集中、added 0 / common_changed 0 と判明。00316でfamily priorを粗いpriorへshrinkするとbest raw `+107.0324` まで落ち、current shrinkage policyはreject。標準policyはNoTrade。 |
+| `00258`..`00317` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00312でfixed60 false-positiveをprior-only uncertainty featureへ戻し、00313でuncertainty headのAP改善を確認したがdirect thresholdは勝ちtradeを削るためreject。00314でfixed60 uncertaintyをsoft marginへ戻し、family-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00315でtrade-set deltaを確認し、00314改善はrefit2025の少数removed tradeに集中、added 0 / common_changed 0 と判明。00316でfamily priorを粗いpriorへshrinkするとbest raw `+107.0324` まで落ち、current shrinkage policyはreject。00317でstandard admission repair targetを計算し、PnL不足は `+2.1686` と小さいが、side/support修復に `8` extra tradesが必要で、00310と00314のrepair targetは同じと確認。標準policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00316` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00316のprior shrinkageでは粗いpriorへ寄せるとraw performanceが落ち、current shrinkage policyはreject。support2/shallow025では引き続きblockedで、標準policyはNoTrade。 |
+| Latest decision | `00258`..`00317` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00316のprior shrinkageでは粗いpriorへ寄せるとraw performanceが落ち、current shrinkage policyはreject。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。support2/shallow025では引き続きblockedで、標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -92,6 +92,7 @@
 57. `00314_2026-07-02_entry_ev_fixed60_uncertainty_soft_margin.md`
 58. `00315_2026-07-02_entry_ev_fixed60_margin_trade_set_delta.md`
 59. `00316_2026-07-02_entry_ev_fixed60_margin_prior_shrinkage.md`
+60. `00317_2026-07-02_entry_ev_admission_repair_targets.md`
 
 component targetの流れを読む:
 
@@ -138,10 +139,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00316 Entry EV Fixed60 Margin Prior Shrinkage
-Status: accepted infrastructure / shrinkage policy rejected / standard NoTrade
-Question: 00314 family-aware w5改善を粗いpriorへ寄せても再現できるか
-Best evidence: w0 controlは +126.8118 を再現したが、best shrink rawは s2_w5 +107.0324 / month min -6.8324 で、00314 family-aware w5 raw +139.1098 を下回った。
+Report: 00317 Entry EV Admission Repair Targets
+Status: accepted infrastructure / standard NoTrade
+Question: standard admissionへ近づくために、PnL floor / month support / side-shareをどれだけ修復する必要があるか
+Best evidence: 00314 best overlayのPnL不足は合計 +2.1686 と小さいが、side/support修復には long 5 / short 3 の 8 extra trades が必要。00310 referenceと00314 w5のrepair targetは同じ。
 Decision: 標準policyはNoTrade
-Next: calibrated EV uncertaintyとsupport-limited negative months / side-share対策へ進む
+Next: thin monthsのnear-miss opposite-side candidatesとside-balanced support overlayを検証する
 ```

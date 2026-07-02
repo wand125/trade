@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 19:53 Entry EV admission repair targets
+
+作業:
+
+- 00316の次アクションとして、support-limited negative months と side-share blockersをstandard admissionへ戻すための修復targetへ分解した。
+- `scripts/experiments/entry_ev_admission_repair_target_diagnostics.py` を追加し、monthly metricsから月別PnL hurdle、追加long/short trade数、role support修復後の状態を算出できるようにした。
+- report: `docs/reports/00317_2026-07-02_entry_ev_admission_repair_targets.md`
+
+結果:
+
+- 00314 best overlay (`holdext_long_range_normal_ny` / `long_range_normal_ny_fixed60_pred_gt0`) は total `+339.2910` だが、standard blockersは引き続き `month_pnl_below_floor,role_trades_low,month_trades_low,side_share_high`。
+- month PnL hurdleは合計 `+2.1686` と小さい。
+- 一方、standard side/supportを満たすには月別に `8` extra trades が必要で、内訳は long `5` / short `3`。
+- 00310 referenceと00314 w5は同じ repair targetになり、00314 w5はtotalを改善したがstandard-admission readinessは改善していない。
+
+判断:
+
+- admission repair target diagnosticsはaccepted infrastructure。
+- 次はthin monthのnear-miss opposite-side candidatesを探し、entry coverage / side balanceを増やせるか確認する。
+- row削除だけでsupport-aware blockersを解く方向は本流にしない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_admission_repair_target_diagnostics.py tests/test_entry_ev_admission_repair_target_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_admission_repair_target_diagnostics`: OK
+- `uv run python -m unittest tests.test_entry_ev_admission_repair_target_diagnostics tests.test_docs_reports`: OK
+- `git diff --check`: OK
+- 00317 admission repair target runs: OK
+
 ### 19:40 Entry EV fixed60 margin prior shrinkage
 
 作業:
