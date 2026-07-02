@@ -7133,3 +7133,34 @@ trade delta:
 - `uv run python -m unittest tests.test_entry_ev_stateful_floor_meta_selector`: OK
 - stateful floor selector run: OK
 - floor-only audit run: OK
+
+### 2026-07-02 12:18 JST Entry EV post-exit path diagnostics
+
+作業:
+
+- 00286の次アクションとして、raw `loss_exit30_cd15` benchmarkのtrade CSVを統合し、post-exit re-entry pathを診断した。
+- `scripts/experiments/entry_ev_post_exit_path_diagnostics.py` を追加し、前回trade結果、前回exitからの経過分、同方向再入、月別PnL、cooldown no-replacement estimateを出力するようにした。
+- report: `docs/reports/00287_2026-07-02_entry_ev_post_exit_path_diagnostics.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| path bucket | trades | total pnl | large losses | reading |
+|---|---:|---:|---:|---|
+| first | `23` | `-10.3524` | `6` | 初回/孤立大損が残る |
+| prev_non_loss | `135` | `+6.1132` | `16` | 前回勝ち後の大損も混ざる |
+| prev_loss | `108` | `+122.9292` | `13` | 広いpost-loss blockは勝ちを削る |
+| prev <= -2, cd60 no-replacement | `11 flagged` | `+127.1674 kept` | `2 flagged` | totalは改善するがmonth floorは負 |
+
+判断:
+
+- post-exit path diagnostic infrastructureはaccepted。
+- `prev_adjusted_pnl <= -2` かつ60分以内の再入除去はno-replacement上は `+8.4774` 改善するが、month floorは `-6.7236` のまま負で標準policyにはしない。
+- 単純なpost-loss cooldown拡張はreject。
+- 次はentry削除ではなく、初回/孤立大損と前回勝ち後の大損に対するexit-capture改善へ戻る。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_post_exit_path_diagnostics.py tests/test_entry_ev_post_exit_path_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_post_exit_path_diagnostics`: OK
+- raw cd15 post-exit diagnostics run: OK

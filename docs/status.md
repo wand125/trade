@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 12:07 JST
+最終更新: 2026-07-02 12:18 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV post-exit path diagnosticsを追加した。00286の次アクションとして、raw `loss_exit30_cd15` benchmarkのtrade CSVを統合し、前回trade結果、前回exitからの経過分、同方向再入、月別PnL、cooldown no-replacement estimateを診断する `scripts/experiments/entry_ev_post_exit_path_diagnostics.py` を実装した。合計は266 trades / total `+118.6900` で00286と一致。`prev_loss` 後のtradeは `+122.9292` と強く、広いpost-loss blockは勝ちを削る。最良のno-replacement診断 `prev_adjusted_pnl <= -2` かつ60分以内の再入除去は flagged PnL `-8.4774`, kept total `+127.1674` だが、month floorは `-6.7236` のまま負。判断: post-exit path diagnostic infrastructureはaccepted、単純なpost-loss cooldown拡張はreject。次はentry削除ではなく、初回/孤立大損と前回勝ち後の大損に対するexit-capture改善へ戻る。詳細は `docs/reports/00287_2026-07-02_entry_ev_post_exit_path_diagnostics.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV stateful floor meta selectorを追加した。00285の結論どおりscore arithmeticを止め、複数runの `monthly_exit_timing_metrics.csv` をsource単位で結合し、candidateごとに total PnL、role min、month min、support、side share、floor-aware utilityを集計する横断selectorを実装した。raw cd15 baseline、downside hard block、soft margin、supervised shrinkage replacement / q96-q99 sweepを比較したところ、strict gate通過候補はなし。floor-only条件でも候補なし。最上位は raw cd15 baseline と no-opの `gte3` で total `+118.6900`, role min `+0.0074`, month min `-6.8324`。判断: candidate-level selector infrastructureはaccepted、現候補群ではNoTrade。次はscore gatingではなく、raw cd15 losing monthsのstateful path、特にexit timing/cooldown/post-exit re-entry qualityを改善する。詳細は `docs/reports/00286_2026-07-02_entry_ev_stateful_floor_meta_selector.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
