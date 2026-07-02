@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 14:21 Entry EV month warmup overlay
+
+作業:
+
+- 00296の次アクションとして、remaining thin-support negative monthsを単発blacklistではなく月内サポート形成待ちで扱えるか診断した。
+- `scripts/experiments/entry_ev_month_warmup_overlay.py` を追加し、既存entry-block overlay trade pathへ `skip_first_N` / `wait_opposite_seen` / `wait_both_sides_seen` をno-replacementで重ねられるようにした。
+- `tests/test_entry_ev_month_warmup_overlay.py` を追加した。
+- report: `docs/reports/00297_2026-07-02_entry_ev_month_warmup_overlay.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 対象は00296 diagnostic benchmark branch。
+- baseline `none` は total `+329.4348`, month min `-0.7200`。
+- `skip_first_1` は total `+275.3470`, delta `-54.0878`, month min `-1.9596` へ悪化。
+- `wait_opposite_seen` / `wait_both_sides_seen` は totalとrole/month floorを大きく壊した。
+- support-aware上は `skip_first_1` も `support_aware_only` だが、totalとmonth floorが悪化するため改善とは扱わない。
+
+判断:
+
+- month-warmup overlay diagnosticsはaccepted infrastructure。
+- 現warmup rulesは勝ちtradeを削るためreject。
+- thin-support residual monthsを広い月初warmupで解く方向は本流にしない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_month_warmup_overlay.py tests/test_entry_ev_month_warmup_overlay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_month_warmup_overlay`: OK
+- warmup overlay run: OK
+- support-aware check run: OK
+
 ### 14:09 Entry EV support-aware progression compare
 
 作業:

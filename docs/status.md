@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 14:09 JST
+最終更新: 2026-07-02 14:21 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV month warmup overlayを追加した。00296の次アクションとして、remaining thin-support negative monthsを単発blacklistではなく月内サポート形成待ちで扱えるか診断する `scripts/experiments/entry_ev_month_warmup_overlay.py` を実装した。00296 diagnostic benchmark branchに対し、`skip_first_1` は total `+329.4348 -> +275.3470`, month min `-0.7200 -> -1.9596` へ悪化し、`wait_opposite_seen` / `wait_both_sides_seen` はさらに悪化。判断: month-warmup overlay diagnosticsはaccepted infrastructure、現warmup rulesはreject、標準policyはNoTrade。詳細は `docs/reports/00297_2026-07-02_entry_ev_month_warmup_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV support-aware progression compareを追加した。00295のsupport-aware分類を、raw cd15、00290 hold-extension、00291 side horizon、00292 entry block、00293 residual comboへ横断適用した。default条件で `support_aware_only` になったのは00293 residual comboだけで、bestは total `+329.4348`, role min `+0.5354`, month min `-0.7200`, structural negative months `0`。一方でsupport-limited許容を2に下げる、またはshallow floorを `-0.25` へ厳しくするとblocked。判断: support-aware分類は候補系列の進歩を説明する診断としてaccepted、標準policyはNoTrade。詳細は `docs/reports/00296_2026-07-02_entry_ev_support_aware_progression_compare.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
