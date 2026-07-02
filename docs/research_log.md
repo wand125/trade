@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 18:06 Entry EV fixed60 prior uncertainty head
+
+作業:
+
+- 00312の `prior_fixed_*` featureをchronological OOF headへ接続した。
+- `scripts/experiments/entry_ev_fixed60_prior_uncertainty_head.py` を追加し、`fixed_false_positive` と `is_loss` の `base` vs `base_fixed_prior` を比較できるようにした。
+- role/family/group_keyを含むdefault runと、それらを外したnorole runを実施した。
+- `tests/test_entry_ev_fixed60_prior_uncertainty_head.py` を追加した。
+- report: `docs/reports/00313_2026-07-02_entry_ev_fixed60_prior_uncertainty_head.md`
+
+結果:
+
+- `fixed_false_positive` では、fine contextで `base_fixed_prior` がAPを改善した。defaultは `0.4642 -> 0.4765`、noroleは `0.4616 -> 0.4816`。
+- `is_loss` は分類として弱く、prior追加で安定改善しなかった。
+- ただしhigh-risk threshold / top quantileの取引除外はPnLに変換されない。default `base_fixed_prior` top q95は flagged PnL `+62.0720`、norole top q95も `+7.5910` で、勝ちtradeを削る。
+
+判断:
+
+- fixed60 prior uncertainty headはaccepted infrastructure。
+- `prior_fixed_*` はcontext-local uncertainty featureとして残す。
+- direct hard gateはreject。
+- 次は `pred_fixed60_uncertainty_prob` をsoft calibration / uncertainty marginとしてexpected PnLへ入れる。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_fixed60_prior_uncertainty_head.py tests/test_entry_ev_fixed60_prior_uncertainty_head.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_fixed60_prior_uncertainty_head`: OK
+- 00313 default / norole runs: OK
+
 ### 17:51 Entry EV fixed60 prior uncertainty
 
 作業:

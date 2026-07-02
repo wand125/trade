@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 17:51 JST
+最終更新: 2026-07-02 18:06 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV fixed60 prior uncertainty headを追加した。00312の `prior_fixed_*` featureをchronological OOF headへ接続し、`fixed_false_positive` と `is_loss` の `base` vs `base_fixed_prior` を比較した。`fixed_false_positive` ではfine contextでAPが改善し、default categoricalでは `0.4642 -> 0.4765`、role/family/group_keyを外したnoroleでも `0.4616 -> 0.4816`。一方でhigh-risk threshold除去はPnLに変換されず、default `base_fixed_prior` top q95は flagged PnL `+62.0720`、norole top q95も `+7.5910` で勝ちtradeを削る。判断: fixed60 uncertainty headはaccepted infrastructure、direct hard gateはreject、次はsoft calibration / uncertainty marginとしてexpected PnLへ入れる。詳細は `docs/reports/00313_2026-07-02_entry_ev_fixed60_prior_uncertainty_head.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV fixed60 prior uncertainty diagnosticsを追加した。00311で `long_range_normal_ny_fixed60_pred_gt0` のhard-block昇格を止めたため、短期path過大評価を対象月より前だけのprior featureへ戻した。`entry_ev_short_horizon_prior_uncertainty.py` を追加し、`selected_fixed_60m_pred_pnl > 0` かつ `selected_fixed_60m_actual_pnl < 0` を診断targetにして、context別 `prior_fixed_false_positive_rate`, `prior_fixed_overestimate_mean`, `prior_fixed_uncertainty_pressure` などを生成する。00310 best branchの `entryblock_none` 246 tradesでは、細粒度 `family,direction,combined_regime,session_regime` の `prior_count_ge5_pnl_neg_fp_rate_ge0p4` が4件 / flagged PnL `-11.4360` / final loss precision `1.0000` で00310のrefit集中blockをほぼ再現した。ただし全て `refit2025_validation` で、非refit holdoutでは同rule発火0件。判断: fixed60 prior uncertaintyはaccepted infrastructure / feature候補、hard gate標準化はreject、標準policyはNoTrade。詳細は `docs/reports/00312_2026-07-02_entry_ev_fixed60_prior_uncertainty.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
