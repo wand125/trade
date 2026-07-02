@@ -4,6 +4,33 @@
 
 ## 2026-07-03 JST
 
+### 06:32 Entry EV broad prior horizon-choice ranker
+
+作業:
+
+- 00328の次アクションとして、broad duration priorを静的penaltyではなくchronological horizon-choice ranker/headのfeatureとして使った。
+- `scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py` を追加し、broad train rowsを60/240/720mのhorizon-level examplesへ展開して `pnl / delta_vs_60 / executable / tail_loss / beats_60` headを学習した。
+- report: `docs/reports/00329_2026-07-03_entry_ev_broad_prior_horizon_choice_ranker.md`
+
+結果:
+
+- default complexity (`max_leaf_nodes=8`, `l2=1`) のbestは6本追加、added PnL `+29.2630`、combined `+368.5540`、month min `-0.6120`。00328 direct penalty `+363.0870` は超えたが、00326 hpen0.25 `+374.6110` には届かなかった。
+- tail強化だけではbest combined `+364.4940` に悪化した。
+- 低複雑度版 (`max_leaf_nodes=4`, `l2=5`) は5本追加、added PnL `+63.9770`、combined `+403.2680` まで伸びた。ただしmonth min `-0.6120`、role trade min `3`、remaining extra trades `3` でstandard gateは未通過。
+- fallback許可は低複雑度bestと同じで、fresh2024 2024-03/11のcoverage不足を解かなかった。
+
+判断:
+
+- broad-prior horizon-choice ranker infrastructureはaccepted。
+- 低複雑度rankerはdiagnostic bestとしてaccepted。ただし標準policyはNoTrade。
+- 次はstatic tail thresholdではなく、horizon/context別のprior residualからlower-bound scoreを作る。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00329 default / tail-strong / low-complexity / fallback diagnostics: OK
+
 ### 06:11 Entry EV broad duration prior repair replay
 
 作業:

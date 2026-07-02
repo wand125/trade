@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 06:11 JST
+最終更新: 2026-07-03 06:32 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV broad prior horizon-choice rankerを追加した。00328でbroad duration priorは静的penaltyでは鈍すぎると分かったため、broad train rowsを60/240/720mのhorizon-level examplesへ展開し、target月より前だけで `pnl / delta_vs_60 / executable / tail_loss / beats_60` headを学習した。default complexityはbest added PnL `+29.2630`、combined `+368.5540` で00328 direct penalty `+363.0870` を超えたが、00326 hpen0.25 `+374.6110` には届かなかった。tail強化だけでは `+364.4940` に悪化。低複雑度版 (`max_leaf_nodes=4`, `l2=5`) はadded PnL `+63.9770`、combined `+403.2680` まで伸び、diagnostic bestを更新した。ただしmonth min `-0.6120`、role trade min `3`、remaining extra trades `3`、blockers `month_pnl_below_floor,role_trades_low,side_share_high` が残る。判断: broad-prior horizon-choice ranker infrastructureとlow-complexity diagnostic branchはaccepted、標準policyはNoTrade。次はhorizon/context別prior residualからlower-bound scoreを作る。詳細は `docs/reports/00329_2026-07-03_entry_ev_broad_prior_horizon_choice_ranker.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV broad duration prior repair replayを追加した。00327でsupport-repair-only priorが疎すぎると分かったため、00322 s2 broad candidate universeをtrain rows付きで再生成し、target月より前のbroad rowsからcontext別duration priorを作った。fresh2024 2024-08の `long / down_low_vol / asia / one_failed` priorは48 rows / 6 monthsで、60m mean `+0.9061`、240m mean `+1.7885`、720m mean `-3.4993`、720m delta vs 60m `-4.4053`、tail-loss rate `0.4145`。悪い720mを事前に警告できる。一方、direct penalty replayのbestはadded PnL `+23.7960`、combined `+363.0870` で、00326 hpen0.25の `+374.6110` には届かない。p0.4系では2024-08を720m `-29.1360` から60m `+2.9500` へ切り替えられるが、勝ち候補も削る。判断: broad duration prior infrastructureはaccepted、current direct penaltyはreject、次はpriorを特徴量としてchronological horizon-choice ranker/headへ入れる。標準policyはNoTrade。詳細は `docs/reports/00328_2026-07-03_entry_ev_broad_duration_prior_repair_replay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
