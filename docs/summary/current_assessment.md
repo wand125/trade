@@ -1,6 +1,6 @@
 # Current Assessment
 
-最終更新: 2026-07-02 11:38 JST
+最終更新: 2026-07-02 11:57 JST
 
 ## 結論
 
@@ -8,7 +8,7 @@
 
 現在の標準判断は NoTrade-first。候補policyは、複数chronological window、role/month PnL floor、trade support、side balance、NoTrade比較を通らない限り標準化しない。
 
-直近で最も進んだ候補は exit-regret系から、capture-adjusted score上のcoarse side/regime tail-risk headへ移ったが、外部HGB chronologyで弱い再現に留まった。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたがNoTrade未満。`00273` ではselector前base scoreへ移してq95 `-12.1040` まで戻したが、まだNoTrade未満だった。`00274` では `direction_regime` tail-riskを重ねるとq99が `+3.1260` まで改善したが、3 trades / all-long / month floor未達でadmissionはNoTradeだった。`00275` で外部HGBへ固定適用すると、bestはoverall `-9.1956` と00269比 `+0.3800` の小幅改善に留まり、標準化を支持しなかった。`00276` でexit timingへ戻り、低いloss-first dynamic exit thresholdを検証した。HGB単体では q95 + `loss_exit20/25` がgateを通ったが、hybridでは最良閾値が `0.35` 付近へずれた。統合では q95 + `loss_exit30` が total `+44.5308`, role min `+2.6780`, positive roles `3/3` まで改善したが、month min `-4.1460` が残った。`00277` で q95 + `loss_exit30` を内部chronologyへ再探索なしで固定適用し、base `-14.6536` から `+67.5682` へ改善、00276外部と統合して total `+112.0990`, positive roles `6/6` になった。ただし month min `-11.3450` と追加entry負けが残った。`00278` でdynamic exit後cooldownを追加し、q95 + `loss_exit30_cd15` は内部+外部統合 total `+118.6900`, positive roles `6/6`, month min `-6.8324`, trades `266` へ改善した。ただしmonth floorはまだ負、fresh/hybrid supportも薄いため標準採用はしない。`00279` でraw `0.30` をglobal expanding loss-first quantileへ置き換えたが、best totalの `lfq60_cd15` は total `+135.3536` でも positive roles `4/6`, month min `-28.9404` で崩れた。`00280` で raw `loss_exit30_cd15` の残存損失をprediction文脈へjoinして分解し、loss trade 122件 `-229.4220` のうち no-edge entryは3件 `-34.6800` だけ、119件 `-194.7420` は同方向oracle利益ありと確認した。`00281` ではprior exit-capture risk、executable EV calibration、direct score shrinkを検証し、hard blockもdirect multiplicative shrinkもraw benchmarkを下回ると確認した。`00282` ではselected-trade supervised shrinkageがraw/prior calibrationよりMAEを改善するが、rank/gateとしては勝ちtradeを削ると確認した。`00283` でshrinkage headをprediction row側へ戻し、q95 no-floor + `loss_exit30_cd15` は total `+219.7158` まで伸びたが month min `-35.1586` でraw cd15より悪化した。`00284` ではraw cd15 scoreを維持し、shrinkage outputを補助featureにしたdownside meta hard blockを試したが、`gte1` はbaseline `+118.6900` から `+15.4886` へ悪化し、`gte3` はbaseline同等のno-opだった。次はhard blockではなくsoft risk margin / stateful floor-aware meta selectorへ進む。
+直近で最も進んだ候補は exit-regret系から、capture-adjusted score上のcoarse side/regime tail-risk headへ移ったが、外部HGB chronologyで弱い再現に留まった。`00258` で `confidence_exit t0.4` selectorがbroad/fixed2025を改善し、`00261` でreplacement guard replayも改善した。ただし `00262` のNoTrade-first admissionでは strict / relaxed ともNoTrade。`00263` でfresh2024 0-tradeの主因はpost-block `side_gap_pct` 汚染と分かり、`00264` でpre-block side-gap quantileを実装した。`00265` では追加refit rowsのtailを分解し、`00266` では前月までの `direction_regime` 損失で q99/floor5 の追加rowを止める余地を確認した。`00267` でこれをstateful replayへ接続し、q99/floor5はoverall `+55.6750` まで改善したが、標準strict/relaxed admissionはrole trade support不足でNoTradeのまま。`00269` では外部HGB preflightに固定適用し、supportはあるがoverall `-9.5756` でNoTrade未満。`00270` では外部HGB+MLP hybrid 2025-09..12にも固定適用し、q99 `-28.3940`, q95 `+0.0820` だがmonth floor未達でNoTradeだった。`00271` ではその損失を教師/特徴量設計の観点で分解し、同方向oracle利益を実行exitで取り逃すexit-capture failureとEV過大評価が中心だと確認した。`00272` では既存executable EV補正をpost-selector scoreに掛けたがNoTrade未満。`00273` ではselector前base scoreへ移してq95 `-12.1040` まで戻したが、まだNoTrade未満だった。`00274` では `direction_regime` tail-riskを重ねるとq99が `+3.1260` まで改善したが、3 trades / all-long / month floor未達でadmissionはNoTradeだった。`00275` で外部HGBへ固定適用すると、bestはoverall `-9.1956` と00269比 `+0.3800` の小幅改善に留まり、標準化を支持しなかった。`00276` でexit timingへ戻り、低いloss-first dynamic exit thresholdを検証した。HGB単体では q95 + `loss_exit20/25` がgateを通ったが、hybridでは最良閾値が `0.35` 付近へずれた。統合では q95 + `loss_exit30` が total `+44.5308`, role min `+2.6780`, positive roles `3/3` まで改善したが、month min `-4.1460` が残った。`00277` で q95 + `loss_exit30` を内部chronologyへ再探索なしで固定適用し、base `-14.6536` から `+67.5682` へ改善、00276外部と統合して total `+112.0990`, positive roles `6/6` になった。ただし month min `-11.3450` と追加entry負けが残った。`00278` でdynamic exit後cooldownを追加し、q95 + `loss_exit30_cd15` は内部+外部統合 total `+118.6900`, positive roles `6/6`, month min `-6.8324`, trades `266` へ改善した。ただしmonth floorはまだ負、fresh/hybrid supportも薄いため標準採用はしない。`00279` でraw `0.30` をglobal expanding loss-first quantileへ置き換えたが、best totalの `lfq60_cd15` は total `+135.3536` でも positive roles `4/6`, month min `-28.9404` で崩れた。`00280` で raw `loss_exit30_cd15` の残存損失をprediction文脈へjoinして分解し、loss trade 122件 `-229.4220` のうち no-edge entryは3件 `-34.6800` だけ、119件 `-194.7420` は同方向oracle利益ありと確認した。`00281` ではprior exit-capture risk、executable EV calibration、direct score shrinkを検証し、hard blockもdirect multiplicative shrinkもraw benchmarkを下回ると確認した。`00282` ではselected-trade supervised shrinkageがraw/prior calibrationよりMAEを改善するが、rank/gateとしては勝ちtradeを削ると確認した。`00283` でshrinkage headをprediction row側へ戻し、q95 no-floor + `loss_exit30_cd15` は total `+219.7158` まで伸びたが month min `-35.1586` でraw cd15より悪化した。`00284` ではraw cd15 scoreを維持し、shrinkage outputを補助featureにしたdownside meta hard blockを試したが、`gte1` はbaseline `+118.6900` から `+15.4886` へ悪化し、`gte3` はbaseline同等のno-opだった。`00285` ではsoft risk marginを試したが、best totalの `w0.25` も `+23.7938` でbaselineを大きく下回った。次はscore arithmeticを止め、raw cd15固定benchmark上のcandidate-level stateful floor-aware meta selectorへ進む。
 
 ## 現在の判断
 
@@ -28,7 +28,7 @@
 | Entry EV admission | `00208`..`00224` | raw/calibrated EV、rank、quantile、positive floor、hold-capを検証。NoTrade-first selectorは通らない。 |
 | Executable EV / capture | `00225`..`00232` | executable EVやdense captureはrow-level改善があるが、stateful validationでtailとsupport不足が残る。 |
 | Side balance / composite | `00233`..`00239` | side-balanceやcomposite hard gateでは候補が生まれず、component targetへ分解。 |
-| Component / exit-regret | `00240`..`00284` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、input/replay経路はaccepted。 |
+| Component / exit-regret | `00240`..`00285` | EV overestimateからdirection/exit/replacementへ分解。00267でq99 prior guardがstateful replay上は改善したが、標準admission未通過。00268でfresh support不足がepisode集中であり、rank0緩和はcal/refitを壊すと確認。00269の外部HGB、00270の外部full-hybridでもNoTrade未満。00271で損失はno-edgeではなくexit-capture failure / executable EV過大評価に寄ると確認。00272でpost-selector executable scoreは負の対照としてreject。00273でselector前capture補正もNoTrade未満。00274でcoarse `direction_regime` tail-riskはq99をプラス化したが、support/side集中でNoTrade。00275で外部HGB再現は弱く、tail-risk headはdiagnosticへ降格。00276/00277でlow loss-first dynamic exitが全role positiveまで進み、00278でcooldownが過剰回転を抑えた。00279のglobal quantile化はtotal改善と引き換えにtail/roleを壊し、policy候補にはしない。00280でraw cd15の残存損失はentry無価値ではなくexit-capture / EV過大評価が中心と確認。00281でprior capture factorのhard block/direct shrinkはreject。00282でsupervised shrinkageはscale補正として有効だが、direct gateはreject。00283でprediction-row shrinkage inputはaccepted、score replacementはreject。00284でdownside meta hard blockはreject、00285でdownside soft marginもreject。 |
 
 ## 採用済みインフラ
 
@@ -59,6 +59,7 @@
 - supervised shrinkage prediction-row policy input generation
 - downside meta prediction-row side-block input generation
 - exit-timing sensitivity side-block passthrough
+- downside meta risk-margin score input generation
 
 ## 採用しないもの
 
@@ -93,12 +94,13 @@
 - selected-trade supervised shrinkageを低score gateとして直接使うこと
 - supervised shrinkage scoreをmain entry scoreへ直接置き換えること
 - expected-downside meta scoreを単純threshold hard blockとして使うこと
+- expected-downside meta scoreをentry scoreへ直接足し引きすること
 
 ## 次にやること
 
-1. q95 + raw `loss_exit30_cd15` を固定benchmarkにしたまま、downside meta outputをhard blockではなくsoft risk marginとして使う。
+1. q95 + raw `loss_exit30_cd15` を固定benchmarkにしたまま、candidate-level meta selectorを作る。
 2. candidate-level meta selectorは、pointwise OOF PnLだけでなくstateful replayのmonth/role floor penaltyを目的に含める。
-3. prior capture factor、loss-first probability、predicted holding、side confidence gap、regime/session/family、fixed-horizon proxy、supervised shrinkage/downside meta scoreを特徴量として使う。
+3. prior capture factor、loss-first probability、predicted holding、side confidence gap、regime/session/family、fixed-horizon proxy、supervised shrinkage/downside meta scoreをselector特徴量として使う。
 4. no-edge entryはrare-event guardとして別枠にし、3件だけでcontext blacklistを作らない。
 5. `direction_regime` tail-riskはdiagnostic featureとして保持し、policy candidateにはしない。
 6. role trade support、role PnL、month floor、side share、NoTrade-first比較を標準採用ゲートとして維持する。
@@ -132,3 +134,4 @@
 25. `00282_2026-07-02_entry_ev_selected_trade_supervised_shrinkage.md`
 26. `00283_2026-07-02_entry_ev_supervised_shrinkage_policy_inputs.md`
 27. `00284_2026-07-02_entry_ev_downside_meta_block_inputs.md`
+28. `00285_2026-07-02_entry_ev_downside_meta_risk_margin.md`

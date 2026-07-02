@@ -7069,3 +7069,35 @@ trade delta:
 - `uv run python -m unittest tests.test_entry_ev_downside_meta_block_policy_inputs tests.test_entry_ev_quantile_exit_timing_sensitivity`: OK
 - 6 family downside meta input generation: OK
 - baseline / gte1 / gte3 replay: OK
+
+### 2026-07-02 11:57 JST Entry EV downside meta risk margin
+
+作業:
+
+- 00284でrejectしたhard blockの代わりに、downside metaをsoft risk marginとしてentry scoreに入れた。
+- `scripts/experiments/entry_ev_downside_meta_risk_margin_policy_inputs.py` を追加し、`raw_score - weight * pred_downside_meta_expected_downside` のlong/short score列とquantile列を生成した。
+- weight `0.1/0.25/0.5/1/2/5/10` を q95/floor5/rank90 + `loss_exit30_cd15` でreplayした。
+- report: `docs/reports/00285_2026-07-02_entry_ev_downside_meta_risk_margin.md`
+- 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
+
+主要結果:
+
+| run | total pnl | trades | month min | role min | positive roles | decision |
+|---|---:|---:|---:|---:|---:|---|
+| baseline raw cd15 | `+118.6900` | `266` | `-6.8324` | `+0.0074` | `6/6` | NoTrade |
+| w0.25 | `+23.7938` | `177` | `-7.7558` | `-5.9184` | `4/6` | reject |
+| w1 | `+18.9676` | `160` | `-5.6864` | `-3.9590` | `3/6` | reject |
+| w10 | `+1.9740` | `107` | `-13.5568` | `-5.7944` | `2/6` | reject |
+
+判断:
+
+- downside metaをentry scoreへ直接足し引きする経路もreject。
+- weak weightでもbaselineの利益を大きく削り、strong weightはside-switch / support collapseを起こす。
+- 次はscore arithmeticではなく、stateful replayのmonth/role floorを目的に含むcandidate-level selectorへ進む。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_downside_meta_risk_margin_policy_inputs.py tests/test_entry_ev_downside_meta_risk_margin_policy_inputs.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_downside_meta_risk_margin_policy_inputs`: OK
+- 6 family / 7 weights margin input generation: OK
+- 7 weights replay: OK
