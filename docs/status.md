@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 07:38 JST
+最終更新: 2026-07-03 07:52 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair pairwise switch diagnosticsを追加した。00332でscalar harmful penaltyが勝ち候補を落とすと分かったため、選択済みsupport repair候補と同一 `(scenario_label, role, month, side)` 内の近傍代替候補を比較した。00329/00332 baseline best scenarioでは近傍代替がある選択候補は3本、pairwise examplesは22本のみ。harmful probabilityが低い代替へ切り替えるruleは1件発火し、actual `-5.8900` の悪化だった。EV -2まで緩めると72 pairsへ増えるが、harmful-lower switchは9 pairsすべて悪化しactual delta sum `-118.6696`。判断: pairwise/listwise switch診断インフラはaccepted、現support repair surfaceは学習policyにするには薄く、harmful-lower / tail-lower / support-proxy-higher switch ruleはreject。標準policyはNoTrade。詳細は `docs/reports/00333_2026-07-03_entry_ev_support_repair_pairwise_switch.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV support-aware harmful objectiveを追加した。00331の次アクションとして、harmful probabilityをsupport-aware objectiveへ入れた。horizon-choice score側の `pnl_support_harmful_guard` 系modeはbest `+370.0040` で00329/00331 baseline `+403.2680` を超えない。support repair層には `hv_chosen_pred_harmful_overestimate_prob`, `repair_support_success_proxy`, `repair_harmful_penalty_weight`, `repair_harmful_penalty_threshold` を追加したが、continuous penaltyはweight `0.1` 以上で勝ち候補を落としbest `+396.9280` へ悪化。threshold `0.5/0.7` はbaseline維持だがno-opだった。判断: support-aware harmful infrastructureはaccepted、現形のscore-side / repair-side harmful penaltyはpolicy候補としてreject。次はscalar penaltyではなくpairwise/listwise switching targetとcontext別harmful calibrationへ進む。標準policyはNoTrade。詳細は `docs/reports/00332_2026-07-03_entry_ev_support_aware_harmful_objective.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

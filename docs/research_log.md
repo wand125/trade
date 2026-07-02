@@ -4,6 +4,33 @@
 
 ## 2026-07-03 JST
 
+### 07:52 Entry EV support repair pairwise switch diagnostics
+
+作業:
+
+- 00332の次アクションとして、scalar harmful penaltyではなくpairwise/listwise switching診断へ進んだ。
+- `scripts/experiments/entry_ev_support_repair_pairwise_switch_diagnostics.py` を追加し、選択済みsupport repair候補と近傍代替候補を `(scenario_label, role, month, side)` 内で比較した。
+- report: `docs/reports/00333_2026-07-03_entry_ev_support_repair_pairwise_switch.md`
+
+結果:
+
+- 00329/00332 baseline best scenarioでは、近傍代替がある選択候補は3本、pairwise examplesは22本だけだった。
+- harmful probabilityが低い代替へ切り替えるruleは1件発火し、その1件はactual `-5.8900` の悪化だった。
+- 120分near windowでも同じ候補面で、window幅ではなくsupport-repair gating後の候補面の薄さがボトルネックだった。
+- EV -2 scenarioでは72 pairsまで増えたが、harmful-lower switchは9 pairsすべて悪化しactual delta sum `-118.6696`。tail-lower / support-proxy-higherも悪化が多い。
+
+判断:
+
+- pairwise/listwise support-repair switch diagnostic infrastructureはaccepted。
+- harmful-lower / tail-lower / support-proxy-higher switch ruleは現policy候補としてreject。
+- 現selected-addition中心の候補面は学習policyにするには薄い。次はstateful selection前の広いgated候補を非重複cluster化し、listwise repair utility targetを作る。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_support_repair_pairwise_switch_diagnostics`: OK
+- baseline best / 120-minute sensitivity / EV -2 diagnostics: OK
+
 ### 07:38 Entry EV support-aware harmful objective
 
 作業:
