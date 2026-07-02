@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-02 20:53 JST
+最終更新: 2026-07-02 21:21 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00321` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00312でfixed60 false-positiveをprior-only uncertainty featureへ戻し、00313でuncertainty headのAP改善を確認したがdirect thresholdは勝ちtradeを削るためreject。00314でfixed60 uncertaintyをsoft marginへ戻し、family-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00315でtrade-set deltaを確認し、00314改善はrefit2025の少数removed tradeに集中、added 0 / common_changed 0 と判明。00316でfamily priorを粗いpriorへshrinkするとbest raw `+107.0324` まで落ち、current shrinkage policyはreject。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318で反対側near-miss候補を探し、one-fail strictなら8 targetを埋められるが固定horizonで崩れると確認。00319でnear-miss候補をexit target化し、fixed-best targetは有望だが現predicted fixed horizon choiceは悪化すると確認。00320でchronological exit headへ接続したがcurrent PnL-regression argmax headは悪化。00321でhorizon-specific binary viabilityへ切り替え、60m executable AUCなど一部の識別力は出たがthreshold後PnLは全runで負。current direct horizon selectorはreject。標準policyはNoTrade。 |
+| `00258`..`00322` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00315で改善源はrefit2025の少数removed tradeに集中、00316で粗いpriorへshrinkすると崩れると確認。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318で反対側near-miss候補はあるが固定horizonで崩れ、00319でfixed-best targetは有望だが現predicted fixed horizon choiceは悪化。00320/00321のnear-miss-only exit head / horizon viabilityもdirect selectorとして悪化。00322で広いcandidate universeへ学習を広げるとq90 + one-failed trainingは available raw `+71.3850`、非重複後 `+18.4790`、greedy raw `+34.3230`、非重複後 `+20.5430` まで改善したが、overlapping cluster依存でstateful policy evidenceではない。score>=5 broad universeは失敗。標準policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00321` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318ではone-fail strict候補でsupport数は埋まるが、fixed horizon実現が悪く、oracle bestとの差が大きい。00319ではnear-miss exit target化により、fixed-bestなら改善余地があるが現predicted fixed horizonでは悪化すると確認。00320ではchronological exit headを試したがdefault best thresholdはgreedy selected `-17.8948`、available candidates `-296.9364` でreject。00321ではhorizon-specific viabilityへ切り替えたが、default bestはgreedy selected `-36.8370`、model-used必須 `-39.9600`、available candidates `-354.5204` でreject。次はdirect selectorではなくfeature化し、より広いcandidate universeでtail-loss / PnL calibrationを改善する。標準policyはNoTrade。 |
+| Latest decision | `00258`..`00322` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318ではone-fail strict候補でsupport数は埋まるが、fixed horizon実現が悪く、oracle bestとの差が大きい。00319ではnear-miss exit target化により、fixed-bestなら改善余地があるが現predicted fixed horizonでは悪化すると確認。00320/00321のnear-miss-only exit head / horizon viabilityはdirect selectorとしてreject。00322では広いcandidate universeで再学習し、q90 + one-failed trainingが available raw `+71.3850` / 非重複後 `+18.4790`、greedy raw `+34.3230` / 非重複後 `+20.5430` まで改善した。ただしraw threshold PnLはoverlapping cluster依存で、score>=5 broad universeは失敗。次はs2出力をstateful support-repair replayへ接続する。標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -97,6 +97,7 @@
 62. `00319_2026-07-02_entry_ev_near_miss_exit_target.md`
 63. `00320_2026-07-02_entry_ev_near_miss_exit_head.md`
 64. `00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`
+65. `00322_2026-07-02_entry_ev_broad_horizon_viability.md`
 
 component targetの流れを読む:
 
@@ -143,10 +144,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00321 Entry EV Near-Miss Horizon Viability
+Report: 00322 Entry EV Broad Horizon Viability
 Status: accepted infrastructure / standard NoTrade
-Question: horizon-specific binary viability / abstention-first decisionでnear-miss support候補を実行可能にできるか
-Best evidence: default bestはgreedy selected -36.8370、model-used必須 -39.9600、available candidates -354.5204。60m executable AUCなど一部の識別力はあるがtail-loss/PnL calibrationが弱い。
+Question: 広いcandidate universeでhorizon viabilityを学習し、near-miss support候補のtail-loss / PnL calibrationを改善できるか
+Best evidence: q90 + one-failed trainingはavailable raw +71.3850 / 非重複後 +18.4790、greedy raw +34.3230 / 非重複後 +20.5430。ただしraw利益はoverlapping cluster依存。score>=5 broad universeは失敗。
 Decision: 標準policyはNoTrade
-Next: direct selectorではなくfeature化し、広いcandidate universeでtail-loss / PnL calibrationを改善する
+Next: s2出力をstateful support-repair replayへ接続し、non-overlap/stateful制約下で評価する
 ```

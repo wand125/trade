@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 21:21 Entry EV broad horizon viability
+
+作業:
+
+- 00321の次アクションとして、near-miss-only headを広いprediction-row candidate universeで再学習する診断を実装した。
+- `scripts/experiments/entry_ev_broad_horizon_viability.py` を追加し、60/240/720mのhorizon-specific executable / PnL / tail-loss headをprior-month-only chronological splitで学習した。
+- `scripts/experiments/entry_ev_horizon_choice_nonoverlap_audit.py` を追加し、raw threshold choicesを一玉制約に近いnon-overlap greedy監査へ通した。
+- report: `docs/reports/00322_2026-07-02_entry_ev_broad_horizon_viability.md`
+
+結果:
+
+- s1 q90 broad trainingは4303 train rows。available candidatesはmodel-used raw best `+23.5350`、非重複後 `+14.8160`。greedy selectedはmodel-used raw `+16.8700`、非重複後 `+13.7800`。
+- s2 q90 + one-failed trainingは9697 train rows。available candidatesはraw `+71.3850`、非重複後 `+18.4790`。greedy selectedはraw `+34.3230`、非重複後 `+20.5430`。
+- s2では available 240m tail-loss AUC `0.7145`、greedy 240m executable AUC `0.6333` と、00321より改善した信号が出た。
+- s3 score>=5 broad trainingは90447 train rowsだが、available candidates raw `-40.6836`、非重複後 `-12.8676` で失敗した。
+
+判断:
+
+- broad candidate universe horizon viabilityとnon-overlap auditはaccepted infrastructure。
+- q90 + one-failed broad trainingはdiagnostic candidateとして残す。
+- raw threshold PnL、overlapping available candidates、score>=5 broad universeはpolicy evidenceとして採用しない。
+- 次はs2出力をstateful support-repair replayへ接続する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_horizon_viability.py tests/test_entry_ev_broad_horizon_viability.py scripts/experiments/entry_ev_horizon_choice_nonoverlap_audit.py tests/test_entry_ev_horizon_choice_nonoverlap_audit.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_horizon_viability tests.test_entry_ev_horizon_choice_nonoverlap_audit`: OK
+- 00322 broad horizon viability / non-overlap audit runs: OK
+
 ### 20:53 Entry EV near-miss horizon viability
 
 作業:

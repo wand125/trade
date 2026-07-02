@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 20:53 JST
+最終更新: 2026-07-02 21:21 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV broad horizon viabilityを追加した。00321の次アクションとして、near-miss-only headを広いprediction-row candidate universeで再学習し、評価は00319 near-miss rowsへ限定した。s1 q90 broad trainingは4303 train rowsで、available candidatesのmodel-used raw bestが `+23.5350`、非重複後 `+14.8160`、greedy selectedはmodel-used raw `+16.8700`、非重複後 `+13.7800`。s2 q90 + one-failed trainingは9697 train rowsで、available candidatesはraw `+71.3850`、非重複後 `+18.4790`、greedy selectedはraw `+34.3230`、非重複後 `+20.5430`。s3 score>=5 broad trainingは90447 train rowsだが、available candidates raw `-40.6836`、非重複後 `-12.8676` で失敗。判断: broad candidate universe horizon viabilityとnon-overlap auditはaccepted infrastructure、q90 + one-failed broad trainingはdiagnostic candidate、raw threshold PnL / overlapping available choices / score>=5 broad universeはpolicy evidenceとしてreject。次はs2出力をstateful support-repair replayへ接続する。標準policyはNoTrade。詳細は `docs/reports/00322_2026-07-02_entry_ev_broad_horizon_viability.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV near-miss horizon viabilityを追加した。00320の次アクションとして、horizon-specific binary viability / abstention-first decisionを実装した。default runでは available candidates の60m executable AUCが `0.6635`、greedy selectedの240m executable AUCが `0.6167` と一部の識別力は出たが、tail-loss headは弱く、available candidates 60m tail-loss AUC `0.3225`、greedy selected 720m tail-loss AUC `0.3333`。threshold後の実PnLは全runで負で、default bestはgreedy selected `-36.8370`、model-used必須では `-39.9600`、available candidatesでは `-354.5204`。判断: horizon-specific viability diagnosticsはaccepted infrastructure、current direct horizon selector / side-balanced near-miss support overlayはreject。次はdirect selectorではなくfeature化し、より広いcandidate universeでtail-loss / PnL calibrationを改善する。標準policyはNoTrade。詳細は `docs/reports/00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
