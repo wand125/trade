@@ -8627,3 +8627,36 @@ trade delta:
 - `uv run python -m unittest tests.test_entry_ev_uncompensated_sequence_state_diagnostics tests.test_entry_ev_selected_trade_uncompensated_loss_head tests.test_docs_reports`: OK
 - `git diff --check`: OK
 - uncompensated sequence-state diagnostics run: OK
+
+### 2026-07-03 08:17 JST Entry EV support repair leak-free tiebreak
+
+作業:
+
+- 00334のlistwise cluster診断後に、support repairの候補sortで `actual_pnl_at_hv_chosen_horizon` がtie-breakerとして使われていることを監査した。
+- `scripts/experiments/entry_ev_support_repair_horizon_replay.py` のruntime selectorからfuture actual PnL tie-breakerを除去した。
+- `scripts/experiments/entry_ev_support_repair_listwise_cluster_diagnostics.py` の非oracle selectorからもfuture actual PnL tie-breakerを除去した。`actual_oracle_greedy` は上限診断 / teacher設計専用として維持。
+- tie時に将来実損益へ寄らない回帰テストを追加した。
+- 00332 w0 s2条件で本体replayをleak-free再実行し、さらに新replay上でlistwise診断を再実行した。
+- report: `docs/reports/00335_2026-07-03_entry_ev_support_repair_leakfree_tiebreak.md`
+- 00334には訂正注記を追加した。
+
+主要結果:
+
+| scenario | old added PnL | leak-free added PnL | leak-free combined | blocker |
+|---|---:|---:|---:|---|
+| p0.45 / EV 2 / tail 0.3 | `+63.9770` | `+60.8530` | `+400.1440` | month / role-trades / side-share |
+| p0.45 / EV -2 / tail 0.3 | `+34.8410` | `+31.7170` | `+371.0080` | role total / month / side-share |
+
+判断:
+
+- 00334の `repair_score_greedy == current_replay` はfuture actual tie-breaker混入後の読みなので破棄する。
+- leak-free replay後はcurrentとrepair_scoreが整合したが、simple rerankerではstandard blockersを解けない。
+- 00329/00332 low-complexity rankerは引き続きdiagnostic branch。標準policyはNoTrade。
+- 次はleak-free baselineから、chronological listwise target/meta-selector、fresh/thin-month候補生成、singleton harmful候補のabstention層へ進む。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_horizon_replay.py scripts/experiments/entry_ev_support_repair_listwise_cluster_diagnostics.py tests/test_entry_ev_support_repair_horizon_replay.py tests/test_entry_ev_support_repair_listwise_cluster_diagnostics.py tests/test_docs_reports.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_horizon_replay tests.test_entry_ev_support_repair_listwise_cluster_diagnostics tests.test_docs_reports`: OK
+- leak-free broad-prior horizon-choice replay: OK
+- leak-free listwise diagnostics on new replay: OK

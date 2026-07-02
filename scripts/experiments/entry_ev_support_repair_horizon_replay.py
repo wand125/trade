@@ -725,16 +725,16 @@ def select_support_additions(
             "repair_score",
             "support_reduction_value",
             "repair_expected_pnl",
-            "actual_pnl_at_hv_chosen_horizon",
             "decision_timestamp",
             "entry_timestamp",
+            "hv_chosen_horizon_minutes",
         ]
     else:
         candidate_sort_columns = [
             "hv_chosen_score",
-            "actual_pnl_at_hv_chosen_horizon",
             "decision_timestamp",
             "entry_timestamp",
+            "hv_chosen_horizon_minutes",
         ]
     sort_columns = [column for column in candidate_sort_columns if column in choices.columns]
     ascending = [
@@ -742,7 +742,6 @@ def select_support_additions(
         if column
         in {
             "hv_chosen_score",
-            "actual_pnl_at_hv_chosen_horizon",
             "repair_score",
             "support_reduction_value",
             "repair_expected_pnl",

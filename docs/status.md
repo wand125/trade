@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 08:03 JST
+最終更新: 2026-07-03 08:17 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-Entry EV support repair listwise cluster diagnosticsを追加した。00333で薄かったselected addition近傍から一段戻り、`selected + quota_full` rowsをstateful selection直前の広いgated候補面として再構成した。同じquotaと一玉非重複制約で `repair_score`, actual oracle, predicted PnL, low harmful, low tail, high support proxy のgreedy選択を比較。baseline best scenarioは31候補まで広がったが、`repair_score_greedy` はcurrent replayと一致し、actual oracle差は `+2.6360` のみ。EV -2 scenarioは111候補まで広がりactual oracle差 `+22.3190` だが、`fresh2024 2024-08 long -29.1360` は候補が1本しかなくrerankingでは救えない。low harmful / low tail / high support proxy selectorはいずれも大きく悪化。判断: listwise cluster診断インフラはaccepted、simple rerankerでは標準blockerを解けない。次はlistwise examplesを教師化し、fresh/thin monthの候補生成またはabstention層へ進む。標準policyはNoTrade。詳細は `docs/reports/00334_2026-07-03_entry_ev_support_repair_listwise_cluster.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
+Entry EV support repair leak-free tiebreakを追加した。00334のlistwise cluster診断後に、support repairの実行時候補sortとlistwise `repair_score_greedy` / `support_proxy_high_greedy` に `actual_pnl_at_hv_chosen_horizon` がtie-breakerとして混入していることを確認した。これはscore同点候補で将来実損益を見て選ぶlook-aheadなので、runtime selectorから除去し、oracle診断だけにactual PnL利用を限定した。00332 w0 s2条件をleak-freeで本体replayし直すと、best scenarioはadded PnL `+63.9770 -> +60.8530`、combined `+403.2680 -> +400.1440`、EV -2 scenarioはadded PnL `+34.8410 -> +31.7170`、combined `+374.1320 -> +371.0080` に下方修正。leak-free replay後のlistwise診断では `current_replay == repair_score_greedy` へ整合したが、best scenarioでもactual oracle差 `+5.7600`、EV -2では `+25.4430` が残り、標準blockerは未解決。判断: tie-breaker修正はaccepted、00334のcurrent-vs-repair同値はleak混入後の読みとして破棄、標準policyはNoTrade。次はleak-free replay baselineから、chronological listwise target/meta-selector、fresh/thin-month候補生成、singleton harmful候補のabstention層へ進む。詳細は `docs/reports/00335_2026-07-03_entry_ev_support_repair_leakfree_tiebreak.md`。
+
+Entry EV support repair listwise cluster diagnosticsを追加した。00333で薄かったselected addition近傍から一段戻り、`selected + quota_full` rowsをstateful selection直前の広いgated候補面として再構成した。同じquotaと一玉非重複制約で `repair_score`, actual oracle, predicted PnL, low harmful, low tail, high support proxy のgreedy選択を比較。baseline best scenarioは31候補、EV -2 scenarioは111候補まで広がった。ただし00335で `repair_score_greedy` とcurrent replayの一致はactual PnL tie-breaker混入後の結果と判明したため、00334単体のcurrent-vs-repair同値は破棄する。EV -2の `fresh2024 2024-08 long -29.1360` は候補が1本しかなくrerankingでは救えない。low harmful / low tail / high support proxy selectorはいずれも大きく悪化。判断: listwise cluster診断インフラはaccepted、simple rerankerでは標準blockerを解けない。標準policyはNoTrade。詳細は `docs/reports/00334_2026-07-03_entry_ev_support_repair_listwise_cluster.md` と訂正 `docs/reports/00335_2026-07-03_entry_ev_support_repair_leakfree_tiebreak.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV support repair pairwise switch diagnosticsを追加した。00332でscalar harmful penaltyが勝ち候補を落とすと分かったため、選択済みsupport repair候補と同一 `(scenario_label, role, month, side)` 内の近傍代替候補を比較した。00329/00332 baseline best scenarioでは近傍代替がある選択候補は3本、pairwise examplesは22本のみ。harmful probabilityが低い代替へ切り替えるruleは1件発火し、actual `-5.8900` の悪化だった。EV -2まで緩めると72 pairsへ増えるが、harmful-lower switchは9 pairsすべて悪化しactual delta sum `-118.6696`。判断: pairwise/listwise switch診断インフラはaccepted、現support repair surfaceは学習policyにするには薄く、harmful-lower / tail-lower / support-proxy-higher switch ruleはreject。標準policyはNoTrade。詳細は `docs/reports/00333_2026-07-03_entry_ev_support_repair_pairwise_switch.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 

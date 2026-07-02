@@ -104,6 +104,107 @@ class EntryEvSupportRepairHorizonReplayTest(unittest.TestCase):
         self.assertEqual(float(selected.iloc[0]["adjusted_pnl"]), 2.0)
         self.assertEqual(rejected.iloc[0]["reject_reason"], "quota_full")
 
+    def test_score_tie_breaker_does_not_use_future_actual_pnl(self) -> None:
+        base_trades = pd.DataFrame(
+            {
+                "role": ["r"],
+                "family": ["f"],
+                "month": ["2026-01"],
+                "direction": ["short"],
+                "entry_timestamp": [pd.Timestamp("2026-01-01T00:00:00Z")],
+                "exit_timestamp": [pd.Timestamp("2026-01-01T00:10:00Z")],
+                "adjusted_pnl": [1.0],
+                "repair_source": ["base"],
+            }
+        )
+        choices = pd.DataFrame(
+            {
+                "role": ["r", "r"],
+                "family": ["f", "f"],
+                "month": ["2026-01", "2026-01"],
+                "side": ["long", "long"],
+                "decision_timestamp": [
+                    pd.Timestamp("2026-01-01T01:00:00Z"),
+                    pd.Timestamp("2026-01-01T03:00:00Z"),
+                ],
+                "entry_timestamp": [
+                    pd.Timestamp("2026-01-01T01:00:00Z"),
+                    pd.Timestamp("2026-01-01T03:00:00Z"),
+                ],
+                "exit_timestamp": [
+                    pd.Timestamp("2026-01-01T02:00:00Z"),
+                    pd.Timestamp("2026-01-01T04:00:00Z"),
+                ],
+                "hv_chosen_score": [10.0, 10.0],
+                "actual_pnl_at_hv_chosen_horizon": [-10.0, 10.0],
+                "adjusted_pnl": [-10.0, 10.0],
+                "extra_side_needed": [1, 1],
+            }
+        )
+
+        selected, _ = select_support_additions(base_trades, choices)
+
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(
+            pd.Timestamp(selected.iloc[0]["decision_timestamp"]),
+            pd.Timestamp("2026-01-01T01:00:00Z"),
+        )
+        self.assertEqual(float(selected.iloc[0]["actual_pnl_at_hv_chosen_horizon"]), -10.0)
+
+    def test_repair_score_tie_breaker_does_not_use_future_actual_pnl(self) -> None:
+        base_trades = pd.DataFrame(
+            {
+                "role": ["r"],
+                "family": ["f"],
+                "month": ["2026-01"],
+                "direction": ["short"],
+                "entry_timestamp": [pd.Timestamp("2026-01-01T00:00:00Z")],
+                "exit_timestamp": [pd.Timestamp("2026-01-01T00:10:00Z")],
+                "adjusted_pnl": [1.0],
+                "repair_source": ["base"],
+            }
+        )
+        choices = pd.DataFrame(
+            {
+                "role": ["r", "r"],
+                "family": ["f", "f"],
+                "month": ["2026-01", "2026-01"],
+                "side": ["long", "long"],
+                "decision_timestamp": [
+                    pd.Timestamp("2026-01-01T01:00:00Z"),
+                    pd.Timestamp("2026-01-01T03:00:00Z"),
+                ],
+                "entry_timestamp": [
+                    pd.Timestamp("2026-01-01T01:00:00Z"),
+                    pd.Timestamp("2026-01-01T03:00:00Z"),
+                ],
+                "exit_timestamp": [
+                    pd.Timestamp("2026-01-01T02:00:00Z"),
+                    pd.Timestamp("2026-01-01T04:00:00Z"),
+                ],
+                "hv_chosen_score": [1.0, 1.0],
+                "repair_score": [10.0, 10.0],
+                "support_reduction_value": [1.0, 1.0],
+                "repair_expected_pnl": [2.0, 2.0],
+                "actual_pnl_at_hv_chosen_horizon": [-10.0, 10.0],
+                "adjusted_pnl": [-10.0, 10.0],
+                "extra_side_needed": [1, 1],
+            }
+        )
+
+        selected, _ = select_support_additions(
+            base_trades,
+            choices,
+            selection_mode="repair_score",
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(
+            pd.Timestamp(selected.iloc[0]["decision_timestamp"]),
+            pd.Timestamp("2026-01-01T01:00:00Z"),
+        )
+        self.assertEqual(float(selected.iloc[0]["actual_pnl_at_hv_chosen_horizon"]), -10.0)
+
     def test_repair_score_penalizes_harmful_probability_after_support_relief(self) -> None:
         base_monthly = pd.DataFrame(
             {

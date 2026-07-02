@@ -103,6 +103,61 @@ class EntryEvSupportRepairListwiseClusterDiagnosticsTest(unittest.TestCase):
         self.assertAlmostEqual(float(oracle["actual_pnl_sum"]), 20.0)
         self.assertAlmostEqual(float(repair["actual_pnl_sum"]), 5.0)
 
+    def test_repair_score_greedy_tie_breaker_does_not_use_future_actual_pnl(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "scenario_label": ["s1", "s1"],
+                "role": ["r", "r"],
+                "family": ["f", "f"],
+                "month": ["2026-01", "2026-01"],
+                "side": ["long", "long"],
+                "needed_side": ["long", "long"],
+                "extra_side_needed": [1.0, 1.0],
+                "decision_timestamp": [
+                    "2026-01-01T10:00:00Z",
+                    "2026-01-01T12:00:00Z",
+                ],
+                "entry_timestamp": [
+                    "2026-01-01T10:00:00Z",
+                    "2026-01-01T12:00:00Z",
+                ],
+                "exit_timestamp": [
+                    "2026-01-01T11:00:00Z",
+                    "2026-01-01T13:00:00Z",
+                ],
+                "hv_chosen_horizon_minutes": [60.0, 60.0],
+                "actual_pnl_at_hv_chosen_horizon": [-10.0, 10.0],
+                "adjusted_pnl": [-10.0, 10.0],
+                "hv_chosen_pred_pnl": [2.0, 2.0],
+                "hv_chosen_pred_executable_prob": [0.8, 0.8],
+                "hv_chosen_pred_tail_loss_prob": [0.2, 0.2],
+                "hv_chosen_pred_harmful_overestimate_prob": [0.1, 0.1],
+                "repair_score": [10.0, 10.0],
+                "repair_expected_pnl": [2.0, 2.0],
+                "repair_support_success_proxy": [1.0, 1.0],
+                "support_reduction_value": [1.0, 1.0],
+            }
+        )
+        additions = frame.iloc[[0]].copy()
+        additions["addition_rank"] = [1]
+        rejections = frame.iloc[[1]].copy()
+        rejections["reject_reason"] = ["quota_full"]
+        universe = prepare_stateful_universe(
+            additions,
+            rejections,
+            scenario_label="s1",
+            include_reject_reasons=["quota_full"],
+        )
+        universe = add_selector_flags(
+            universe,
+            quota_columns=["scenario_label", "role", "month", "side"],
+            overlap_columns=["role"],
+        )
+        selected = universe[universe["repair_score_greedy_selected"]].iloc[0]
+
+        self.assertEqual(str(selected["decision_timestamp"]), "2026-01-01 10:00:00+00:00")
+        self.assertEqual(float(selected["actual_pnl_at_hv_chosen_horizon"]), -10.0)
+
     def test_interval_clusters_split_non_overlapping_episodes(self) -> None:
         additions, rejections = sample_rows()
         universe = prepare_stateful_universe(

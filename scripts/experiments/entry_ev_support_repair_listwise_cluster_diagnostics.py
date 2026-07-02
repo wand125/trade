@@ -42,10 +42,9 @@ SELECTOR_SPECS: dict[str, tuple[list[str], list[bool]]] = {
             "repair_score",
             "support_reduction_value",
             "repair_expected_pnl",
-            "actual_pnl_at_hv_chosen_horizon",
             "decision_timestamp",
         ],
-        [False, False, False, False, True],
+        [False, False, False, True],
     ),
     "actual_oracle_greedy": (
         [
@@ -87,10 +86,9 @@ SELECTOR_SPECS: dict[str, tuple[list[str], list[bool]]] = {
         [
             "repair_support_success_proxy",
             "repair_score",
-            "actual_pnl_at_hv_chosen_horizon",
             "decision_timestamp",
         ],
-        [False, False, False, True],
+        [False, False, True],
     ),
 }
 

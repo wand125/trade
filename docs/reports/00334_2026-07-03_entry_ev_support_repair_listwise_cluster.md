@@ -1,15 +1,16 @@
 # Entry EV Support Repair Listwise Cluster
 
 日時: 2026-07-03 08:03 JST
-更新日時: 2026-07-03 08:03 JST
+更新日時: 2026-07-03 08:17 JST
 
 採番メモ: 通し番号、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、本文内の作成時刻 `日時` を参照する。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ## Summary
 
+- 訂正: 00335で、support repairのruntime sortとlistwise `repair_score_greedy` に `actual_pnl_at_hv_chosen_horizon` がtie-breakerとして混入していたことを確認した。00334の「repair_score_greedyがcurrent replayと完全一致」という読みはleak混入後の結果なので破棄し、00335のleak-free replayを正とする。
 - 00333の次アクションとして、selected addition近傍だけでなく、stateful selection直前の広いgated候補面をlistwiseに診断した。
 - `selected + quota_full` rejectionsを再構成し、同じquotaと一玉非重複制約で `repair_score`, actual oracle, predicted PnL, low harmful, low tail, high support proxy のgreedy選択を比較した。
-- baseline best scenarioではpost-filter候補31本まで広がったが、現行 `repair_score` はcurrent replayと完全一致し、actual oracleとの差は `+2.6360` だけだった。
+- baseline best scenarioではpost-filter候補31本まで広がった。当時のleak混入後 `repair_score` はcurrent replayと一致して見えたが、この読みは00335で破棄した。actual oracleとの差は `+2.6360` だった。
 - EV -2 scenarioではpost-filter候補111本、actual oracle差 `+22.3190` まで増えたが、`fresh2024 2024-08 long -29.1360` は候補が1本しかなく残る。
 - low harmful / low tail / high support proxy の単純selectorは大きく悪化した。
 - 結論: listwise cluster診断インフラはaccepted。現候補面ではsimple rerankerでは標準blockerを解けない。次は候補生成側、特にfresh2024のthin month coverageと、listwise repair utilityを教師にした広い候補生成/選択へ進む。標準policyはNoTrade。
