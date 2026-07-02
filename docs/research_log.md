@@ -4,6 +4,36 @@
 
 ## 2026-07-02 JST
 
+### 17:36 Entry EV position-quality holdout support
+
+作業:
+
+- 00310の `long_range_normal_ny_fixed60_pred_gt0` を未使用chronologyへ再探索なしで適用できるか確認した。
+- `scripts/experiments/entry_ev_entry_block_holdout_support_diagnostics.py` を追加し、entry-block overlayの効果を discovery / holdout に分解できるようにした。
+- `tests/test_entry_ev_entry_block_holdout_support_diagnostics.py` を追加した。
+- report: `docs/reports/00311_2026-07-02_entry_ev_position_quality_holdout_support.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- discoveryは `refit2025_validation`、holdoutは非refit rolesとした。
+- `long_range_normal_ny_fixed60_pred_gt0` は全体で +11.4912、discoveryで +11.4912、holdoutでは発火0件 / delta 0.0000。
+- broad `long_range_normal_ny` はholdoutで2件発火し net +0.7370だが、cal loss 1件を消す一方でhgb winner 1件も消した。
+- `long_range_normal_ny_rank_lt0p55` のholdout改善はcal2024 1件だけ。
+
+判断:
+
+- holdout-support diagnosticsはaccepted infrastructure。
+- `long_range_normal_ny_fixed60_pred_gt0` は未使用chronology支持なし。
+- refit-only改善を標準候補として扱わない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_entry_block_holdout_support_diagnostics.py tests/test_entry_ev_entry_block_holdout_support_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_entry_block_holdout_support_diagnostics`: OK
+- 00311 holdout-support diagnostics run: OK
+
 ### 17:22 Entry EV position-quality proxy overlay
 
 作業:

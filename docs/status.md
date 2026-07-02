@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 17:22 JST
+最終更新: 2026-07-02 17:36 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV position-quality holdout support diagnosticsを追加した。00310の `long_range_normal_ny_fixed60_pred_gt0` を未使用chronologyへ再探索なしで適用できるか確認するため、`entry_ev_entry_block_holdout_support_diagnostics.py` を追加した。discoveryを `refit2025_validation`、holdoutを非refit rolesとすると、`long_range_normal_ny_fixed60_pred_gt0` は全体 +11.4912、discovery +11.4912、holdout発火0件 / delta 0.0000。broader `long_range_normal_ny` はholdoutで2件発火し net +0.7370だが、cal loss 1件とhgb winner 1件を同時に削る。判断: holdout-support diagnosticsはaccepted infrastructure、`long_range_normal_ny_fixed60_pred_gt0` は未使用chronology支持なし、標準policyはNoTrade。詳細は `docs/reports/00311_2026-07-02_entry_ev_position_quality_holdout_support.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV position-quality proxy overlayを追加した。00309のnegative resultを受け、`holdext_long_range_normal_ny` をextension vetoではなくentry/no-entryまたはposition-quality問題として扱い、entry-time observableな `long_range_normal_ny*` rulesを `entry_ev_stateful_entry_block_overlay.py` に追加した。対象branch `isolated_large_loss_long / threshold -5 / fixed720 / require-model-used` では、`long_range_normal_ny_fixed60_pred_gt0` が total `+326.1098 -> +337.6010`、month min `-0.8832 -> -0.7200` まで改善した。ただしblocked 4件は全て `refit2025_validation` に集中し、standard admissionは不合格。default support-awareでは `support_aware_only` だが、support2では `too_many_support_limited_negative_months`、shallow025では `structural_negative_months` でblocked。判断: position-quality proxy rulesはaccepted diagnostic infrastructure、`long_range_normal_ny_fixed60_pred_gt0` はdiagnostic candidate、標準policyはNoTrade。詳細は `docs/reports/00310_2026-07-02_entry_ev_position_quality_proxy_overlay.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
