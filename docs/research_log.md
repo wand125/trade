@@ -4,6 +4,38 @@
 
 ## 2026-07-02 JST
 
+### 09:54 Entry EV loss-first global expanding quantile
+
+作業:
+
+- 00278の次アクションとして、raw `loss_first_exit_threshold=0.30` をglobal expanding empirical-CDF quantileへ置き換える診断を実施した。
+- `scripts/experiments/entry_ev_loss_first_quantile_inputs.py` を追加し、各評価月より前のprediction rowだけをfit分布にして `pred_long/short_loss_first_global_expanding_quantile` を生成した。
+- `entry_ev_quantile_exit_timing_sensitivity.py` に `--long-loss-first-column` / `--short-loss-first-column` を追加した。
+- fit不足時にNaNを出すとrequired column欠損でentry自体が消えるため、fit不足時は `0.0` fillにしてdynamic exitだけを無効化する扱いにした。
+- q95 + `cd15` 固定で `lfq30/50/60/70/80/90` を内部chronologyへ適用し、良さそうな `lfq30/50/60` を外部HGB/hybridへ固定適用した。
+- report: `docs/reports/00279_2026-07-02_entry_ev_loss_first_global_expanding_quantile.md`
+- 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
+
+結果:
+
+- 内部では `lfq60_cd15` が total `+117.1112` まで伸びたが、role min `-4.2906`, month min `-28.9404` でraw `loss_exit30_cd15` の `-6.8324` より悪い。
+- 外部HGBではraw `loss_exit30_cd15` が total `+28.4894`, month min `+0.0074`。quantile版は `lfq50_cd15` total `+26.3734`, month min `-2.8560` が最良で、rawに届かない。
+- 外部hybridでは `lfq30_cd15` が month min `-0.7200` まで改善するが、totalは raw `+6.6240` に対して `+6.0900`。
+- 内部+外部統合では raw `loss_exit30_cd15` が total `+118.6900`, positive roles `6/6`, month min `-6.8324`。`lfq60_cd15` は total `+135.3536` だが positive roles `4/6`, month min `-28.9404`。
+
+判断:
+
+- chronological quantile input infrastructureはaccepted。
+- 単純なglobal expanding loss-first quantile thresholdはpolicy候補にしない。
+- 固定診断候補は q95 + raw `loss_exit30_cd15` のまま。
+- calibrationを再訪するなら、global CDFではなくside/family/regime-conditioned calibrationまたはsupervised exit-capture calibrationにする。
+
+検証:
+
+- `python3 -m py_compile scripts/experiments/entry_ev_loss_first_quantile_inputs.py tests/test_entry_ev_loss_first_quantile_inputs.py`: OK
+- `python3 -m unittest tests.test_entry_ev_loss_first_quantile_inputs`: OK
+- internal quantile replay / external HGB quantile replay / external hybrid quantile replay: OK
+
 ### 09:28 Entry EV loss_exit30 dynamic exit cooldown
 
 作業:

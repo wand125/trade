@@ -202,6 +202,8 @@ def build_model_policy_config(
     short_holding_column: str,
     min_valid_predicted_hold_minutes: float,
     max_predicted_hold_minutes: float,
+    long_loss_first_column: str = "pred_long_exit_event_prob_2",
+    short_loss_first_column: str = "pred_short_exit_event_prob_2",
     side_block_rules: tuple[str, ...] = (),
 ) -> ModelPolicyConfig:
     return ModelPolicyConfig(
@@ -214,6 +216,8 @@ def build_model_policy_config(
         short_column=short_column,
         long_holding_column=long_holding_column,
         short_holding_column=short_holding_column,
+        long_loss_first_column=long_loss_first_column,
+        short_loss_first_column=short_loss_first_column,
         min_valid_predicted_hold_minutes=min_valid_predicted_hold_minutes,
         max_predicted_hold_minutes=max_predicted_hold_minutes,
         min_entry_rank=candidate.min_entry_rank,

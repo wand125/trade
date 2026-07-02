@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-02 09:28 JST
+最終更新: 2026-07-02 09:54 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV loss-first global expanding quantileを追加した。raw `loss_first_exit_threshold=0.30` を絶対確率として扱う弱さに対し、各評価月より前の全prediction rowだけをfit分布にしたempirical-CDF quantile列を生成する `scripts/experiments/entry_ev_loss_first_quantile_inputs.py` を追加した。`entry_ev_quantile_exit_timing_sensitivity.py` には `--long-loss-first-column` / `--short-loss-first-column` を追加し、dynamic exitの入力列を差し替えられるようにした。fit不足月をNaNにするとrequired column欠損でentry自体が消えるため、fit不足時はquantile `0.0` で埋め、dynamic exitだけを無効化する扱いに修正。内部+外部統合では raw `loss_exit30_cd15` が total `+118.6900`, positive roles `6/6`, month min `-6.8324`。quantile版は `lfq60_cd15` が total `+135.3536` まで伸びるが positive roles `4/6`, month min `-28.9404` でreject。`lfq30/50` はpositive roles `6/6` だがmonth floorがrawより悪い。判断: quantile input infrastructureはaccepted、単純なglobal expanding loss-first quantile thresholdはpolicy候補にしない。詳細は `docs/reports/00279_2026-07-02_entry_ev_loss_first_global_expanding_quantile.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
 Entry EV loss_exit30 dynamic exit cooldownを追加した。00277で見えた `loss_exit30` の過剰回転と悪い追加entryに対して、`ModelPolicyConfig` に `dynamic_exit_min_holding_minutes` / `dynamic_exit_cooldown_minutes` を追加し、signal生成段階でdynamic exit後の再entryを制限できるようにした。内部chronologyではminimum hold単独はtailを悪化させたが、cooldownは有効で、`loss_exit30_cd15` は total `+83.5766`, worst `-6.8324`, 164 trades、`loss_exit30_cd60` は total `+82.9864`, worst `-5.9400`, 123 trades。外部HGBでは `cd15` が total `+28.4894`, month min `+0.0074` でselector passしたが、外部hybridでは2025-12 `-4.1460` が残った。内部+外部統合では q95 + `loss_exit30_cd15` が total `+118.6900`, positive roles `6/6`, role min `+0.0074`, month min `-6.8324`, 266 trades。判断: cooldown hookはaccepted infrastructure、`loss_exit30_cd15` は次の固定診断候補。ただし標準policyはNoTrade。詳細は `docs/reports/00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`。採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポート本文内の作成時刻 `日時` を基準にする。
 
