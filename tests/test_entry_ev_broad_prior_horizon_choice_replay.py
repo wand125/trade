@@ -9,10 +9,12 @@ from scripts.experiments.entry_ev_broad_prior_horizon_choice_replay import (
     DEFAULT_HORIZON_NUMERIC_FEATURES,
     add_residual_prior_columns,
     add_head_reliability_columns,
+    apply_positive_pnl_gate,
     apply_switch_abstention,
     chronological_ranker_predictions,
     expand_horizon_examples,
     pivot_ranker_predictions,
+    positive_pnl_gate_mask,
     score_predictions,
 )
 
@@ -384,6 +386,40 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
         )
 
         self.assertTrue(bool(output.iloc[0]["target_horizon_harmful_overestimate"]))
+
+    def test_positive_pnl_gate_uses_chosen_horizon_risk_columns(self) -> None:
+        choices = pd.DataFrame(
+            {
+                "id": ["bias_tail", "tail_prob", "negative_pred"],
+                "hv_chosen_horizon_minutes": [720.0, 720.0, 720.0],
+                "hv_chosen_pred_pnl": [2.0, 2.0, -1.0],
+                "hv_chosen_pred_tail_loss_prob": [0.20, 0.35, 0.90],
+                "ranker_hv_720m_residual_bias": [1.0, -1.0, 5.0],
+                "ranker_hv_720m_residual_tail_miss_rate": [0.20, 0.20, 0.90],
+            }
+        )
+
+        gated_bias, vetoed_bias = apply_positive_pnl_gate(
+            choices,
+            "positive_bias_and_tail_miss_ge_0p10",
+        )
+        gated_tail, vetoed_tail = apply_positive_pnl_gate(choices, "tail_prob_ge_0p30")
+
+        self.assertEqual(vetoed_bias["id"].tolist(), ["bias_tail"])
+        self.assertEqual(gated_bias["id"].tolist(), ["tail_prob", "negative_pred"])
+        self.assertEqual(vetoed_tail["id"].tolist(), ["tail_prob"])
+        self.assertEqual(gated_tail["id"].tolist(), ["bias_tail", "negative_pred"])
+        self.assertTrue(bool(vetoed_bias.iloc[0]["positive_pnl_gate_veto"]))
+        self.assertAlmostEqual(
+            float(vetoed_bias.iloc[0]["positive_pnl_gate_residual_tail_miss_rate"]),
+            0.20,
+        )
+
+    def test_positive_pnl_gate_rejects_unknown_rule(self) -> None:
+        choices = pd.DataFrame({"hv_chosen_pred_pnl": [1.0]})
+
+        with self.assertRaises(ValueError):
+            positive_pnl_gate_mask(choices, "unknown_rule")
 
 
 if __name__ == "__main__":

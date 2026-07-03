@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 11:26 Entry EV positive PnL gate stateful replay
+
+作業:
+
+- 00347のpositive predicted PnL failure候補ruleを、pointwise診断からstateful replayへ戻した。
+- `scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py` に `--positive-pnl-gate-rules`、gate veto artifact、gate summary artifactを追加した。defaultは `none` のまま。
+- report: `docs/reports/00348_2026-07-03_entry_ev_positive_pnl_gate_stateful_replay.md`
+
+結果:
+
+- 864条件をreplayし、selector passは `0 / 864`。
+- `tail_prob_ge_0p30` はcandidate surfaceでは負けを削るが、best scenarioでは発火せず、gateなしと同じ5 trades / added PnL `+60.8530` / combined `+400.1440`。
+- `positive_bias_and_tail_miss_ge_0p10` はscenario-weighted候補面で `pnl` rows 789件 / actual PnL `-6135.8956` をvetoしたが、bestでは勝ち720m候補も削り、best combinedは `+393.2940` へ悪化した。
+- positive-bias gateのbestはEV -2 scenarioへ移動し、gateなしbestより `-6.8500` 低い。
+
+判断:
+
+- positive-PnL gate replay infrastructureはaccepted。
+- `positive_bias_and_tail_miss_ge_0p10` と `tail_prob_ge_0p30` はhard gateとして標準採用しない。
+- 00347の「positive predicted PnLを信用しすぎる」問題は本物だが、global hard cutoffでは勝ち候補も削る。次はhorizon/context別calibration、soft penalty、over-gating diagnosticsへ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00348 positive PnL gate stateful replay: OK
+
 ### 11:04 Entry EV positive predicted PnL failure diagnostics
 
 作業:
