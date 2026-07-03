@@ -4,6 +4,31 @@
 
 ## 2026-07-03 JST
 
+### 10:31 Entry EV horizon reliability abstention diagnostics
+
+作業:
+
+- 00344でdirect reliability multiplierが悪化したため、reliability-driven horizon switchをbaseline `pnl` horizonへ戻すabstention/veto診断を追加した。
+- `scripts/experiments/entry_ev_horizon_reliability_abstention_diagnostics.py` を追加し、`horizon_reliability_choice_deltas.csv` に対して複数ruleのpost-veto delta、veto件数、回復損失、削除利益をCSV化できるようにした。
+- report: `docs/reports/00345_2026-07-03_entry_ev_horizon_reliability_abstention.md`
+
+結果:
+
+- target subset available candidatesでは、`pnl_delta_tail_reliability_gated` のplain `pnl` 比 `-131.8792` 悪化に対し、`veto_chosen_pred_pnl_lt0` は `+13.6962` まで回復した。5件vetoし、5件すべて損失回復、利益削除0件。
+- all rows available candidatesでも、`pnl_delta_tail_reliability_gated` は `-137.6916 -> +57.0582`、`pnl_tail_reliability_gated` は `-93.6228 -> +37.9022` へ改善した。
+- 一方 `hybrid2025 2025-10 long` の `60m +3.5800 -> 240m -12.0000` は予測PnLが `+0.6115` のためこのvetoでは止まらず、別のtail/overestimate診断が必要。
+
+判断:
+
+- horizon reliability abstention diagnosticsはaccepted infrastructure。
+- `veto_chosen_pred_pnl_lt0` は次のstateful replay候補。
+- これはchoice-delta後処理であり標準policyではない。標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_horizon_reliability_abstention_diagnostics`: OK
+- 00345 target subset / all rows diagnostics: OK
+
 ### 10:17 Entry EV horizon reliability diagnostics
 
 作業:

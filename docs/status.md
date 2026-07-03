@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 10:17 JST
+最終更新: 2026-07-03 10:31 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV horizon reliability abstention diagnosticsを追加した。00344でdirect reliability multiplierがtarget subset/all rowsの両方で悪化したため、reliability-driven horizon switchをbaseline `pnl` horizonへ戻すprediction-only vetoを診断した。target subset available candidatesでは `pnl_delta_tail_reliability_gated` のplain `pnl` 比 `-131.8792` 悪化に対し、`veto_chosen_pred_pnl_lt0` が `+13.6962` まで回復。all rowsでも同score modeは `-137.6916 -> +57.0582`、`pnl_tail_reliability_gated` は `-93.6228 -> +37.9022` へ改善した。判断: abstention diagnosticsはaccepted infrastructure、`ranker_pred_pnl < 0` switch vetoは次のstateful replay候補。ただしchoice-delta後処理なので標準policyではなく、標準policyはNoTrade。詳細は `docs/reports/00345_2026-07-03_entry_ev_horizon_reliability_abstention.md`。
 
 Entry EV horizon reliability diagnosticsを追加した。00343のreliability-gated score同点/悪化を受け、baseline `pnl` とのhorizon選択差分、悪化case、horizon/head別prediction error、missing target coverageをCSV化する `entry_ev_horizon_reliability_diagnostics.py` を追加した。target subsetでは `pnl_delta_tail_reliability_gated` がavailable candidates合計でplain `pnl` 比 `-131.8792`、`pnl_tail_reliability_gated` が `-87.8104`。all rowsでもそれぞれ `-137.6916`, `-93.6228` と悪化。最悪caseは `fresh2024 2024-08 long` の `60m +9.4600 -> 240m -43.9404` で、positive reliabilityが実行PnL上の正しいhorizonを保証しないと確認した。判断: horizon reliability diagnosticsはaccepted infrastructure、reliabilityはdirect scoreではなくhead selection / abstention / confidence reportへ回す、標準policyはNoTrade。詳細は `docs/reports/00344_2026-07-03_entry_ev_horizon_reliability_diagnostics.md`。
 
