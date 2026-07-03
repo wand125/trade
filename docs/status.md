@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 16:02 JST
+最終更新: 2026-07-03 16:20 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-sufficient replacement calibration diagnosticsを追加した。00366でbroad horizon abstentionを本線vetoに使えないと分かったため、00363のsupport-sufficient negative month laneへ戻り、replacement candidateのexpected PnL calibrationを診断した。target月より前のside-row実績だけでcontext別bias/MAE/prior actual meanを作り、`refit2025 2025-03` のloss trade replacementをrank比較した。candidate rows `1710`、prior rows `664` / prior months `2`。min prior count `20` では `bias_corrected` がmean month PnL `+22.1670`、best `+23.6370` まで改善するが、`downside_bias_corrected` / `conservative` はmean `-18.7634` へ悪化。min prior count `50` では `prior_actual_mean` がmean `+18.3040`、best `+19.7740`、`bias_corrected` がmean `+8.0640`。判断: prior-calibrated replacement rankingは有望なdiagnostic infrastructure。ただしpriorが2ヶ月しかなくone-fail candidate依存なので標準policyではない。標準policyはNoTrade。詳細は `docs/reports/00367_2026-07-03_entry_ev_support_sufficient_replacement_calibration.md`。
 
 Entry EV horizon abstention stateful replayを追加した。00365のcandidate `lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` をhold-extension stateful replayのextension vetoへ接続し、00314 w5 hold-extension targetでone-position constraint込みに検証した。広い `all / predicted / t-5` ではvetoなしが total `+52.4794`, month min `-324.7062` と崩れる一方、同ruleありは total `+267.8748`, month min `-32.9086` まで回復し、`refit2025 2025-03` も `-26.7670 -> +16.0670` へ改善した。ただし本線の `isolated_large_loss_long / fixed720 / t-5` では、vetoなしが total `+338.4078`, month min `-0.8832` のbestで、同ruleありは全8 extensionsを止め raw base `+139.1098`, month min `-6.8324` に戻る。判断: extension veto hookは採用、00365 broad ruleは探索的predicted-horizon安全診断として残すが、本線policy vetoとしては過剰抑制なのでreject。標準policyはNoTrade。詳細は `docs/reports/00366_2026-07-03_entry_ev_horizon_abstention_stateful_replay.md`。
 

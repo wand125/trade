@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 16:20 Entry EV support-sufficient replacement calibration
+
+作業:
+
+- 00366でbroad horizon abstentionを本線vetoに使えないと分かったため、00363のsupport-sufficient negative month laneへ戻した。
+- `entry_ev_support_sufficient_replacement_calibration_diagnostics.py` を追加し、target月より前のside-row実績だけでcontext別 `actual - predicted` bias / MAE / prior actual meanを作り、replacement candidate rankingを比較した。
+- report: `docs/reports/00367_2026-07-03_entry_ev_support_sufficient_replacement_calibration.md`
+
+結果:
+
+- 対象は `refit2025_validation 2025-03`。candidate rows `1710`、prior rows `664` / prior months `2`。
+- min prior count `20` では `bias_corrected` がmean month PnL `+22.1670`、best `+23.6370`、worst `+21.4686`。side-score referenceのbest `+4.2170` を大きく上回った。
+- ただし同じmin20で `downside_bias_corrected` / `conservative` はmean `-18.7634` へ悪化し、`2025-03-31 short 720m` actual `-19.1604` を選ぶ。
+- min prior count `50` では `prior_actual_mean` がmean `+18.3040`、best `+19.7740`、`bias_corrected` がmean `+8.0640`。`conservative` / `downside` はraw pred fixedと同じmean `+3.0870` へ戻る。
+
+判断:
+
+- prior-calibrated replacement ranking diagnosticsはaccepted infrastructure。
+- `prior_actual_mean` / `bias_corrected` はsupport-sufficient replacement selectorの有望feature。
+- ただしpriorが2ヶ月しかなく、全choiceが `one_failed_strict_stage` なので標準policyにはしない。
+- 次はprior month count / support thresholdをselector surface化し、loss-risk selectorと組み合わせる。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_replacement_calibration_diagnostics.py tests/test_entry_ev_support_sufficient_replacement_calibration_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_replacement_calibration_diagnostics`: OK
+- 00367 min20/min50 replacement calibration runs: OK
+
 ### 16:02 Entry EV horizon abstention stateful replay
 
 作業:
