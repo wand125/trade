@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 09:16 JST
+最終更新: 2026-07-03 09:30 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV horizon confidence support auditを追加した。00340で見えた `fresh2024 2024-03` の240m優位をtarget-local ruleではなく、00329/00341 scored examples上のprediction-only horizon choiceとして監査した。00329 baselineでは `fresh2024_validation 2024-03 long` は51 rows / 17 decisionsが全て `ranker_core_model_used=false` で、60mを17/17選び `-137.9060`。fixed 240mは `+49.0950`。`min_train_months=1` / `min_train_rows=50` に緩めるとmodel-used 17/17となり、`score_pnl` は240mを7/17選んで `-69.6140` まで改善したが、fixed 240mには遠い。tail-aware scoreは `-128.0160` / `-111.0260` へ悪化し、fold summaryでも `tail_loss` AUC `0.2384` と悪い。判断: horizon-confidence support auditはaccepted infrastructure、mintrain1は診断のみ、global early-support relaxationと現headのtail-aware early scoreはreject、標準policyはNoTrade。詳細は `docs/reports/00341_2026-07-03_entry_ev_horizon_confidence_support_audit.md`。
 
 Entry EV support repair target-local confidence diagnosticsを追加した。00339で見えた `fresh2024 2024-03` のfallback/non-model hidden positivesについて、00324 horizon rowsをtarget-localに切り出し、観測可能特徴量だけのrule surfaceを診断した。`fresh2024_validation 2024-03 long` は51 rows / 17 decisions / 3 horizonsで全て `pred_model_used=false`。60m合計 `-137.9060`、240m合計 `+49.0950`、720m合計 `-99.9060` で、post-hocでは `horizon_eq_240` が17 rows / positive 12 / tail loss 1を拾う。`horizon_eq_240 & entry_hour>=15` は3 rows / `+39.1300` だが、target-localで薄すぎるためpolicy evidenceではない。判断: target-local confidence diagnosticsはaccepted infrastructure、fresh03の弱点はentry方向よりexit timing / horizon confidence / expected PnL calibration。240m固定や時刻ruleはreject、標準policyはNoTrade。詳細は `docs/reports/00340_2026-07-03_entry_ev_support_repair_target_local_confidence.md`。
 

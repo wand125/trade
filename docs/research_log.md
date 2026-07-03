@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 09:30 Entry EV horizon confidence support audit
+
+作業:
+
+- 00340のtarget-local confidence診断を広いscored examplesへ拡張し、horizon-confidence support auditを追加した。
+- `scripts/experiments/entry_ev_horizon_confidence_support_audit.py` を追加し、target別のcandidate availability、prediction-only score choice、fixed horizon / oracle比較、fold supportを出力するようにした。
+- 00329 baselineと、`min_train_months=1` / `min_train_rows=50` の00341 sensitivityを比較した。
+- report: `docs/reports/00341_2026-07-03_entry_ev_horizon_confidence_support_audit.md`
+
+結果:
+
+- 00329 baselineの `fresh2024_validation 2024-03 long` は51 rows / 17 decisionsが全て `ranker_core_model_used=false` で、60mを17/17選び `-137.9060`。fixed 240mは `+49.0950`。
+- mintrain1ではfresh03がmodel-used 17/17になり、`score_pnl` は240mを7/17選んで `-69.6140` まで改善。ただしfixed 240m `+49.0950` には遠い。
+- tail-aware scoreはfresh03で悪化し、`score_pnl_minus_tail` は `-128.0160`、`score_pnl_delta_tail` は `-111.0260`。fold summaryでも `tail_loss` AUCは `0.2384` と悪い。
+- `fresh2024 2024-11 long` はavailable rows 0、`refit2025 2025-03 short` はavailable/greedy rows 0で、候補生成不足が残る。
+
+判断:
+
+- horizon-confidence support auditはaccepted infrastructure。
+- `min_train_months=1` は診断のみで、global early-support relaxationとしては採用しない。
+- 現headのtail-aware early scoreはpolicy候補としてreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_horizon_confidence_support_audit`: OK
+- 00341 mintrain1 replay / 00329 audit / mintrain1 audit: OK
+
 ### 09:16 Entry EV support repair target-local confidence diagnostics
 
 作業:
