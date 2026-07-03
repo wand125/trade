@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 13:40 Entry EV tail ceiling residual failure diagnostics
+
+作業:
+
+- 00355で全件tail ceiling済みと分かったcontextual penalty rowsの先を確認するため、tail ceiling通過後のpositive predicted PnL failureを診断した。
+- `entry_ev_tail_ceiling_residual_failure_diagnostics.py` を追加し、00354 no-penalty candidatesを `max_chosen_tail_prob=0.3` のpass/blockedで分解した。
+- report: `docs/reports/00356_2026-07-03_entry_ev_tail_ceiling_residual_failure_diagnostics.md`
+
+結果:
+
+- row-weightedではpositive predicted PnL 12544 rows / actual PnL `-47285.8192` のうち、tail blocked側は3236 rows / `-47165.1376`、tail pass側は9308 rows / `-120.6816`。
+- market candidate dedupでもpositive predicted PnL 205件 / `-1104.5216` に対し、tail blocked側は86件 / `-999.3158`、tail pass側は119件 / `-105.2058`。
+- greedy selectedではtail pass positive 82 rows / `+500.7960`、loss 8 / `-74.3040`、wins `+575.1000` で、現selectorはavailable candidates上の低rank/noisy residual failuresをかなり避けている。
+- `pred_pnl_lt_1/2` は損失捕捉が強いが勝ち候補も削る。`harmful_prob_ge_0p50` はprecisionが高いがsupportが小さく、単体hard gateではほぼno-op。
+- 残存弱点は `refit2025_validation 2025-08 short range_low_vol asia` cluster、`fresh2024_validation 2024-08 long 720m` などに寄る。
+
+判断:
+
+- `max_chosen_tail_prob=0.3` は高tail大損領域を落とす有効なhard filterとして維持する。
+- tail pass後のglobal residual hard gateは勝ち候補削除が大きいためreject。
+- 次はselected/near-selected tail-pass residual failureを、quota boundary、remaining weak months、horizon/exit calibrationへ分解する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_tail_ceiling_residual_failure_diagnostics.py tests/test_entry_ev_tail_ceiling_residual_failure_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_tail_ceiling_residual_failure_diagnostics`: OK
+- 00356 tail ceiling residual failure diagnostics: OK
+
 ### 13:26 Entry EV contextual penalty near-selected diagnostics
 
 作業:

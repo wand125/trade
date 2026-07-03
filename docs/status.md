@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 13:26 JST
+最終更新: 2026-07-03 13:40 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV tail ceiling residual failure diagnosticsを追加した。00355で全件tail ceiling済みと分かったcontextual penalty rowsの先を確認するため、00354 no-penalty候補を `max_chosen_tail_prob=0.3` 通過/遮断で分解した。row-weightedではpositive predicted PnL 12544 rows / `-47285.8192` のうち、tail blocked側は3236 rows / `-47165.1376`、tail pass側は9308 rows / `-120.6816`。market candidate dedupでもpositive 205件 / `-1104.5216` に対し、tail blocked 86件 / `-999.3158`、tail pass 119件 / `-105.2058`。tail ceilingは大きな高tail損失領域を落としているが、tail pass後にも低tail residual failureが残る。`pred_pnl_lt_1/2` は損失捕捉は強いが勝ち候補も削るためglobal hard gateとしてはreject。次はselected/near-selected tail-pass residual failureへ絞る。標準policyはNoTrade。詳細は `docs/reports/00356_2026-07-03_entry_ev_tail_ceiling_residual_failure_diagnostics.md`。
 
 Entry EV contextual penalty near-selected diagnosticsを追加した。00354でpenalizedされたrowsのquota rank / selected boundary / rejection reasonを、00354のcandidate/additions/rejectionsから突き合わせた。各contextual labelは656 rows / 26 unique candidate identitiesをpenalizeし、penalized PnL `-9779.2960`, loss 624 / win 32。selected additionsとの交差は0件のまま。一部はquota rank 1にいるが、penalized rowsは全件 `tail_prob_ceiling` でpre-filter rejectされていた。00354の `max_chosen_tail_prob=0.3` に対し、penalized rowsのtail probは min `0.312885`, median `0.381267`, max `0.451762`。判断: soft penalty no-opの主因はrepair score順位ではなく既存tail hard filter。contextual positive-bias confidenceはtail ceilingの説明/監査signalとして扱い、標準policyはNoTrade。詳細は `docs/reports/00355_2026-07-03_entry_ev_contextual_penalty_near_selected_diagnostics.md`。
 
