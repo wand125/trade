@@ -338,6 +338,46 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
         self.assertEqual(trades[0]["hold_extension_veto_reason"], "holdext_long_range_normal_ny")
         self.assertAlmostEqual(trades[0]["adjusted_pnl"], -3.0)
 
+    def test_horizon_abstention_veto_blocks_matching_extension(self) -> None:
+        rule = "lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf"
+        frame = pd.DataFrame(
+            [
+                {
+                    **row(
+                        entry_minute=1,
+                        exit_minute=2,
+                        adjusted_pnl=-3.0,
+                        pred_delta=6.0,
+                        horizon=60,
+                        fixed_pnl=8.0,
+                        isolated_large_loss=True,
+                    ),
+                    "selected_loss_first_prob": 0.45,
+                    "selected_fixed_60m_pred_pnl": 1.0,
+                    "selected_fixed_240m_pred_pnl": 2.0,
+                    "selected_fixed_720m_pred_pnl": 3.0,
+                    "pred_taken_ev": 4.0,
+                }
+            ]
+        )
+
+        trades, skipped = replay_group(
+            frame,
+            apply_mask=universe_mask(frame, "isolated_large_loss"),
+            threshold=5.0,
+            horizon_mode="predicted",
+            require_model_used=False,
+            extension_veto_rule=rule,
+            profit_multiplier=1.0,
+            loss_multiplier=1.2,
+        )
+
+        self.assertFalse(skipped)
+        self.assertFalse(trades[0]["hold_extension_applied"])
+        self.assertTrue(trades[0]["hold_extension_vetoed"])
+        self.assertEqual(trades[0]["hold_extension_veto_reason"], rule)
+        self.assertAlmostEqual(trades[0]["adjusted_pnl"], -3.0)
+
     def test_extension_veto_nonmatching_context_allows_extension(self) -> None:
         frame = pd.DataFrame(
             [
@@ -428,6 +468,49 @@ class EntryEvHoldExtensionStatefulReplayTest(unittest.TestCase):
                 ),
                 720,
                 "holdext_long_range_normal_ny",
+            )
+        )
+
+    def test_extension_veto_applies_to_horizon_abstention_feature_rule(self) -> None:
+        rule = "lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf"
+
+        self.assertTrue(
+            extension_veto_applies(pd.Series({"selected_loss_first_prob": 0.40}), 240, rule)
+        )
+        self.assertTrue(
+            extension_veto_applies(
+                pd.Series(
+                    {
+                        "selected_loss_first_prob": 0.20,
+                        "selected_fixed_60m_pred_pnl": 1.0,
+                        "selected_fixed_240m_pred_pnl": 5.1,
+                        "selected_fixed_720m_pred_pnl": -1.0,
+                    }
+                ),
+                240,
+                rule,
+            )
+        )
+        self.assertTrue(
+            extension_veto_applies(
+                pd.Series({"selected_loss_first_prob": 0.20, "pred_taken_ev": 5.1}),
+                240,
+                rule,
+            )
+        )
+        self.assertFalse(
+            extension_veto_applies(
+                pd.Series(
+                    {
+                        "selected_loss_first_prob": 0.35,
+                        "selected_fixed_60m_pred_pnl": 4.9,
+                        "selected_fixed_240m_pred_pnl": 1.0,
+                        "selected_fixed_720m_pred_pnl": -1.0,
+                        "pred_taken_ev": 4.9,
+                    }
+                ),
+                240,
+                rule,
             )
         )
 

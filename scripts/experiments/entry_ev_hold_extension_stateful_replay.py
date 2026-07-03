@@ -24,6 +24,7 @@ DEFAULT_THRESHOLDS = "5,10"
 DEFAULT_APPLY_UNIVERSES = "isolated_large_loss"
 DEFAULT_HORIZON_MODES = "predicted"
 DEFAULT_EXTENSION_VETO_RULES = "none"
+HORIZON_ABSTENTION_VETO_RULE = "lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf"
 DEFAULT_GROUP_COLUMNS = [
     "source",
     "role",
@@ -229,6 +230,33 @@ def row_text(row: pd.Series, column: str, default: str = "") -> str:
     return str(value)
 
 
+def row_float(row: pd.Series, column: str, default: float = np.nan) -> float:
+    value = row.get(column, default)
+    if pd.isna(value):
+        return default
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if np.isfinite(parsed) else default
+
+
+def row_first_float(row: pd.Series, columns: list[str], default: float = np.nan) -> float:
+    for column in columns:
+        parsed = row_float(row, column, default=np.nan)
+        if np.isfinite(parsed):
+            return parsed
+    return default
+
+
+def row_max_float(row: pd.Series, columns: list[str], default: float = np.nan) -> float:
+    values = [row_float(row, column, default=np.nan) for column in columns]
+    finite = [value for value in values if np.isfinite(value)]
+    if not finite:
+        return default
+    return float(max(finite))
+
+
 def extension_veto_applies(row: pd.Series, horizon_minutes: int, rule: str) -> bool:
     normalized = rule.strip()
     if normalized == "none":
@@ -239,6 +267,29 @@ def extension_veto_applies(row: pd.Series, horizon_minutes: int, rule: str) -> b
             and row_text(row, "combined_regime") == "range_normal_vol"
             and row_text(row, "session_regime") == "ny_overlap"
             and int(horizon_minutes) >= 720
+        )
+    if normalized == HORIZON_ABSTENTION_VETO_RULE:
+        loss_first = row_first_float(row, ["loss_first_prob", "selected_loss_first_prob"])
+        taken_ev = row_first_float(row, ["taken_ev", "pred_taken_ev"])
+        pred_best = row_first_float(row, ["pred_fixed_best_pred_pnl"])
+        if not np.isfinite(pred_best):
+            pred_best = row_max_float(
+                row,
+                [
+                    "selected_fixed_60m_pred_pnl",
+                    "selected_fixed_240m_pred_pnl",
+                    "selected_fixed_720m_pred_pnl",
+                ],
+            )
+        return bool(
+            (np.isfinite(loss_first) and loss_first >= 0.40)
+            or (np.isfinite(pred_best) and pred_best >= 5.0)
+            or (
+                np.isfinite(taken_ev)
+                and taken_ev >= 5.0
+                and np.isfinite(loss_first)
+                and loss_first < 0.30
+            )
         )
     raise ValueError(f"unknown extension veto rule: {rule}")
 

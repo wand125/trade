@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 15:51 JST
+最終更新: 2026-07-03 16:02 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV horizon abstention stateful replayを追加した。00365のcandidate `lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` をhold-extension stateful replayのextension vetoへ接続し、00314 w5 hold-extension targetでone-position constraint込みに検証した。広い `all / predicted / t-5` ではvetoなしが total `+52.4794`, month min `-324.7062` と崩れる一方、同ruleありは total `+267.8748`, month min `-32.9086` まで回復し、`refit2025 2025-03` も `-26.7670 -> +16.0670` へ改善した。ただし本線の `isolated_large_loss_long / fixed720 / t-5` では、vetoなしが total `+338.4078`, month min `-0.8832` のbestで、同ruleありは全8 extensionsを止め raw base `+139.1098`, month min `-6.8324` に戻る。判断: extension veto hookは採用、00365 broad ruleは探索的predicted-horizon安全診断として残すが、本線policy vetoとしては過剰抑制なのでreject。標準policyはNoTrade。詳細は `docs/reports/00366_2026-07-03_entry_ev_horizon_abstention_stateful_replay.md`。
 
 Entry EV support-sufficient horizon abstention diagnosticsを追加した。00364でloss-riskはdirect entry blockにするとwinner damageが大きいと分かったため、fixed-horizon choiceのabstentionへ回した。全240 selected tradesでpredicted fixed-horizon argmaxを全採用するとcurrent exit比のextension deltaは `-221.4806`。`refit2025 2025-03` ではcurrent month PnL `-0.4730` から、predicted fixed-horizon全採用で `-50.9070` まで崩れる。`lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` はtarget harmful horizon 7/7を止め、target extension delta `-50.4340 -> +26.1200`、全体でも `-221.4806 -> +207.3556` へ反転した。判断: horizon abstention diagnosticsは採用、同ruleはstateful replay candidate。ただしselected-trade counterfactualであり、one-position constraint下のskip影響未検証なので標準policyにはしない。標準policyはNoTrade。詳細は `docs/reports/00365_2026-07-03_entry_ev_support_sufficient_horizon_abstention.md`。
 

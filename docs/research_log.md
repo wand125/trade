@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 16:02 Entry EV horizon abstention stateful replay
+
+作業:
+
+- 00365のcandidate rule `lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` を `entry_ev_hold_extension_stateful_replay.py` のextension veto hookへ接続した。
+- 00314 w5 hold-extension targetを入力に、`--require-model-used`、one-position constraint、overlap skip込みでstateful replayした。
+- report: `docs/reports/00366_2026-07-03_entry_ev_horizon_abstention_stateful_replay.md`
+
+結果:
+
+- `all / predicted / t-5` はvetoなし total `+52.4794`, month min `-324.7062`。同ruleありでは total `+267.8748`, month min `-32.9086` まで回復した。
+- `refit2025 2025-03` でも `all / predicted / t-5` はvetoなし `-26.7670`、同ruleあり `+16.0670` で、00365のtarget改善はstatefulでも一部再現した。
+- 一方、本線の `isolated_large_loss_long / fixed720 / t-5` はvetoなし total `+338.4078`, month min `-0.8832` がbest。ruleありでは全8 extensionsを止め、raw base total `+139.1098`, month min `-6.8324` へ戻した。
+- blockedされた8 extensionsには、`+89.5680`, `+32.3510`, `+24.8146`, `+19.4460` などの大きなpositive recoveryが含まれていた。
+
+判断:
+
+- extension veto hookとprediction-based abstention rule実装はaccepted infrastructure。
+- `lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` は探索的 `all/predicted` horizon argmaxの安全診断として有効。
+- ただし本線hold-extension vetoとしては過剰抑制なのでreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_hold_extension_stateful_replay.py tests/test_entry_ev_hold_extension_stateful_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_hold_extension_stateful_replay`: OK
+- 00366 stateful hold-extension replay: OK
+
 ### 15:51 Entry EV support-sufficient horizon abstention diagnostics
 
 作業:
