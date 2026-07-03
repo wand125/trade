@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 14:26 JST
+最終更新: 2026-07-03 14:40 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV candidate generation gap auditを追加した。00359で残った薄い月を `role/month/side/row_scope` 別に分解し、00322 base predictionと00358 ranker predictionでcandidate generationの落ち段階を比較した。`fresh2024 2024-11 long` はrole/month rowが1件あるが `available_candidates` は0件で、`greedy_selected` の1行だけがrelaxed条件で候補になる。00358 rankerでは60m `+0.3000`, 240m `+2.4500`, 720m `-5.2800` だがpred PnLは負でstrict gateを通らない。`refit2025 2025-03 short` は00322 base / 00358 rankerの両方でprediction row自体が0。したがって `fresh2024 2024-11` はrow-scope/candidate availability問題、`refit2025 2025-03` はprediction-row universe coverage問題として分ける。actual PnLは診断専用でstage分類やgate選択には使わない。標準policyはNoTrade。詳細は `docs/reports/00360_2026-07-03_entry_ev_candidate_generation_gap_audit.md`。
 
 Entry EV 00358 thin month candidate auditを追加した。00358後の残blocker (`month_pnl_below_floor`, `role_trades_low`, `side_share_high`) が候補生成不足かselection問題かを診断し、`entry_ev_support_repair_thin_month_candidate_diagnostics.py` にdiagnostic-onlyの `needed_top_oracle_actual_*` 列を追加した。00358 EV2 bestのstateful surfaceでは残target 4件に候補0。EV -2 + `singleton_720_pred_pnl_lt2` ではtarget pool 12 unique / model-used 12 / relaxed guarded 11 / oracle positive 8だが、実質 `fresh2024 2024-08` に集中する。00324 external horizon coverageを足すと `fresh2024 2024-03` は51 unique / oracle positive 18 / oracle positive sum `+90.5230` だがmodel-used 0で、top predicted actualは `-12.7920`。`fresh2024 2024-11` と `refit2025 2025-03` は候補0。残blockerはglobal gate不足ではなくtarget-local calibration / fallback confidence / candidate generation不足。標準policyはNoTrade。詳細は `docs/reports/00359_2026-07-03_entry_ev_00358_thin_month_candidate_audit.md`。
 

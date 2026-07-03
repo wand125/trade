@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 14:40 Entry EV candidate generation gap audit
+
+作業:
+
+- 00359で残った薄い月について、candidate generationのどこで落ちているかを `role/month/side/row_scope` 別に診断した。
+- `entry_ev_candidate_generation_gap_audit.py` を追加し、00322 base prediction、00358 ranker prediction、00358 replay candidateを同じtarget-scope schemaで比較した。
+- stageは `no_prediction_rows`, `no_rows_in_scope`, `no_target_side_rows`, `no_target_support_rows`, `threshold_filtered`, `relaxed_only_candidate`, `strict_candidate_exists` へ分類した。
+- report: `docs/reports/00360_2026-07-03_entry_ev_candidate_generation_gap_audit.md`
+
+結果:
+
+- 00358 rankerでは `fresh2024 2024-11 long` は role/month rowが1件あるが、`available_candidates` は0件。`greedy_selected` の1行だけがrelaxed条件で候補になる。
+- 同rowは00358 rankerで60m `+0.3000`, 240m `+2.4500`, 720m `-5.2800`。strict gateはpred PnLが負で通らず、relaxed gateのみ通る。
+- `refit2025 2025-03 short` は00322 base / 00358 rankerの両方でprediction row自体が0。rankerやstateful replay以前のcoverage不足。
+- `fresh2024 2024-03` と `fresh2024 2024-08` は00358 ranker上ではavailable supportがあり、candidate-generation問題ではなくcalibration / horizon choice問題。
+
+判断:
+
+- `fresh2024 2024-11` はrow-scope/candidate availability問題。
+- `refit2025 2025-03` はprediction-row universe coverage問題。
+- actual PnLは診断専用で、stage分類やgate選択には使わない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_candidate_generation_gap_audit.py tests/test_entry_ev_candidate_generation_gap_audit.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_candidate_generation_gap_audit`: OK
+- 00360 ranker/base candidate-generation gap audit runs: OK
+
 ### 14:26 Entry EV 00358 thin month candidate audit
 
 作業:
