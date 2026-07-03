@@ -90,6 +90,8 @@ DEFAULT_POSITIVE_PNL_PENALTY_SPECS = "none:0"
 CONTEXT_HS_SUPPORT2_POSITIVE_BIAS_GATE_RULE = (
     "context_hs_support2_positive_bias_tail_miss_ge_0p10"
 )
+SELECTED_TAIL_PASS_PRED_PNL_LT2_GATE_RULE = "selected_tail_pass_pred_pnl_lt2"
+SINGLETON_720_PRED_PNL_LT2_GATE_RULE = "singleton_720_pred_pnl_lt2"
 DEFAULT_PROB_THRESHOLDS = "0.50,0.60,0.70"
 DEFAULT_EV_THRESHOLDS = "-2,0,2"
 DEFAULT_TAIL_PROB_THRESHOLDS = "0.30,0.50"
@@ -1775,7 +1777,23 @@ def contextual_positive_bias_confidence(frame: pd.DataFrame) -> pd.DataFrame:
 def positive_pnl_gate_mask(frame: pd.DataFrame, gate_rule: str) -> pd.Series:
     if gate_rule == "none":
         return pd.Series(False, index=frame.index)
-    predicted_positive = numeric_series(frame, "hv_chosen_pred_pnl", default=0.0).gt(0.0)
+    chosen_pred_pnl = numeric_series(frame, "hv_chosen_pred_pnl", default=0.0)
+    predicted_positive = chosen_pred_pnl.gt(0.0)
+    tail_prob = numeric_series(
+        frame,
+        "hv_chosen_pred_tail_loss_prob",
+        default=0.0,
+    )
+    tail_pass_pred_pnl_lt2 = (
+        predicted_positive
+        & chosen_pred_pnl.lt(2.0)
+        & tail_prob.le(0.30)
+    )
+    if gate_rule == SELECTED_TAIL_PASS_PRED_PNL_LT2_GATE_RULE:
+        return tail_pass_pred_pnl_lt2
+    if gate_rule == SINGLETON_720_PRED_PNL_LT2_GATE_RULE:
+        horizon = numeric_series(frame, "hv_chosen_horizon_minutes", default=np.nan).round()
+        return tail_pass_pred_pnl_lt2 & horizon.eq(720.0)
     if gate_rule == "positive_bias_and_tail_miss_ge_0p10":
         residual_bias = chosen_horizon_wide_metric(frame, "residual_bias", default=0.0)
         residual_tail_miss = chosen_horizon_wide_metric(
@@ -1793,22 +1811,12 @@ def positive_pnl_gate_mask(frame: pd.DataFrame, gate_rule: str) -> pd.Series:
             default=False,
         )
     if gate_rule == "tail_prob_ge_0p30":
-        tail_prob = numeric_series(
-            frame,
-            "hv_chosen_pred_tail_loss_prob",
-            default=0.0,
-        )
         return predicted_positive & tail_prob.ge(0.30)
     if gate_rule == "positive_bias_tail_miss_or_tail_prob":
         residual_bias = chosen_horizon_wide_metric(frame, "residual_bias", default=0.0)
         residual_tail_miss = chosen_horizon_wide_metric(
             frame,
             "residual_tail_miss_rate",
-            default=0.0,
-        )
-        tail_prob = numeric_series(
-            frame,
-            "hv_chosen_pred_tail_loss_prob",
             default=0.0,
         )
         return predicted_positive & (

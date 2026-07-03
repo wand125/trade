@@ -417,6 +417,38 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             0.20,
         )
 
+    def test_selected_tail_pass_and_singleton_pred_pnl_lt2_gates_use_observable_columns(
+        self,
+    ) -> None:
+        choices = pd.DataFrame(
+            {
+                "id": ["low60", "low720", "high720", "tail_blocked", "negative_pred"],
+                "hv_chosen_horizon_minutes": [60.0, 720.0, 720.0, 720.0, 720.0],
+                "hv_chosen_pred_pnl": [1.5, 1.5, 2.5, 1.5, -1.0],
+                "hv_chosen_pred_tail_loss_prob": [0.20, 0.20, 0.20, 0.31, 0.20],
+            }
+        )
+
+        gated_selected, vetoed_selected = apply_positive_pnl_gate(
+            choices,
+            "selected_tail_pass_pred_pnl_lt2",
+        )
+        gated_singleton, vetoed_singleton = apply_positive_pnl_gate(
+            choices,
+            "singleton_720_pred_pnl_lt2",
+        )
+
+        self.assertEqual(vetoed_selected["id"].tolist(), ["low60", "low720"])
+        self.assertEqual(
+            gated_selected["id"].tolist(),
+            ["high720", "tail_blocked", "negative_pred"],
+        )
+        self.assertEqual(vetoed_singleton["id"].tolist(), ["low720"])
+        self.assertEqual(
+            gated_singleton["id"].tolist(),
+            ["low60", "high720", "tail_blocked", "negative_pred"],
+        )
+
     def test_context_positive_pnl_gate_uses_prior_month_support(self) -> None:
         choices = pd.DataFrame(
             {

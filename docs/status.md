@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 13:56 JST
+最終更新: 2026-07-03 14:12 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV selected tail pred PnL gate replayを追加した。00357のpre-registered候補をstateful replayへ戻し、`selected_tail_pass_pred_pnl_lt2` と `singleton_720_pred_pnl_lt2` をpositive PnL gate ruleとして実装した。どちらも実行時には `selected_addition` やactual PnLを使わず、`hv_chosen_pred_pnl`, `hv_chosen_pred_tail_loss_prob`, `hv_chosen_horizon_minutes` だけを使う。replayでは両gateともbest combined `+400.1440` で既存no-gate bestと同点、selector passは `0 / 288`。`singleton_720_pred_pnl_lt2` はscenario差分で改善96 / 悪化0 / 同値192、known singleton lossを止めるが、NoTrade-first blockersは `month_pnl_below_floor,role_trades_low,side_share_high` のまま。`selected_tail_pass_pred_pnl_lt2` は改善96 / 悪化32で広すぎるためglobal gateとしてreject。標準policyはNoTrade。詳細は `docs/reports/00358_2026-07-03_entry_ev_selected_tail_pred_pnl_gate_replay.md`。
 
 Entry EV tail selected residual diagnosticsを追加した。00356で見えたtail ceiling通過後のpositive predicted PnL failureを、実際のselector boundary周辺に限定して診断した。00354 no-penalty candidatesを00354 additions/rejectionsと突き合わせ、row-weightedだけでなく `candidate_identity_key` dedupで評価した。candidate identity dedupではtail pass positiveは118件 / `-90.3858`、loss 61件 / `-365.8848`。actual selected additionsに絞るとtail pass positiveは8件 / `+59.0070`、lossは1件 / `-29.1360` だけで、`fresh2024_validation 2024-08 long 720m` のsingletonだった。`pred_pnl_lt_2` はこのselected lossだけをflagしwin damage 0だが、支持はunique 1件なので標準policy化せず、stateful replay候補として扱う。`greedy_selected` row_scopeだけではloss 0に見えるため、selection artifact上のactual additionsと混同しない。標準policyはNoTrade。詳細は `docs/reports/00357_2026-07-03_entry_ev_tail_selected_residual_diagnostics.md`。
 

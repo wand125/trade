@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 14:12 Entry EV selected tail pred PnL gate replay
+
+作業:
+
+- 00357のpre-registered候補をstateful replayへ戻した。
+- `entry_ev_broad_prior_horizon_choice_replay.py` に `selected_tail_pass_pred_pnl_lt2` と `singleton_720_pred_pnl_lt2` positive PnL gate ruleを追加した。
+- 両ruleは実行時に `selected_addition` やactual PnLを使わず、`hv_chosen_pred_pnl`, `hv_chosen_pred_tail_loss_prob`, `hv_chosen_horizon_minutes` だけを使う。
+- report: `docs/reports/00358_2026-07-03_entry_ev_selected_tail_pred_pnl_gate_replay.md`
+
+結果:
+
+- 全gateでbest combinedは `+400.1440`、selector passは `0 / 288`。既存no-gate EV2 bestと同点だった。
+- `singleton_720_pred_pnl_lt2` はscenario差分で改善96 / 悪化0 / 同値192、best delta `+29.1360`。EV -2 / 0のknown singleton lossを止め、5 trades / added PnL `+60.8530` へ戻した。
+- `selected_tail_pass_pred_pnl_lt2` は改善96 / 悪化32 / 同値160。候補面では強いが広すぎる。
+- additions aggregateでは no-gate 1040 rows / `+9044.3480` / losses 96 に対し、`singleton_720_pred_pnl_lt2` は944 rows / `+11841.4040` / losses 0。
+- ただしbestのblockersは `month_pnl_below_floor,role_trades_low,side_share_high` のまま。
+
+判断:
+
+- `singleton_720_pred_pnl_lt2` はaccepted diagnostic replay candidate。known singleton lossを止め、今回のreplayでは悪化scenario 0。
+- ただし既存EV2 thresholdと同点で、NoTrade-first admissionを通らない。標準policyにはしない。
+- `selected_tail_pass_pred_pnl_lt2` は広すぎてscenario悪化があるためglobal hard gateとしてreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00358 selected tail pred PnL gate replay: OK
+
 ### 13:56 Entry EV tail selected residual diagnostics
 
 作業:
