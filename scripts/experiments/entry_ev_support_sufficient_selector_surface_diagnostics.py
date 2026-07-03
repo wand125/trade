@@ -71,6 +71,11 @@ DEFAULT_RISK_SELECTORS = (
 )
 DEFAULT_SCORE_MODES = "prior_actual_mean,bias_corrected,raw_pred_fixed,side_score"
 AUTO_TARGET_VALUES = {"auto", "auto_support_sufficient_negative"}
+TARGET_OUTCOME_REPLACEMENT_GAPS = {
+    "loss_selected_no_replacement",
+    "loss_replacement_degrades",
+    "loss_replacement_improves_but_still_negative",
+}
 
 
 def parse_int_grid(value: str) -> list[int]:
@@ -654,6 +659,46 @@ def safe_rate(numerator: float, denominator: float) -> float:
     return float(numerator / denominator) if denominator else np.nan
 
 
+def add_target_outcome_columns(choices: pd.DataFrame) -> pd.DataFrame:
+    output = choices.copy()
+    risk_selected = bool_series(output, "risk_trade_selected", default=False)
+    risk_loss = bool_series(output, "risk_trade_is_loss", default=False)
+    replacement = bool_series(output, "replacement_chosen", default=False)
+    supported = numeric_series(output, "supported_candidate_rows", default=0.0).gt(0.0)
+    delta = numeric_series(output, "delta_vs_baseline", default=0.0)
+    after = numeric_series(output, "month_pnl_after_replacement", default=np.nan)
+    category = pd.Series("unknown", index=output.index, dtype=object)
+    category.loc[~risk_selected] = "no_risk_trade"
+    category.loc[risk_selected & ~risk_loss] = "risk_trade_winner"
+    category.loc[risk_selected & risk_loss & ~supported] = "loss_selected_no_supported_candidate"
+    category.loc[risk_selected & risk_loss & supported & ~replacement] = "loss_selected_no_replacement"
+    category.loc[risk_selected & risk_loss & replacement & delta.lt(0.0)] = "loss_replacement_degrades"
+    category.loc[
+        risk_selected
+        & risk_loss
+        & replacement
+        & delta.ge(0.0)
+        & after.lt(0.0)
+    ] = "loss_replacement_improves_but_still_negative"
+    category.loc[
+        risk_selected
+        & risk_loss
+        & replacement
+        & delta.ge(0.0)
+        & after.ge(0.0)
+    ] = "loss_replacement_repairs_month"
+    output["target_outcome_category"] = category
+    output["target_outcome_success"] = category.eq("loss_replacement_repairs_month")
+    output["target_outcome_candidate_gap"] = category.eq("loss_selected_no_supported_candidate")
+    output["target_outcome_risk_gap"] = category.isin(["no_risk_trade", "risk_trade_winner"])
+    output["target_outcome_replacement_gap"] = category.isin(TARGET_OUTCOME_REPLACEMENT_GAPS)
+    return output
+
+
+def optional_max_count_pass(count: int, threshold: int) -> bool:
+    return True if int(threshold) < 0 else bool(count <= int(threshold))
+
+
 def summarize_surface(
     choices: pd.DataFrame,
     *,
@@ -661,9 +706,14 @@ def summarize_surface(
     max_winner_trade_selected: int = 0,
     max_baseline_positive_degraded: int = 0,
     min_current_negative_delta: float = 0.0,
+    min_target_outcome_success_count: int = 1,
+    max_target_candidate_gap_count: int = 0,
+    max_target_risk_gap_count: int = -1,
+    max_target_replacement_gap_count: int = 0,
 ) -> pd.DataFrame:
     if choices.empty:
         return pd.DataFrame()
+    choices = add_target_outcome_columns(choices)
     group_cols = [
         "risk_selector",
         "replacement_score_mode",
@@ -678,6 +728,7 @@ def summarize_surface(
         risk_selected = bool_series(group, "risk_trade_selected", default=False)
         risk_loss = bool_series(group, "risk_trade_is_loss", default=False)
         risk_winner = risk_selected & ~risk_loss
+        categories = group["target_outcome_category"].astype(str)
         pnl = numeric_series(group, "month_pnl_after_replacement", default=np.nan)
         delta = numeric_series(group, "delta_vs_baseline", default=0.0)
         baseline = numeric_series(group, "baseline_month_pnl", default=np.nan)
@@ -706,16 +757,53 @@ def summarize_surface(
         passes_baseline_positive_degradation = bool(
             baseline_positive_degraded_count <= int(max_baseline_positive_degraded)
         )
-        violation_count = int(
+        winner_violation_count = int(
             (not passes_loss_precision)
             + (not passes_winner_damage)
             + (not passes_baseline_positive_degradation)
             + (not passes_current_negative_delta)
         )
+        target_success_count = int((categories == "loss_replacement_repairs_month").sum())
+        target_candidate_gap_count = int(
+            (categories == "loss_selected_no_supported_candidate").sum()
+        )
+        target_risk_gap_count = int(categories.isin(["no_risk_trade", "risk_trade_winner"]).sum())
+        target_replacement_gap_count = int(categories.isin(TARGET_OUTCOME_REPLACEMENT_GAPS).sum())
+        passes_target_success_count = bool(
+            target_success_count >= int(min_target_outcome_success_count)
+        )
+        passes_target_candidate_gap = optional_max_count_pass(
+            target_candidate_gap_count,
+            int(max_target_candidate_gap_count),
+        )
+        passes_target_risk_gap = optional_max_count_pass(
+            target_risk_gap_count,
+            int(max_target_risk_gap_count),
+        )
+        passes_target_replacement_gap = optional_max_count_pass(
+            target_replacement_gap_count,
+            int(max_target_replacement_gap_count),
+        )
+        target_outcome_violation_count = int(
+            (not passes_target_success_count)
+            + (not passes_target_candidate_gap)
+            + (not passes_target_risk_gap)
+            + (not passes_target_replacement_gap)
+        )
         rows.append(
             {
                 **dict(zip(group_cols, keys, strict=True)),
                 "target_count": int(len(group)),
+                "target_outcome_success_count": target_success_count,
+                "target_outcome_candidate_gap_count": target_candidate_gap_count,
+                "target_outcome_risk_gap_count": target_risk_gap_count,
+                "target_outcome_replacement_gap_count": target_replacement_gap_count,
+                "target_outcome_winner_risk_count": int((categories == "risk_trade_winner").sum()),
+                "target_outcome_no_risk_trade_count": int((categories == "no_risk_trade").sum()),
+                "target_outcome_category_counts": ";".join(
+                    f"{name}:{count}"
+                    for name, count in categories.value_counts().sort_index().items()
+                ),
                 "risk_trade_selected_count": selected_count,
                 "replacement_count": int(replacement.sum()),
                 "loss_trade_selected_count": loss_selected_count,
@@ -753,23 +841,51 @@ def summarize_surface(
                 "passes_winner_trade_selected": passes_winner_damage,
                 "passes_baseline_positive_degradation": passes_baseline_positive_degradation,
                 "passes_current_negative_delta": passes_current_negative_delta,
-                "winner_damage_constraint_violation_count": violation_count,
-                "passes_winner_damage_constraints": bool(violation_count == 0),
+                "winner_damage_constraint_violation_count": winner_violation_count,
+                "passes_winner_damage_constraints": bool(winner_violation_count == 0),
+                "passes_target_outcome_success_count": passes_target_success_count,
+                "passes_target_outcome_candidate_gap": passes_target_candidate_gap,
+                "passes_target_outcome_risk_gap": passes_target_risk_gap,
+                "passes_target_outcome_replacement_gap": passes_target_replacement_gap,
+                "target_outcome_constraint_violation_count": target_outcome_violation_count,
+                "passes_target_outcome_constraints": bool(target_outcome_violation_count == 0),
             }
         )
     return pd.DataFrame(rows).sort_values(
         [
             "passes_winner_damage_constraints",
+            "passes_target_outcome_constraints",
             "winner_damage_constraint_violation_count",
+            "target_outcome_constraint_violation_count",
             "passes_winner_trade_selected",
             "passes_baseline_positive_degradation",
             "passes_current_negative_delta",
+            "target_outcome_success_count",
+            "target_outcome_candidate_gap_count",
+            "target_outcome_risk_gap_count",
+            "target_outcome_replacement_gap_count",
             "loss_selection_precision",
             "mean_month_pnl_after_replacement",
             "min_month_pnl_after_replacement",
             "mean_delta_vs_baseline",
         ],
-        ascending=[False, True, False, False, False, False, False, False, False],
+        ascending=[
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+        ],
     )
 
 
@@ -1011,13 +1127,17 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
             }
         )
 
-    choices = pd.DataFrame(choice_rows)
+    choices = add_target_outcome_columns(pd.DataFrame(choice_rows))
     summary = summarize_surface(
         choices,
         min_loss_selection_precision=float(args.min_loss_selection_precision),
         max_winner_trade_selected=int(args.max_winner_trade_selected),
         max_baseline_positive_degraded=int(args.max_baseline_positive_degraded),
         min_current_negative_delta=float(args.min_current_negative_delta),
+        min_target_outcome_success_count=int(args.min_target_outcome_success_count),
+        max_target_candidate_gap_count=int(args.max_target_candidate_gap_count),
+        max_target_risk_gap_count=int(args.max_target_risk_gap_count),
+        max_target_replacement_gap_count=int(args.max_target_replacement_gap_count),
     )
     targets = pd.DataFrame(target_rows)
     risk_trades = (
@@ -1071,6 +1191,10 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         "max_winner_trade_selected": args.max_winner_trade_selected,
         "max_baseline_positive_degraded": args.max_baseline_positive_degraded,
         "min_current_negative_delta": args.min_current_negative_delta,
+        "min_target_outcome_success_count": args.min_target_outcome_success_count,
+        "max_target_candidate_gap_count": args.max_target_candidate_gap_count,
+        "max_target_risk_gap_count": args.max_target_risk_gap_count,
+        "max_target_replacement_gap_count": args.max_target_replacement_gap_count,
         "large_loss_threshold": args.large_loss_threshold,
         "include_non_candidate_top_score": args.include_non_candidate_top_score,
         "note": (
@@ -1089,6 +1213,10 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         "replacement_score_mode",
         "candidate_min_prior_count",
         "target_count",
+        "target_outcome_success_count",
+        "target_outcome_candidate_gap_count",
+        "target_outcome_risk_gap_count",
+        "target_outcome_replacement_gap_count",
         "loss_trade_selected_count",
         "winner_trade_selected_count",
         "loss_selection_precision",
@@ -1098,6 +1226,8 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         "mean_delta_vs_baseline",
         "winner_damage_constraint_violation_count",
         "passes_winner_damage_constraints",
+        "target_outcome_constraint_violation_count",
+        "passes_target_outcome_constraints",
     ]
     print(
         summary[[column for column in summary_display_columns if column in summary.columns]]
@@ -1161,6 +1291,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-winner-trade-selected", type=int, default=0)
     parser.add_argument("--max-baseline-positive-degraded", type=int, default=0)
     parser.add_argument("--min-current-negative-delta", type=float, default=0.0)
+    parser.add_argument("--min-target-outcome-success-count", type=int, default=1)
+    parser.add_argument("--max-target-candidate-gap-count", type=int, default=0)
+    parser.add_argument(
+        "--max-target-risk-gap-count",
+        type=int,
+        default=-1,
+        help="Use -1 to leave target risk gaps unconstrained.",
+    )
+    parser.add_argument("--max-target-replacement-gap-count", type=int, default=0)
     parser.add_argument("--large-loss-threshold", type=float, default=-1.0)
     parser.add_argument("--output-root", type=Path, default=ROOT / "data/reports/backtests")
     parser.add_argument(

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 22:10 JST
+最終更新: 2026-07-03 22:20 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV outcome-constrained surfaceを追加した。00380のtarget outcome categoryを `entry_ev_support_sufficient_selector_surface_diagnostics.py` 本体へ統合し、surface choicesとsummaryに success / candidate gap / risk gap / replacement gapを出すようにした。00378と同じ条件で再実行したところ、旧winner-damage制約は16行中8行が通過したが、新しいtarget outcome制約は16行中0行。oracleでもsuccess 2 / candidate gap 3で落ちる。判断: outcome制約はaccepted infrastructure。候補不足を成功扱いしない。標準policyはNoTrade。詳細は `docs/reports/00381_2026-07-03_entry_ev_outcome_constrained_surface.md`。
 
 Entry EV surface target outcome diagnosticsを追加した。00378 surfaceの制約通過をtarget単位に分解し、`no_risk_trade` / `risk_trade_winner` / `loss_selected_no_supported_candidate` / `loss_replacement_repairs_month` などに分類した。非oracle `ev_ge5` + `prior_actual_mean` は5 target中、修復成功1、candidate gap 3、risk gap 1で、mean after PnLは `-0.3246` のまま。`combined:any_lossrisk` はmean after `+3.5350` だがwinner risk 2を含む。判断: target-level outcome分類はaccepted infrastructure。loss selectedをrepair成功と誤読しない。標準policyはNoTrade。詳細は `docs/reports/00380_2026-07-03_entry_ev_surface_target_outcome.md`。
 

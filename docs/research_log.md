@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 22:20 Entry EV outcome-constrained surface
+
+作業:
+
+- 00380のtarget outcome categoryを、selector surface本体のsummaryへ統合した。
+- `support_sufficient_selector_surface_choices.csv` に outcome columns を出力し、summaryに `passes_target_outcome_constraints` を追加した。
+- 00378と同じconfig / target / risk selector / score条件でsurfaceを再実行した。
+- report: `docs/reports/00381_2026-07-03_entry_ev_outcome_constrained_surface.md`
+
+結果:
+
+- 16 surface rows中、旧winner-damage制約は8行が通過。
+- 新target outcome制約は0行が通過。
+- 非oracle `feature:ev_ge5_lossfirst_lt0p30` + `prior_actual_mean` はsuccess 1 / candidate gap 3 / risk gap 1で、旧passだが新passではない。
+- oracle `worst_loss` でもsuccess 2 / candidate gap 3なので、perfect risk selectionだけでは候補不足を解けない。
+
+判断:
+
+- outcome-constrained surfaceはaccepted infrastructure。
+- old winner-damage passをpolicy readinessとして読まない。
+- 次はshrunk cross-family priorを、mean PnLではなく `passes_target_outcome_constraints` とcandidate gap削減で評価する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_selector_surface_diagnostics.py tests/test_entry_ev_support_sufficient_selector_surface_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_selector_surface_diagnostics`: OK
+- 00381 outcome-constrained surface run: OK
+
 ### 22:10 Entry EV surface target outcome diagnostics
 
 作業:

@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 import pandas as pd
 
 from scripts.experiments.entry_ev_support_sufficient_selector_surface_diagnostics import (
+    add_target_outcome_columns,
     annotate_target_inventory_with_evaluation,
     build_target_inventory,
     candidate_support_mask,
@@ -286,13 +287,49 @@ class EntryEvSupportSufficientSelectorSurfaceDiagnosticsTest(unittest.TestCase):
         good = summary.iloc[0]
         bad = summary.iloc[1]
         self.assertTrue(bool(good["passes_winner_damage_constraints"]))
+        self.assertTrue(bool(good["passes_target_outcome_constraints"]))
+        self.assertEqual(int(good["target_outcome_success_count"]), 1)
+        self.assertEqual(int(good["target_outcome_candidate_gap_count"]), 0)
         self.assertEqual(int(good["winner_damage_constraint_violation_count"]), 0)
+        self.assertEqual(int(good["target_outcome_constraint_violation_count"]), 0)
         self.assertAlmostEqual(float(good["loss_selection_precision"]), 1.0)
         self.assertEqual(int(good["current_negative_target_count"]), 1)
         self.assertAlmostEqual(float(good["current_negative_min_delta"]), 4.0)
         self.assertFalse(bool(bad["passes_winner_damage_constraints"]))
+        self.assertFalse(bool(bad["passes_target_outcome_constraints"]))
         self.assertEqual(int(bad["winner_trade_selected_count"]), 1)
         self.assertEqual(int(bad["baseline_positive_degraded_count"]), 0)
+
+    def test_add_target_outcome_columns_marks_candidate_gap_and_success(self) -> None:
+        choices = pd.DataFrame(
+            [
+                {
+                    "risk_trade_selected": True,
+                    "risk_trade_is_loss": True,
+                    "supported_candidate_rows": 0,
+                    "replacement_chosen": False,
+                    "month_pnl_after_replacement": -1.0,
+                    "delta_vs_baseline": 0.0,
+                },
+                {
+                    "risk_trade_selected": True,
+                    "risk_trade_is_loss": True,
+                    "supported_candidate_rows": 2,
+                    "replacement_chosen": True,
+                    "month_pnl_after_replacement": 1.0,
+                    "delta_vs_baseline": 2.0,
+                },
+            ]
+        )
+
+        output = add_target_outcome_columns(choices)
+
+        self.assertEqual(
+            output["target_outcome_category"].tolist(),
+            ["loss_selected_no_supported_candidate", "loss_replacement_repairs_month"],
+        )
+        self.assertEqual(output["target_outcome_candidate_gap"].tolist(), [True, False])
+        self.assertEqual(output["target_outcome_success"].tolist(), [False, True])
 
 
 if __name__ == "__main__":
