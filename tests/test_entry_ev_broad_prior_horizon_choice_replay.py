@@ -529,10 +529,93 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             1.0,
         )
 
-    def test_parse_positive_pnl_penalty_specs(self) -> None:
-        specs = parse_positive_pnl_penalty_specs("none:0,residual_bias_tail_miss:0.25")
+    def test_context_positive_pnl_penalty_uses_prior_month_support(self) -> None:
+        choices = pd.DataFrame(
+            {
+                "id": [
+                    "prior_jan_1",
+                    "prior_jan_2",
+                    "prior_jan_3",
+                    "prior_feb_1",
+                    "prior_feb_2",
+                    "current_short",
+                    "current_long",
+                ],
+                "role": ["r"] * 7,
+                "month": [
+                    "2025-01",
+                    "2025-01",
+                    "2025-01",
+                    "2025-02",
+                    "2025-02",
+                    "2025-03",
+                    "2025-03",
+                ],
+                "decision_timestamp": [
+                    "2025-01-02T00:00:00Z",
+                    "2025-01-03T00:00:00Z",
+                    "2025-01-04T00:00:00Z",
+                    "2025-02-02T00:00:00Z",
+                    "2025-02-03T00:00:00Z",
+                    "2025-03-02T00:00:00Z",
+                    "2025-03-02T00:01:00Z",
+                ],
+                "row_scope": ["available_candidates"] * 7,
+                "prob_threshold": [0.45] * 7,
+                "ev_threshold": [0.0] * 7,
+                "tail_prob_threshold": [0.30] * 7,
+                "require_model_used": [True] * 7,
+                "side": ["short", "short", "short", "short", "short", "short", "long"],
+                "hv_chosen_horizon_minutes": [60.0] * 7,
+                "hv_chosen_pred_pnl": [2.0] * 7,
+                "actual_pnl_at_hv_chosen_horizon": [
+                    -5.0,
+                    -5.0,
+                    -5.0,
+                    -6.0,
+                    -6.0,
+                    -4.0,
+                    -4.0,
+                ],
+                "ranker_hv_60m_residual_bias": [1.0] * 7,
+                "ranker_hv_60m_residual_tail_miss_rate": [0.20] * 7,
+                "repair_duration_risk_penalty_amount": [0.0] * 7,
+            }
+        )
 
-        self.assertEqual(specs, [("none", 0.0), ("residual_bias_tail_miss", 0.25)])
+        binary = apply_positive_pnl_penalty(
+            choices,
+            penalty_mode="contextual_confidence",
+            penalty_weight=2.0,
+        )
+        delta = apply_positive_pnl_penalty(
+            choices,
+            penalty_mode="contextual_confidence_delta",
+            penalty_weight=1.0,
+        )
+
+        current_binary = binary[binary["id"].eq("current_short")].iloc[0]
+        current_delta = delta[delta["id"].eq("current_short")].iloc[0]
+        other_delta = delta[delta["id"].eq("current_long")].iloc[0]
+        self.assertAlmostEqual(float(current_binary["positive_pnl_penalty_signal"]), 1.0)
+        self.assertAlmostEqual(float(current_binary["positive_pnl_penalty_amount"]), 2.0)
+        self.assertAlmostEqual(float(current_delta["positive_pnl_penalty_signal"]), 0.27)
+        self.assertAlmostEqual(float(current_delta["positive_pnl_penalty_amount"]), 0.27)
+        self.assertAlmostEqual(
+            float(current_delta["positive_pnl_penalty_contextual_prior_flagged_count"]),
+            5.0,
+        )
+        self.assertAlmostEqual(float(other_delta["positive_pnl_penalty_signal"]), 0.0)
+
+    def test_parse_positive_pnl_penalty_specs(self) -> None:
+        specs = parse_positive_pnl_penalty_specs(
+            "none:0,residual_bias_tail_miss:0.25,contextual_confidence:2"
+        )
+
+        self.assertEqual(
+            specs,
+            [("none", 0.0), ("residual_bias_tail_miss", 0.25), ("contextual_confidence", 2.0)],
+        )
         with self.assertRaises(ValueError):
             parse_positive_pnl_penalty_specs("bad_mode:1")
 

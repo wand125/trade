@@ -131,6 +131,8 @@ POSITIVE_PNL_PENALTY_MODES = {
     "tail_prob",
     "tail_prob_excess",
     "residual_bias_tail_miss_plus_tail",
+    "contextual_confidence",
+    "contextual_confidence_delta",
 }
 
 
@@ -1870,6 +1872,19 @@ def positive_pnl_penalty_signal(frame: pd.DataFrame, penalty_mode: str) -> pd.Se
         signal = 10.0 * (tail_prob - 0.30).clip(lower=0.0)
     elif penalty_mode == "residual_bias_tail_miss_plus_tail":
         signal = residual_bias * residual_tail_miss + 10.0 * tail_prob
+    elif penalty_mode == "contextual_confidence":
+        contextual = contextual_positive_bias_confidence(frame)
+        signal = bool_series(contextual, "contextual_veto", default=False).astype(float)
+    elif penalty_mode == "contextual_confidence_delta":
+        contextual = contextual_positive_bias_confidence(frame)
+        signal = (
+            numeric_series(
+                contextual,
+                "contextual_prior_pointwise_gate_delta",
+                default=0.0,
+            ).clip(lower=0.0)
+            / 100.0
+        ).where(bool_series(contextual, "contextual_veto", default=False), 0.0)
     else:
         raise ValueError(f"unknown positive PnL penalty mode: {penalty_mode}")
     return signal.where(predicted_positive, 0.0).fillna(0.0)
@@ -1898,6 +1913,10 @@ def apply_positive_pnl_penalty(
         "residual_tail_miss_rate",
         default=0.0,
     )
+    if penalty_mode in {"contextual_confidence", "contextual_confidence_delta"}:
+        contextual_diagnostics = contextual_positive_bias_confidence(output)
+        for column in contextual_diagnostics.columns:
+            output[f"positive_pnl_penalty_{column}"] = contextual_diagnostics[column]
     output["positive_pnl_penalty_signal"] = signal
     output["positive_pnl_penalty_amount"] = amount
     output["repair_duration_risk_penalty_amount"] = numeric_series(

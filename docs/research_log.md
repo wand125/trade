@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 13:09 Entry EV contextual positive PnL soft penalty replay
+
+作業:
+
+- 00353のcontextual positive-bias confidenceをhard gateではなくsoft repair penaltyへ接続した。
+- `--positive-pnl-penalty-specs` に `contextual_confidence` と `contextual_confidence_delta` を追加した。
+- 00353と同じreplay条件で `none`, `contextual_confidence:1/2/5`, `contextual_confidence_delta:1/2/5` を比較した。
+- report: `docs/reports/00354_2026-07-03_entry_ev_contextual_positive_pnl_soft_penalty_replay.md`
+
+結果:
+
+- bestは全penalty labelで同じ5 trades / added PnL `+60.8530` / combined `+400.1440`。
+- `none` との差分は全labelで `0 / 288` scenarios。
+- 候補段階では各contextual labelで656 rowsをpenalizeし、penalized PnL `-9779.2960`、loss 624 / win 32。
+- ただし選択された additions で `positive_pnl_penalty_amount > 0` は0件。
+
+判断:
+
+- contextual soft penalty modesはaccepted infrastructure。
+- hard gateと同じく、現行repair selectorの最終採用集合とは交差しない。
+- 改善なしなので標準policy候補としてはreject。
+- 次はpenalized rowsがquota group内で何位か、near-selectedなのかを診断する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00354 contextual positive PnL soft penalty replay: OK
+
 ### 12:53 Entry EV context H/S support2 positive PnL gate replay
 
 作業:

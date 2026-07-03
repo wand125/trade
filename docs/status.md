@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 12:53 JST
+最終更新: 2026-07-03 13:09 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV contextual positive PnL soft penalty replayを追加した。00353の次アクションとして、contextual positive-bias confidenceをhard gateではなくrepair scoreのsoft penaltyへ接続し、`contextual_confidence` / `contextual_confidence_delta` を追加した。00353と同じ条件で `none`, `contextual_confidence:1/2/5`, `contextual_confidence_delta:1/2/5` を比較した。候補段階では各labelで656 rowsをpenalizeし、penalized PnL `-9779.2960`、loss 624 / win 32 とrisk signalは再現。ただし選択された additions で penalty amount > 0 は0件。最終summary差分は全penalty labelで `0 / 288` scenarios、best combinedはすべて `+400.1440`。判断: soft penalty modesはaccepted infrastructure、標準policyはNoTrade。詳細は `docs/reports/00354_2026-07-03_entry_ev_contextual_positive_pnl_soft_penalty_replay.md`。
 
 Entry EV context H/S support2 positive PnL gate replayを追加した。00352のpre-registered候補 `horizon,side` + support2 + `positive_bias_and_tail_miss_ge_0p10` を `--positive-pnl-gate-rules context_hs_support2_positive_bias_tail_miss_ge_0p10` としてstateful replayへ接続した。gateはscenario / chosen horizon / side / month単位で、過去月だけのmonthly prior confidenceを使う。候補段階では各score/abstentionで82 rowsをvetoし、vetoed PnL `-1222.4120`、loss 78 / win 4 とrisk検出は強い。ただし最終採用tradeには当たらず、`none` vs new gateの最終summary差分は `0 / 288` scenarios。bestはどちらも5 trades / added PnL `+60.8530` / combined `+400.1440`。判断: hookはaccepted infrastructure、標準policyはNoTrade。詳細は `docs/reports/00353_2026-07-03_entry_ev_context_hs_support2_positive_pnl_gate_replay.md`。
 
