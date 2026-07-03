@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 21:28 Entry EV broad support abstention stability
+
+作業:
+
+- 00374のabstention gateが11-target setに過適合していないかを見るため、00370 inventoryの条件を `support_sufficient_config_count >=1`、`metric_parent_count >=2` へ緩めた。
+- 同じselector/replacement gridで広めのsurfaceを再実行し、そのartifactへ00374のreplacement abstention sweepを適用した。
+- report: `docs/reports/00375_2026-07-03_entry_ev_broad_support_abstention_stability.md`
+
+結果:
+
+- target inventoryは14件、現00314/00318 configで評価できたtargetは13件。00371比で `hgb2024_0306 2024-06`、`hgb2025_08 2025-08`、`cal2024 2024-01` が追加された。
+- 広いsurfaceでもwinner-damage ranking単体は通過0件。
+- non-oracleのloss precisionは悪化し、`ev_ge5_lossfirst_lt0p30` は `0.5556 -> 0.4545`、`side_gap_ge0p15_lossfirst_lt0p30` は `0.2857 -> 0.2222`。
+- `feature:side_gap_ge0p15_lossfirst_lt0p30` + `prior_actual_mean` + candidate prior count `>=100` + abstention `prior_actual_mean >=25` は引き続き制約通過し、current-negative delta `+20.2470`、winner intervention 0、baseline-positive degraded 0。
+- ただし介入は依然 `refit2025 2025-03` の1件だけ。追加3targetは介入せずbaseline維持。mean deltaは `+2.0247 -> +1.5575` へ薄まった。
+
+判断:
+
+- broad support-sufficient stressはaccepted diagnostics。
+- abstention gateは広いtarget集合でも壊れなかったが、複数targetで効いた証拠ではない。
+- `prior_actual_mean >=25` / `prior_margin >=0` 系はdiagnostic candidateのまま。
+- 標準policyはNoTrade。
+
+検証:
+
+- 00375 broad support-sufficient selector surface run: OK
+- 00375 broad support replacement abstention run: OK
+
 ### 21:18 Entry EV replacement abstention surface
 
 作業:

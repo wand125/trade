@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 21:18 JST
+最終更新: 2026-07-03 21:28 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV broad support abstention stabilityを追加した。00374のabstention gateを追加targetへstressするため、00370 inventory条件を `support_sufficient_config_count >=1`、`metric_parent_count >=2` へ緩め、13 evaluated targetsの広いsurfaceを作った。追加targetは `hgb2024_0306 2024-06`, `hgb2025_08 2025-08`, `cal2024 2024-01`。winner-damage ranking単体は引き続き通過0件で、non-oracle loss precisionは `ev_ge5_lossfirst_lt0p30` が `0.5556 -> 0.4545`、`side_gap_ge0p15_lossfirst_lt0p30` が `0.2857 -> 0.2222` に悪化。abstentionでは `side_gap` + `prior_actual_mean` + `prior_actual_mean >=25` が引き続き通過したが、介入は同じ `refit2025 2025-03` の1件だけで、追加3targetはbaseline維持。判断: gateは広い集合でも壊れなかったが複数targetで効いた証拠ではない。標準policyはNoTrade。詳細は `docs/reports/00375_2026-07-03_entry_ev_broad_support_abstention_stability.md`。
 
 Entry EV replacement abstention surfaceを追加した。00373の次アクションとして、replacement candidateを通す/捨てるobservable gateをsurface上で診断した。候補を捨てた場合はbaseline維持に戻し、winner damageは実際にreplacement interventionしたtradeだけで数える。`abstain_all_replacements` は16/16 rowsで制約通過するが改善0。非oracleでは `feature:side_gap_ge0p15_lossfirst_lt0p30` + `prior_actual_mean` + candidate prior count `>=100` + abstention `prior_actual_mean >=25` が、`refit2025 2025-03` のlossだけへ介入し、current-negative delta `+20.2470`、mean delta `+2.0247`、winner intervention 0、baseline-positive degraded 0で通過した。`hgb2024_0306 2024-05` はprior actual mean `14.4308` で介入せずbaseline維持。判断: abstention surfaceはaccepted infrastructure、同gateはdiagnostic candidate。ただし実質1 target改善なので標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00374_2026-07-03_entry_ev_replacement_abstention_surface.md`。
 
