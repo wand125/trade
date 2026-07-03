@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 14:26 Entry EV 00358 thin month candidate audit
+
+作業:
+
+- 00358後の残blocker (`month_pnl_below_floor`, `role_trades_low`, `side_share_high`) が候補生成不足かselection問題かを診断した。
+- `entry_ev_support_repair_thin_month_candidate_diagnostics.py` にdiagnostic-onlyの `needed_top_oracle_actual_*` 列を追加した。actual PnLはteacher/audit専用で、実行featureやselector tie-breakerには使わない。
+- 00358 EV2 best、EV -2 + `singleton_720_pred_pnl_lt2`、それぞれの00324 external horizon coverage追加版を比較した。
+- report: `docs/reports/00359_2026-07-03_entry_ev_00358_thin_month_candidate_audit.md`
+
+結果:
+
+- 00358 EV2 bestのstateful surfaceでは、残target 4件に候補0。best branchのrerankingでは修復できない。
+- EV -2 + singleton guardではtarget pool 12 unique / model-used 12 / relaxed guarded 11 / oracle positive 8だが、実質 `fresh2024 2024-08` に集中する。
+- 00324 externalを足すと `fresh2024 2024-03` は51 unique / oracle positive 18 / oracle positive sum `+90.5230`。ただしmodel-used 0で、top predicted actualは `-12.7920`、top oracle actualは `+13.4900`。
+- `fresh2024 2024-11` と `refit2025 2025-03` は00358 statefulにも00324 externalにも候補0。
+
+判断:
+
+- 残blockerはglobal gate不足ではなく、target-local calibration / fallback confidence / candidate generation不足。
+- `fresh2024 2024-11` と `refit2025 2025-03` は新しいcandidate-generation pathが必要。
+- `fresh2024 2024-03` はfallback/non-model rowsをそのままedge扱いしない。chronological confidenceが必要。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_repair_thin_month_candidate_diagnostics.py tests/test_entry_ev_support_repair_thin_month_candidate_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_repair_thin_month_candidate_diagnostics`: OK
+- 00359 four thin-month candidate audit runs: OK
+
 ### 14:12 Entry EV selected tail pred PnL gate replay
 
 作業:

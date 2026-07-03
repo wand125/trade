@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 14:12 JST
+最終更新: 2026-07-03 14:26 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV 00358 thin month candidate auditを追加した。00358後の残blocker (`month_pnl_below_floor`, `role_trades_low`, `side_share_high`) が候補生成不足かselection問題かを診断し、`entry_ev_support_repair_thin_month_candidate_diagnostics.py` にdiagnostic-onlyの `needed_top_oracle_actual_*` 列を追加した。00358 EV2 bestのstateful surfaceでは残target 4件に候補0。EV -2 + `singleton_720_pred_pnl_lt2` ではtarget pool 12 unique / model-used 12 / relaxed guarded 11 / oracle positive 8だが、実質 `fresh2024 2024-08` に集中する。00324 external horizon coverageを足すと `fresh2024 2024-03` は51 unique / oracle positive 18 / oracle positive sum `+90.5230` だがmodel-used 0で、top predicted actualは `-12.7920`。`fresh2024 2024-11` と `refit2025 2025-03` は候補0。残blockerはglobal gate不足ではなくtarget-local calibration / fallback confidence / candidate generation不足。標準policyはNoTrade。詳細は `docs/reports/00359_2026-07-03_entry_ev_00358_thin_month_candidate_audit.md`。
 
 Entry EV selected tail pred PnL gate replayを追加した。00357のpre-registered候補をstateful replayへ戻し、`selected_tail_pass_pred_pnl_lt2` と `singleton_720_pred_pnl_lt2` をpositive PnL gate ruleとして実装した。どちらも実行時には `selected_addition` やactual PnLを使わず、`hv_chosen_pred_pnl`, `hv_chosen_pred_tail_loss_prob`, `hv_chosen_horizon_minutes` だけを使う。replayでは両gateともbest combined `+400.1440` で既存no-gate bestと同点、selector passは `0 / 288`。`singleton_720_pred_pnl_lt2` はscenario差分で改善96 / 悪化0 / 同値192、known singleton lossを止めるが、NoTrade-first blockersは `month_pnl_below_floor,role_trades_low,side_share_high` のまま。`selected_tail_pass_pred_pnl_lt2` は改善96 / 悪化32で広すぎるためglobal gateとしてreject。標準policyはNoTrade。詳細は `docs/reports/00358_2026-07-03_entry_ev_selected_tail_pred_pnl_gate_replay.md`。
 

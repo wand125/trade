@@ -105,10 +105,14 @@ class EntryEvSupportRepairThinMonthCandidateDiagnosticsTest(unittest.TestCase):
         self.assertAlmostEqual(float(r1["needed_top_pred_pnl_pred_pnl"]), 3.0)
         self.assertAlmostEqual(float(r1["needed_top_pred_pnl_actual_pnl"]), -10.0)
         self.assertAlmostEqual(float(r1["needed_side_oracle_best_actual"]), 20.0)
+        self.assertAlmostEqual(float(r1["needed_top_oracle_actual_actual_pnl"]), 20.0)
+        self.assertAlmostEqual(float(r1["needed_top_oracle_actual_pred_pnl"]), 1.0)
         self.assertEqual(int(r1["needed_side_strict_guarded_pass_unique_count"]), 2)
+        self.assertTrue(bool(r1["needed_top_pred_pnl_model_used"]))
         self.assertTrue(bool(candidates.iloc[2]["singleton_720_pred_pnl_lt2"]))
         self.assertEqual(int(r2["needed_side_strict_pass_unique_count"]), 1)
         self.assertEqual(int(r2["needed_side_strict_guarded_pass_unique_count"]), 0)
+        self.assertTrue(bool(r2["needed_top_pred_pnl_singleton_720_pred_pnl_lt2"]))
 
     def test_external_horizon_candidates_map_to_common_schema(self) -> None:
         external = normalize_external_horizon_candidates(

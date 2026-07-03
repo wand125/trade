@@ -390,6 +390,8 @@ def top_observable_candidate(
             f"{prefix}_pred_pnl": np.nan,
             f"{prefix}_prob": np.nan,
             f"{prefix}_tail_prob": np.nan,
+            f"{prefix}_model_used": False,
+            f"{prefix}_singleton_720_pred_pnl_lt2": False,
             f"{prefix}_actual_pnl": np.nan,
             f"{prefix}_selection_status": "",
             f"{prefix}_reject_reason": "",
@@ -418,6 +420,10 @@ def top_observable_candidate(
         f"{prefix}_pred_pnl": float(top.get("hv_chosen_pred_pnl", np.nan)),
         f"{prefix}_prob": float(top.get("hv_chosen_pred_executable_prob", np.nan)),
         f"{prefix}_tail_prob": float(top.get("hv_chosen_pred_tail_loss_prob", np.nan)),
+        f"{prefix}_model_used": bool(top.get("hv_chosen_pred_model_used_bool", False)),
+        f"{prefix}_singleton_720_pred_pnl_lt2": bool(
+            top.get("singleton_720_pred_pnl_lt2", False)
+        ),
         f"{prefix}_actual_pnl": float(top.get("actual_pnl_at_hv_chosen_horizon", np.nan)),
         f"{prefix}_selection_status": top.get("selection_status", ""),
         f"{prefix}_reject_reason": top.get("reject_reason", ""),
@@ -512,6 +518,19 @@ def summarize_target_candidates(
                 ascending=[True, False, False, True],
             )
         )
+        row.update(
+            top_observable_candidate(
+                needed_pool,
+                prefix="needed_top_oracle_actual",
+                sort_columns=[
+                    "actual_pnl_at_hv_chosen_horizon",
+                    "hv_chosen_pred_pnl",
+                    "repair_score",
+                    "decision_timestamp",
+                ],
+                ascending=[False, False, False, True],
+            )
+        )
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -587,6 +606,7 @@ def overall_summary(
         "needed_top_strict_guarded_actual_pnl",
         "needed_top_relaxed_guarded_actual_pnl",
         "needed_top_tail_low_actual_pnl",
+        "needed_top_oracle_actual_actual_pnl",
     ]:
         values = numeric_series(target_summary, column, default=np.nan)
         row[f"{column}_sum"] = float(values.sum(skipna=True)) if len(values) else 0.0
