@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-03 16:42 JST
+最終更新: 2026-07-03 16:52 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -22,12 +22,13 @@
 | `00367` | Support-sufficient replacement calibration | target月より前のside-row実績でreplacement candidateのexpected PnLを補正。`prior_actual_mean` / `bias_corrected` は有望だが、prior 2ヶ月 + one-fail依存なので標準policyではない。 |
 | `00368` | Support-sufficient selector surface | loss-risk selectorで外すcurrent tradeを選び、prior support filter付きreplacementを選ぶsurfaceへ接続。`side_gap_ge0p15_lossfirst_lt0p30` はtarget worst lossを選べるが、broad risk selectorはwinnerを外す。標準policyはNoTrade。 |
 | `00369` | Support-sufficient auto targets | current trades / repair targetsからsupport-sufficient negative monthをauto抽出。現branchでは対象が `refit2025 2025-03` の1件だけと確認。 |
+| `00370` | Support negative month inventory | 過去のselector monthly metrics 17件を棚卸しし、support-sufficient negative rows 5,065 / support-limited negative rows 4,426、support-sufficient target identity 14件を確認。ただしconfig rowsは独立サンプルではなくtarget選定用の地図。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00369` | support-sufficient selector surfaceをauto target化した。現branchのnegative monthは4件だが、support-sufficient negative monthは `refit2025 2025-03` の1件のみ。他3件はsupport-limitedなので、複数target評価には他branch/variant探索またはsupport-limited lane分離が必要。 |
+| Latest decision | `00370` | 過去artifact全体ではsupport-sufficient target候補が複数あると確認した。次はcanonical support-sufficient target setを作り、00368/00369のselector surfaceを複数targetへ広げる。config rowsはvariant重複を含むため独立サンプルとして扱わない。 |
 | Recent trajectory | `00258`..`00365` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00325ではtarget-aware repair utilityを接続し、actual-floor upper-boundならcombined `+371.6610` まで伸びた。00326ではrow x horizon化とhpen0.25でpred-onlyでもcombined `+374.6110` まで到達した。00329ではpriorをfeatureとしてchronological horizon-choice rankerへ入れ、低複雑度版がcombined `+403.2680` まで伸びた。00335でactual PnL tie-breaker leakを修正し、best combinedはleak-free `+400.1440` に下方修正。00339でthin-month候補面を診断し、fresh03はfallback/non-model calibration問題、fresh11/refit03は候補生成不足と確認。00340/00341でfresh03のhorizon confidence / tail calibration問題を確認。00342でtail support gateはfresh03局所を改善したがfull replayではplain PnLに負けた。00343/00344でprior/OOB reliabilityを検証し、direct score multiplierはtarget subset/all rowsの両方で悪化。00346 stateful pred-pnl negative vetoはplain `pnl` bestを改善せず、00347でpositive predicted PnL failureを診断するとmarket dedup positive pred 205件中124件が損失だった。00348でstateful hard gateへ戻すと、tail gateはbest no-op、positive-bias gateはbest悪化。00349でsoft penalty化してもbestはno-op、強いtail_prob penaltyは悪化。00350でover-gatingを分解し、tail probabilityはcontext-specific risk priorとして有用だがglobal gateではなく、harmful/residual系はwinner damageが大きいと確認。00351でcontext-specific abstention confidenceを試したが、market dedup後はdefault confident context 0、min4ではwinner over-gating。00352でsupport countを追加し、`horizon,side` + support2 + positive-biasをstateful replay候補にした。00353 hard gateと00354 soft penaltyはいずれも候補riskは検出するが最終採用は不変。00355でこれらのpenalized rowsは全件既存 `tail_prob_ceiling` に落とされていたと判明。00356でtail ceiling通過後の残存failureを見たが、global residual hard gateは勝ち候補削除が大きい。00357でactual selected lossは `fresh2024_validation 2024-08 long 720m` のsingletonに狭まり、00358で `singleton_720_pred_pnl_lt2` をstateful replayへ戻した。known lossは止まるが既存EV2 no-gate bestと同点。00359で残targetを監査し、EV2 bestは候補0、external oracleはmodel-used 0、2024-11/refit2025-03は候補0。00360で2024-11はavailable row-scope不足、refit2025-03はpost-00318 feed上の候補0と切り分けた。00362でrefit2025-03はraw rows/candidatesがあり、support-sufficient negative monthのrepair-target objective mismatchと確認。00363で既存trade repair診断を作り、現predicted fixed-horizon argmaxはreject。00364でloss-risk priorを追加し、target loss recallだけではwinner damageを抑えられないと確認した。00365でhorizon abstention診断を追加し、`lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` をstateful replay candidateにした。標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
@@ -150,6 +151,7 @@
 110. `00367_2026-07-03_entry_ev_support_sufficient_replacement_calibration.md`
 111. `00368_2026-07-03_entry_ev_support_sufficient_selector_surface.md`
 112. `00369_2026-07-03_entry_ev_support_sufficient_selector_surface_auto_targets.md`
+113. `00370_2026-07-03_entry_ev_support_negative_month_inventory.md`
 
 component targetの流れを読む:
 
@@ -196,10 +198,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00369 Entry EV Support-Sufficient Selector Surface Auto Targets
+Report: 00370 Entry EV Support Negative Month Inventory
 Status: accepted infrastructure / standard NoTrade
-Question: 00368のselector surfaceを全support-sufficient negative monthsへ広げられるか
-Best evidence: 現branchのnegative monthは4件。support-sufficientは `refit2025 2025-03` だけで、`fresh2024 2024-03`, `fresh2024 2024-11`, `hybrid2025_0912 2025-11` はsupport-limited。
-Decision: auto target inventoryは採用。現branch単体ではtarget count 1なので標準policy evidenceにはならない。
-Next: 他branch/variantのsupport-sufficient target探索、またはsupport-limited laneを別目的で作る
+Question: 現branch以外にsupport-sufficient negative target候補はあるか
+Best evidence: 17 monthly metricsを読み、negative rows 9,491、support-sufficient negative rows 5,065、support-limited negative rows 4,426。support-sufficient configを持つtarget identityは14件。
+Decision: inventory diagnosticsは採用。config rowsは独立サンプルではなく、target選定用の地図として使う。
+Next: canonical support-sufficient target setを作り、selector surfaceを複数targetへ広げる
 ```

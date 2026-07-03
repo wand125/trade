@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 16:42 JST
+最終更新: 2026-07-03 16:52 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support negative month inventory diagnosticsを追加した。00369で現branchのsupport-sufficient negative targetが `refit2025_validation 2025-03` の1件だけと分かったため、過去の `*selector_monthly_metrics.csv` 17件を棚卸しし、既存repair target分類でsupport-sufficient / support-limited negative monthを分けた。inventory rowsは29,371、negative rowsは9,491、support-sufficient negative rowsは5,065、support-limited negative rowsは4,426。target identityは20件で、support-sufficient configを持つtargetは14件、support-limited onlyは6件。判断: support-sufficient targetは現branch以外にも存在するが、row/configはvariant重複を含むため独立サンプルではない。次はcanonical support-sufficient target setを作り、00368/00369のselector surfaceを複数targetへ広げる。support-limited only targetは別lane。標準policyはNoTrade。詳細は `docs/reports/00370_2026-07-03_entry_ev_support_negative_month_inventory.md`。
 
 Entry EV support-sufficient selector surface auto target diagnosticsを追加した。00368の単一target指定を手動依存にしないため、`--targets auto_support_sufficient_negative` とtarget inventory出力を追加した。現00314/00318 branchのnegative monthは4件あるが、support-sufficient negative monthは `refit2025_validation 2025-03` の1件だけ。他の `fresh2024 2024-03`, `fresh2024 2024-11`, `hybrid2025_0912 2025-11` はsupport-limited negative monthだった。auto run結果は00368と同じで、これは現branchのsupport-sufficient target母集団自体が1件しかないため。判断: auto target inventoryはaccepted infrastructure。複数targetでselectorを評価するには他branch/variant探索、またはsupport-limited laneを別目的で扱う必要がある。標準policyはNoTrade。詳細は `docs/reports/00369_2026-07-03_entry_ev_support_sufficient_selector_surface_auto_targets.md`。
 

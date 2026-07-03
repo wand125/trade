@@ -4,6 +4,37 @@
 
 ## 2026-07-03 JST
 
+### 16:52 Entry EV support negative month inventory
+
+作業:
+
+- 00369で現branchのsupport-sufficient negative targetが1件だけと分かったため、過去のselector monthly metrics全体を棚卸しするdiagnosticsを追加した。
+- `entry_ev_support_negative_month_inventory_diagnostics.py` を追加し、`data/reports/backtests` 配下の `*selector_monthly_metrics.csv` からsupport-sufficient / support-limited negative monthを分類した。
+- report: `docs/reports/00370_2026-07-03_entry_ev_support_negative_month_inventory.md`
+
+結果:
+
+- monthly metricsは17件すべて読み込み成功、load errorsは0。
+- inventory rowsは29,371、negative rowsは9,491。
+- support-sufficient negative rowsは5,065、support-limited negative rowsは4,426。
+- target identityは20件。support-sufficient configを持つtargetは14件、support-limited only targetは6件。
+- `refit2025 2025-03/09/06/05/08/12/02/04` や `hgb2024_0306 2024-05/03/06` など、現branch以外にはsupport-sufficient target候補がある。
+- `fresh2024 2024-03`, `fresh2024 2024-11`, `hybrid2025_0912 2025-11` は17 metric parentでsupport-limited onlyだった。
+
+判断:
+
+- support negative month inventory diagnosticsはaccepted infrastructure。
+- config rowsはvariant/parameter重複を含むため独立サンプルではなく、policy evidenceではなくtarget選定用の地図として使う。
+- 次はcanonical support-sufficient target setを作り、00368/00369のselector surfaceを複数targetへ広げる。
+- support-limited only targetは別laneで扱う。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_negative_month_inventory_diagnostics.py tests/test_entry_ev_support_negative_month_inventory_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_negative_month_inventory_diagnostics`: OK
+- 00370 support negative month inventory run: OK
+
 ### 16:42 Entry EV support-sufficient selector surface auto targets
 
 作業:
