@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 22:33 JST
+最終更新: 2026-07-03 22:44 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV surface support gap diagnosticsを追加した。00382で残ったcandidate gapをcandidate pool / prior count / prior month / prior actual meanに分解したところ、残gapは `prior_count_gap` ではなく `prior_month_and_actual_gap` だった。非oracle `ev_ge5` + `shrunk_prior_actual_mean` では `hgb2024_0306 2024-03` と `fresh2024 2024-03` にcandidate poolとpositive actual candidateはあるが、max prior month countは1、max prior actual meanは `-1.3401`。oracleでも同じ2targetが残る。判断: support gap診断はaccepted infrastructure。early-month targetはraw candidate生成不足ではなく、薄くて負のpriorしかない候補をどう扱うかの問題。標準policyはNoTrade。詳細は `docs/reports/00383_2026-07-03_entry_ev_surface_support_gap.md`。
 
 Entry EV all-family shrunk prior surfaceを追加した。00379のall-family priorをselector surface本体へ接続し、`shrunk_prior_actual_mean` を追加した。00381と同じ00378 aligned surface条件で再実行したところ、48 rows中、旧winner-damage制約は20行が通過したが、target outcome制約は0行。all-family priorはcandidate gapを非oracle `ev_ge5` で `3 -> 2`、oracleで `3 -> 2` に減らしたが、shrunk priorはraw priorと同じ選択になり、outcome passには届かなかった。判断: all-family prior / shrunk prior infrastructureはaccepted、direct all-family replacement policyはreject。標準policyはNoTrade。詳細は `docs/reports/00382_2026-07-03_entry_ev_all_family_shrunk_prior_surface.md`。
 

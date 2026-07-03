@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 22:44 Entry EV surface support gap diagnostics
+
+作業:
+
+- 00382で残ったcandidate gapを、candidate pool / prior count / prior month / prior actual meanのどこで落ちたかに分解する診断を追加した。
+- `scripts/experiments/entry_ev_surface_support_gap_diagnostics.py` を追加した。
+- 同じrisk tradeを複数risk selectorが共有する場合に備え、risk selector完全一致がないcandidate poolはfamily/month/risk_trade/calibration単位でfallback照合するようにした。
+- report: `docs/reports/00383_2026-07-03_entry_ev_surface_support_gap.md`
+
+結果:
+
+- 00382のcandidate gapは `prior_count_gap` ではなく `prior_month_and_actual_gap` だった。
+- 非oracle `ev_ge5` + `shrunk_prior_actual_mean` では、`hgb2024_0306 2024-03` と `fresh2024 2024-03` がcandidate gapで、どちらもcandidate poolとpositive actual candidateは存在する。
+- ただし両targetともmax prior month countは1、max prior actual meanは `-1.3401`。
+- oracleでも同じ2targetが `prior_month_and_actual_gap` で残る。
+
+判断:
+
+- support gap decompositionはaccepted infrastructure。
+- hgb/fresh03は「raw candidate生成なし」ではなく、「薄くて負のpriorしかない候補をどう扱うか」の問題。
+- prior month floorを1へ下げるだけでは足りず、prior actual floorも壊すため、次はsupport-limited candidate scoring reportとして扱う。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_surface_support_gap_diagnostics.py tests/test_entry_ev_surface_support_gap_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_surface_support_gap_diagnostics`: OK
+- 00383 surface support gap diagnostics run: OK
+
 ### 22:33 Entry EV all-family shrunk prior surface
 
 作業:
