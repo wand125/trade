@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 22:10 Entry EV surface target outcome diagnostics
+
+作業:
+
+- 00378 surfaceの制約通過をtarget単位に分解する診断を追加した。
+- `scripts/experiments/entry_ev_surface_target_outcome_diagnostics.py` を追加し、surface choicesへ outcome category を付与した。
+- report: `docs/reports/00380_2026-07-03_entry_ev_surface_target_outcome.md`
+
+結果:
+
+- 非oracle `feature:ev_ge5_lossfirst_lt0p30` + `prior_actual_mean` は5 target中、修復成功1、candidate gap 3、risk gap 1。
+- 同rowのmean after PnLは `-0.3246`、min after PnLは `-17.6936` で、制約通過をpolicy readinessとは読めない。
+- `combined:any_lossrisk` + `prior_actual_mean` はmean after `+3.5350` だがwinner risk 2を含む。
+- oracle `worst_loss` でもsuccess 2 / candidate gap 3なので、perfect risk selectionだけでは候補不足targetを直せない。
+
+判断:
+
+- target-level outcome categoryはaccepted infrastructure。
+- `loss selected` を `repair succeeded` と誤読しない。
+- 次はoutcome categoryをsurface ranking制約へ組み込み、shrunk cross-family priorも同じ分類で評価する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_surface_target_outcome_diagnostics.py tests/test_entry_ev_surface_target_outcome_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_surface_target_outcome_diagnostics`: OK
+- 00380 surface target outcome diagnostics run: OK
+
 ### 22:04 Entry EV cross-family prior calibration
 
 作業:
