@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 15:07 Entry EV upstream universe coverage diagnostics
+
+作業:
+
+- 00361の次アクションとして、`refit2025 2025-03 short` が00318/00322で0件になった原因をrepair target生成前から監査した。
+- `entry_ev_upstream_universe_coverage_diagnostics.py` を追加し、00318 s2 configをそのまま読み、repair targetを `extra_*_needed > 0` で落とさずにraw prediction rows / side rows / candidate rows / stateful availabilityを出すようにした。
+- report: `docs/reports/00362_2026-07-03_entry_ev_upstream_universe_coverage_diagnostics.md`
+
+結果:
+
+- `refit2025 2025-03 short` は raw prediction rows `28,972`、short side rows `28,972`、candidate rows `41`、stateful available `33` が存在した。
+- 00318に出ない直接原因は `extra_short_needed=0` かつ `extra_long_needed=0`。00318の `read_repair_targets()` はextraが正のsideだけを発行するため、support-sufficientな負け月は候補生成対象から外れる。
+- 同月はcurrent trades `9`、side mix `5L / 4S`、PnL `-0.4730`。support不足ではなく、既存tradeのexit/replacement/EV過大評価の問題。
+- prospective short候補の上位例はfixed horizon actualが悪いものが多く、追加entryで直す読みは弱い。
+
+判断:
+
+- 00362 upstream universe coverage diagnosticsはaccepted infrastructure。
+- `refit2025 2025-03` は raw universe coverage不足ではなく、repair-target objective mismatchとして扱う。
+- 00318 thin-support laneを全negative monthへ拡張しない。support-sufficient negative monthは別のreplacement / exit repair laneを作る。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_upstream_universe_coverage_diagnostics.py tests/test_entry_ev_upstream_universe_coverage_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_upstream_universe_coverage_diagnostics`: OK
+- 00362 upstream universe coverage diagnostic run: OK
+
 ### 14:53 Entry EV selected replacement scope diagnostics
 
 作業:

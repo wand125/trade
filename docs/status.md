@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 14:53 JST
+最終更新: 2026-07-03 15:07 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV upstream universe coverage diagnosticsを追加した。00361の次アクションとして、`refit2025 2025-03 short` が00318/00322で0件になった原因をrepair target生成前から監査した。00318 s2 config上では raw prediction rows `28,972`、short side rows `28,972`、candidate rows `41`、stateful available `33` が存在する。00318に出ない直接原因は `extra_short_needed=0` かつ `extra_long_needed=0` で、thin-support repair targetが発行されないことだった。同月はcurrent trades `9`、side mix `5L / 4S`、PnL `-0.4730` なので、追加entry不足ではなくsupport-sufficient negative monthのexit/replacement/EV過大評価問題として扱う。判断: upstream coverage diagnosticsは採用、00318 thin-support laneを全negative monthへ拡張しない。標準policyはNoTrade。詳細は `docs/reports/00362_2026-07-03_entry_ev_upstream_universe_coverage_diagnostics.md`。
 
 Entry EV selected replacement scope diagnosticsを追加した。00360で `fresh2024 2024-11 long` が `available_candidates` ではなく `greedy_selected` にだけ存在すると分かったため、selected one-fail行を `selected_onefail_replacement` として再露出する診断を作った。`fresh2024 2024-11` は1行出るがstrictでは通らずrelaxedのみ通る。00358 rankerでは60m `+0.3000`, 240m `+2.4500`, 720m `-5.2800`。ただしselected one-failをglobalに戻すと、00358 ranker strict choices 6件 / actual sum `-83.4028`, relaxed choices 8件 / `-68.0198` と悪化する。大きな悪化要因は `refit2025 2025-07 short 720m`, `hybrid2025 2025-11 short 720m`, `fresh2024 2024-08 long 720m`。判断: diagnostic scopeは採用、global wideningはreject。標準policyはNoTrade。詳細は `docs/reports/00361_2026-07-03_entry_ev_selected_replacement_scope_diagnostics.md`。
 
