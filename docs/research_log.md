@@ -4,6 +4,37 @@
 
 ## 2026-07-03 JST
 
+### 17:16 Entry EV selector surface winner damage
+
+作業:
+
+- 00371のselector surfaceをpost-processし、current-negative repairとcross-artifact robustnessを分けるwinner-damage diagnosticsを追加した。
+- `entry_ev_selector_surface_winner_damage_diagnostics.py` を追加し、loss precision、winner selected count、baseline-positive degradation、current-negative deltaを制約として集計した。
+- report: `docs/reports/00372_2026-07-03_entry_ev_selector_surface_winner_damage.md`
+
+結果:
+
+- 制約は `loss_selection_precision >= 0.5`、winner selected 0、baseline-positive degradation 0、current-negative delta `>=0`。
+- 00371の16 surface rowsで通過は0件。
+- `feature:ev_ge5_lossfirst_lt0p30` はloss precision `0.5556` だが、winner selected 4件、baseline-positive degraded 2-4件で落ちる。
+- `combined:any_lossrisk` はmean delta最大だったが、loss precision `0.3000`、winner selected 7件で落ちる。
+- `feature:side_gap_ge0p15_lossfirst_lt0p30` はloss precision `0.2857`、winner selected 5件で落ちる。
+- `oracle:worst_loss` はprecision 1.0 / winner 0だが、`hgb2024_0306 2024-05` を `+0.9578 -> -11.7730` へ反転させるため落ちる。
+
+判断:
+
+- winner-damage post-process diagnosticsはaccepted infrastructure。
+- mean deltaだけでsurfaceを選ばない。winner deletionをreplacementが補償したケースはloss-risk selector成功と扱わない。
+- 現risk selectorも現replacement selectorも標準policy化しない。
+- 次はwinner-damage constrained objectiveをsurface rankingへ直接入れ、`hgb2024_0306 2024-05` のreplacement失敗を診断する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selector_surface_winner_damage_diagnostics.py tests/test_entry_ev_selector_surface_winner_damage_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selector_surface_winner_damage_diagnostics`: OK
+- 00372 winner-damage diagnostics run: OK
+
 ### 17:07 Entry EV canonical support-sufficient selector surface
 
 作業:

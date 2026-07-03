@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 17:07 JST
+最終更新: 2026-07-03 17:16 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV selector surface winner damage diagnosticsを追加した。00371のsurfaceをpost-processし、current-negative repairとcross-artifact robustnessを分け、loss precision `>=0.5`、winner selected 0、baseline-positive degradation 0、current-negative delta `>=0` の制約で評価した。16 surface rowsの通過は0件。非oracleでは `ev_ge5_lossfirst_lt0p30` だけがloss precision `0.5556` を満たすがwinner selected 4件、baseline-positive degraded 2-4件で落ちる。`combined:any_lossrisk` はmean delta最大だがloss precision `0.3000`、winner selected 7件。`side_gap_ge0p15_lossfirst_lt0p30` はloss precision `0.2857`、winner selected 5件。oracleはprecision 1.0 / winner 0だが、`hgb2024_0306 2024-05` を `+0.9578 -> -11.7730` に反転させるため落ちる。判断: winner-damage diagnosticsはaccepted infrastructure。現risk selectorもreplacement selectorも標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00372_2026-07-03_entry_ev_selector_surface_winner_damage.md`。
 
 Entry EV canonical support-sufficient selector surface diagnosticsを追加した。00370の `support_negative_month_target_summary.csv` からsupport-sufficient config数 `>=50`、metric parent数 `>=5` のcanonical target setを作り、00368/00369のselector surfaceを複数targetへ広げた。inventory targetは11件、現00314/00318 configで評価できたtargetは10件、`refit2025 2025-08` は現configのunblocked current tradesがなく評価対象外。評価対象10件のbaselineは9件が既にpositive monthで、negativeは `refit2025 2025-03` だけ。non-oracle bestの `combined:any_lossrisk` + `bias_corrected` + prior count `>=100` はmean PnL `+33.2963` / mean delta `+12.3633` / positive months `9/10` だが、loss trade selected 3件に対しwinner selected 7件でwinner damageが大きい。00368で有望だった `side_gap_ge0p15_lossfirst_lt0p30` もwinner selected 5件、`hgb2024_0306 2024-05` を `+0.9578 -> -19.3690` へ悪化。判断: inventory target injectionはaccepted infrastructure、現risk selectorは標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00371_2026-07-03_entry_ev_canonical_support_sufficient_selector_surface.md`。
 
