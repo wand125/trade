@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 21:40 JST
+最終更新: 2026-07-03 21:47 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV aligned current-negative surfaceを追加した。00376の次アクションとして `00310_position_quality_proxy_overlay_s1` の `entry_block_overlay_trades.csv` に00318 configを合成し、`loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` 系にvariant familyを揃えてsurfaceを実行した。5 target指定中4 target評価。非oracleの `side_gap` + `prior_actual_mean` と `ev_ge5` + `prior_actual_mean` はwinner-damage制約を通過し、代表行はloss selected 3、winner selected 0、loss precision 1.0、mean delta `+5.0618`。ただし改善は `refit2025 2025-03` の `+20.2470` に集中し、`fresh2024 2024-03/11` はsupported replacement candidate 0、`hybrid2025_0912 2025-11` はrisk trade選択なしでbaseline維持。判断: aligned surfaceはaccepted stress infrastructureだがmulti-target repair evidenceではない。support-sufficient laneとsupport-limited candidate-generation laneを分ける。標準policyはNoTrade。詳細は `docs/reports/00377_2026-07-03_entry_ev_aligned_current_negative_surface.md`。
 
 Entry EV surface artifact readinessを追加した。00375で残った「current-negative evaluated targetを増やす」課題に対し、00370 inventory上の17 metric parentsを棚卸しし、既存artifactがselector surfaceへそのまま流用できるかを検査した。結果は `surface_ready_without_conversion=True` が0件、trade schema readyが10/17、trade schema conversion neededが7/17、surface config不足が17/17。上位候補は `00310_position_quality_proxy_overlay_s1` と `short_entryblock_replacement_holdext_block_overlay_s1` で、`entry_block_overlay_trades.csv` は必要列を持つが、surface用 `current_trades` / `family_predictions` / `candidate` configを合成する必要がある。hold-extension stateful系は `entry_block_rule`, `entry_blocked`, `selector_variant` が足りずschema変換も必要。判断: readiness診断はaccepted infrastructure。次はschema-ready artifactへ00318 configを合成し、variant family整合を保ったsurface replayを行う。標準policyはNoTrade。詳細は `docs/reports/00376_2026-07-03_entry_ev_surface_artifact_readiness.md`。
 

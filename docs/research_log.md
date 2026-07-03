@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 21:47 Entry EV aligned current-negative surface
+
+作業:
+
+- 00376の次アクションとして、`00310_position_quality_proxy_overlay_s1` の `entry_block_overlay_trades.csv` に既存00318 configのprediction/repair target設定を合成した。
+- variant familyを `loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` に揃え、current-negative targetを明示指定してselector surfaceとreplacement abstentionを実行した。
+- report: `docs/reports/00377_2026-07-03_entry_ev_aligned_current_negative_surface.md`
+
+結果:
+
+- 5 target指定中、4 targetを評価した。
+- 非oracleでは `feature:side_gap_ge0p15_lossfirst_lt0p30` + `prior_actual_mean` と `feature:ev_ge5_lossfirst_lt0p30` + `prior_actual_mean` がwinner-damage制約を通過した。
+- 代表行 `side_gap` + `prior_actual_mean` + prior count `>=100` はloss selected 3、winner selected 0、loss precision 1.0、mean delta `+5.0618`。
+- ただし改善は `refit2025 2025-03` の `+20.2470` に集中。`fresh2024 2024-03` と `fresh2024 2024-11` はsupported replacement candidate 0、`hybrid2025_0912 2025-11` はrisk trade選択なしでbaseline維持。
+
+判断:
+
+- aligned current-negative surfaceはaccepted stress infrastructure。
+- これはmulti-target repair成功ではない。support-limited月の候補不足を再確認した結果として扱う。
+- support-sufficient laneとsupport-limited candidate-generation laneを分ける。
+- 標準policyはNoTrade。
+
+検証:
+
+- 00377 generated config: OK
+- 00377 selector surface run: OK
+- 00377 replacement abstention run: OK
+
 ### 21:40 Entry EV surface artifact readiness
 
 作業:
