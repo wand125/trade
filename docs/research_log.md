@@ -4,6 +4,32 @@
 
 ## 2026-07-03 JST
 
+### 10:49 Entry EV stateful reliability abstention replay
+
+作業:
+
+- 00345で有望だった `ranker_pred_pnl < 0` horizon-switch vetoを、post-hoc診断ではなく `entry_ev_broad_prior_horizon_choice_replay.py` のstateful replay経路へ入れた。
+- `--abstention-rules none,pred_pnl_lt0_switch_veto` と `--baseline-score-mode pnl` を追加し、defaultは `none` のまま既存挙動を維持した。
+- report: `docs/reports/00346_2026-07-03_entry_ev_stateful_reliability_abstention_replay.md`
+
+結果:
+
+- 288条件のreplayでは、bestはplain `pnl` / reliability-gated / veto有無で同じ5 tradesに収束し、added PnL `+60.8530`、combined `+400.1440`、month min `-0.6120`、role total min `+0.5354`。
+- `pred_pnl_lt0_switch_veto` はprediction artifacts上では `pnl_delta_tail_reliability_gated` 13 groups、`pnl_tail_reliability_gated` 12 groupsで発火したが、best additions 5本では発火0件。
+- selector passは0件で、blockersは `month_pnl_below_floor,role_trades_low,side_share_high` のまま。
+
+判断:
+
+- stateful horizon-switch abstention replay infrastructureはaccepted。
+- `pred_pnl_lt0_switch_veto` は現stateful bestを改善しないため標準policyへ昇格しない。
+- 次はpositive predicted PnL failureのtail/overestimate/context reliability診断と、候補生成不足targetのcandidate pathへ進む。標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00346 stateful replay: OK
+
 ### 10:31 Entry EV horizon reliability abstention diagnostics
 
 作業:

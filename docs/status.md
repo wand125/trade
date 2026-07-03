@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 10:31 JST
+最終更新: 2026-07-03 10:49 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV stateful reliability abstention replayを追加した。00345で有望だった `ranker_pred_pnl < 0` horizon-switch vetoをpost-hocではなくstateful replay経路へ入れ、`--abstention-rules none,pred_pnl_lt0_switch_veto` と `--baseline-score-mode pnl` を追加した。288条件のreplayではbestはplain `pnl` / reliability-gated / veto有無で同じ5 trades、added PnL `+60.8530`、combined `+400.1440`、month min `-0.6120`、role total min `+0.5354` に収束。selector passは0件、blockersは `month_pnl_below_floor,role_trades_low,side_share_high` のまま。判断: stateful abstention infrastructureはaccepted、`pred_pnl_lt0_switch_veto` は現stateful bestを改善しないため標準policyへ昇格しない。標準policyはNoTrade。詳細は `docs/reports/00346_2026-07-03_entry_ev_stateful_reliability_abstention_replay.md`。
 
 Entry EV horizon reliability abstention diagnosticsを追加した。00344でdirect reliability multiplierがtarget subset/all rowsの両方で悪化したため、reliability-driven horizon switchをbaseline `pnl` horizonへ戻すprediction-only vetoを診断した。target subset available candidatesでは `pnl_delta_tail_reliability_gated` のplain `pnl` 比 `-131.8792` 悪化に対し、`veto_chosen_pred_pnl_lt0` が `+13.6962` まで回復。all rowsでも同score modeは `-137.6916 -> +57.0582`、`pnl_tail_reliability_gated` は `-93.6228 -> +37.9022` へ改善した。判断: abstention diagnosticsはaccepted infrastructure、`ranker_pred_pnl < 0` switch vetoは次のstateful replay候補。ただしchoice-delta後処理なので標準policyではなく、標準policyはNoTrade。詳細は `docs/reports/00345_2026-07-03_entry_ev_horizon_reliability_abstention.md`。
 

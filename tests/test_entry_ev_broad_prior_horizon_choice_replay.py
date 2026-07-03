@@ -9,6 +9,7 @@ from scripts.experiments.entry_ev_broad_prior_horizon_choice_replay import (
     DEFAULT_HORIZON_NUMERIC_FEATURES,
     add_residual_prior_columns,
     add_head_reliability_columns,
+    apply_switch_abstention,
     chronological_ranker_predictions,
     expand_horizon_examples,
     pivot_ranker_predictions,
@@ -307,6 +308,59 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             lower_bound_tail_miss_weight=5.0,
         )
         self.assertAlmostEqual(float(score.iloc[0]), 2.4)
+
+    def test_pred_pnl_lt0_switch_veto_reverts_group_to_baseline_score(self) -> None:
+        scored = pd.DataFrame(
+            {
+                "family": ["f", "f", "f", "f"],
+                "role": ["r", "r", "r", "r"],
+                "month": ["2026-01", "2026-01", "2026-01", "2026-01"],
+                "decision_timestamp": [
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:05:00Z",
+                    "2026-01-01T00:05:00Z",
+                ],
+                "side": ["long", "long", "long", "long"],
+                "row_scope": ["available_candidates"] * 4,
+                "selection_bucket": ["unit"] * 4,
+                "needed_side": ["long"] * 4,
+                "extra_side_needed": [1.0] * 4,
+                "hv_chosen_horizon_minutes": [60.0, 720.0, 60.0, 720.0],
+                "ranker_pred_pnl": [5.0, -1.0, 1.0, 2.0],
+                "ranker_pred_delta_vs_60": [0.0, 40.0, 0.0, 4.0],
+                "ranker_pred_beats60_prob": [0.0, 0.0, 0.0, 0.0],
+                "ranker_pred_tail_loss_prob": [0.0, 0.0, 0.0, 0.0],
+                "ranker_pred_harmful_overestimate_prob": [0.0, 0.0, 0.0, 0.0],
+            }
+        )
+
+        output = apply_switch_abstention(
+            scored,
+            score_mode="pnl_delta",
+            abstention_rule="pred_pnl_lt0_switch_veto",
+            baseline_score_mode="pnl",
+            delta_weight=0.25,
+            beats60_weight=0.5,
+            tail_score_weight=2.0,
+            support_score_weight=2.0,
+            harmful_score_weight=5.0,
+            lower_bound_mae_weight=0.25,
+            lower_bound_bias_weight=0.25,
+            lower_bound_tail_miss_weight=5.0,
+        )
+
+        first = output[output["decision_timestamp"].eq("2026-01-01T00:00:00Z")]
+        second = output[output["decision_timestamp"].eq("2026-01-01T00:05:00Z")]
+        first_choice = first.loc[first["ranker_choice_score"].idxmax()]
+        second_choice = second.loc[second["ranker_choice_score"].idxmax()]
+
+        self.assertTrue(bool(first["ranker_abstention_veto"].all()))
+        self.assertEqual(float(first_choice["hv_chosen_horizon_minutes"]), 60.0)
+        self.assertAlmostEqual(float(first.iloc[1]["ranker_choice_score_raw"]), 9.0)
+        self.assertAlmostEqual(float(first.iloc[1]["ranker_choice_score"]), -1.0)
+        self.assertFalse(bool(second["ranker_abstention_veto"].any()))
+        self.assertEqual(float(second_choice["hv_chosen_horizon_minutes"]), 720.0)
 
     def test_residual_prior_columns_are_score_only_by_default(self) -> None:
         self.assertNotIn("residual_prior_mae", DEFAULT_HORIZON_NUMERIC_FEATURES)

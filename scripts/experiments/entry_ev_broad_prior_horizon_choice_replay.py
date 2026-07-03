@@ -83,6 +83,7 @@ DEFAULT_HORIZON_CATEGORICAL_FEATURES = (
     "duration_prior_context_spec",
 )
 DEFAULT_SCORE_MODES = "pnl,pnl_delta,pnl_delta_tail"
+DEFAULT_ABSTENTION_RULES = "none"
 DEFAULT_PROB_THRESHOLDS = "0.50,0.60,0.70"
 DEFAULT_EV_THRESHOLDS = "-2,0,2"
 DEFAULT_TAIL_PROB_THRESHOLDS = "0.30,0.50"
@@ -847,6 +848,128 @@ def score_predictions(
     raise ValueError(f"unknown score mode: {score_mode}")
 
 
+def apply_switch_abstention(
+    scored_examples: pd.DataFrame,
+    *,
+    score_mode: str,
+    abstention_rule: str,
+    baseline_score_mode: str,
+    delta_weight: float,
+    beats60_weight: float,
+    tail_score_weight: float,
+    support_score_weight: float,
+    harmful_score_weight: float,
+    lower_bound_mae_weight: float,
+    lower_bound_bias_weight: float,
+    lower_bound_tail_miss_weight: float,
+    tail_penalty_min_train_months: int = 0,
+    tail_penalty_min_train_rows: int = 0,
+) -> pd.DataFrame:
+    if abstention_rule not in {"none", "pred_pnl_lt0_switch_veto"}:
+        raise ValueError(f"unknown abstention rule: {abstention_rule}")
+    output = scored_examples.copy()
+    output["ranker_choice_score_raw"] = score_predictions(
+        output,
+        score_mode=score_mode,
+        delta_weight=delta_weight,
+        beats60_weight=beats60_weight,
+        tail_score_weight=tail_score_weight,
+        support_score_weight=support_score_weight,
+        harmful_score_weight=harmful_score_weight,
+        lower_bound_mae_weight=lower_bound_mae_weight,
+        lower_bound_bias_weight=lower_bound_bias_weight,
+        lower_bound_tail_miss_weight=lower_bound_tail_miss_weight,
+        tail_penalty_min_train_months=tail_penalty_min_train_months,
+        tail_penalty_min_train_rows=tail_penalty_min_train_rows,
+    )
+    output["ranker_baseline_choice_score"] = score_predictions(
+        output,
+        score_mode=baseline_score_mode,
+        delta_weight=delta_weight,
+        beats60_weight=beats60_weight,
+        tail_score_weight=tail_score_weight,
+        support_score_weight=support_score_weight,
+        harmful_score_weight=harmful_score_weight,
+        lower_bound_mae_weight=lower_bound_mae_weight,
+        lower_bound_bias_weight=lower_bound_bias_weight,
+        lower_bound_tail_miss_weight=lower_bound_tail_miss_weight,
+        tail_penalty_min_train_months=tail_penalty_min_train_months,
+        tail_penalty_min_train_rows=tail_penalty_min_train_rows,
+    )
+    output["ranker_choice_score"] = output["ranker_choice_score_raw"]
+    output["ranker_abstention_rule"] = abstention_rule
+    output["ranker_abstention_veto"] = False
+    output["ranker_abstention_pre_veto_horizon_minutes"] = np.nan
+    output["ranker_abstention_baseline_horizon_minutes"] = np.nan
+    output["ranker_abstention_pre_veto_pred_pnl"] = np.nan
+
+    if abstention_rule == "none" or score_mode == baseline_score_mode:
+        return output
+
+    keys = prediction_key_columns(output)
+    if not keys:
+        raise ValueError("cannot apply abstention without prediction key columns")
+    raw_idx = output.groupby(keys, dropna=False)["ranker_choice_score_raw"].idxmax()
+    baseline_idx = output.groupby(keys, dropna=False)["ranker_baseline_choice_score"].idxmax()
+    raw_choice = output.loc[
+        raw_idx,
+        [
+            *keys,
+            "hv_chosen_horizon_minutes",
+            "ranker_pred_pnl",
+        ],
+    ].rename(
+        columns={
+            "hv_chosen_horizon_minutes": "ranker_abstention_pre_veto_horizon_minutes",
+            "ranker_pred_pnl": "ranker_abstention_pre_veto_pred_pnl",
+        }
+    )
+    baseline_choice = output.loc[
+        baseline_idx,
+        [*keys, "hv_chosen_horizon_minutes"],
+    ].rename(columns={"hv_chosen_horizon_minutes": "ranker_abstention_baseline_horizon_minutes"})
+    metadata = raw_choice.merge(baseline_choice, on=keys, how="left")
+    metadata["ranker_abstention_veto"] = (
+        numeric_series(metadata, "ranker_abstention_pre_veto_pred_pnl", default=0.0).lt(0.0)
+        & ~numeric_series(
+            metadata,
+            "ranker_abstention_pre_veto_horizon_minutes",
+            default=-1.0,
+        ).eq(
+            numeric_series(
+                metadata,
+                "ranker_abstention_baseline_horizon_minutes",
+                default=-2.0,
+            )
+        )
+    )
+    metadata = metadata[
+        [
+            *keys,
+            "ranker_abstention_veto",
+            "ranker_abstention_pre_veto_horizon_minutes",
+            "ranker_abstention_baseline_horizon_minutes",
+            "ranker_abstention_pre_veto_pred_pnl",
+        ]
+    ]
+    output = output.drop(
+        columns=[
+            "ranker_abstention_veto",
+            "ranker_abstention_pre_veto_horizon_minutes",
+            "ranker_abstention_baseline_horizon_minutes",
+            "ranker_abstention_pre_veto_pred_pnl",
+        ]
+    ).merge(metadata, on=keys, how="left")
+    output["ranker_abstention_veto"] = bool_series(
+        output,
+        "ranker_abstention_veto",
+        default=False,
+    )
+    veto = bool_series(output, "ranker_abstention_veto", default=False)
+    output.loc[veto, "ranker_choice_score"] = output.loc[veto, "ranker_baseline_choice_score"]
+    return output
+
+
 def fit_predict_target(
     train: pd.DataFrame,
     target: pd.DataFrame,
@@ -1151,20 +1274,25 @@ def pivot_ranker_predictions(
     lower_bound_tail_miss_weight: float,
     tail_penalty_min_train_months: int = 0,
     tail_penalty_min_train_rows: int = 0,
+    abstention_rule: str = "none",
+    baseline_score_mode: str = "pnl",
 ) -> pd.DataFrame:
     output = normalize_source_rows(base_rows)
     stale_prediction_columns = [
         column
         for column in output.columns
-        if column.startswith("pred_hv_") or column.startswith("ranker_hv_")
+        if column.startswith("pred_hv_")
+        or column.startswith("ranker_hv_")
+        or column.startswith("ranker_abstention_")
     ]
     if stale_prediction_columns:
         output = output.drop(columns=stale_prediction_columns)
     keys = prediction_key_columns(output)
-    scored = scored_examples.copy()
-    scored["ranker_choice_score"] = score_predictions(
-        scored,
+    scored = apply_switch_abstention(
+        scored_examples,
         score_mode=score_mode,
+        abstention_rule=abstention_rule,
+        baseline_score_mode=baseline_score_mode,
         delta_weight=delta_weight,
         beats60_weight=beats60_weight,
         tail_score_weight=tail_score_weight,
@@ -1217,6 +1345,8 @@ def pivot_ranker_predictions(
                 "beats60_reliability_used",
                 "tail_reliability_used",
                 "ranker_choice_score",
+                "ranker_choice_score_raw",
+                "ranker_baseline_choice_score",
                 "ranker_core_model_used",
                 "duration_prior_count",
                 "duration_prior_months",
@@ -1243,6 +1373,8 @@ def pivot_ranker_predictions(
             "ranker_pred_harmful_overestimate_prob": (
                 f"ranker_hv_{horizon}m_pred_harmful_overestimate_prob"
             ),
+            "ranker_choice_score_raw": f"ranker_hv_{horizon}m_choice_score_raw",
+            "ranker_baseline_choice_score": f"ranker_hv_{horizon}m_baseline_score",
             "ranker_pred_tail_loss_prob_train_months": (
                 f"ranker_hv_{horizon}m_tail_train_months"
             ),
@@ -1284,10 +1416,24 @@ def pivot_ranker_predictions(
         ]
         output = output.merge(horizon_rows, on=keys, how="left")
     output["ranker_score_mode"] = score_mode
+    output["ranker_abstention_rule"] = abstention_rule
+    metadata_columns = [
+        "ranker_abstention_veto",
+        "ranker_abstention_pre_veto_horizon_minutes",
+        "ranker_abstention_baseline_horizon_minutes",
+        "ranker_abstention_pre_veto_pred_pnl",
+    ]
+    metadata = scored[[*keys, *metadata_columns]].drop_duplicates(keys)
+    output = output.merge(metadata, on=keys, how="left")
     return output
 
 
-def summarize_ranker_choices(scored_examples: pd.DataFrame, *, score_mode: str) -> pd.DataFrame:
+def summarize_ranker_choices(
+    scored_examples: pd.DataFrame,
+    *,
+    score_mode: str,
+    abstention_rule: str = "none",
+) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for (scope, month), group in scored_examples.groupby(["row_scope", "month"], dropna=False):
         scored = group.copy()
@@ -1299,6 +1445,7 @@ def summarize_ranker_choices(scored_examples: pd.DataFrame, *, score_mode: str) 
         rows.append(
             {
                 "score_mode": score_mode,
+                "abstention_rule": abstention_rule,
                 "row_scope": scope,
                 "month": month,
                 "candidate_rows": int(
@@ -1324,6 +1471,7 @@ def summarize_ranker_choices(scored_examples: pd.DataFrame, *, score_mode: str) 
                 "chosen_720m_count": int(
                     numeric_series(chosen, "hv_chosen_horizon_minutes").eq(720.0).sum()
                 ),
+                "veto_count": int(bool_series(chosen, "ranker_abstention_veto").sum()),
             }
         )
     return pd.DataFrame(rows)
@@ -1335,6 +1483,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
     residual_context_specs = parse_context_specs(args.residual_context_specs)
     head_reliability_context_specs = parse_context_specs(args.head_reliability_context_specs)
     score_modes = parse_csv(args.score_modes)
+    abstention_rules = parse_csv(args.abstention_rules)
     broad_train_rows = pd.read_csv(args.broad_train_rows)
     eval_rows = pd.read_csv(args.predictions)
 
@@ -1459,101 +1608,116 @@ def run_experiment(args: argparse.Namespace) -> Path:
     rejection_frames: list[pd.DataFrame] = []
     choice_summary_frames: list[pd.DataFrame] = []
     for score_mode in score_modes:
-        scored_for_mode = scored_examples.copy()
-        scored_for_mode["ranker_choice_score"] = score_predictions(
-            scored_for_mode,
-            score_mode=score_mode,
-            delta_weight=args.delta_weight,
-            beats60_weight=args.beats60_weight,
-            tail_score_weight=args.tail_score_weight,
-            support_score_weight=args.support_score_weight,
-            harmful_score_weight=args.harmful_score_weight,
-            lower_bound_mae_weight=args.lower_bound_mae_weight,
-            lower_bound_bias_weight=args.lower_bound_bias_weight,
-            lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
-            tail_penalty_min_train_months=args.tail_penalty_min_train_months,
-            tail_penalty_min_train_rows=args.tail_penalty_min_train_rows,
-        )
-        choice_summary_frames.append(
-            summarize_ranker_choices(scored_for_mode, score_mode=score_mode)
-        )
-        prediction_rows = pivot_ranker_predictions(
-            eval_rows,
-            scored_for_mode,
-            horizons=horizons,
-            score_mode=score_mode,
-            delta_weight=args.delta_weight,
-            beats60_weight=args.beats60_weight,
-            tail_score_weight=args.tail_score_weight,
-            support_score_weight=args.support_score_weight,
-            harmful_score_weight=args.harmful_score_weight,
-            lower_bound_mae_weight=args.lower_bound_mae_weight,
-            lower_bound_bias_weight=args.lower_bound_bias_weight,
-            lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
-            tail_penalty_min_train_months=args.tail_penalty_min_train_months,
-            tail_penalty_min_train_rows=args.tail_penalty_min_train_rows,
-        )
-        prediction_path = run_dir / f"ranker_predictions_{score_mode}.csv"
-        prediction_rows.to_csv(prediction_path, index=False)
-        choices = read_choice_candidates(
-            prediction_path,
-            row_scopes=parse_csv(args.row_scopes),
-            target_only=args.target_only,
-            choice_input_mode="row_horizon_grid",
-            prob_thresholds=parse_float_csv(args.prob_thresholds),
-            ev_thresholds=parse_float_csv(args.ev_thresholds),
-            tail_prob_thresholds=parse_float_csv(args.tail_prob_thresholds),
-            require_model_used_options=parse_bool_csv(args.require_model_used_options),
-        )
-        choices["ranker_score_mode"] = score_mode
-        choices = add_repair_utility_columns(
-            base_monthly,
-            choices,
-            min_month_trades=args.min_month_trades,
-            max_side_trade_share=args.max_side_trade_share,
-            repair_support_weight=args.repair_support_weight,
-            repair_expected_pnl_weight=args.repair_expected_pnl_weight,
-            repair_tail_penalty_weight=args.repair_tail_penalty_weight,
-            repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
-            repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
-            repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
-        )
-        choices.to_csv(run_dir / f"ranker_replay_candidates_{score_mode}.csv", index=False)
-        summary, monthly, additions, rejections = replay_scenarios(
-            base_monthly,
-            base_trades,
-            choices,
-            min_total_pnl=args.min_total_pnl,
-            min_role_total_pnl=args.min_role_total_pnl,
-            month_floor=args.month_floor,
-            shallow_month_floor=args.shallow_month_floor,
-            min_role_trades=args.min_role_trades,
-            min_month_trades=args.min_month_trades,
-            max_side_trade_share=args.max_side_trade_share,
-            cap_to_extra_side_needed=args.cap_to_extra_side_needed,
-            overlap_key_columns=parse_csv(args.overlap_keys),
-            selection_mode="repair_score",
-            repair_support_weight=args.repair_support_weight,
-            repair_expected_pnl_weight=args.repair_expected_pnl_weight,
-            repair_tail_penalty_weight=args.repair_tail_penalty_weight,
-            repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
-            repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
-            repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
-            min_chosen_pred_pnl=args.min_chosen_pred_pnl,
-            min_chosen_actual_pnl=None,
-            max_chosen_tail_prob=args.max_chosen_tail_prob,
-        )
-        for frame in [summary, monthly, additions, rejections]:
-            if not frame.empty:
-                frame["ranker_score_mode"] = score_mode
-                if "scenario_label" in frame.columns:
-                    frame["scenario_label"] = (
-                        frame["scenario_label"].astype(str) + f"_ranker_{score_mode}"
-                    )
-        summary_frames.append(summary)
-        monthly_frames.append(monthly)
-        addition_frames.append(additions)
-        rejection_frames.append(rejections)
+        for abstention_rule in abstention_rules:
+            mode_label = (
+                score_mode
+                if abstention_rule == "none"
+                else f"{score_mode}__{abstention_rule}"
+            )
+            scored_for_mode = apply_switch_abstention(
+                scored_examples,
+                score_mode=score_mode,
+                abstention_rule=abstention_rule,
+                baseline_score_mode=args.baseline_score_mode,
+                delta_weight=args.delta_weight,
+                beats60_weight=args.beats60_weight,
+                tail_score_weight=args.tail_score_weight,
+                support_score_weight=args.support_score_weight,
+                harmful_score_weight=args.harmful_score_weight,
+                lower_bound_mae_weight=args.lower_bound_mae_weight,
+                lower_bound_bias_weight=args.lower_bound_bias_weight,
+                lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
+                tail_penalty_min_train_months=args.tail_penalty_min_train_months,
+                tail_penalty_min_train_rows=args.tail_penalty_min_train_rows,
+            )
+            choice_summary_frames.append(
+                summarize_ranker_choices(
+                    scored_for_mode,
+                    score_mode=score_mode,
+                    abstention_rule=abstention_rule,
+                )
+            )
+            prediction_rows = pivot_ranker_predictions(
+                eval_rows,
+                scored_examples,
+                horizons=horizons,
+                score_mode=score_mode,
+                delta_weight=args.delta_weight,
+                beats60_weight=args.beats60_weight,
+                tail_score_weight=args.tail_score_weight,
+                support_score_weight=args.support_score_weight,
+                harmful_score_weight=args.harmful_score_weight,
+                lower_bound_mae_weight=args.lower_bound_mae_weight,
+                lower_bound_bias_weight=args.lower_bound_bias_weight,
+                lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
+                tail_penalty_min_train_months=args.tail_penalty_min_train_months,
+                tail_penalty_min_train_rows=args.tail_penalty_min_train_rows,
+                abstention_rule=abstention_rule,
+                baseline_score_mode=args.baseline_score_mode,
+            )
+            prediction_path = run_dir / f"ranker_predictions_{mode_label}.csv"
+            prediction_rows.to_csv(prediction_path, index=False)
+            choices = read_choice_candidates(
+                prediction_path,
+                row_scopes=parse_csv(args.row_scopes),
+                target_only=args.target_only,
+                choice_input_mode="row_horizon_grid",
+                prob_thresholds=parse_float_csv(args.prob_thresholds),
+                ev_thresholds=parse_float_csv(args.ev_thresholds),
+                tail_prob_thresholds=parse_float_csv(args.tail_prob_thresholds),
+                require_model_used_options=parse_bool_csv(args.require_model_used_options),
+            )
+            choices["ranker_score_mode"] = score_mode
+            choices["ranker_abstention_rule"] = abstention_rule
+            choices = add_repair_utility_columns(
+                base_monthly,
+                choices,
+                min_month_trades=args.min_month_trades,
+                max_side_trade_share=args.max_side_trade_share,
+                repair_support_weight=args.repair_support_weight,
+                repair_expected_pnl_weight=args.repair_expected_pnl_weight,
+                repair_tail_penalty_weight=args.repair_tail_penalty_weight,
+                repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
+                repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
+                repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
+            )
+            choices.to_csv(run_dir / f"ranker_replay_candidates_{mode_label}.csv", index=False)
+            summary, monthly, additions, rejections = replay_scenarios(
+                base_monthly,
+                base_trades,
+                choices,
+                min_total_pnl=args.min_total_pnl,
+                min_role_total_pnl=args.min_role_total_pnl,
+                month_floor=args.month_floor,
+                shallow_month_floor=args.shallow_month_floor,
+                min_role_trades=args.min_role_trades,
+                min_month_trades=args.min_month_trades,
+                max_side_trade_share=args.max_side_trade_share,
+                cap_to_extra_side_needed=args.cap_to_extra_side_needed,
+                overlap_key_columns=parse_csv(args.overlap_keys),
+                selection_mode="repair_score",
+                repair_support_weight=args.repair_support_weight,
+                repair_expected_pnl_weight=args.repair_expected_pnl_weight,
+                repair_tail_penalty_weight=args.repair_tail_penalty_weight,
+                repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
+                repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
+                repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
+                min_chosen_pred_pnl=args.min_chosen_pred_pnl,
+                min_chosen_actual_pnl=None,
+                max_chosen_tail_prob=args.max_chosen_tail_prob,
+            )
+            for frame in [summary, monthly, additions, rejections]:
+                if not frame.empty:
+                    frame["ranker_score_mode"] = score_mode
+                    frame["ranker_abstention_rule"] = abstention_rule
+                    if "scenario_label" in frame.columns:
+                        frame["scenario_label"] = (
+                            frame["scenario_label"].astype(str) + f"_ranker_{mode_label}"
+                        )
+            summary_frames.append(summary)
+            monthly_frames.append(monthly)
+            addition_frames.append(additions)
+            rejection_frames.append(rejections)
 
     summary_all = pd.concat(summary_frames, ignore_index=True) if summary_frames else pd.DataFrame()
     monthly_all = pd.concat(monthly_frames, ignore_index=True) if monthly_frames else pd.DataFrame()
@@ -1581,6 +1745,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "broad_train_rows": args.broad_train_rows,
         "horizons": horizons,
         "score_modes": score_modes,
+        "abstention_rules": abstention_rules,
+        "baseline_score_mode": args.baseline_score_mode,
         "numeric_features": numeric_features,
         "categorical_features": categorical_features,
         "min_train_months": args.min_train_months,
@@ -1645,6 +1811,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
             summary_all[
                 [
                     "ranker_score_mode",
+                    "ranker_abstention_rule",
                     "scenario_label",
                     "selector_pass",
                     "blockers",
@@ -1682,6 +1849,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-entry-block-rule", default="long_range_normal_ny_fixed60_pred_gt0")
     parser.add_argument("--row-scopes", default="available_candidates,greedy_selected")
     parser.add_argument("--score-modes", default=DEFAULT_SCORE_MODES)
+    parser.add_argument("--abstention-rules", default=DEFAULT_ABSTENTION_RULES)
+    parser.add_argument("--baseline-score-mode", default="pnl")
     parser.add_argument("--prob-thresholds", default=DEFAULT_PROB_THRESHOLDS)
     parser.add_argument("--ev-thresholds", default=DEFAULT_EV_THRESHOLDS)
     parser.add_argument("--tail-prob-thresholds", default=DEFAULT_TAIL_PROB_THRESHOLDS)
