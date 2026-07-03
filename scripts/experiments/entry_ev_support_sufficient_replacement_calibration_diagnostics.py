@@ -65,6 +65,7 @@ SCORE_COLUMNS = {
     "downside_bias_corrected": "calibrated_downside_bias_corrected_pred_pnl",
     "conservative": "calibrated_conservative_pred_pnl",
     "prior_actual_mean": "calibrated_prior_actual_mean",
+    "shrunk_prior_actual_mean": "calibrated_shrunk_prior_actual_mean",
 }
 PRIOR_SCOPES = {"same_family", "all_families_prior_months"}
 
@@ -190,6 +191,8 @@ def add_prior_calibration(
     prior_rows: pd.DataFrame,
     context_specs: list[list[str]],
     min_prior_count: int,
+    prior_shrinkage_count: int = 100,
+    prior_shrinkage_month_count: int = 3,
 ) -> pd.DataFrame:
     if candidates.empty:
         return candidates.copy()
@@ -215,6 +218,14 @@ def add_prior_calibration(
         output["calibrated_downside_bias_corrected_pred_pnl"] - mae
     )
     output["calibrated_prior_actual_mean"] = actual_mean
+    prior_count = numeric_series(output, "prior_count", default=0.0).clip(lower=0.0)
+    prior_month_count = numeric_series(output, "prior_month_count", default=0.0).clip(lower=0.0)
+    count_denom = prior_count + max(float(prior_shrinkage_count), 0.0)
+    month_denom = prior_month_count + max(float(prior_shrinkage_month_count), 0.0)
+    count_weight = prior_count.div(count_denom.replace(0.0, np.nan)).fillna(0.0)
+    month_weight = prior_month_count.div(month_denom.replace(0.0, np.nan)).fillna(0.0)
+    output["prior_shrink_weight"] = np.minimum(count_weight, month_weight)
+    output["calibrated_shrunk_prior_actual_mean"] = actual_mean * output["prior_shrink_weight"]
     output["calibration_context_insufficient"] = output.get(
         "calibration_context_insufficient",
         pd.Series(False, index=output.index),
@@ -442,6 +453,8 @@ def choice_row(
         "prior_bias_mean": float(candidate.get("prior_bias_mean", np.nan)),
         "prior_mae": float(candidate.get("prior_mae", np.nan)),
         "prior_actual_mean": float(candidate.get("prior_actual_mean", np.nan)),
+        "prior_shrink_weight": float(candidate.get("prior_shrink_weight", np.nan)),
+        "shrunk_prior_actual_mean": float(candidate.get("calibrated_shrunk_prior_actual_mean", np.nan)),
         "month_pnl_at_pred_horizon": float(
             month_pnl - float(loss_trade["adjusted_pnl"]) + actual_at_pred
         ),
@@ -592,6 +605,8 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
                 prior_rows=prior_rows,
                 context_specs=context_specs,
                 min_prior_count=args.min_prior_count,
+                prior_shrinkage_count=int(args.prior_shrinkage_count),
+                prior_shrinkage_month_count=int(args.prior_shrinkage_month_count),
             )
             target_candidate_count += len(pool)
             supported_pool = supported_candidates(
@@ -661,6 +676,8 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         "targets": parse_targets(args.targets),
         "context_specs": context_specs,
         "min_prior_count": args.min_prior_count,
+        "prior_shrinkage_count": args.prior_shrinkage_count,
+        "prior_shrinkage_month_count": args.prior_shrinkage_month_count,
         "prior_scope": prior_scope,
         "require_supported_candidates": bool(args.require_supported_candidates),
         "include_non_candidate_top_score": args.include_non_candidate_top_score,
@@ -687,6 +704,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--targets", default=DEFAULT_TARGETS)
     parser.add_argument("--context-specs", default=DEFAULT_CONTEXT_SPECS)
     parser.add_argument("--min-prior-count", type=int, default=20)
+    parser.add_argument("--prior-shrinkage-count", type=int, default=100)
+    parser.add_argument("--prior-shrinkage-month-count", type=int, default=3)
     parser.add_argument(
         "--prior-scope",
         choices=sorted(PRIOR_SCOPES),

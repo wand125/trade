@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 22:33 Entry EV all-family shrunk prior surface
+
+作業:
+
+- replacement calibrationへ `shrunk_prior_actual_mean` を追加した。
+- selector surfaceへ `--prior-scope all_families_prior_months` とshrinkage parametersを接続した。
+- 00381と同じ00378 aligned surface条件で、all-family prior + `shrunk_prior_actual_mean,prior_actual_mean,side_score,bias_corrected` を評価した。
+- report: `docs/reports/00382_2026-07-03_entry_ev_all_family_shrunk_prior_surface.md`
+
+結果:
+
+- 48 surface rows中、旧winner-damage制約は20行が通過した。
+- 新target outcome制約は0行が通過。
+- all-family priorはcandidate gapを減らした。非oracle `feature:ev_ge5_lossfirst_lt0p30` はsame-family比でcandidate gap `3 -> 2`、oracleも `3 -> 2`。
+- 非oracle `ev_ge5` + `shrunk_prior_actual_mean` はsuccess 2 / candidate gap 2 / risk gap 1、mean after `-0.0384`。
+- `shrunk_prior_actual_mean` はraw `prior_actual_mean` と同じ選択になり、target outcome passには届かなかった。
+
+判断:
+
+- all-family prior / shrunk prior infrastructureはaccepted。
+- direct all-family replacement policyはreject。
+- `side_score` の高いmean PnLをcalibrated EVとして扱わない。
+- 次はsupport-limited candidate generationとsupport-sufficient replacement calibrationを分ける。
+- 標準policyはNoTrade。
+
+検証:
+
+- 00382 all-family shrunk prior selector surface run: OK
+- Choices artifact includes `prior_shrink_weight` / `shrunk_prior_actual_mean`: OK
+
 ### 22:20 Entry EV outcome-constrained surface
 
 作業:

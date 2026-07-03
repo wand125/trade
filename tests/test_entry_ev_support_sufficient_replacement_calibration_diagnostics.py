@@ -83,6 +83,8 @@ class EntryEvSupportSufficientReplacementCalibrationDiagnosticsTest(unittest.Tes
                 "side,candidate_pred_fixed_best_horizon_minutes,combined_regime,session_regime;side"
             ),
             min_prior_count=2,
+            prior_shrinkage_count=3,
+            prior_shrinkage_month_count=3,
         ).iloc[0]
 
         self.assertEqual(
@@ -97,6 +99,8 @@ class EntryEvSupportSufficientReplacementCalibrationDiagnosticsTest(unittest.Tes
             1.5,
         )
         self.assertAlmostEqual(float(output["calibrated_conservative_pred_pnl"]), -1.0)
+        self.assertAlmostEqual(float(output["prior_shrink_weight"]), 0.4)
+        self.assertAlmostEqual(float(output["calibrated_shrunk_prior_actual_mean"]), 0.6)
 
     def test_choose_top_candidate_can_use_calibrated_score(self) -> None:
         pool = pd.DataFrame(
@@ -116,15 +120,21 @@ class EntryEvSupportSufficientReplacementCalibrationDiagnosticsTest(unittest.Tes
                 "candidate_actual_at_pred_fixed_best_horizon": [-3.0, 2.0],
                 "candidate_fixed_best_actual_pnl_oracle": [-1.0, 4.0],
                 "calibrated_conservative_pred_pnl": [-10.0, -1.0],
+                "calibrated_shrunk_prior_actual_mean": [-0.5, 1.0],
             }
         )
 
         raw_choice = choose_top_candidate(pool, score_mode="side_score")
         calibrated_choice = choose_top_candidate(pool, score_mode="conservative")
+        shrunk_prior_choice = choose_top_candidate(pool, score_mode="shrunk_prior_actual_mean")
 
         self.assertEqual(str(raw_choice["decision_timestamp"]), "2025-03-01T00:00:00Z")
         self.assertEqual(
             str(calibrated_choice["decision_timestamp"]),
+            "2025-03-01T01:00:00Z",
+        )
+        self.assertEqual(
+            str(shrunk_prior_choice["decision_timestamp"]),
             "2025-03-01T01:00:00Z",
         )
 

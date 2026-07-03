@@ -39,11 +39,13 @@ from entry_ev_support_sufficient_replacement_calibration_diagnostics import (  #
     DEFAULT_CONFIG,
     DEFAULT_CONTEXT_SPECS,
     DEFAULT_TARGETS,
+    PRIOR_SCOPES,
     SCORE_COLUMNS,
     add_prior_calibration,
     choose_top_candidate,
     load_family_side_rows,
     parse_context_specs,
+    prior_rows_for_scope,
 )
 from entry_ev_thin_month_opposite_candidate_diagnostics import (  # noqa: E402
     bool_series,
@@ -624,6 +626,8 @@ def selector_choice_row(
             "prior_count": 0,
             "prior_month_count": 0,
             "prior_actual_mean": np.nan,
+            "prior_shrink_weight": np.nan,
+            "shrunk_prior_actual_mean": np.nan,
             "month_pnl_after_replacement": float(month_pnl),
             "delta_vs_baseline": 0.0,
         }
@@ -650,6 +654,8 @@ def selector_choice_row(
         "prior_bias_mean": float(candidate.get("prior_bias_mean", np.nan)),
         "prior_mae": float(candidate.get("prior_mae", np.nan)),
         "prior_actual_mean": float(candidate.get("prior_actual_mean", np.nan)),
+        "prior_shrink_weight": float(candidate.get("prior_shrink_weight", np.nan)),
+        "shrunk_prior_actual_mean": float(candidate.get("calibrated_shrunk_prior_actual_mean", np.nan)),
         "month_pnl_after_replacement": float(month_after),
         "delta_vs_baseline": float(month_after - month_pnl),
     }
@@ -954,6 +960,9 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     risk_context_specs = parse_risk_context_specs(args.risk_context_specs)
     risk_selectors = parse_semicolon(args.risk_selectors)
     score_modes = parse_score_modes(args.score_modes)
+    prior_scope = str(args.prior_scope)
+    if prior_scope not in PRIOR_SCOPES:
+        raise ValueError(f"unknown prior scope: {prior_scope}")
     calibration_min_context_counts = parse_int_grid(args.calibration_min_context_counts)
     candidate_min_prior_counts = parse_int_grid(args.candidate_min_prior_counts)
     candidate_min_prior_month_counts = parse_int_grid(args.candidate_min_prior_month_counts)
@@ -1003,16 +1012,24 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
             month=month,
             config=config,
         )
-        if family not in prior_cache:
-            prior_cache[family] = load_family_side_rows(
-                prediction_path=prediction_path,
-                family=family,
+        prior_families = [family] if prior_scope == "same_family" else sorted(family_predictions)
+        for prior_family in prior_families:
+            if prior_family in prior_cache:
+                continue
+            prior_path = family_predictions.get(prior_family)
+            if prior_path is None:
+                continue
+            prior_cache[prior_family] = load_family_side_rows(
+                prediction_path=prior_path,
+                family=prior_family,
                 config=config,
             )
-        prior_rows = prior_cache[family][prior_cache[family]["month"].astype(str).lt(month)].copy()
-        prior_rows = prior_rows[
-            prior_rows["candidate_stage"].astype(str).ne("non_candidate")
-        ].copy()
+        prior_rows = prior_rows_for_scope(
+            prior_cache,
+            family=family,
+            month=month,
+            prior_scope=prior_scope,
+        )
 
         risk_prior_context = build_prior_context_rows(
             current_features,
@@ -1056,6 +1073,8 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
                             prior_rows=prior_rows,
                             context_specs=replacement_context_specs,
                             min_prior_count=int(calibration_min_count),
+                            prior_shrinkage_count=int(args.prior_shrinkage_count),
+                            prior_shrinkage_month_count=int(args.prior_shrinkage_month_count),
                         )
                         if not pool_cache[key].empty:
                             enriched = pool_cache[key].copy()
@@ -1123,6 +1142,9 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
                 "prior_candidate_month_count": int(prior_rows["month"].astype(str).nunique())
                 if len(prior_rows)
                 else 0,
+                "prior_family_count": int(prior_rows["prior_source_family"].astype(str).nunique())
+                if len(prior_rows) and "prior_source_family" in prior_rows.columns
+                else 0,
                 "risk_selectors": ";".join(risk_selectors),
             }
         )
@@ -1181,6 +1203,9 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         "inventory_target_side": args.inventory_target_side,
         "risk_selectors": risk_selectors,
         "score_modes": score_modes,
+        "prior_scope": prior_scope,
+        "prior_shrinkage_count": args.prior_shrinkage_count,
+        "prior_shrinkage_month_count": args.prior_shrinkage_month_count,
         "replacement_context_specs": replacement_context_specs,
         "risk_context_specs": risk_context_specs,
         "calibration_min_context_counts": calibration_min_context_counts,
@@ -1281,6 +1306,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--inventory-target-side", default="both")
     parser.add_argument("--replacement-context-specs", default=DEFAULT_CONTEXT_SPECS)
     parser.add_argument("--risk-context-specs", default=DEFAULT_RISK_CONTEXT_SPECS)
+    parser.add_argument(
+        "--prior-scope",
+        choices=sorted(PRIOR_SCOPES),
+        default="same_family",
+        help="Use same-family prior rows or all family rows strictly before the target month.",
+    )
+    parser.add_argument("--prior-shrinkage-count", type=int, default=100)
+    parser.add_argument("--prior-shrinkage-month-count", type=int, default=3)
     parser.add_argument("--risk-selectors", default=DEFAULT_RISK_SELECTORS)
     parser.add_argument("--score-modes", default=DEFAULT_SCORE_MODES)
     parser.add_argument("--calibration-min-context-counts", default="20,50")

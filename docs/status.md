@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 22:20 JST
+最終更新: 2026-07-03 22:33 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV all-family shrunk prior surfaceを追加した。00379のall-family priorをselector surface本体へ接続し、`shrunk_prior_actual_mean` を追加した。00381と同じ00378 aligned surface条件で再実行したところ、48 rows中、旧winner-damage制約は20行が通過したが、target outcome制約は0行。all-family priorはcandidate gapを非oracle `ev_ge5` で `3 -> 2`、oracleで `3 -> 2` に減らしたが、shrunk priorはraw priorと同じ選択になり、outcome passには届かなかった。判断: all-family prior / shrunk prior infrastructureはaccepted、direct all-family replacement policyはreject。標準policyはNoTrade。詳細は `docs/reports/00382_2026-07-03_entry_ev_all_family_shrunk_prior_surface.md`。
 
 Entry EV outcome-constrained surfaceを追加した。00380のtarget outcome categoryを `entry_ev_support_sufficient_selector_surface_diagnostics.py` 本体へ統合し、surface choicesとsummaryに success / candidate gap / risk gap / replacement gapを出すようにした。00378と同じ条件で再実行したところ、旧winner-damage制約は16行中8行が通過したが、新しいtarget outcome制約は16行中0行。oracleでもsuccess 2 / candidate gap 3で落ちる。判断: outcome制約はaccepted infrastructure。候補不足を成功扱いしない。標準policyはNoTrade。詳細は `docs/reports/00381_2026-07-03_entry_ev_outcome_constrained_surface.md`。
 

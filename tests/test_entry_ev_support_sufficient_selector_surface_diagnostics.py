@@ -13,6 +13,7 @@ from scripts.experiments.entry_ev_support_sufficient_selector_surface_diagnostic
     candidate_support_mask,
     choose_supported_candidate,
     choose_trade_by_risk,
+    parse_score_modes,
     resolve_inventory_target_specs,
     resolve_target_specs,
     selector_choice_row,
@@ -129,6 +130,9 @@ class EntryEvSupportSufficientSelectorSurfaceDiagnosticsTest(unittest.TestCase):
 
         self.assertEqual(mask.tolist(), [True, False, False, False])
 
+    def test_parse_score_modes_accepts_shrunk_prior_score(self) -> None:
+        self.assertEqual(parse_score_modes("shrunk_prior_actual_mean"), ["shrunk_prior_actual_mean"])
+
     def test_choose_trade_by_feature_risk_uses_observable_score_not_outcome(self) -> None:
         trades = pd.DataFrame(
             {
@@ -215,6 +219,8 @@ class EntryEvSupportSufficientSelectorSurfaceDiagnosticsTest(unittest.TestCase):
                 "prior_count": 100,
                 "prior_month_count": 2,
                 "prior_actual_mean": 10.0,
+                "prior_shrink_weight": 0.5,
+                "calibrated_shrunk_prior_actual_mean": 5.0,
             }
         )
 
@@ -238,6 +244,8 @@ class EntryEvSupportSufficientSelectorSurfaceDiagnosticsTest(unittest.TestCase):
         self.assertAlmostEqual(row["skip_only_month_pnl"], 1.0)
         self.assertAlmostEqual(row["month_pnl_after_replacement"], 6.0)
         self.assertAlmostEqual(row["delta_vs_baseline"], 7.0)
+        self.assertAlmostEqual(row["prior_shrink_weight"], 0.5)
+        self.assertAlmostEqual(row["shrunk_prior_actual_mean"], 5.0)
 
     def test_summarize_surface_ranks_winner_damage_constraints_first(self) -> None:
         base = {
