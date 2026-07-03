@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 17:27 Entry EV winner-damage ranked selector surface
+
+作業:
+
+- 00372のwinner-damage post-process制約を `entry_ev_support_sufficient_selector_surface_diagnostics.py` 本体へ組み込んだ。
+- `summarize_surface()` にloss precision、winner selected、baseline-positive degradation、current-negative delta、違反数、合否列を追加した。
+- summary rankingを、mean PnLではなくwinner-damage制約 pass / violation countを先に見る順序へ変更した。
+- report: `docs/reports/00373_2026-07-03_entry_ev_winner_damage_ranked_selector_surface.md`
+
+結果:
+
+- 00371と同じcanonical target setで再実行した。
+- 16 surface rowsで `passes_winner_damage_constraints=True` は0件。
+- 最小違反は `oracle:worst_loss` 系で、loss precision 1.0 / winner selected 0 / current-negative delta positiveだがbaseline-positive degradationが1-3件残る。
+- `feature:ev_ge5_lossfirst_lt0p30` はloss precision `0.5556` を満たすがwinner selected 4件。
+- `combined:any_lossrisk` はloss precision `0.3000` / winner selected 7件、`side_gap_ge0p15_lossfirst_lt0p30` はloss precision `0.2857` / winner selected 5件。
+
+判断:
+
+- winner-damage constrained rankingはaccepted infrastructure。
+- 結論は00372と同じで、現risk selector / replacement selectorは標準policy化しない。
+- 次はbaseline-positive degradationを起こすreplacement failure、特に `hgb2024_0306 2024-05` のabstention/calibration診断へ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_selector_surface_diagnostics.py tests/test_entry_ev_support_sufficient_selector_surface_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_selector_surface_diagnostics`: OK
+- 00373 winner-damage ranked selector surface run: OK
+
 ### 17:16 Entry EV selector surface winner damage
 
 作業:

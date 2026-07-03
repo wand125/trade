@@ -15,6 +15,7 @@ from scripts.experiments.entry_ev_support_sufficient_selector_surface_diagnostic
     resolve_inventory_target_specs,
     resolve_target_specs,
     selector_choice_row,
+    summarize_surface,
 )
 
 
@@ -236,6 +237,62 @@ class EntryEvSupportSufficientSelectorSurfaceDiagnosticsTest(unittest.TestCase):
         self.assertAlmostEqual(row["skip_only_month_pnl"], 1.0)
         self.assertAlmostEqual(row["month_pnl_after_replacement"], 6.0)
         self.assertAlmostEqual(row["delta_vs_baseline"], 7.0)
+
+    def test_summarize_surface_ranks_winner_damage_constraints_first(self) -> None:
+        base = {
+            "replacement_score_mode": "bias_corrected",
+            "calibration_min_context_count": 50,
+            "candidate_min_prior_count": 100,
+            "candidate_min_prior_month_count": 2,
+            "candidate_min_prior_actual_mean": 0.0,
+            "supported_candidate_rows": 1,
+            "replacement_chosen": True,
+        }
+        choices = pd.DataFrame(
+            [
+                {
+                    **base,
+                    "risk_selector": "good",
+                    "baseline_month_pnl": -1.0,
+                    "month_pnl_after_replacement": 3.0,
+                    "delta_vs_baseline": 4.0,
+                    "risk_trade_selected": True,
+                    "risk_trade_is_loss": True,
+                },
+                {
+                    **base,
+                    "risk_selector": "good",
+                    "baseline_month_pnl": 2.0,
+                    "month_pnl_after_replacement": 2.0,
+                    "delta_vs_baseline": 0.0,
+                    "risk_trade_selected": False,
+                    "risk_trade_is_loss": False,
+                },
+                {
+                    **base,
+                    "risk_selector": "bad",
+                    "baseline_month_pnl": 10.0,
+                    "month_pnl_after_replacement": 20.0,
+                    "delta_vs_baseline": 10.0,
+                    "risk_trade_selected": True,
+                    "risk_trade_is_loss": False,
+                },
+            ]
+        )
+
+        summary = summarize_surface(choices)
+
+        self.assertEqual(summary["risk_selector"].tolist(), ["good", "bad"])
+        good = summary.iloc[0]
+        bad = summary.iloc[1]
+        self.assertTrue(bool(good["passes_winner_damage_constraints"]))
+        self.assertEqual(int(good["winner_damage_constraint_violation_count"]), 0)
+        self.assertAlmostEqual(float(good["loss_selection_precision"]), 1.0)
+        self.assertEqual(int(good["current_negative_target_count"]), 1)
+        self.assertAlmostEqual(float(good["current_negative_min_delta"]), 4.0)
+        self.assertFalse(bool(bad["passes_winner_damage_constraints"]))
+        self.assertEqual(int(bad["winner_trade_selected_count"]), 1)
+        self.assertEqual(int(bad["baseline_positive_degraded_count"]), 0)
 
 
 if __name__ == "__main__":

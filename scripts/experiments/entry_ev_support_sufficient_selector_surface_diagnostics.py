@@ -650,7 +650,18 @@ def selector_choice_row(
     }
 
 
-def summarize_surface(choices: pd.DataFrame) -> pd.DataFrame:
+def safe_rate(numerator: float, denominator: float) -> float:
+    return float(numerator / denominator) if denominator else np.nan
+
+
+def summarize_surface(
+    choices: pd.DataFrame,
+    *,
+    min_loss_selection_precision: float = 0.5,
+    max_winner_trade_selected: int = 0,
+    max_baseline_positive_degraded: int = 0,
+    min_current_negative_delta: float = 0.0,
+) -> pd.DataFrame:
     if choices.empty:
         return pd.DataFrame()
     group_cols = [
@@ -666,34 +677,99 @@ def summarize_surface(choices: pd.DataFrame) -> pd.DataFrame:
         replacement = bool_series(group, "replacement_chosen", default=False)
         risk_selected = bool_series(group, "risk_trade_selected", default=False)
         risk_loss = bool_series(group, "risk_trade_is_loss", default=False)
+        risk_winner = risk_selected & ~risk_loss
         pnl = numeric_series(group, "month_pnl_after_replacement", default=np.nan)
         delta = numeric_series(group, "delta_vs_baseline", default=0.0)
+        baseline = numeric_series(group, "baseline_month_pnl", default=np.nan)
+        current_negative = baseline.lt(0.0)
+        current_nonnegative = baseline.ge(0.0)
+        loss_selected_count = int((risk_selected & risk_loss).sum())
+        winner_selected_count = int(risk_winner.sum())
+        selected_count = int(risk_selected.sum())
+        loss_selection_precision = safe_rate(loss_selected_count, selected_count)
+        baseline_positive_degraded_count = int((current_nonnegative & delta.lt(0.0)).sum())
+        current_negative_delta = delta[current_negative]
+        if int(current_negative.sum()) == 0:
+            current_negative_min_delta = np.nan
+            passes_current_negative_delta = True
+        else:
+            current_negative_min_delta = float(current_negative_delta.min())
+            passes_current_negative_delta = bool(
+                np.isfinite(current_negative_min_delta)
+                and current_negative_min_delta >= float(min_current_negative_delta)
+            )
+        passes_loss_precision = bool(
+            np.isfinite(loss_selection_precision)
+            and loss_selection_precision >= float(min_loss_selection_precision)
+        )
+        passes_winner_damage = bool(winner_selected_count <= int(max_winner_trade_selected))
+        passes_baseline_positive_degradation = bool(
+            baseline_positive_degraded_count <= int(max_baseline_positive_degraded)
+        )
+        violation_count = int(
+            (not passes_loss_precision)
+            + (not passes_winner_damage)
+            + (not passes_baseline_positive_degradation)
+            + (not passes_current_negative_delta)
+        )
         rows.append(
             {
                 **dict(zip(group_cols, keys, strict=True)),
                 "target_count": int(len(group)),
-                "risk_trade_selected_count": int(risk_selected.sum()),
+                "risk_trade_selected_count": selected_count,
                 "replacement_count": int(replacement.sum()),
-                "loss_trade_selected_count": int((risk_selected & risk_loss).sum()),
-                "winner_trade_selected_count": int((risk_selected & ~risk_loss).sum()),
+                "loss_trade_selected_count": loss_selected_count,
+                "winner_trade_selected_count": winner_selected_count,
+                "loss_selection_precision": loss_selection_precision,
                 "mean_month_pnl_after_replacement": float(pnl.mean()) if len(pnl) else np.nan,
                 "min_month_pnl_after_replacement": float(pnl.min()) if len(pnl) else np.nan,
                 "max_month_pnl_after_replacement": float(pnl.max()) if len(pnl) else np.nan,
                 "mean_delta_vs_baseline": float(delta.mean()) if len(delta) else np.nan,
                 "min_delta_vs_baseline": float(delta.min()) if len(delta) else np.nan,
                 "positive_month_count": int(pnl.gt(0.0).sum()),
+                "baseline_positive_degraded_count": baseline_positive_degraded_count,
+                "baseline_positive_flipped_negative_count": int(
+                    (current_nonnegative & pnl.lt(0.0)).sum()
+                ),
+                "current_negative_target_count": int(current_negative.sum()),
+                "current_negative_mean_delta": float(current_negative_delta.mean())
+                if len(current_negative_delta)
+                else np.nan,
+                "current_negative_min_delta": current_negative_min_delta,
+                "current_negative_positive_after_count": int(
+                    (current_negative & pnl.gt(0.0)).sum()
+                ),
+                "current_nonnegative_target_count": int(current_nonnegative.sum()),
+                "current_nonnegative_mean_delta": float(delta[current_nonnegative].mean())
+                if int(current_nonnegative.sum())
+                else np.nan,
+                "current_nonnegative_min_delta": float(delta[current_nonnegative].min())
+                if int(current_nonnegative.sum())
+                else np.nan,
                 "mean_supported_candidate_rows": float(
                     numeric_series(group, "supported_candidate_rows", default=0.0).mean()
                 ),
+                "passes_loss_selection_precision": passes_loss_precision,
+                "passes_winner_trade_selected": passes_winner_damage,
+                "passes_baseline_positive_degradation": passes_baseline_positive_degradation,
+                "passes_current_negative_delta": passes_current_negative_delta,
+                "winner_damage_constraint_violation_count": violation_count,
+                "passes_winner_damage_constraints": bool(violation_count == 0),
             }
         )
     return pd.DataFrame(rows).sort_values(
         [
+            "passes_winner_damage_constraints",
+            "winner_damage_constraint_violation_count",
+            "passes_winner_trade_selected",
+            "passes_baseline_positive_degradation",
+            "passes_current_negative_delta",
+            "loss_selection_precision",
             "mean_month_pnl_after_replacement",
             "min_month_pnl_after_replacement",
             "mean_delta_vs_baseline",
         ],
-        ascending=[False, False, False],
+        ascending=[False, True, False, False, False, False, False, False, False],
     )
 
 
@@ -936,7 +1012,13 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         )
 
     choices = pd.DataFrame(choice_rows)
-    summary = summarize_surface(choices)
+    summary = summarize_surface(
+        choices,
+        min_loss_selection_precision=float(args.min_loss_selection_precision),
+        max_winner_trade_selected=int(args.max_winner_trade_selected),
+        max_baseline_positive_degraded=int(args.max_baseline_positive_degraded),
+        min_current_negative_delta=float(args.min_current_negative_delta),
+    )
     targets = pd.DataFrame(target_rows)
     risk_trades = (
         pd.concat(risk_trade_frames, ignore_index=True, sort=False)
@@ -985,6 +1067,10 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         "candidate_min_prior_counts": candidate_min_prior_counts,
         "candidate_min_prior_month_counts": candidate_min_prior_month_counts,
         "candidate_min_prior_actual_means": candidate_min_prior_actual_means,
+        "min_loss_selection_precision": args.min_loss_selection_precision,
+        "max_winner_trade_selected": args.max_winner_trade_selected,
+        "max_baseline_positive_degraded": args.max_baseline_positive_degraded,
+        "min_current_negative_delta": args.min_current_negative_delta,
         "large_loss_threshold": args.large_loss_threshold,
         "include_non_candidate_top_score": args.include_non_candidate_top_score,
         "note": (
@@ -998,7 +1084,26 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     )
 
     print("Support-sufficient selector surface summary:")
-    print(summary.head(int(args.print_rows)).to_string(index=False))
+    summary_display_columns = [
+        "risk_selector",
+        "replacement_score_mode",
+        "candidate_min_prior_count",
+        "target_count",
+        "loss_trade_selected_count",
+        "winner_trade_selected_count",
+        "loss_selection_precision",
+        "baseline_positive_degraded_count",
+        "current_negative_min_delta",
+        "mean_month_pnl_after_replacement",
+        "mean_delta_vs_baseline",
+        "winner_damage_constraint_violation_count",
+        "passes_winner_damage_constraints",
+    ]
+    print(
+        summary[[column for column in summary_display_columns if column in summary.columns]]
+        .head(int(args.print_rows))
+        .to_string(index=False)
+    )
     if not target_inventory.empty:
         inventory_columns = [
             "role",
@@ -1052,6 +1157,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-min-prior-counts", default="20,50,100")
     parser.add_argument("--candidate-min-prior-month-counts", default="1,2,3")
     parser.add_argument("--candidate-min-prior-actual-means", default="-inf,0,5,10")
+    parser.add_argument("--min-loss-selection-precision", type=float, default=0.5)
+    parser.add_argument("--max-winner-trade-selected", type=int, default=0)
+    parser.add_argument("--max-baseline-positive-degraded", type=int, default=0)
+    parser.add_argument("--min-current-negative-delta", type=float, default=0.0)
     parser.add_argument("--large-loss-threshold", type=float, default=-1.0)
     parser.add_argument("--output-root", type=Path, default=ROOT / "data/reports/backtests")
     parser.add_argument(

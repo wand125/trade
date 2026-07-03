@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 17:16 JST
+最終更新: 2026-07-03 17:27 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV winner-damage ranked selector surfaceを追加した。00372のwinner-damage post-process制約を `entry_ev_support_sufficient_selector_surface_diagnostics.py` 本体へ組み込み、summary rankingをmean PnLではなく制約pass / violation count優先へ変更した。00371と同じcanonical target setでは16 rows中通過0件。最小違反はoracle系で、loss precision 1.0 / winner selected 0 / current-negative delta positiveだがbaseline-positive degradationが1-3件残る。非oracleでは `ev_ge5_lossfirst_lt0p30` がloss precision `0.5556` を満たすがwinner selected 4件、`combined:any_lossrisk` はloss precision `0.3000` / winner selected 7件。判断: winner-damage constrained rankingはaccepted infrastructure。現risk selector / replacement selectorは標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00373_2026-07-03_entry_ev_winner_damage_ranked_selector_surface.md`。
 
 Entry EV selector surface winner damage diagnosticsを追加した。00371のsurfaceをpost-processし、current-negative repairとcross-artifact robustnessを分け、loss precision `>=0.5`、winner selected 0、baseline-positive degradation 0、current-negative delta `>=0` の制約で評価した。16 surface rowsの通過は0件。非oracleでは `ev_ge5_lossfirst_lt0p30` だけがloss precision `0.5556` を満たすがwinner selected 4件、baseline-positive degraded 2-4件で落ちる。`combined:any_lossrisk` はmean delta最大だがloss precision `0.3000`、winner selected 7件。`side_gap_ge0p15_lossfirst_lt0p30` はloss precision `0.2857`、winner selected 5件。oracleはprecision 1.0 / winner 0だが、`hgb2024_0306 2024-05` を `+0.9578 -> -11.7730` に反転させるため落ちる。判断: winner-damage diagnosticsはaccepted infrastructure。現risk selectorもreplacement selectorも標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00372_2026-07-03_entry_ev_selector_surface_winner_damage.md`。
 
