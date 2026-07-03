@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 12:53 Entry EV context H/S support2 positive PnL gate replay
+
+作業:
+
+- 00352でpre-registeredした `horizon,side` + support2 + `positive_bias_and_tail_miss_ge_0p10` をstateful replayへ戻した。
+- `scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py` に `context_hs_support2_positive_bias_tail_miss_ge_0p10` gateを追加した。
+- gateはscenario / chosen horizon / side / month単位で、過去月だけのmonthly prior confidenceを使う。support条件は observed months >= 2, flagged months >= 2, decisions >= 5 など。
+- residual context spec/keyもranker candidateへ残し、vetoed rows監査に使えるようにした。
+- report: `docs/reports/00353_2026-07-03_entry_ev_context_hs_support2_positive_pnl_gate_replay.md`
+
+結果:
+
+- final replayでは `none` vs contextual gate のsummary差分は `0 / 288` scenarios。
+- bestはどちらも5 trades / added PnL `+60.8530` / combined `+400.1440`。
+- 候補段階では、各score/abstentionで82 rowsをvetoし、vetoed PnL `-1222.4120`、loss 78 / win 4。
+- risk候補検出としては強いが、現行stateful selectorの最終採用tradeとは交差しなかった。
+
+判断:
+
+- contextual positive-bias support2 gate hookはaccepted infrastructure。
+- hard prefilterとしては現bestを改善しない。
+- 次はcontextual confidenceをrepair score / listwise selector feature / admission explanationとして扱う。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00353 contextual gate replay: OK
+
 ### 12:29 Entry EV context support count diagnostics
 
 作業:

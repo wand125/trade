@@ -417,6 +417,81 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
             0.20,
         )
 
+    def test_context_positive_pnl_gate_uses_prior_month_support(self) -> None:
+        choices = pd.DataFrame(
+            {
+                "id": [
+                    "prior_jan_1",
+                    "prior_jan_2",
+                    "prior_jan_3",
+                    "prior_feb_1",
+                    "prior_feb_2",
+                    "current_short",
+                    "current_long",
+                ],
+                "role": ["r"] * 7,
+                "month": [
+                    "2025-01",
+                    "2025-01",
+                    "2025-01",
+                    "2025-02",
+                    "2025-02",
+                    "2025-03",
+                    "2025-03",
+                ],
+                "decision_timestamp": [
+                    "2025-01-02T00:00:00Z",
+                    "2025-01-03T00:00:00Z",
+                    "2025-01-04T00:00:00Z",
+                    "2025-02-02T00:00:00Z",
+                    "2025-02-03T00:00:00Z",
+                    "2025-03-02T00:00:00Z",
+                    "2025-03-02T00:01:00Z",
+                ],
+                "row_scope": ["available_candidates"] * 7,
+                "prob_threshold": [0.45] * 7,
+                "ev_threshold": [0.0] * 7,
+                "tail_prob_threshold": [0.30] * 7,
+                "require_model_used": [True] * 7,
+                "side": ["short", "short", "short", "short", "short", "short", "long"],
+                "hv_chosen_horizon_minutes": [60.0] * 7,
+                "hv_chosen_pred_pnl": [2.0] * 7,
+                "actual_pnl_at_hv_chosen_horizon": [-5.0, -5.0, -5.0, -6.0, -6.0, -4.0, -4.0],
+                "ranker_hv_60m_residual_bias": [1.0] * 7,
+                "ranker_hv_60m_residual_tail_miss_rate": [0.20] * 7,
+            }
+        )
+
+        gated, vetoed = apply_positive_pnl_gate(
+            choices,
+            "context_hs_support2_positive_bias_tail_miss_ge_0p10",
+        )
+
+        self.assertEqual(vetoed["id"].tolist(), ["current_short"])
+        self.assertEqual(
+            gated["id"].tolist(),
+            [
+                "prior_jan_1",
+                "prior_jan_2",
+                "prior_jan_3",
+                "prior_feb_1",
+                "prior_feb_2",
+                "current_long",
+            ],
+        )
+        self.assertAlmostEqual(
+            float(vetoed.iloc[0]["positive_pnl_gate_contextual_prior_observed_month_count"]),
+            2.0,
+        )
+        self.assertAlmostEqual(
+            float(vetoed.iloc[0]["positive_pnl_gate_contextual_prior_flagged_count"]),
+            5.0,
+        )
+        self.assertAlmostEqual(
+            float(vetoed.iloc[0]["positive_pnl_gate_contextual_prior_loss_precision"]),
+            1.0,
+        )
+
     def test_positive_pnl_gate_rejects_unknown_rule(self) -> None:
         choices = pd.DataFrame({"hv_chosen_pred_pnl": [1.0]})
 

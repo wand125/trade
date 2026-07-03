@@ -87,6 +87,9 @@ DEFAULT_SCORE_MODES = "pnl,pnl_delta,pnl_delta_tail"
 DEFAULT_ABSTENTION_RULES = "none"
 DEFAULT_POSITIVE_PNL_GATE_RULES = "none"
 DEFAULT_POSITIVE_PNL_PENALTY_SPECS = "none:0"
+CONTEXT_HS_SUPPORT2_POSITIVE_BIAS_GATE_RULE = (
+    "context_hs_support2_positive_bias_tail_miss_ge_0p10"
+)
 DEFAULT_PROB_THRESHOLDS = "0.50,0.60,0.70"
 DEFAULT_EV_THRESHOLDS = "-2,0,2"
 DEFAULT_TAIL_PROB_THRESHOLDS = "0.30,0.50"
@@ -1335,6 +1338,12 @@ def pivot_ranker_predictions(
         }.items():
             if column not in scored.columns:
                 scored[column] = default
+        for column, default in {
+            "residual_prior_context_spec": "none",
+            "residual_prior_context_key": "",
+        }.items():
+            if column not in scored.columns:
+                scored[column] = default
         horizon_rows = scored[
             numeric_series(scored, "hv_chosen_horizon_minutes").eq(float(horizon))
         ][
@@ -1371,6 +1380,8 @@ def pivot_ranker_predictions(
                 "residual_prior_mae",
                 "residual_prior_overestimate_rate",
                 "residual_prior_tail_miss_rate",
+                "residual_prior_context_spec",
+                "residual_prior_context_key",
             ]
         ].copy()
         rename = {
@@ -1417,6 +1428,8 @@ def pivot_ranker_predictions(
             "residual_prior_tail_miss_rate": (
                 f"ranker_hv_{horizon}m_residual_tail_miss_rate"
             ),
+            "residual_prior_context_spec": f"ranker_hv_{horizon}m_residual_context_spec",
+            "residual_prior_context_key": f"ranker_hv_{horizon}m_residual_context_key",
         }
         horizon_rows = horizon_rows.rename(columns=rename)
         horizon_rows[f"pred_hv_{horizon}m_pnl_model_used"] = horizon_rows[
@@ -1514,6 +1527,249 @@ def chosen_horizon_wide_metric(
     return output
 
 
+def chosen_horizon_wide_text_metric(
+    frame: pd.DataFrame,
+    metric_suffix: str,
+    *,
+    default: str = "",
+) -> pd.Series:
+    output = pd.Series(default, index=frame.index, dtype=object)
+    if "hv_chosen_horizon_minutes" not in frame.columns:
+        return output
+    chosen_horizon = numeric_series(frame, "hv_chosen_horizon_minutes", default=np.nan)
+    prefix = "ranker_hv_"
+    suffix = f"m_{metric_suffix}"
+    for column in frame.columns:
+        if not column.startswith(prefix) or not column.endswith(suffix):
+            continue
+        raw_horizon = column.removeprefix(prefix).removesuffix(suffix)
+        try:
+            horizon = float(raw_horizon)
+        except ValueError:
+            continue
+        mask = chosen_horizon.eq(horizon)
+        if mask.any():
+            output.loc[mask] = text_series(frame, column, default=default).loc[mask]
+    return output.fillna(default)
+
+
+def _contextual_damage_ratio(win_pnl: float, loss_abs: float) -> float:
+    if loss_abs > 0.0:
+        return float(win_pnl / loss_abs)
+    return float("inf") if win_pnl > 0.0 else 0.0
+
+
+def contextual_positive_bias_confidence(frame: pd.DataFrame) -> pd.DataFrame:
+    columns = [
+        "contextual_rule_flag",
+        "contextual_confident",
+        "contextual_veto",
+        "contextual_prior_observed_month_count",
+        "contextual_prior_flagged_month_count",
+        "contextual_prior_decision_count",
+        "contextual_prior_flagged_count",
+        "contextual_prior_pointwise_gate_delta",
+        "contextual_prior_loss_precision",
+        "contextual_prior_winner_damage_ratio",
+        "contextual_prior_selected_flagged_win_count",
+    ]
+    diagnostics = pd.DataFrame(index=frame.index)
+    for column in columns:
+        diagnostics[column] = False if column.endswith(("flag", "confident", "veto")) else 0.0
+    if frame.empty or "month" not in frame.columns:
+        return diagnostics
+
+    work = frame.copy()
+    work["_orig_index"] = work.index
+    residual_bias = chosen_horizon_wide_metric(work, "residual_bias", default=0.0)
+    residual_tail_miss = chosen_horizon_wide_metric(
+        work,
+        "residual_tail_miss_rate",
+        default=0.0,
+    )
+    predicted_positive = numeric_series(work, "hv_chosen_pred_pnl", default=0.0).gt(0.0)
+    actual = numeric_series(work, "actual_pnl_at_hv_chosen_horizon", default=0.0)
+    work["_contextual_rule_flag"] = (
+        predicted_positive & residual_bias.gt(0.0) & residual_tail_miss.ge(0.10)
+    )
+    work["_positive_loss"] = predicted_positive & actual.lt(0.0)
+    work["_positive_win"] = predicted_positive & actual.gt(0.0)
+    work["_actual_pnl"] = actual
+    work["_selected_addition"] = bool_series(work, "selected_addition", default=False)
+
+    month_text = text_series(work, "month", default="").str.slice(0, 7)
+    month_dt = pd.to_datetime(month_text + "-01", errors="coerce")
+    work["_month_ordinal"] = month_dt.dt.year * 12 + month_dt.dt.month
+    valid_month = work["_month_ordinal"].notna()
+    if not valid_month.any():
+        return diagnostics
+    work["_month_ordinal"] = work["_month_ordinal"].fillna(-1).astype(int)
+    horizon = numeric_series(work, "hv_chosen_horizon_minutes", default=np.nan)
+    horizon_key = horizon.round().astype("Int64").astype(str).replace("<NA>", "missing")
+    side_key = text_series(work, "side", default="missing")
+    work["_context_key"] = horizon_key + "|" + side_key
+
+    decision_time = (
+        pd.to_datetime(work["decision_timestamp"], utc=True, errors="coerce")
+        if "decision_timestamp" in work.columns
+        else pd.Series(pd.NaT, index=work.index)
+    )
+    decision_time_key = decision_time.dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna(
+        pd.Series(work.index.astype(str), index=work.index)
+    )
+    work["_decision_key"] = (
+        text_series(work, "role", default="missing")
+        + "|"
+        + month_text
+        + "|"
+        + side_key
+        + "|"
+        + text_series(work, "row_scope", default="missing")
+        + "|"
+        + decision_time_key
+    )
+    work["_market_candidate_key"] = work["_decision_key"] + "|" + horizon_key
+
+    scenario_columns = [column for column in SCENARIO_COLUMNS if column in work.columns]
+    prior_work = work[valid_month].copy()
+    prior_work = prior_work.drop_duplicates(
+        [*scenario_columns, "_market_candidate_key"],
+        keep="first",
+    )
+    monthly_rows: list[dict[str, Any]] = []
+    group_columns = [*scenario_columns, "_context_key", "_month_ordinal"]
+    for keys, group in prior_work.groupby(group_columns, dropna=False, sort=True):
+        row = dict(zip(group_columns, keys, strict=True))
+        flag = bool_series(group, "_contextual_rule_flag", default=False)
+        loss = flag & bool_series(group, "_positive_loss", default=False)
+        win = flag & bool_series(group, "_positive_win", default=False)
+        selected_win = flag & bool_series(group, "_selected_addition", default=False) & win
+        pnl = numeric_series(group, "_actual_pnl", default=0.0)
+        row.update(
+            {
+                "observed_month": 1,
+                "decision_count": int(group["_decision_key"].nunique()),
+                "flagged_count": int(flag.sum()),
+                "flagged_month": int(flag.any()),
+                "flagged_actual_pnl_sum": float(pnl.where(flag, 0.0).sum()),
+                "flagged_loss_count": int(loss.sum()),
+                "flagged_loss_pnl": float(pnl.where(loss, 0.0).sum()),
+                "flagged_win_count": int(win.sum()),
+                "flagged_win_pnl": float(pnl.where(win, 0.0).sum()),
+                "selected_flagged_win_count": int(selected_win.sum()),
+            }
+        )
+        monthly_rows.append(row)
+    if not monthly_rows:
+        return diagnostics
+
+    monthly = pd.DataFrame(monthly_rows).sort_values(group_columns).reset_index(drop=True)
+    context_group_columns = [*scenario_columns, "_context_key"]
+    context_group = monthly.groupby(context_group_columns, dropna=False, sort=False)
+    for column in [
+        "observed_month",
+        "decision_count",
+        "flagged_count",
+        "flagged_month",
+        "flagged_actual_pnl_sum",
+        "flagged_loss_count",
+        "flagged_loss_pnl",
+        "flagged_win_count",
+        "flagged_win_pnl",
+        "selected_flagged_win_count",
+    ]:
+        monthly[f"prior_{column}"] = context_group[column].cumsum() - monthly[column]
+
+    monthly["prior_pointwise_gate_delta"] = -numeric_series(
+        monthly,
+        "prior_flagged_actual_pnl_sum",
+        default=0.0,
+    )
+    prior_flagged_count = numeric_series(monthly, "prior_flagged_count", default=0.0)
+    monthly["prior_loss_precision"] = np.where(
+        prior_flagged_count.gt(0.0),
+        numeric_series(monthly, "prior_flagged_loss_count", default=0.0)
+        / prior_flagged_count,
+        0.0,
+    )
+    monthly["prior_winner_damage_ratio"] = [
+        _contextual_damage_ratio(win_pnl, -loss_pnl)
+        for win_pnl, loss_pnl in zip(
+            numeric_series(monthly, "prior_flagged_win_pnl", default=0.0),
+            numeric_series(monthly, "prior_flagged_loss_pnl", default=0.0),
+            strict=True,
+        )
+    ]
+    monthly_prior_columns = [
+        "prior_observed_month",
+        "prior_flagged_month",
+        "prior_decision_count",
+        "prior_flagged_count",
+        "prior_pointwise_gate_delta",
+        "prior_loss_precision",
+        "prior_winner_damage_ratio",
+        "prior_selected_flagged_win_count",
+    ]
+    enriched = work.merge(
+        monthly[group_columns + monthly_prior_columns],
+        on=group_columns,
+        how="left",
+    )
+    for column in monthly_prior_columns:
+        enriched[column] = numeric_series(enriched, column, default=0.0)
+    contextual_confident = (
+        enriched["prior_observed_month"].ge(2.0)
+        & enriched["prior_flagged_month"].ge(2.0)
+        & enriched["prior_decision_count"].ge(5.0)
+        & enriched["prior_flagged_count"].ge(5.0)
+        & enriched["prior_pointwise_gate_delta"].ge(10.0)
+        & enriched["prior_loss_precision"].ge(0.60)
+        & enriched["prior_winner_damage_ratio"].le(0.25)
+        & enriched["prior_selected_flagged_win_count"].le(0.0)
+    )
+    contextual_rule_flag = bool_series(enriched, "_contextual_rule_flag", default=False)
+    contextual_veto = contextual_rule_flag & contextual_confident
+
+    diagnostics.loc[enriched["_orig_index"], "contextual_rule_flag"] = contextual_rule_flag.values
+    diagnostics.loc[enriched["_orig_index"], "contextual_confident"] = (
+        contextual_confident.values
+    )
+    diagnostics.loc[enriched["_orig_index"], "contextual_veto"] = contextual_veto.values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_observed_month_count",
+    ] = enriched["prior_observed_month"].values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_flagged_month_count",
+    ] = enriched["prior_flagged_month"].values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_decision_count",
+    ] = enriched["prior_decision_count"].values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_flagged_count",
+    ] = enriched["prior_flagged_count"].values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_pointwise_gate_delta",
+    ] = enriched["prior_pointwise_gate_delta"].values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_loss_precision",
+    ] = enriched["prior_loss_precision"].values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_winner_damage_ratio",
+    ] = enriched["prior_winner_damage_ratio"].values
+    diagnostics.loc[
+        enriched["_orig_index"],
+        "contextual_prior_selected_flagged_win_count",
+    ] = enriched["prior_selected_flagged_win_count"].values
+    return diagnostics
+
+
 def positive_pnl_gate_mask(frame: pd.DataFrame, gate_rule: str) -> pd.Series:
     if gate_rule == "none":
         return pd.Series(False, index=frame.index)
@@ -1526,6 +1782,14 @@ def positive_pnl_gate_mask(frame: pd.DataFrame, gate_rule: str) -> pd.Series:
             default=0.0,
         )
         return predicted_positive & residual_bias.gt(0.0) & residual_tail_miss.ge(0.10)
+    if gate_rule == CONTEXT_HS_SUPPORT2_POSITIVE_BIAS_GATE_RULE:
+        if "positive_pnl_gate_contextual_veto" in frame.columns:
+            return bool_series(frame, "positive_pnl_gate_contextual_veto", default=False)
+        return bool_series(
+            contextual_positive_bias_confidence(frame),
+            "contextual_veto",
+            default=False,
+        )
     if gate_rule == "tail_prob_ge_0p30":
         tail_prob = numeric_series(
             frame,
@@ -1657,6 +1921,30 @@ def apply_positive_pnl_gate(choices: pd.DataFrame, gate_rule: str) -> tuple[pd.D
         "residual_tail_miss_rate",
         default=0.0,
     )
+    output["positive_pnl_gate_residual_count"] = chosen_horizon_wide_metric(
+        output,
+        "residual_count",
+        default=0.0,
+    )
+    output["positive_pnl_gate_residual_months"] = chosen_horizon_wide_metric(
+        output,
+        "residual_months",
+        default=0.0,
+    )
+    output["positive_pnl_gate_residual_context_spec"] = chosen_horizon_wide_text_metric(
+        output,
+        "residual_context_spec",
+        default="none",
+    )
+    output["positive_pnl_gate_residual_context_key"] = chosen_horizon_wide_text_metric(
+        output,
+        "residual_context_key",
+        default="",
+    )
+    if gate_rule == CONTEXT_HS_SUPPORT2_POSITIVE_BIAS_GATE_RULE:
+        contextual_diagnostics = contextual_positive_bias_confidence(output)
+        for column in contextual_diagnostics.columns:
+            output[f"positive_pnl_gate_{column}"] = contextual_diagnostics[column]
     output["positive_pnl_gate_veto"] = positive_pnl_gate_mask(output, gate_rule)
     vetoed = output[bool_series(output, "positive_pnl_gate_veto", default=False)].copy()
     if not vetoed.empty:
@@ -1769,6 +2057,30 @@ def summarize_positive_pnl_gate(
         "residual_tail_miss_rate",
         default=0.0,
     )
+    scoped["positive_pnl_gate_residual_count"] = chosen_horizon_wide_metric(
+        scoped,
+        "residual_count",
+        default=0.0,
+    )
+    scoped["positive_pnl_gate_residual_months"] = chosen_horizon_wide_metric(
+        scoped,
+        "residual_months",
+        default=0.0,
+    )
+    scoped["positive_pnl_gate_residual_context_spec"] = chosen_horizon_wide_text_metric(
+        scoped,
+        "residual_context_spec",
+        default="none",
+    )
+    scoped["positive_pnl_gate_residual_context_key"] = chosen_horizon_wide_text_metric(
+        scoped,
+        "residual_context_key",
+        default="",
+    )
+    if gate_rule == CONTEXT_HS_SUPPORT2_POSITIVE_BIAS_GATE_RULE:
+        contextual_diagnostics = contextual_positive_bias_confidence(scoped)
+        for column in contextual_diagnostics.columns:
+            scoped[f"positive_pnl_gate_{column}"] = contextual_diagnostics[column]
     scoped["positive_pnl_gate_veto"] = positive_pnl_gate_mask(scoped, gate_rule)
     scoped["positive_predicted_pnl"] = numeric_series(
         scoped,
