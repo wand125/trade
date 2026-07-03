@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 11:26 JST
+最終更新: 2026-07-03 11:43 JST
 
 ## 現在の状態
 
@@ -12,7 +12,9 @@
 
 特徴量・教師ラベル生成パイプラインは作成済み。
 
-Entry EV positive PnL gate stateful replayを追加した。00347のpositive predicted PnL failure ruleを `--positive-pnl-gate-rules` としてstateful replayへ入れ、`none`, `positive_bias_and_tail_miss_ge_0p10`, `tail_prob_ge_0p30` を864条件で比較した。selector passは `0 / 864`。`tail_prob_ge_0p30` はbest scenarioでno-opとなり、gateなしと同じ5 trades / added PnL `+60.8530` / combined `+400.1440`。`positive_bias_and_tail_miss_ge_0p10` は候補面では負けを削るが、bestでは勝ち720m候補を削ってcombined `+393.2940` へ悪化した。判断: positive-PnL gate replay infrastructureはaccepted、両ruleはhard gateとして標準採用しない。次はhard cutoffではなくhorizon/context別calibration/soft penaltyへ進む。標準policyはNoTrade。詳細は `docs/reports/00348_2026-07-03_entry_ev_positive_pnl_gate_stateful_replay.md`。
+Entry EV positive PnL soft penalty replayを追加した。00348でhard gateがno-opまたは悪化だったため、候補を削らずrepair scoreだけを下げる `--positive-pnl-penalty-specs` を追加し、`none:0`, `residual_bias_tail_miss:0.05/0.10/0.25`, `tail_prob:1/2/5` を2016条件で比較した。selector passは `0 / 2016`。`residual_bias_tail_miss` はbest EV2 scenarioで勝ち候補だけをpenalizeし、weight `0.25` までbestは変わらずcombined `+400.1440`。`tail_prob` はweight `1/2` ではbest no-op、weight `5` は4 trades / combined `+399.8040` へ悪化。判断: soft penalty replay infrastructureはaccepted、今回のglobal soft penalty群は標準policy候補としてreject。次はglobal cutoff/penaltyではなく、over-gating診断とhorizon/context別calibrationへ進む。標準policyはNoTrade。詳細は `docs/reports/00349_2026-07-03_entry_ev_positive_pnl_soft_penalty_replay.md`。
+
+Entry EV positive PnL gate stateful replayを追加した。00347のpositive predicted PnL failure ruleを `--positive-pnl-gate-rules` としてstateful replayへ入れ、`none`, `positive_bias_and_tail_miss_ge_0p10`, `tail_prob_ge_0p30` を864条件で比較した。selector passは `0 / 864`。`tail_prob_ge_0p30` はbest scenarioでno-opとなり、gateなしと同じ5 trades / added PnL `+60.8530` / combined `+400.1440`。`positive_bias_and_tail_miss_ge_0p10` は候補面では負けを削るが、bestでは勝ち720m候補を削ってcombined `+393.2940` へ悪化した。判断: positive-PnL gate replay infrastructureはaccepted、両ruleはhard gateとして標準採用しない。詳細は `docs/reports/00348_2026-07-03_entry_ev_positive_pnl_gate_stateful_replay.md`。
 
 Entry EV positive predicted PnL failure diagnosticsを追加した。00346でnegative pred PnL vetoがbestを動かさなかったため、00346 `ranker_replay_candidates_*.csv` を横断し、予測PnLは正なのに実損益が負の候補面をtail / harmful / prior / residual / support reliabilityで診断した。market candidate dedupではpositive predicted PnL 205件中124件が損失、合計 `-1104.5216`。`positive_bias_and_tail_miss_ge_0p10` は109件flag / loss precision `0.7706` / recall `0.6774` / flagged PnL `-1044.5162`、`tail_prob_ge_0p30` は86件flag / precision `0.7209` / recall `0.5000` / flagged PnL `-999.3158`。00348でstateful replayへ戻すと、tail gateはbest no-op、positive-bias gateはbest悪化だった。判断: diagnosticsはaccepted infrastructure、標準policyはNoTrade。詳細は `docs/reports/00347_2026-07-03_entry_ev_positive_pnl_failure_diagnostics.md`。
 

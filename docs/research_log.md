@@ -4,6 +4,33 @@
 
 ## 2026-07-03 JST
 
+### 11:43 Entry EV positive PnL soft penalty replay
+
+作業:
+
+- 00348でpositive-PnL hard gateがno-opまたは悪化だったため、候補を削らずrepair scoreだけを下げるsoft penaltyを追加した。
+- `entry_ev_broad_prior_horizon_choice_replay.py` に `--positive-pnl-penalty-specs` と penalty summary artifactを追加した。
+- report: `docs/reports/00349_2026-07-03_entry_ev_positive_pnl_soft_penalty_replay.md`
+
+結果:
+
+- 2016条件をreplayし、selector passは `0 / 2016`。
+- `residual_bias_tail_miss:0.05/0.10/0.25` はbest EV2 scenarioで勝ち候補のみをpenalizeし、best setは変わらず combined `+400.1440`。改善ではなくno-op。
+- `tail_prob:1/2` もbest no-op。`tail_prob:5` は4 trades / added PnL `+60.5130` / combined `+399.8040` へ悪化した。
+- p0.45 EV2/tail0.3では `tail_prob:5` が31 rowsへpenaltyを与え、penalized actual PnLは `+85.1660`。winnerも一緒に強く下げている。
+
+判断:
+
+- positive-PnL soft penalty replay infrastructureはaccepted。
+- 今回のglobal `residual_bias_tail_miss` / `tail_prob` soft penaltyは標準policy候補としてreject。
+- global cutoff/penaltyではなく、over-gating diagnosticsとhorizon/context別calibrationへ進む。標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py tests/test_entry_ev_broad_prior_horizon_choice_replay.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00349 positive PnL soft penalty replay: OK
+
 ### 11:26 Entry EV positive PnL gate stateful replay
 
 作業:

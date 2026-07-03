@@ -86,6 +86,7 @@ DEFAULT_HORIZON_CATEGORICAL_FEATURES = (
 DEFAULT_SCORE_MODES = "pnl,pnl_delta,pnl_delta_tail"
 DEFAULT_ABSTENTION_RULES = "none"
 DEFAULT_POSITIVE_PNL_GATE_RULES = "none"
+DEFAULT_POSITIVE_PNL_PENALTY_SPECS = "none:0"
 DEFAULT_PROB_THRESHOLDS = "0.50,0.60,0.70"
 DEFAULT_EV_THRESHOLDS = "-2,0,2"
 DEFAULT_TAIL_PROB_THRESHOLDS = "0.30,0.50"
@@ -119,6 +120,14 @@ HEAD_RELIABILITY_SPECS = {
         "classifier",
         "auc",
     ),
+}
+POSITIVE_PNL_PENALTY_MODES = {
+    "none",
+    "residual_bias_tail_miss",
+    "residual_bias_tail_excess",
+    "tail_prob",
+    "tail_prob_excess",
+    "residual_bias_tail_miss_plus_tail",
 }
 
 
@@ -1542,6 +1551,99 @@ def positive_pnl_gate_mask(frame: pd.DataFrame, gate_rule: str) -> pd.Series:
     raise ValueError(f"unknown positive PnL gate rule: {gate_rule}")
 
 
+def value_label(value: float) -> str:
+    return f"{float(value):g}".replace("-", "m").replace(".", "p")
+
+
+def parse_positive_pnl_penalty_specs(value: str) -> list[tuple[str, float]]:
+    specs: list[tuple[str, float]] = []
+    for raw_item in parse_csv(value):
+        if ":" in raw_item:
+            raw_mode, raw_weight = raw_item.split(":", 1)
+            mode = raw_mode.strip()
+            weight = float(raw_weight)
+        else:
+            mode = raw_item.strip()
+            weight = 0.0 if mode == "none" else 1.0
+        if mode not in POSITIVE_PNL_PENALTY_MODES:
+            raise ValueError(f"unknown positive PnL penalty mode: {mode}")
+        specs.append((mode, weight))
+    return specs or [("none", 0.0)]
+
+
+def positive_pnl_penalty_label(mode: str, weight: float) -> str:
+    if mode == "none" or float(weight) <= 0.0:
+        return "none"
+    return f"{mode}_w{value_label(weight)}"
+
+
+def positive_pnl_penalty_signal(frame: pd.DataFrame, penalty_mode: str) -> pd.Series:
+    if penalty_mode not in POSITIVE_PNL_PENALTY_MODES:
+        raise ValueError(f"unknown positive PnL penalty mode: {penalty_mode}")
+    if penalty_mode == "none":
+        return pd.Series(0.0, index=frame.index, dtype=float)
+    predicted_positive = numeric_series(frame, "hv_chosen_pred_pnl", default=0.0).gt(0.0)
+    residual_bias = chosen_horizon_wide_metric(frame, "residual_bias", default=0.0).clip(
+        lower=0.0
+    )
+    residual_tail_miss = chosen_horizon_wide_metric(
+        frame,
+        "residual_tail_miss_rate",
+        default=0.0,
+    ).clip(lower=0.0)
+    tail_prob = numeric_series(
+        frame,
+        "hv_chosen_pred_tail_loss_prob",
+        default=0.0,
+    ).clip(lower=0.0)
+    if penalty_mode == "residual_bias_tail_miss":
+        signal = residual_bias * residual_tail_miss
+    elif penalty_mode == "residual_bias_tail_excess":
+        signal = residual_bias * (residual_tail_miss - 0.10).clip(lower=0.0)
+    elif penalty_mode == "tail_prob":
+        signal = tail_prob
+    elif penalty_mode == "tail_prob_excess":
+        signal = 10.0 * (tail_prob - 0.30).clip(lower=0.0)
+    elif penalty_mode == "residual_bias_tail_miss_plus_tail":
+        signal = residual_bias * residual_tail_miss + 10.0 * tail_prob
+    else:
+        raise ValueError(f"unknown positive PnL penalty mode: {penalty_mode}")
+    return signal.where(predicted_positive, 0.0).fillna(0.0)
+
+
+def apply_positive_pnl_penalty(
+    choices: pd.DataFrame,
+    *,
+    penalty_mode: str,
+    penalty_weight: float,
+) -> pd.DataFrame:
+    output = choices.copy()
+    label = positive_pnl_penalty_label(penalty_mode, penalty_weight)
+    signal = positive_pnl_penalty_signal(output, penalty_mode)
+    amount = float(max(penalty_weight, 0.0)) * signal
+    output["positive_pnl_penalty_mode"] = penalty_mode
+    output["positive_pnl_penalty_weight"] = float(penalty_weight)
+    output["positive_pnl_penalty_label"] = label
+    output["positive_pnl_penalty_residual_bias"] = chosen_horizon_wide_metric(
+        output,
+        "residual_bias",
+        default=0.0,
+    )
+    output["positive_pnl_penalty_residual_tail_miss_rate"] = chosen_horizon_wide_metric(
+        output,
+        "residual_tail_miss_rate",
+        default=0.0,
+    )
+    output["positive_pnl_penalty_signal"] = signal
+    output["positive_pnl_penalty_amount"] = amount
+    output["repair_duration_risk_penalty_amount"] = numeric_series(
+        output,
+        "repair_duration_risk_penalty_amount",
+        default=0.0,
+    ) + amount
+    return output
+
+
 def apply_positive_pnl_gate(choices: pd.DataFrame, gate_rule: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     output = choices.copy()
     output["positive_pnl_gate_rule"] = gate_rule
@@ -1561,6 +1663,89 @@ def apply_positive_pnl_gate(choices: pd.DataFrame, gate_rule: str) -> tuple[pd.D
         vetoed["reject_reason"] = "positive_pnl_gate"
     kept = output[~bool_series(output, "positive_pnl_gate_veto", default=False)].copy()
     return kept.reset_index(drop=True), vetoed.reset_index(drop=True)
+
+
+def summarize_positive_pnl_penalty(
+    choices: pd.DataFrame,
+    *,
+    penalty_mode: str,
+    penalty_weight: float,
+    gate_rule: str,
+    score_mode: str,
+    abstention_rule: str,
+) -> pd.DataFrame:
+    if choices.empty:
+        return pd.DataFrame()
+    scoped = apply_positive_pnl_penalty(
+        choices,
+        penalty_mode=penalty_mode,
+        penalty_weight=penalty_weight,
+    )
+    label = positive_pnl_penalty_label(penalty_mode, penalty_weight)
+    amount = numeric_series(scoped, "positive_pnl_penalty_amount", default=0.0)
+    scoped["positive_predicted_pnl"] = numeric_series(
+        scoped,
+        "hv_chosen_pred_pnl",
+        default=0.0,
+    ).gt(0.0)
+    scoped["positive_pred_loss"] = scoped["positive_predicted_pnl"] & numeric_series(
+        scoped,
+        "actual_pnl_at_hv_chosen_horizon",
+        default=0.0,
+    ).lt(0.0)
+    rows: list[dict[str, Any]] = []
+    for key, group in scoped.groupby(SCENARIO_COLUMNS, dropna=False, sort=False):
+        scenario = dict(zip(SCENARIO_COLUMNS, key, strict=True))
+        group_amount = numeric_series(group, "positive_pnl_penalty_amount", default=0.0)
+        group_penalized = group_amount.gt(0.0)
+        positive_loss = bool_series(group, "positive_pred_loss", default=False)
+        positive_win = bool_series(group, "positive_predicted_pnl", default=False) & numeric_series(
+            group,
+            "actual_pnl_at_hv_chosen_horizon",
+            default=0.0,
+        ).gt(0.0)
+        penalized = group[group_penalized]
+        rows.append(
+            {
+                **scenario,
+                "ranker_score_mode": score_mode,
+                "ranker_abstention_rule": abstention_rule,
+                "positive_pnl_gate_rule": gate_rule,
+                "positive_pnl_penalty_mode": penalty_mode,
+                "positive_pnl_penalty_weight": float(penalty_weight),
+                "positive_pnl_penalty_label": label,
+                "penalty_candidate_rows": int(len(group)),
+                "penalty_positive_amount_count": int(group_penalized.sum()),
+                "penalty_amount_sum": float(group_amount.sum()),
+                "penalty_signal_sum": float(
+                    numeric_series(group, "positive_pnl_penalty_signal", default=0.0).sum()
+                ),
+                "penalized_actual_pnl_sum": float(
+                    numeric_series(
+                        penalized,
+                        "actual_pnl_at_hv_chosen_horizon",
+                        default=0.0,
+                    ).sum()
+                ),
+                "penalized_positive_loss_count": int((group_penalized & positive_loss).sum()),
+                "penalized_positive_loss_actual_pnl_sum": float(
+                    numeric_series(
+                        group[group_penalized & positive_loss],
+                        "actual_pnl_at_hv_chosen_horizon",
+                        default=0.0,
+                    ).sum()
+                ),
+                "penalized_positive_win_count": int((group_penalized & positive_win).sum()),
+                "penalized_positive_win_actual_pnl_sum": float(
+                    numeric_series(
+                        group[group_penalized & positive_win],
+                        "actual_pnl_at_hv_chosen_horizon",
+                        default=0.0,
+                    ).sum()
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def summarize_positive_pnl_gate(
@@ -1663,6 +1848,9 @@ def run_experiment(args: argparse.Namespace) -> Path:
     score_modes = parse_csv(args.score_modes)
     abstention_rules = parse_csv(args.abstention_rules)
     positive_pnl_gate_rules = parse_csv(args.positive_pnl_gate_rules)
+    positive_pnl_penalty_specs = parse_positive_pnl_penalty_specs(
+        args.positive_pnl_penalty_specs
+    )
     broad_train_rows = pd.read_csv(args.broad_train_rows)
     eval_rows = pd.read_csv(args.predictions)
 
@@ -1787,6 +1975,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
     rejection_frames: list[pd.DataFrame] = []
     choice_summary_frames: list[pd.DataFrame] = []
     positive_pnl_gate_summary_frames: list[pd.DataFrame] = []
+    positive_pnl_penalty_summary_frames: list[pd.DataFrame] = []
     for score_mode in score_modes:
         for abstention_rule in abstention_rules:
             mode_label = (
@@ -1850,11 +2039,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
             choices["ranker_score_mode"] = score_mode
             choices["ranker_abstention_rule"] = abstention_rule
             for gate_rule in positive_pnl_gate_rules:
-                gate_label = (
-                    mode_label
-                    if gate_rule == "none"
-                    else f"{mode_label}__ppg_{gate_rule}"
-                )
+                gate_label = mode_label if gate_rule == "none" else f"{mode_label}__ppg_{gate_rule}"
                 gate_summary = summarize_positive_pnl_gate(
                     choices,
                     gate_rule=gate_rule,
@@ -1864,92 +2049,151 @@ def run_experiment(args: argparse.Namespace) -> Path:
                 if not gate_summary.empty:
                     positive_pnl_gate_summary_frames.append(gate_summary)
                 gated_choices, vetoed_choices = apply_positive_pnl_gate(choices, gate_rule)
-                gated_choices = add_repair_utility_columns(
-                    base_monthly,
-                    gated_choices,
-                    min_month_trades=args.min_month_trades,
-                    max_side_trade_share=args.max_side_trade_share,
-                    repair_support_weight=args.repair_support_weight,
-                    repair_expected_pnl_weight=args.repair_expected_pnl_weight,
-                    repair_tail_penalty_weight=args.repair_tail_penalty_weight,
-                    repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
-                    repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
-                    repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
-                )
-                gated_choices.to_csv(
-                    run_dir / f"ranker_replay_candidates_{gate_label}.csv",
-                    index=False,
-                )
                 vetoed_choices.to_csv(
                     run_dir / f"ranker_positive_pnl_gate_vetoed_{gate_label}.csv",
                     index=False,
                 )
-                summary, monthly, additions, rejections = replay_scenarios(
-                    base_monthly,
-                    base_trades,
-                    gated_choices,
-                    min_total_pnl=args.min_total_pnl,
-                    min_role_total_pnl=args.min_role_total_pnl,
-                    month_floor=args.month_floor,
-                    shallow_month_floor=args.shallow_month_floor,
-                    min_role_trades=args.min_role_trades,
-                    min_month_trades=args.min_month_trades,
-                    max_side_trade_share=args.max_side_trade_share,
-                    cap_to_extra_side_needed=args.cap_to_extra_side_needed,
-                    overlap_key_columns=parse_csv(args.overlap_keys),
-                    selection_mode="repair_score",
-                    repair_support_weight=args.repair_support_weight,
-                    repair_expected_pnl_weight=args.repair_expected_pnl_weight,
-                    repair_tail_penalty_weight=args.repair_tail_penalty_weight,
-                    repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
-                    repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
-                    repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
-                    min_chosen_pred_pnl=args.min_chosen_pred_pnl,
-                    min_chosen_actual_pnl=None,
-                    max_chosen_tail_prob=args.max_chosen_tail_prob,
-                )
-                for frame in [summary, monthly, additions, rejections]:
-                    if not frame.empty:
-                        frame["ranker_score_mode"] = score_mode
-                        frame["ranker_abstention_rule"] = abstention_rule
-                        frame["positive_pnl_gate_rule"] = gate_rule
-                        if "scenario_label" in frame.columns:
-                            frame["scenario_label"] = (
-                                frame["scenario_label"].astype(str) + f"_ranker_{gate_label}"
-                            )
-                if not summary.empty and not gate_summary.empty:
-                    summary = summary.merge(
-                        gate_summary[
-                            [
+                for penalty_mode, penalty_weight in positive_pnl_penalty_specs:
+                    penalty_label = positive_pnl_penalty_label(penalty_mode, penalty_weight)
+                    replay_label = (
+                        gate_label
+                        if penalty_label == "none"
+                        else f"{gate_label}__ppp_{penalty_label}"
+                    )
+                    penalty_summary = summarize_positive_pnl_penalty(
+                        gated_choices,
+                        penalty_mode=penalty_mode,
+                        penalty_weight=penalty_weight,
+                        gate_rule=gate_rule,
+                        score_mode=score_mode,
+                        abstention_rule=abstention_rule,
+                    )
+                    if not penalty_summary.empty:
+                        positive_pnl_penalty_summary_frames.append(penalty_summary)
+                    replay_choices = apply_positive_pnl_penalty(
+                        gated_choices,
+                        penalty_mode=penalty_mode,
+                        penalty_weight=penalty_weight,
+                    )
+                    replay_choices = add_repair_utility_columns(
+                        base_monthly,
+                        replay_choices,
+                        min_month_trades=args.min_month_trades,
+                        max_side_trade_share=args.max_side_trade_share,
+                        repair_support_weight=args.repair_support_weight,
+                        repair_expected_pnl_weight=args.repair_expected_pnl_weight,
+                        repair_tail_penalty_weight=args.repair_tail_penalty_weight,
+                        repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
+                        repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
+                        repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
+                    )
+                    replay_choices.to_csv(
+                        run_dir / f"ranker_replay_candidates_{replay_label}.csv",
+                        index=False,
+                    )
+                    summary, monthly, additions, rejections = replay_scenarios(
+                        base_monthly,
+                        base_trades,
+                        replay_choices,
+                        min_total_pnl=args.min_total_pnl,
+                        min_role_total_pnl=args.min_role_total_pnl,
+                        month_floor=args.month_floor,
+                        shallow_month_floor=args.shallow_month_floor,
+                        min_role_trades=args.min_role_trades,
+                        min_month_trades=args.min_month_trades,
+                        max_side_trade_share=args.max_side_trade_share,
+                        cap_to_extra_side_needed=args.cap_to_extra_side_needed,
+                        overlap_key_columns=parse_csv(args.overlap_keys),
+                        selection_mode="repair_score",
+                        repair_support_weight=args.repair_support_weight,
+                        repair_expected_pnl_weight=args.repair_expected_pnl_weight,
+                        repair_tail_penalty_weight=args.repair_tail_penalty_weight,
+                        repair_horizon_penalty_weight=args.repair_horizon_penalty_weight,
+                        repair_harmful_penalty_weight=args.repair_harmful_penalty_weight,
+                        repair_harmful_penalty_threshold=args.repair_harmful_penalty_threshold,
+                        min_chosen_pred_pnl=args.min_chosen_pred_pnl,
+                        min_chosen_actual_pnl=None,
+                        max_chosen_tail_prob=args.max_chosen_tail_prob,
+                    )
+                    for frame in [summary, monthly, additions, rejections]:
+                        if not frame.empty:
+                            frame["ranker_score_mode"] = score_mode
+                            frame["ranker_abstention_rule"] = abstention_rule
+                            frame["positive_pnl_gate_rule"] = gate_rule
+                            frame["positive_pnl_penalty_mode"] = penalty_mode
+                            frame["positive_pnl_penalty_weight"] = float(penalty_weight)
+                            frame["positive_pnl_penalty_label"] = penalty_label
+                            if "scenario_label" in frame.columns:
+                                frame["scenario_label"] = (
+                                    frame["scenario_label"].astype(str)
+                                    + f"_ranker_{replay_label}"
+                                )
+                    if not summary.empty and not gate_summary.empty:
+                        summary = summary.merge(
+                            gate_summary[
+                                [
+                                    *SCENARIO_COLUMNS,
+                                    "ranker_score_mode",
+                                    "ranker_abstention_rule",
+                                    "positive_pnl_gate_rule",
+                                    "candidate_rows_before_gate",
+                                    "candidate_rows_after_gate",
+                                    "positive_predicted_pnl_count",
+                                    "positive_pred_actual_pnl_sum",
+                                    "positive_pred_loss_count",
+                                    "positive_pred_loss_actual_pnl_sum",
+                                    "gate_veto_count",
+                                    "gate_veto_actual_pnl_sum",
+                                    "gate_veto_positive_loss_count",
+                                    "gate_veto_positive_loss_actual_pnl_sum",
+                                    "gate_veto_positive_win_count",
+                                ]
+                            ],
+                            on=[
                                 *SCENARIO_COLUMNS,
                                 "ranker_score_mode",
                                 "ranker_abstention_rule",
                                 "positive_pnl_gate_rule",
-                                "candidate_rows_before_gate",
-                                "candidate_rows_after_gate",
-                                "positive_predicted_pnl_count",
-                                "positive_pred_actual_pnl_sum",
-                                "positive_pred_loss_count",
-                                "positive_pred_loss_actual_pnl_sum",
-                                "gate_veto_count",
-                                "gate_veto_actual_pnl_sum",
-                                "gate_veto_positive_loss_count",
-                                "gate_veto_positive_loss_actual_pnl_sum",
-                                "gate_veto_positive_win_count",
-                            ]
-                        ],
-                        on=[
-                            *SCENARIO_COLUMNS,
-                            "ranker_score_mode",
-                            "ranker_abstention_rule",
-                            "positive_pnl_gate_rule",
-                        ],
-                        how="left",
-                    )
-                summary_frames.append(summary)
-                monthly_frames.append(monthly)
-                addition_frames.append(additions)
-                rejection_frames.append(rejections)
+                            ],
+                            how="left",
+                        )
+                    if not summary.empty and not penalty_summary.empty:
+                        summary = summary.merge(
+                            penalty_summary[
+                                [
+                                    *SCENARIO_COLUMNS,
+                                    "ranker_score_mode",
+                                    "ranker_abstention_rule",
+                                    "positive_pnl_gate_rule",
+                                    "positive_pnl_penalty_mode",
+                                    "positive_pnl_penalty_weight",
+                                    "positive_pnl_penalty_label",
+                                    "penalty_candidate_rows",
+                                    "penalty_positive_amount_count",
+                                    "penalty_amount_sum",
+                                    "penalty_signal_sum",
+                                    "penalized_actual_pnl_sum",
+                                    "penalized_positive_loss_count",
+                                    "penalized_positive_loss_actual_pnl_sum",
+                                    "penalized_positive_win_count",
+                                    "penalized_positive_win_actual_pnl_sum",
+                                ]
+                            ],
+                            on=[
+                                *SCENARIO_COLUMNS,
+                                "ranker_score_mode",
+                                "ranker_abstention_rule",
+                                "positive_pnl_gate_rule",
+                                "positive_pnl_penalty_mode",
+                                "positive_pnl_penalty_weight",
+                                "positive_pnl_penalty_label",
+                            ],
+                            how="left",
+                        )
+                    summary_frames.append(summary)
+                    monthly_frames.append(monthly)
+                    addition_frames.append(additions)
+                    rejection_frames.append(rejections)
 
     summary_all = pd.concat(summary_frames, ignore_index=True) if summary_frames else pd.DataFrame()
     monthly_all = pd.concat(monthly_frames, ignore_index=True) if monthly_frames else pd.DataFrame()
@@ -1969,6 +2213,11 @@ def run_experiment(args: argparse.Namespace) -> Path:
         if positive_pnl_gate_summary_frames
         else pd.DataFrame()
     )
+    positive_pnl_penalty_summary = (
+        pd.concat(positive_pnl_penalty_summary_frames, ignore_index=True)
+        if positive_pnl_penalty_summary_frames
+        else pd.DataFrame()
+    )
     summary_all.to_csv(run_dir / "broad_prior_horizon_choice_replay_summary.csv", index=False)
     monthly_all.to_csv(run_dir / "broad_prior_horizon_choice_monthly_metrics.csv", index=False)
     additions_all.to_csv(run_dir / "broad_prior_horizon_choice_additions.csv", index=False)
@@ -1976,6 +2225,10 @@ def run_experiment(args: argparse.Namespace) -> Path:
     choice_summary.to_csv(run_dir / "broad_prior_horizon_choice_selection_summary.csv", index=False)
     positive_pnl_gate_summary.to_csv(
         run_dir / "broad_prior_horizon_choice_positive_pnl_gate_summary.csv",
+        index=False,
+    )
+    positive_pnl_penalty_summary.to_csv(
+        run_dir / "broad_prior_horizon_choice_positive_pnl_penalty_summary.csv",
         index=False,
     )
 
@@ -1988,6 +2241,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "score_modes": score_modes,
         "abstention_rules": abstention_rules,
         "positive_pnl_gate_rules": positive_pnl_gate_rules,
+        "positive_pnl_penalty_specs": positive_pnl_penalty_specs,
         "baseline_score_mode": args.baseline_score_mode,
         "numeric_features": numeric_features,
         "categorical_features": categorical_features,
@@ -2061,6 +2315,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
                     "ranker_score_mode",
                     "ranker_abstention_rule",
                     "positive_pnl_gate_rule",
+                    "positive_pnl_penalty_label",
                     "scenario_label",
                     "selector_pass",
                     "blockers",
@@ -2100,6 +2355,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--score-modes", default=DEFAULT_SCORE_MODES)
     parser.add_argument("--abstention-rules", default=DEFAULT_ABSTENTION_RULES)
     parser.add_argument("--positive-pnl-gate-rules", default=DEFAULT_POSITIVE_PNL_GATE_RULES)
+    parser.add_argument(
+        "--positive-pnl-penalty-specs",
+        default=DEFAULT_POSITIVE_PNL_PENALTY_SPECS,
+    )
     parser.add_argument("--baseline-score-mode", default="pnl")
     parser.add_argument("--prob-thresholds", default=DEFAULT_PROB_THRESHOLDS)
     parser.add_argument("--ev-thresholds", default=DEFAULT_EV_THRESHOLDS)

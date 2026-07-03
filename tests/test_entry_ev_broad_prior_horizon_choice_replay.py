@@ -9,10 +9,12 @@ from scripts.experiments.entry_ev_broad_prior_horizon_choice_replay import (
     DEFAULT_HORIZON_NUMERIC_FEATURES,
     add_residual_prior_columns,
     add_head_reliability_columns,
+    apply_positive_pnl_penalty,
     apply_positive_pnl_gate,
     apply_switch_abstention,
     chronological_ranker_predictions,
     expand_horizon_examples,
+    parse_positive_pnl_penalty_specs,
     pivot_ranker_predictions,
     positive_pnl_gate_mask,
     score_predictions,
@@ -420,6 +422,44 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             positive_pnl_gate_mask(choices, "unknown_rule")
+
+    def test_positive_pnl_penalty_adds_soft_repair_penalty_only_for_positive_pred(self) -> None:
+        choices = pd.DataFrame(
+            {
+                "id": ["positive", "negative"],
+                "hv_chosen_horizon_minutes": [720.0, 720.0],
+                "hv_chosen_pred_pnl": [2.0, -2.0],
+                "hv_chosen_pred_tail_loss_prob": [0.20, 0.90],
+                "ranker_hv_720m_residual_bias": [10.0, 10.0],
+                "ranker_hv_720m_residual_tail_miss_rate": [0.50, 0.50],
+                "repair_duration_risk_penalty_amount": [1.0, 1.0],
+            }
+        )
+
+        output = apply_positive_pnl_penalty(
+            choices,
+            penalty_mode="residual_bias_tail_miss",
+            penalty_weight=0.10,
+        )
+
+        self.assertAlmostEqual(float(output.iloc[0]["positive_pnl_penalty_signal"]), 5.0)
+        self.assertAlmostEqual(float(output.iloc[0]["positive_pnl_penalty_amount"]), 0.5)
+        self.assertAlmostEqual(
+            float(output.iloc[0]["repair_duration_risk_penalty_amount"]),
+            1.5,
+        )
+        self.assertAlmostEqual(float(output.iloc[1]["positive_pnl_penalty_amount"]), 0.0)
+        self.assertAlmostEqual(
+            float(output.iloc[1]["repair_duration_risk_penalty_amount"]),
+            1.0,
+        )
+
+    def test_parse_positive_pnl_penalty_specs(self) -> None:
+        specs = parse_positive_pnl_penalty_specs("none:0,residual_bias_tail_miss:0.25")
+
+        self.assertEqual(specs, [("none", 0.0), ("residual_bias_tail_miss", 0.25)])
+        with self.assertRaises(ValueError):
+            parse_positive_pnl_penalty_specs("bad_mode:1")
 
 
 if __name__ == "__main__":
