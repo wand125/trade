@@ -4,6 +4,37 @@
 
 ## 2026-07-03 JST
 
+### 13:56 Entry EV tail selected residual diagnostics
+
+作業:
+
+- 00356で見えたtail ceiling通過後のpositive predicted PnL failureを、実際のselected / near-selected候補へ絞って診断した。
+- `entry_ev_tail_selected_residual_diagnostics.py` を追加し、00354 no-penalty candidatesを00354 `broad_prior_horizon_choice_additions.csv` / `rejections.csv` とscenario/candidate keyで突き合わせた。
+- 同じmarket eventがscore mode / threshold scenarioで重複するため、row-weightedに加えて `candidate_identity_key` dedupを追加した。
+- report: `docs/reports/00357_2026-07-03_entry_ev_tail_selected_residual_diagnostics.md`
+
+結果:
+
+- candidate identity dedupではtail pass positiveは118件 / `-90.3858`、loss 61件 / `-365.8848`、win 57件 / `+275.4990`。
+- actual selected additionsに絞るとtail pass positiveは8件 / `+59.0070`、lossは1件 / `-29.1360`、winは7件 / `+88.1430`。
+- selected lossは `fresh2024_validation 2024-08 long 720m` のsingletonで、`pred_pnl=+1.4813`, actual `-29.1360`, tail prob `0.167651`, prior mean `-3.499252`, prior tail `0.414536`, prior risk `9.977267`。
+- `pred_pnl_lt_2` はselected additions dedupではこの1件だけをflagし、flagged win PnL `0.0000`、kept PnL `+88.1430`。
+- near-boundaryまで広げると `pred_pnl_lt_2` は13件 / `-69.0904` をflagし、kept PnL `+132.0018` だが、failure precision `0.4615` でwin damageが残る。
+
+判断:
+
+- 00356の全候補面のtail-pass residual failureは広いが、actual selected lossはsingletonに狭まった。
+- `greedy_selected` row_scopeだけを見るとloss 0に見えるが、selection artifact上のactual additionsでは `available_candidates` 側にselected lossが存在する。この2つを混同しない。
+- `selected tail-pass pred_pnl_lt2` / `singleton_720_pred_pnl_lt2` はpre-registered stateful replay候補。ただし支持がunique 1件なので標準policyにはしない。
+- prior mean/tail/riskやpositive-bias residual ruleはselected lossを拾うが、selected winnersも巻き込むためglobal hard gateとしてはreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_tail_selected_residual_diagnostics.py tests/test_entry_ev_tail_selected_residual_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_tail_selected_residual_diagnostics`: OK
+- 00357 tail selected residual diagnostics: OK
+
 ### 13:40 Entry EV tail ceiling residual failure diagnostics
 
 作業:

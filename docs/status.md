@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 13:40 JST
+最終更新: 2026-07-03 13:56 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV tail selected residual diagnosticsを追加した。00356で見えたtail ceiling通過後のpositive predicted PnL failureを、実際のselector boundary周辺に限定して診断した。00354 no-penalty candidatesを00354 additions/rejectionsと突き合わせ、row-weightedだけでなく `candidate_identity_key` dedupで評価した。candidate identity dedupではtail pass positiveは118件 / `-90.3858`、loss 61件 / `-365.8848`。actual selected additionsに絞るとtail pass positiveは8件 / `+59.0070`、lossは1件 / `-29.1360` だけで、`fresh2024_validation 2024-08 long 720m` のsingletonだった。`pred_pnl_lt_2` はこのselected lossだけをflagしwin damage 0だが、支持はunique 1件なので標準policy化せず、stateful replay候補として扱う。`greedy_selected` row_scopeだけではloss 0に見えるため、selection artifact上のactual additionsと混同しない。標準policyはNoTrade。詳細は `docs/reports/00357_2026-07-03_entry_ev_tail_selected_residual_diagnostics.md`。
 
 Entry EV tail ceiling residual failure diagnosticsを追加した。00355で全件tail ceiling済みと分かったcontextual penalty rowsの先を確認するため、00354 no-penalty候補を `max_chosen_tail_prob=0.3` 通過/遮断で分解した。row-weightedではpositive predicted PnL 12544 rows / `-47285.8192` のうち、tail blocked側は3236 rows / `-47165.1376`、tail pass側は9308 rows / `-120.6816`。market candidate dedupでもpositive 205件 / `-1104.5216` に対し、tail blocked 86件 / `-999.3158`、tail pass 119件 / `-105.2058`。tail ceilingは大きな高tail損失領域を落としているが、tail pass後にも低tail residual failureが残る。`pred_pnl_lt_1/2` は損失捕捉は強いが勝ち候補も削るためglobal hard gateとしてはreject。次はselected/near-selected tail-pass residual failureへ絞る。標準policyはNoTrade。詳細は `docs/reports/00356_2026-07-03_entry_ev_tail_ceiling_residual_failure_diagnostics.md`。
 
