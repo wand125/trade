@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 09:06 JST
+最終更新: 2026-07-03 09:16 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair target-local confidence diagnosticsを追加した。00339で見えた `fresh2024 2024-03` のfallback/non-model hidden positivesについて、00324 horizon rowsをtarget-localに切り出し、観測可能特徴量だけのrule surfaceを診断した。`fresh2024_validation 2024-03 long` は51 rows / 17 decisions / 3 horizonsで全て `pred_model_used=false`。60m合計 `-137.9060`、240m合計 `+49.0950`、720m合計 `-99.9060` で、post-hocでは `horizon_eq_240` が17 rows / positive 12 / tail loss 1を拾う。`horizon_eq_240 & entry_hour>=15` は3 rows / `+39.1300` だが、target-localで薄すぎるためpolicy evidenceではない。判断: target-local confidence diagnosticsはaccepted infrastructure、fresh03の弱点はentry方向よりexit timing / horizon confidence / expected PnL calibration。240m固定や時刻ruleはreject、標準policyはNoTrade。詳細は `docs/reports/00340_2026-07-03_entry_ev_support_repair_target_local_confidence.md`。
 
 Entry EV support repair thin-month candidate diagnosticsを追加した。00335 leak-free support repair後に残る負け月/薄い月について、00335 stateful候補面と00324 external row x horizon候補を同じschemaへ正規化し、代替候補の存在と観測可能gateを診断した。stateful-onlyではEV2のtarget 4件に候補0、EV -2では `fresh2024 2024-08` だけ13 unique候補があり他targetは候補0。00324 external候補を混ぜると `fresh2024 2024-03 long` に51 unique / oracle positive 18 / positive sum `+90.5230` / best `+13.4900` が見えるが、model-used 0、strict/relaxed guarded pass 0で、実行可能policy evidenceではない。`fresh2024 2024-08` はmodel-used候補があるがtop predicted PnLは720m selected `-29.1360` で、00338のsingleton guardにより60/240m小幅positive候補へ戻る。判断: thin-month candidate diagnosticsはaccepted infrastructure、remaining thin monthsは単純rerankingでは解けない。global fallback採用やEV threshold緩和はreject、標準policyはNoTrade。詳細は `docs/reports/00339_2026-07-03_entry_ev_support_repair_thin_month_candidates.md`。
 

@@ -4,6 +4,32 @@
 
 ## 2026-07-03 JST
 
+### 09:16 Entry EV support repair target-local confidence diagnostics
+
+作業:
+
+- 00339の次アクションとして、`fresh2024 2024-03` のfallback/non-model horizon rowsに対するtarget-local confidence診断を追加した。
+- `scripts/experiments/entry_ev_support_repair_target_local_confidence_diagnostics.py` を追加し、00324 horizon rowsから対象role/month/side/row_scopeを切り出してhorizon別rule surfaceとfeature binsを出すようにした。
+- report: `docs/reports/00340_2026-07-03_entry_ev_support_repair_target_local_confidence.md`
+
+結果:
+
+- `fresh2024_validation 2024-03 long` は51 rows / 17 decisions / 3 horizonsで、全て `pred_model_used=false`。60m合計 `-137.9060`、240m合計 `+49.0950`、720m合計 `-99.9060`。
+- post-hoc ruleでは `horizon_eq_240` が17 rows / `+49.0950` / positive 12 / tail loss 1で最上位。
+- `horizon_eq_240 & entry_hour>=15` は3 rows / `+39.1300` / positive 3 / tail 0だが、target-localで薄すぎる。
+- `fresh2024_validation 2024-11 long` も1 decisionでは240mが `+2.4500`、720mが `-5.2800` で、候補生成不足に加えてhorizon confidence問題が見える。
+
+判断:
+
+- target-local confidence diagnosticsはaccepted infrastructure。
+- `fresh03` は方向よりもexit timing / horizon confidence / expected PnL calibrationが弱い。
+- 240m固定や時刻ruleはpolicy evidenceではない。標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_support_repair_target_local_confidence_diagnostics`: OK
+- fresh03 / fresh11 target-local confidence diagnostics: OK
+
 ### 09:06 Entry EV support repair thin-month candidate diagnostics
 
 作業:
