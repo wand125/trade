@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 11:59 JST
+最終更新: 2026-07-03 12:17 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV contextual risk confidence diagnosticsを追加した。00350のcontext-specific tail riskを過去月の同一contextだけで信用できるか検証した。初回row-weighted priorではconfident contextが出たが、同じmarket candidateが複数replay scenarioで重複してsupportを水増ししていたため、prior confidenceを `market_candidate_key` dedup既定へ修正した。market dedup後のdefault条件では全ruleで `confident_context_count=0` / `context_risk_flag_count=0`。`min_prior_flagged=4` に緩めると `720m short / down_normal_vol / london / one_failed_strict_stage` がconfidentになるが、focus側では勝ち候補36 rows / `+465.8400` だけをflagしてしまう。`720m short / up_normal_vol / asia` の2025-11損失clusterはprior 0でchronological evidenceにならない。判断: infrastructureはaccepted、exact-context hard gateはreject、標準policyはNoTrade。詳細は `docs/reports/00351_2026-07-03_entry_ev_contextual_risk_confidence_diagnostics.md`。
 
 Entry EV over-gating context diagnosticsを追加した。00348/00349でglobal positive-PnL hard gate / soft penaltyがno-opまたは悪化だったため、00349のsummary/additions/candidate filesを横断し、top/near-best scenarioでrisk ruleが損失を捕まえる効果とselected winnersを巻き込む害を同時に集計した。focusは242 scenario。best scenarioでは `tail_prob_ge_0p30` は発火0でno-op、`harmful_prob_ge_0p30` はloss PnL `-40.2876` を捕まえるがwin PnL `+89.7100` とselected flagged win PnL `+49.5600` を巻き込み、`residual_tail_miss_ge_0p10` はselected winners 5本 / `+60.8530` を全て巻き込んだ。near-best aggregateでは `tail_prob_ge_0p30` が flagged PnL `-59216.3688` / selected flagged win `0` と最もcleanだが、best additionsでは発火しない。判断: over-gating diagnosticsはaccepted。global harmful/residual/720m risk rulesは引き続きreject。`tail_prob_ge_0p30` はglobal gateではなくcontext-specific risk priorとして扱う。標準policyはNoTrade。詳細は `docs/reports/00350_2026-07-03_entry_ev_over_gating_context_diagnostics.md`。
 

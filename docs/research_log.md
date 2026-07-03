@@ -4,6 +4,37 @@
 
 ## 2026-07-03 JST
 
+### 12:17 Entry EV contextual risk confidence diagnostics
+
+作業:
+
+- 00350で見えたcontext-specific tail riskを、過去月の同一contextだけで信用できるか検証した。
+- `entry_ev_contextual_risk_confidence_diagnostics.py` を追加し、risk rule x context x monthのprior-only confidenceを出力した。
+- 初回row-weighted集計は同じmarket candidateをscenario数ぶんsupportに数えていたため、prior confidenceを `market_candidate_key` dedup既定へ修正した。
+- report: `docs/reports/00351_2026-07-03_entry_ev_contextual_risk_confidence_diagnostics.md`
+
+結果:
+
+- market dedup後のdefault条件では全ruleで `confident_context_count=0` / `context_risk_flag_count=0`。selected casesも空。
+- `720m short / down_normal_vol / london / one_failed_strict_stage` は2025-07に4 unique losses / `-178.0692` があるが、defaultの `min_prior_flagged=5` ではconfidence不足。
+- `min_prior_flagged=4` に緩めると同contextがconfidentになるが、2025-08 focus側では勝ち候補36 rows / `+465.8400` だけをflagしてしまう。
+- `720m short / up_normal_vol / asia / one_failed_strict_stage` は2025-11に5 unique losses / `-330.4680` があるが、prior 0なのでchronological gate evidenceにはならない。
+
+判断:
+
+- contextual risk confidence diagnosticsはaccepted infrastructure。
+- row-weighted prior supportは採用しない。market candidate dedupを既定とする。
+- exact-context hard gateは薄いpriorで壊れるためreject。`tail_prob_ge_0p30` はdiagnostic context signalに留める。
+- 次は `prior_month_count` / unique decision support、hierarchical/shrunk context risk、exit timing / EV calibrationへ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_contextual_risk_confidence_diagnostics.py tests/test_entry_ev_contextual_risk_confidence_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_contextual_risk_confidence_diagnostics`: OK
+- 00351 default market-dedup contextual risk confidence diagnostics: OK
+- 00351 `min_prior_flagged=4` sensitivity diagnostics: OK
+
 ### 11:59 Entry EV over-gating context diagnostics
 
 作業:
