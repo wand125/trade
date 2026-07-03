@@ -110,7 +110,12 @@ class EntryEvContextualRiskConfidenceDiagnosticsTest(unittest.TestCase):
         ].iloc[0]
         self.assertEqual(int(feb_short["prior_flagged_count"]), 2)
         self.assertAlmostEqual(float(feb_short["prior_flagged_actual_pnl_sum"]), -13.0)
+        self.assertEqual(int(feb_short["prior_observed_month_count"]), 1)
+        self.assertEqual(int(feb_short["prior_flagged_month_count"]), 1)
+        self.assertEqual(int(feb_short["prior_decision_count"]), 2)
+        self.assertEqual(int(feb_short["prior_flagged_decision_count"]), 2)
         self.assertEqual(int(feb_long["prior_flagged_count"]), 0)
+        self.assertEqual(int(feb_long["prior_observed_month_count"]), 0)
 
     def test_prior_dedup_uses_unique_market_candidates(self) -> None:
         duplicated = pd.concat(
@@ -146,6 +151,8 @@ class EntryEvContextualRiskConfidenceDiagnosticsTest(unittest.TestCase):
         ].iloc[0]
         self.assertEqual(int(feb_short["prior_flagged_count"]), 2)
         self.assertAlmostEqual(float(feb_short["prior_flagged_actual_pnl_sum"]), -13.0)
+        self.assertEqual(int(feb_short["prior_market_candidate_count"]), 2)
+        self.assertEqual(int(feb_short["prior_flagged_market_candidate_count"]), 2)
 
     def test_contextual_summary_flags_only_prior_confident_context(self) -> None:
         candidates = normalize_candidates(sample_candidates())
@@ -158,6 +165,9 @@ class EntryEvContextualRiskConfidenceDiagnosticsTest(unittest.TestCase):
         monthly = monthly_context_rule_summary(expanded, CONTEXT_COLUMNS)
         prior = apply_confidence_thresholds(
             add_prior_context_stats(monthly),
+            min_prior_months=1,
+            min_prior_flagged_months=1,
+            min_prior_decisions=2,
             min_prior_flagged=2,
             min_prior_gate_delta=5.0,
             min_prior_loss_precision=1.0,
@@ -172,6 +182,52 @@ class EntryEvContextualRiskConfidenceDiagnosticsTest(unittest.TestCase):
         self.assertEqual(int(row["flagged_loss_count"]), 1)
         self.assertAlmostEqual(float(row["flagged_loss_pnl"]), -4.0)
         self.assertEqual(int(row["flagged_win_count"]), 0)
+
+    def test_confidence_can_require_prior_month_and_decision_support(self) -> None:
+        candidates = normalize_candidates(sample_candidates())
+        expanded = expand_rule_rows(
+            candidates,
+            rules=["tail_prob_ge_0p30"],
+            context_columns=CONTEXT_COLUMNS,
+        )
+        monthly = monthly_context_rule_summary(expanded, CONTEXT_COLUMNS)
+        prior = add_prior_context_stats(monthly)
+
+        insufficient_months = apply_confidence_thresholds(
+            prior,
+            min_prior_months=2,
+            min_prior_flagged_months=1,
+            min_prior_decisions=2,
+            min_prior_flagged=2,
+            min_prior_gate_delta=5.0,
+            min_prior_loss_precision=1.0,
+            max_prior_winner_damage_ratio=0.0,
+            max_prior_selected_win_count=0,
+        )
+        feb_short = insufficient_months[
+            insufficient_months["month"].eq("2026-02")
+            & insufficient_months["side"].eq("short")
+            & insufficient_months["rule"].eq("tail_prob_ge_0p30")
+        ].iloc[0]
+        self.assertFalse(bool(feb_short["context_risk_confident"]))
+
+        insufficient_decisions = apply_confidence_thresholds(
+            prior,
+            min_prior_months=1,
+            min_prior_flagged_months=1,
+            min_prior_decisions=3,
+            min_prior_flagged=2,
+            min_prior_gate_delta=5.0,
+            min_prior_loss_precision=1.0,
+            max_prior_winner_damage_ratio=0.0,
+            max_prior_selected_win_count=0,
+        )
+        feb_short = insufficient_decisions[
+            insufficient_decisions["month"].eq("2026-02")
+            & insufficient_decisions["side"].eq("short")
+            & insufficient_decisions["rule"].eq("tail_prob_ge_0p30")
+        ].iloc[0]
+        self.assertFalse(bool(feb_short["context_risk_confident"]))
 
 
 if __name__ == "__main__":

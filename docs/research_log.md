@@ -4,6 +4,37 @@
 
 ## 2026-07-03 JST
 
+### 12:29 Entry EV context support count diagnostics
+
+作業:
+
+- 00351のcontext confidenceへ、prior月数・flag月数・unique decision / market candidate supportを追加した。
+- `--min-prior-months`, `--min-prior-flagged-months`, `--min-prior-decisions` を追加した。defaultは0で既存挙動は維持。
+- exact context、`horizon,side`、`horizon,side` support2、`horizon,side,combined_regime` support2を比較した。
+- report: `docs/reports/00352_2026-07-03_entry_ev_context_support_count_diagnostics.md`
+
+結果:
+
+- exact contextはdefaultで全rule `confident_context_count=0` / `context_risk_flag_count=0`。
+- `720m short / down_normal_vol / london` の `tail_prob_ge_0p30` は2025-08時点で prior flagged `4` / prior delta `+178.0692` だが、prior observed monthは1ヶ月だけで、現在月は `+12.9400` winnerに反転していた。
+- `horizon,side` defaultでは supportは増えるが、`harmful_prob_ge_0p30`, `positive_bias_and_tail_miss_ge_0p10`, `horizon_720m`, `residual_tail_miss_ge_0p10` がselected winnersを巻き込む。
+- `horizon,side` support2では `positive_bias_and_tail_miss_ge_0p10` が flagged PnL `-39210.5520`, loss count `1008`, win count `0`, selected flagged win `0` とclean。ただし harmful/residualはselected winner damageが残る。
+- `horizon,side,combined_regime` support2は全rule発火0で、regimeまで入れるとsupportが薄すぎる。
+
+判断:
+
+- prior support count columnsとsupport threshold controlsはaccepted infrastructure。
+- exact-context hard gateは薄い。horizon/side coarse gateは一部有望だが、ruleによってwinner damageが大きい。
+- `horizon,side` + support2 + `positive_bias_and_tail_miss_ge_0p10` はpre-registered stateful replay候補。ただし標準policyではない。
+- 次はこのcontextual positive-bias riskをstateful replayへ戻す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_contextual_risk_confidence_diagnostics.py tests/test_entry_ev_contextual_risk_confidence_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_contextual_risk_confidence_diagnostics`: OK
+- exact / horizon-side / horizon-side support2 / horizon-side-regime support2 diagnostics: OK
+
 ### 12:17 Entry EV contextual risk confidence diagnostics
 
 作業:

@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 12:17 JST
+最終更新: 2026-07-03 12:29 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV context support count diagnosticsを追加した。00351のcontext confidenceへ `prior_observed_month_count`, `prior_flagged_month_count`, `prior_decision_count`, `prior_market_candidate_count` とflagged unique counts、`--min-prior-months`, `--min-prior-flagged-months`, `--min-prior-decisions` を追加した。exact contextはdefaultで全rule発火0。`horizon,side` まで粗くするとsupportは増えるが、defaultでは harmful/residual/720m がselected winnersを巻き込み、support2でも harmful/residual はselected winner damageを出す。`horizon,side,combined_regime` + support2 は全rule発火0で薄すぎる。一方、`horizon,side` + support2 + `positive_bias_and_tail_miss_ge_0p10` はscenario-weighted `-39210.5520` / selected flagged win `0` とcleanなので、次のpre-registered stateful replay候補。標準policyはNoTrade。詳細は `docs/reports/00352_2026-07-03_entry_ev_context_support_count_diagnostics.md`。
 
 Entry EV contextual risk confidence diagnosticsを追加した。00350のcontext-specific tail riskを過去月の同一contextだけで信用できるか検証した。初回row-weighted priorではconfident contextが出たが、同じmarket candidateが複数replay scenarioで重複してsupportを水増ししていたため、prior confidenceを `market_candidate_key` dedup既定へ修正した。market dedup後のdefault条件では全ruleで `confident_context_count=0` / `context_risk_flag_count=0`。`min_prior_flagged=4` に緩めると `720m short / down_normal_vol / london / one_failed_strict_stage` がconfidentになるが、focus側では勝ち候補36 rows / `+465.8400` だけをflagしてしまう。`720m short / up_normal_vol / asia` の2025-11損失clusterはprior 0でchronological evidenceにならない。判断: infrastructureはaccepted、exact-context hard gateはreject、標準policyはNoTrade。詳細は `docs/reports/00351_2026-07-03_entry_ev_contextual_risk_confidence_diagnostics.md`。
 

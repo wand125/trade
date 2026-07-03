@@ -163,9 +163,32 @@ def summarize_flagged_scope(frame: pd.DataFrame, prefix: str = "") -> dict[str, 
     selected_flag = flag & selected
     selected_flagged_loss = selected_flag & loss
     selected_flagged_win = selected_flag & win
+    decision_count = int(frame["decision_key"].nunique()) if "decision_key" in frame.columns else 0
+    candidate_key_count = (
+        int(frame["candidate_key"].nunique()) if "candidate_key" in frame.columns else 0
+    )
+    market_candidate_count = (
+        int(frame["market_candidate_key"].nunique())
+        if "market_candidate_key" in frame.columns
+        else 0
+    )
     return {
         f"{prefix}candidate_rows": int(len(frame)),
+        f"{prefix}decision_count": decision_count,
+        f"{prefix}candidate_key_count": candidate_key_count,
+        f"{prefix}market_candidate_count": market_candidate_count,
         f"{prefix}flagged_count": int(flag.sum()),
+        f"{prefix}flagged_decision_count": (
+            int(frame.loc[flag, "decision_key"].nunique()) if "decision_key" in frame.columns else 0
+        ),
+        f"{prefix}flagged_candidate_key_count": (
+            int(frame.loc[flag, "candidate_key"].nunique()) if "candidate_key" in frame.columns else 0
+        ),
+        f"{prefix}flagged_market_candidate_count": (
+            int(frame.loc[flag, "market_candidate_key"].nunique())
+            if "market_candidate_key" in frame.columns
+            else 0
+        ),
         f"{prefix}flagged_actual_pnl_sum": float(actual.where(flag, 0.0).sum()),
         f"{prefix}flagged_loss_count": int(flagged_loss.sum()),
         f"{prefix}flagged_loss_pnl": float(actual.where(flagged_loss, 0.0).sum()),
@@ -202,7 +225,13 @@ def add_prior_context_stats(monthly: pd.DataFrame) -> pd.DataFrame:
     output = monthly.sort_values(["rule", "context_key", "month_ordinal"]).copy()
     stat_columns = [
         "candidate_rows",
+        "decision_count",
+        "candidate_key_count",
+        "market_candidate_count",
         "flagged_count",
+        "flagged_decision_count",
+        "flagged_candidate_key_count",
+        "flagged_market_candidate_count",
         "flagged_actual_pnl_sum",
         "flagged_loss_count",
         "flagged_loss_pnl",
@@ -220,6 +249,29 @@ def add_prior_context_stats(monthly: pd.DataFrame) -> pd.DataFrame:
     context_first = group.cumcount().eq(0)
     for column in stat_columns:
         output.loc[context_first, f"prior_{column}"] = 0.0
+    output["observed_month"] = 1
+    output["flagged_month"] = numeric_series(output, "flagged_count", default=0.0).gt(0.0).astype(int)
+    output["flagged_loss_month"] = (
+        numeric_series(output, "flagged_loss_count", default=0.0).gt(0.0).astype(int)
+    )
+    output["flagged_win_month"] = (
+        numeric_series(output, "flagged_win_count", default=0.0).gt(0.0).astype(int)
+    )
+    output["selected_flagged_win_month"] = (
+        numeric_series(output, "selected_flagged_win_count", default=0.0)
+        .gt(0.0)
+        .astype(int)
+    )
+    month_stat_columns = [
+        "observed_month",
+        "flagged_month",
+        "flagged_loss_month",
+        "flagged_win_month",
+        "selected_flagged_win_month",
+    ]
+    for column in month_stat_columns:
+        output[f"prior_{column}_count"] = group[column].cumsum().shift(fill_value=0.0)
+        output.loc[context_first, f"prior_{column}_count"] = 0.0
     output["prior_pointwise_gate_delta"] = -numeric_series(
         output,
         "prior_flagged_actual_pnl_sum",
@@ -245,6 +297,9 @@ def add_prior_context_stats(monthly: pd.DataFrame) -> pd.DataFrame:
 def apply_confidence_thresholds(
     prior_monthly: pd.DataFrame,
     *,
+    min_prior_months: int,
+    min_prior_flagged_months: int,
+    min_prior_decisions: int,
     min_prior_flagged: int,
     min_prior_gate_delta: float,
     min_prior_loss_precision: float,
@@ -253,7 +308,14 @@ def apply_confidence_thresholds(
 ) -> pd.DataFrame:
     output = prior_monthly.copy()
     output["context_risk_confident"] = (
-        numeric_series(output, "prior_flagged_count", default=0.0).ge(min_prior_flagged)
+        numeric_series(output, "prior_observed_month_count", default=0.0).ge(min_prior_months)
+        & numeric_series(output, "prior_flagged_month_count", default=0.0).ge(
+            min_prior_flagged_months
+        )
+        & numeric_series(output, "prior_decision_count", default=0.0).ge(
+            min_prior_decisions
+        )
+        & numeric_series(output, "prior_flagged_count", default=0.0).ge(min_prior_flagged)
         & numeric_series(output, "prior_pointwise_gate_delta", default=0.0).ge(
             min_prior_gate_delta
         )
@@ -425,7 +487,13 @@ def selected_cases(expanded: pd.DataFrame, focus: pd.DataFrame) -> pd.DataFrame:
             "combined_regime",
             "session_regime",
             "near_miss_bucket",
+            "prior_observed_month_count",
+            "prior_flagged_month_count",
+            "prior_decision_count",
+            "prior_market_candidate_count",
             "prior_flagged_count",
+            "prior_flagged_decision_count",
+            "prior_flagged_market_candidate_count",
             "prior_pointwise_gate_delta",
             "prior_loss_precision",
             "prior_winner_damage_ratio",
@@ -455,6 +523,9 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     monthly = monthly_context_rule_summary(prior_input, context_columns)
     prior_monthly = apply_confidence_thresholds(
         add_prior_context_stats(monthly),
+        min_prior_months=args.min_prior_months,
+        min_prior_flagged_months=args.min_prior_flagged_months,
+        min_prior_decisions=args.min_prior_decisions,
         min_prior_flagged=args.min_prior_flagged,
         min_prior_gate_delta=args.min_prior_gate_delta,
         min_prior_loss_precision=args.min_prior_loss_precision,
@@ -487,6 +558,9 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
                 "rules": rules,
                 "context_columns": context_columns,
                 "prior_dedup_mode": args.prior_dedup_mode,
+                "min_prior_months": args.min_prior_months,
+                "min_prior_flagged_months": args.min_prior_flagged_months,
+                "min_prior_decisions": args.min_prior_decisions,
                 "min_prior_flagged": args.min_prior_flagged,
                 "min_prior_gate_delta": args.min_prior_gate_delta,
                 "min_prior_loss_precision": args.min_prior_loss_precision,
@@ -523,6 +597,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["row_weighted", "candidate_key", "market_candidate_key"],
         default="market_candidate_key",
     )
+    parser.add_argument("--min-prior-months", type=int, default=0)
+    parser.add_argument("--min-prior-flagged-months", type=int, default=0)
+    parser.add_argument("--min-prior-decisions", type=int, default=0)
     parser.add_argument("--min-prior-flagged", type=int, default=5)
     parser.add_argument("--min-prior-gate-delta", type=float, default=10.0)
     parser.add_argument("--min-prior-loss-precision", type=float, default=0.60)
