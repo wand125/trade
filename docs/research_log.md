@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 11:59 Entry EV over-gating context diagnostics
+
+作業:
+
+- 00348/00349のglobal gate/penalty失敗を受け、risk ruleの損失捕捉とselected winner巻き込みを同時に見るover-gating診断を追加した。
+- `entry_ev_over_gating_diagnostics.py` を追加し、00349のsummary/additions/candidate filesからfocus scenario、rule tradeoff、context tradeoff、selected casesを出力した。
+- report: `docs/reports/00350_2026-07-03_entry_ev_over_gating_context_diagnostics.md`
+
+結果:
+
+- focusは242 scenario。combined `+400.1440` が144、`+399.8040` が84。
+- best scenarioでは `tail_prob_ge_0p30` は発火0。`harmful_prob_ge_0p30` はloss PnL `-40.2876` を捕まえるがwin PnL `+89.7100` とselected flagged win PnL `+49.5600` を巻き込む。
+- `residual_tail_miss_ge_0p10` はbest selected winners 5本 / `+60.8530` を全て巻き込む。
+- near-best aggregateでは `tail_prob_ge_0p30` が flagged PnL `-59216.3688`、selected flagged win `0` でclean。ただしbest additionsでは発火しないためglobal gateとしては採用しない。
+
+判断:
+
+- over-gating diagnosticsはaccepted infrastructure。
+- global harmful/residual/720m risk rulesはselected winnersを削るため引き続きreject。
+- `tail_prob_ge_0p30` はglobal gateではなくcontext-specific risk priorとして扱う。次はcontext別abstention confidenceへ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_over_gating_diagnostics.py tests/test_entry_ev_over_gating_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_over_gating_diagnostics`: OK
+- 00350 over-gating context diagnostics: OK
+
 ### 11:43 Entry EV positive PnL soft penalty replay
 
 作業:

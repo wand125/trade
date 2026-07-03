@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 11:43 JST
+最終更新: 2026-07-03 11:59 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV over-gating context diagnosticsを追加した。00348/00349でglobal positive-PnL hard gate / soft penaltyがno-opまたは悪化だったため、00349のsummary/additions/candidate filesを横断し、top/near-best scenarioでrisk ruleが損失を捕まえる効果とselected winnersを巻き込む害を同時に集計した。focusは242 scenario。best scenarioでは `tail_prob_ge_0p30` は発火0でno-op、`harmful_prob_ge_0p30` はloss PnL `-40.2876` を捕まえるがwin PnL `+89.7100` とselected flagged win PnL `+49.5600` を巻き込み、`residual_tail_miss_ge_0p10` はselected winners 5本 / `+60.8530` を全て巻き込んだ。near-best aggregateでは `tail_prob_ge_0p30` が flagged PnL `-59216.3688` / selected flagged win `0` と最もcleanだが、best additionsでは発火しない。判断: over-gating diagnosticsはaccepted。global harmful/residual/720m risk rulesは引き続きreject。`tail_prob_ge_0p30` はglobal gateではなくcontext-specific risk priorとして扱う。標準policyはNoTrade。詳細は `docs/reports/00350_2026-07-03_entry_ev_over_gating_context_diagnostics.md`。
 
 Entry EV positive PnL soft penalty replayを追加した。00348でhard gateがno-opまたは悪化だったため、候補を削らずrepair scoreだけを下げる `--positive-pnl-penalty-specs` を追加し、`none:0`, `residual_bias_tail_miss:0.05/0.10/0.25`, `tail_prob:1/2/5` を2016条件で比較した。selector passは `0 / 2016`。`residual_bias_tail_miss` はbest EV2 scenarioで勝ち候補だけをpenalizeし、weight `0.25` までbestは変わらずcombined `+400.1440`。`tail_prob` はweight `1/2` ではbest no-op、weight `5` は4 trades / combined `+399.8040` へ悪化。判断: soft penalty replay infrastructureはaccepted、今回のglobal soft penalty群は標準policy候補としてreject。次はglobal cutoff/penaltyではなく、over-gating診断とhorizon/context別calibrationへ進む。標準policyはNoTrade。詳細は `docs/reports/00349_2026-07-03_entry_ev_positive_pnl_soft_penalty_replay.md`。
 
