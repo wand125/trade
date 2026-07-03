@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 15:07 JST
+最終更新: 2026-07-03 15:24 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-sufficient negative month repair diagnosticsを追加した。00362で `refit2025 2025-03` はraw prediction不足ではなくsupport-sufficient negative monthと分かったため、既存trade起点のrepair診断を作った。同月は9 trades、5L / 4S、month PnL `-0.4730`、loss trades 4本 / loss PnL `-3.4800`。事後oracleではloss全skip `+3.0070`、single worst skip `+1.8670`、single fixed-best exit repair `+4.1230`、top-score replacement `+4.2170` まで改善余地がある。ただし現predicted fixed-horizon argmaxはsingle bestでも `-8.8574` へ悪化するためexit selectorとしてreject。次はloss-risk classifier、horizon abstention、target-aware replacement selectorへ進む。標準policyはNoTrade。詳細は `docs/reports/00363_2026-07-03_entry_ev_support_sufficient_negative_month_repair.md`。
 
 Entry EV upstream universe coverage diagnosticsを追加した。00361の次アクションとして、`refit2025 2025-03 short` が00318/00322で0件になった原因をrepair target生成前から監査した。00318 s2 config上では raw prediction rows `28,972`、short side rows `28,972`、candidate rows `41`、stateful available `33` が存在する。00318に出ない直接原因は `extra_short_needed=0` かつ `extra_long_needed=0` で、thin-support repair targetが発行されないことだった。同月はcurrent trades `9`、side mix `5L / 4S`、PnL `-0.4730` なので、追加entry不足ではなくsupport-sufficient negative monthのexit/replacement/EV過大評価問題として扱う。判断: upstream coverage diagnosticsは採用、00318 thin-support laneを全negative monthへ拡張しない。標準policyはNoTrade。詳細は `docs/reports/00362_2026-07-03_entry_ev_upstream_universe_coverage_diagnostics.md`。
 

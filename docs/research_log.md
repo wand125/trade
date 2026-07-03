@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 15:24 Entry EV support-sufficient negative month repair
+
+作業:
+
+- 00362で `refit2025 2025-03` はraw prediction不足ではなくsupport-sufficient negative monthと分かったため、既存trade起点のrepair診断を追加した。
+- `entry_ev_support_sufficient_negative_month_repair_diagnostics.py` を追加し、既存tradeのskip / fixed-horizon exit extension / predicted fixed-horizon choice / replacement candidateを分けて出力した。
+- report: `docs/reports/00363_2026-07-03_entry_ev_support_sufficient_negative_month_repair.md`
+
+結果:
+
+- `refit2025 2025-03` は9 trades、5L / 4S、month PnL `-0.4730`、loss trades 4本 / loss PnL `-3.4800`。
+- 事後oracleではloss全skip `+3.0070`、single worst skip `+1.8670`、single fixed-best exit repair `+4.1230`、top-score replacement `+4.2170` まで改善余地がある。
+- ただし現predicted fixed-horizon argmaxはsingle bestでも月PnL `-8.8574` へ悪化する。`2025-03-20 00:38 long` はoracleなら240m `+3.9600` だが、predictionは720mを選び実績 `-13.7040`。
+- `2025-03-21 14:00 short -2.3400` はfixed 60/240/720mすべて悪化するため、skip/replacement対象。top-score replacementは `2025-03-26 14:34 long` one-fail候補で、pred horizon 240m actual `+2.3500`、月PnL `+4.2170`。
+
+判断:
+
+- support-sufficient negative-month repair diagnosticsはaccepted infrastructure。
+- 現predicted fixed-horizon argmaxはexit selectorとしてreject。
+- 次はloss-risk classifier、horizon abstention、target-aware replacement selectorへ進む。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_negative_month_repair_diagnostics.py tests/test_entry_ev_support_sufficient_negative_month_repair_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_negative_month_repair_diagnostics`: OK
+- 00363 support-sufficient negative month repair diagnostic run: OK
+
 ### 15:07 Entry EV upstream universe coverage diagnostics
 
 作業:
