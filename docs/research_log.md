@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 21:40 Entry EV surface artifact readiness
+
+作業:
+
+- 00375で残った「current-negative evaluated targetを増やす」課題に対し、00370 inventoryに出ている既存artifactがselector surfaceへ流用可能かを棚卸しした。
+- `scripts/experiments/entry_ev_surface_artifact_readiness_diagnostics.py` を追加し、metric parentごとに近傍の `*trades.csv` と `config.json` を検査した。
+- report: `docs/reports/00376_2026-07-03_entry_ev_surface_artifact_readiness.md`
+
+結果:
+
+- 17 metric parentsを検査し、`surface_ready_without_conversion=True` は0件。
+- 10/17 parentsはtrade schema ready。代表は `00310_position_quality_proxy_overlay_s1` と `short_entryblock_replacement_holdext_block_overlay_s1` の `entry_block_overlay_trades.csv`。
+- 17/17 parentsでsurface config key (`current_trades`, `family_predictions`, `candidate`) が不足していた。
+- 7/17 parentsは `hold_extension_stateful_trades.csv` が `entry_block_rule`, `entry_blocked`, `selector_variant` を欠き、trade schema変換も必要。
+- 上位の `00310_position_quality_proxy_overlay_s1` はsupport-sufficient negative count 6、target identity count 9で、次のconfig合成候補。ただし `holdext_isolated_large_loss_t-5_h720` と `holdext_isolated_large_loss_long_t-5_h720` のvariant整合が必要。
+
+判断:
+
+- readiness diagnosticはaccepted infrastructure。
+- 次はschema-ready artifactへ既存00318 configのprediction/repair target設定を合成して、aligned variantでsurfaceを走らせる。
+- inventory rowsを独立サンプル扱いしない。variant familyがずれたcurrent/replacement混合も禁止。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_surface_artifact_readiness_diagnostics.py tests/test_entry_ev_surface_artifact_readiness_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_surface_artifact_readiness_diagnostics`: OK
+- 00376 surface artifact readiness run: OK
+
 ### 21:28 Entry EV broad support abstention stability
 
 作業:
