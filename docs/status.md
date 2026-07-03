@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 17:27 JST
+最終更新: 2026-07-03 21:18 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV replacement abstention surfaceを追加した。00373の次アクションとして、replacement candidateを通す/捨てるobservable gateをsurface上で診断した。候補を捨てた場合はbaseline維持に戻し、winner damageは実際にreplacement interventionしたtradeだけで数える。`abstain_all_replacements` は16/16 rowsで制約通過するが改善0。非oracleでは `feature:side_gap_ge0p15_lossfirst_lt0p30` + `prior_actual_mean` + candidate prior count `>=100` + abstention `prior_actual_mean >=25` が、`refit2025 2025-03` のlossだけへ介入し、current-negative delta `+20.2470`、mean delta `+2.0247`、winner intervention 0、baseline-positive degraded 0で通過した。`hgb2024_0306 2024-05` はprior actual mean `14.4308` で介入せずbaseline維持。判断: abstention surfaceはaccepted infrastructure、同gateはdiagnostic candidate。ただし実質1 target改善なので標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00374_2026-07-03_entry_ev_replacement_abstention_surface.md`。
 
 Entry EV winner-damage ranked selector surfaceを追加した。00372のwinner-damage post-process制約を `entry_ev_support_sufficient_selector_surface_diagnostics.py` 本体へ組み込み、summary rankingをmean PnLではなく制約pass / violation count優先へ変更した。00371と同じcanonical target setでは16 rows中通過0件。最小違反はoracle系で、loss precision 1.0 / winner selected 0 / current-negative delta positiveだがbaseline-positive degradationが1-3件残る。非oracleでは `ev_ge5_lossfirst_lt0p30` がloss precision `0.5556` を満たすがwinner selected 4件、`combined:any_lossrisk` はloss precision `0.3000` / winner selected 7件。判断: winner-damage constrained rankingはaccepted infrastructure。現risk selector / replacement selectorは標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00373_2026-07-03_entry_ev_winner_damage_ranked_selector_surface.md`。
 

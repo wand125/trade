@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-03 17:27 JST
+最終更新: 2026-07-03 21:18 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -26,12 +26,13 @@
 | `00371` | Canonical support-sufficient selector surface | 00370 inventoryから11 targetを選び10 targetを評価。baseline positive月が9/10で、non-oracle bestもwinner selected 7件。target injectionは採用するがrisk selectorは標準化しない。 |
 | `00372` | Selector surface winner damage | 00371 surfaceをwinner-damage制約でpost-process。16 rows中通過0。non-oracleはwinner selectedで落ち、oracleでも `hgb2024_0306 2024-05` のreplacement failureで落ちる。 |
 | `00373` | Winner-damage ranked selector surface | 00372の制約をsurface summary本体へ入れ、制約pass / violation count優先でranking。00371同条件では通過0で、次はreplacement abstention/calibrationへ進む。 |
+| `00374` | Replacement abstention surface | replacement候補を捨てるとbaseline維持に戻す診断。`prior_actual_mean >=25` などで非oracle通過行が出たが、実質1 target改善なのでdiagnostic candidate止まり。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00373` | winner-damage制約をsurface ranking本体へ入れても00371同条件は通過0。非oracleはwinner selectedが多く、oracleでもbaseline-positive degradationが残る。次はreplacement abstention/calibration、標準policyはNoTrade。 |
+| Latest decision | `00374` | replacement abstentionで非oracle制約通過行が出た。`side_gap` + `prior_actual_mean` + abstention `prior_actual_mean >=25` はcurrent-negative delta `+20.2470`、winner intervention 0。ただし実質1 target改善なので標準policyはNoTrade。 |
 | Recent trajectory | `00258`..`00365` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00325ではtarget-aware repair utilityを接続し、actual-floor upper-boundならcombined `+371.6610` まで伸びた。00326ではrow x horizon化とhpen0.25でpred-onlyでもcombined `+374.6110` まで到達した。00329ではpriorをfeatureとしてchronological horizon-choice rankerへ入れ、低複雑度版がcombined `+403.2680` まで伸びた。00335でactual PnL tie-breaker leakを修正し、best combinedはleak-free `+400.1440` に下方修正。00339でthin-month候補面を診断し、fresh03はfallback/non-model calibration問題、fresh11/refit03は候補生成不足と確認。00340/00341でfresh03のhorizon confidence / tail calibration問題を確認。00342でtail support gateはfresh03局所を改善したがfull replayではplain PnLに負けた。00343/00344でprior/OOB reliabilityを検証し、direct score multiplierはtarget subset/all rowsの両方で悪化。00346 stateful pred-pnl negative vetoはplain `pnl` bestを改善せず、00347でpositive predicted PnL failureを診断するとmarket dedup positive pred 205件中124件が損失だった。00348でstateful hard gateへ戻すと、tail gateはbest no-op、positive-bias gateはbest悪化。00349でsoft penalty化してもbestはno-op、強いtail_prob penaltyは悪化。00350でover-gatingを分解し、tail probabilityはcontext-specific risk priorとして有用だがglobal gateではなく、harmful/residual系はwinner damageが大きいと確認。00351でcontext-specific abstention confidenceを試したが、market dedup後はdefault confident context 0、min4ではwinner over-gating。00352でsupport countを追加し、`horizon,side` + support2 + positive-biasをstateful replay候補にした。00353 hard gateと00354 soft penaltyはいずれも候補riskは検出するが最終採用は不変。00355でこれらのpenalized rowsは全件既存 `tail_prob_ceiling` に落とされていたと判明。00356でtail ceiling通過後の残存failureを見たが、global residual hard gateは勝ち候補削除が大きい。00357でactual selected lossは `fresh2024_validation 2024-08 long 720m` のsingletonに狭まり、00358で `singleton_720_pred_pnl_lt2` をstateful replayへ戻した。known lossは止まるが既存EV2 no-gate bestと同点。00359で残targetを監査し、EV2 bestは候補0、external oracleはmodel-used 0、2024-11/refit2025-03は候補0。00360で2024-11はavailable row-scope不足、refit2025-03はpost-00318 feed上の候補0と切り分けた。00362でrefit2025-03はraw rows/candidatesがあり、support-sufficient negative monthのrepair-target objective mismatchと確認。00363で既存trade repair診断を作り、現predicted fixed-horizon argmaxはreject。00364でloss-risk priorを追加し、target loss recallだけではwinner damageを抑えられないと確認した。00365でhorizon abstention診断を追加し、`lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` をstateful replay candidateにした。標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
@@ -158,6 +159,7 @@
 114. `00371_2026-07-03_entry_ev_canonical_support_sufficient_selector_surface.md`
 115. `00372_2026-07-03_entry_ev_selector_surface_winner_damage.md`
 116. `00373_2026-07-03_entry_ev_winner_damage_ranked_selector_surface.md`
+117. `00374_2026-07-03_entry_ev_replacement_abstention_surface.md`
 
 component targetの流れを読む:
 
@@ -204,10 +206,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00373 Entry EV Winner-Damage Ranked Selector Surface
+Report: 00374 Entry EV Replacement Abstention Surface
 Status: accepted infrastructure / standard NoTrade
-Question: winner-damage制約をsurface本体のrankingへ入れると採用可能なrowは残るか
-Best evidence: 00371同条件16 rows中、passes_winner_damage_constraints=True は0。最小違反はoracle系でbaseline-positive degradation 1-3件、非oracleはwinner selected 4-7件。
-Decision: winner-damage constrained rankingは採用。現risk selectorもreplacement selectorも標準policy化しない。
-Next: hgb2024_0306 2024-05を中心にbaseline-positive degradationのreplacement abstention/calibrationを診断する
+Question: replacement候補を捨てるabstentionでwinner damageを抑えつつcurrent-negativeを直せるか
+Best evidence: `feature:side_gap_ge0p15_lossfirst_lt0p30` + `prior_actual_mean` + prior count >=100 + abstention `prior_actual_mean >=25` は `refit2025 2025-03` だけへ介入し、current-negative delta +20.2470、winner intervention 0、baseline-positive degraded 0。
+Decision: replacement abstention surfaceは採用。`prior_actual_mean >=25` 系はdiagnostic candidateだがtarget 1件支持なので標準policy化しない。
+Next: 追加target set / held-out artifact windowでabstention gateの安定性を確認する
 ```

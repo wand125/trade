@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 21:18 Entry EV replacement abstention surface
+
+作業:
+
+- 00373の次アクションとして、replacement candidateを通す/捨てるabstention gateをsurface上で診断した。
+- `entry_ev_replacement_abstention_surface_diagnostics.py` を追加した。
+- 候補を捨てた場合はskip-onlyではなくbaseline維持に戻し、winner damageは実際にreplacement interventionしたtradeだけで数えた。
+- report: `docs/reports/00374_2026-07-03_entry_ev_replacement_abstention_surface.md`
+
+結果:
+
+- `abstain_all_replacements` は16/16 rowsで制約通過するが、current-negative deltaは0なのでpolicy改善ではない。
+- observable gateでは `prior_actual_mean >= 25`、`prior_margin >= 0`、`selection_mae_margin >= 0`、`prior_count >=100/150` などで、非oracleでも制約通過かつcurrent-negative改善の行が出た。
+- 代表例: `feature:side_gap_ge0p15_lossfirst_lt0p30` + `prior_actual_mean` + candidate prior count `>=100` + abstention `prior_actual_mean >=25` は、`refit2025 2025-03` のlossだけへ介入し、current-negative delta `+20.2470`、mean delta `+2.0247`、winner intervention 0、baseline-positive degraded 0。
+- `hgb2024_0306 2024-05` は同ruleでcandidate prior actual mean `14.4308` のため介入せず、baseline `+0.9578` を維持する。
+
+判断:
+
+- replacement abstention surfaceはaccepted infrastructure。
+- `prior_actual_mean >=25` / `prior_margin >=0` 系はdiagnostic candidate。
+- ただし実質1 current-negative targetへの介入で、thresholdも現surface後に見えているため標準policy化しない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_replacement_abstention_surface_diagnostics.py tests/test_entry_ev_replacement_abstention_surface_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_replacement_abstention_surface_diagnostics`: OK
+- 00374 replacement abstention surface run: OK
+
 ### 17:27 Entry EV winner-damage ranked selector surface
 
 作業:
