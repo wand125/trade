@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 16:52 JST
+最終更新: 2026-07-03 17:07 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV canonical support-sufficient selector surface diagnosticsを追加した。00370の `support_negative_month_target_summary.csv` からsupport-sufficient config数 `>=50`、metric parent数 `>=5` のcanonical target setを作り、00368/00369のselector surfaceを複数targetへ広げた。inventory targetは11件、現00314/00318 configで評価できたtargetは10件、`refit2025 2025-08` は現configのunblocked current tradesがなく評価対象外。評価対象10件のbaselineは9件が既にpositive monthで、negativeは `refit2025 2025-03` だけ。non-oracle bestの `combined:any_lossrisk` + `bias_corrected` + prior count `>=100` はmean PnL `+33.2963` / mean delta `+12.3633` / positive months `9/10` だが、loss trade selected 3件に対しwinner selected 7件でwinner damageが大きい。00368で有望だった `side_gap_ge0p15_lossfirst_lt0p30` もwinner selected 5件、`hgb2024_0306 2024-05` を `+0.9578 -> -19.3690` へ悪化。判断: inventory target injectionはaccepted infrastructure、現risk selectorは標準policy化しない。標準policyはNoTrade。詳細は `docs/reports/00371_2026-07-03_entry_ev_canonical_support_sufficient_selector_surface.md`。
 
 Entry EV support negative month inventory diagnosticsを追加した。00369で現branchのsupport-sufficient negative targetが `refit2025_validation 2025-03` の1件だけと分かったため、過去の `*selector_monthly_metrics.csv` 17件を棚卸しし、既存repair target分類でsupport-sufficient / support-limited negative monthを分けた。inventory rowsは29,371、negative rowsは9,491、support-sufficient negative rowsは5,065、support-limited negative rowsは4,426。target identityは20件で、support-sufficient configを持つtargetは14件、support-limited onlyは6件。判断: support-sufficient targetは現branch以外にも存在するが、row/configはvariant重複を含むため独立サンプルではない。次はcanonical support-sufficient target setを作り、00368/00369のselector surfaceを複数targetへ広げる。support-limited only targetは別lane。標準policyはNoTrade。詳細は `docs/reports/00370_2026-07-03_entry_ev_support_negative_month_inventory.md`。
 

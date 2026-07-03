@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 
 from scripts.experiments.entry_ev_support_sufficient_selector_surface_diagnostics import (
+    annotate_target_inventory_with_evaluation,
     build_target_inventory,
     candidate_support_mask,
     choose_supported_candidate,
     choose_trade_by_risk,
+    resolve_inventory_target_specs,
     resolve_target_specs,
     selector_choice_row,
 )
@@ -49,6 +53,61 @@ class EntryEvSupportSufficientSelectorSurfaceDiagnosticsTest(unittest.TestCase):
         self.assertEqual(len(resolved_inventory), 3)
         support_limited = inventory[inventory["role"].eq("r2")].iloc[0]
         self.assertTrue(bool(support_limited["support_limited_negative_month"]))
+
+    def test_inventory_targets_select_support_sufficient_canonical_rows(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "role": ["r1", "r2", "r3", "r4"],
+                "family": ["f1", "f2", "f3", "f4"],
+                "month": ["2025-01", "2025-02", "2025-03", "2025-04"],
+                "support_sufficient_config_count": [100, 0, 50, 10],
+                "support_limited_config_count": [0, 200, 0, 0],
+                "metric_parent_count": [3, 5, 1, 4],
+                "best_month_pnl": [-1.0, -0.5, -2.0, -3.0],
+                "worst_month_pnl": [-5.0, -0.5, -4.0, -6.0],
+            }
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "target_summary.csv"
+            frame.to_csv(path, index=False)
+
+            specs, inventory = resolve_inventory_target_specs(
+                path,
+                min_support_sufficient_configs=10,
+                min_metric_parents=2,
+                max_targets=2,
+                target_side="both",
+            )
+
+        self.assertEqual(specs, [("r1", "2025-01", "both"), ("r4", "2025-04", "both")])
+        self.assertEqual(inventory["role"].tolist(), ["r1", "r4"])
+        self.assertTrue(inventory["support_sufficient_negative_month"].all())
+        self.assertFalse(inventory["support_limited_negative_month"].any())
+
+    def test_annotate_target_inventory_marks_skipped_targets(self) -> None:
+        inventory = pd.DataFrame(
+            {
+                "role": ["r1", "r2"],
+                "family": ["f1", "f2"],
+                "month": ["2025-01", "2025-02"],
+            }
+        )
+        targets = pd.DataFrame(
+            {
+                "role": ["r1"],
+                "family": ["f1"],
+                "month": ["2025-01"],
+                "baseline_month_pnl": [-1.0],
+                "trade_count": [3],
+                "loss_trade_count": [2],
+            }
+        )
+
+        output = annotate_target_inventory_with_evaluation(inventory, targets)
+
+        self.assertEqual(output["evaluated_by_surface"].tolist(), [True, False])
+        self.assertAlmostEqual(float(output.loc[0, "baseline_month_pnl"]), -1.0)
+        self.assertTrue(pd.isna(output.loc[1, "baseline_month_pnl"]))
 
     def test_candidate_support_mask_requires_count_months_and_actual_floor(self) -> None:
         pool = pd.DataFrame(

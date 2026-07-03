@@ -204,6 +204,71 @@ def resolve_target_specs(
     return specs, inventory
 
 
+def resolve_inventory_target_specs(
+    path: Path,
+    *,
+    min_support_sufficient_configs: int,
+    min_metric_parents: int,
+    max_targets: int,
+    target_side: str,
+) -> tuple[list[tuple[str, str, str]], pd.DataFrame]:
+    inventory = pd.read_csv(path)
+    required = {
+        "role",
+        "family",
+        "month",
+        "support_sufficient_config_count",
+        "support_limited_config_count",
+        "metric_parent_count",
+        "best_month_pnl",
+    }
+    missing = sorted(required - set(inventory.columns))
+    if missing:
+        raise ValueError(f"{path} missing columns: {', '.join(missing)}")
+    selected = inventory.copy()
+    selected["month"] = selected["month"].astype(str).str.slice(0, 7)
+    selected["support_sufficient_config_count"] = numeric_series(
+        selected,
+        "support_sufficient_config_count",
+        default=0.0,
+    ).astype(int)
+    selected["support_limited_config_count"] = numeric_series(
+        selected,
+        "support_limited_config_count",
+        default=0.0,
+    ).astype(int)
+    selected["metric_parent_count"] = numeric_series(
+        selected,
+        "metric_parent_count",
+        default=0.0,
+    ).astype(int)
+    selected["best_month_pnl"] = numeric_series(selected, "best_month_pnl", default=np.nan)
+    selected["worst_month_pnl"] = numeric_series(selected, "worst_month_pnl", default=np.nan)
+    selected = selected[
+        selected["support_sufficient_config_count"].ge(int(min_support_sufficient_configs))
+        & selected["metric_parent_count"].ge(int(min_metric_parents))
+    ].copy()
+    selected = selected.sort_values(
+        [
+            "support_sufficient_config_count",
+            "metric_parent_count",
+            "best_month_pnl",
+        ],
+        ascending=[False, False, False],
+    )
+    if max_targets > 0:
+        selected = selected.head(int(max_targets)).copy()
+    selected["target_side"] = str(target_side)
+    selected["target_source"] = "external_support_negative_inventory"
+    selected["support_sufficient_negative_month"] = True
+    selected["support_limited_negative_month"] = False
+    specs = [
+        (str(row["role"]), str(row["month"]), str(row["target_side"]))
+        for _, row in selected.iterrows()
+    ]
+    return specs, selected.reset_index(drop=True)
+
+
 def feature_score(frame: pd.DataFrame, selector: str) -> pd.Series:
     loss_first = numeric_series(frame, "loss_first_prob", default=0.0)
     taken_ev = numeric_series(frame, "taken_ev", default=0.0)
@@ -632,6 +697,44 @@ def summarize_surface(choices: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def annotate_target_inventory_with_evaluation(
+    inventory: pd.DataFrame,
+    targets: pd.DataFrame,
+) -> pd.DataFrame:
+    if inventory.empty:
+        return inventory.copy()
+    output = inventory.copy()
+    if targets.empty:
+        output["evaluated_by_surface"] = False
+        return output
+    target_cols = [
+        "role",
+        "family",
+        "month",
+        "baseline_month_pnl",
+        "trade_count",
+        "loss_trade_count",
+        "prior_candidate_rows",
+        "prior_candidate_month_count",
+    ]
+    available = [column for column in target_cols if column in targets.columns]
+    evaluated = targets[available].copy()
+    evaluated["evaluated_by_surface"] = True
+    merge_cols = [column for column in ["role", "family", "month"] if column in output.columns]
+    output = output.merge(
+        evaluated,
+        on=merge_cols,
+        how="left",
+        suffixes=("", "_surface"),
+    )
+    output["evaluated_by_surface"] = bool_series(
+        output,
+        "evaluated_by_surface",
+        default=False,
+    )
+    return output
+
+
 def run_diagnostics(args: argparse.Namespace) -> Path:
     config_path = resolve_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -663,11 +766,20 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     candidate_min_prior_counts = parse_int_grid(args.candidate_min_prior_counts)
     candidate_min_prior_month_counts = parse_int_grid(args.candidate_min_prior_month_counts)
     candidate_min_prior_actual_means = parse_float_grid(args.candidate_min_prior_actual_means)
-    target_specs, target_inventory = resolve_target_specs(
-        args.targets,
-        current=current,
-        repair_targets=repair_targets,
-    )
+    if args.targets_inventory is not None:
+        target_specs, target_inventory = resolve_inventory_target_specs(
+            resolve_path(args.targets_inventory),
+            min_support_sufficient_configs=int(args.inventory_min_support_sufficient_configs),
+            min_metric_parents=int(args.inventory_min_metric_parents),
+            max_targets=int(args.inventory_max_targets),
+            target_side=str(args.inventory_target_side),
+        )
+    else:
+        target_specs, target_inventory = resolve_target_specs(
+            args.targets,
+            current=current,
+            repair_targets=repair_targets,
+        )
 
     choice_rows: list[dict[str, Any]] = []
     target_rows: list[dict[str, Any]] = []
@@ -843,6 +955,7 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     )
 
     run_dir = make_run_dir(resolve_path(args.output_root), args.run_label)
+    target_inventory = annotate_target_inventory_with_evaluation(target_inventory, targets)
     choices.to_csv(run_dir / "support_sufficient_selector_surface_choices.csv", index=False)
     summary.to_csv(run_dir / "support_sufficient_selector_surface_summary.csv", index=False)
     targets.to_csv(run_dir / "support_sufficient_selector_surface_targets.csv", index=False)
@@ -856,9 +969,14 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     meta = {
         "config": config_path,
         "targets_arg": args.targets,
+        "targets_inventory": args.targets_inventory,
         "targets": target_specs,
         "target_inventory_rows": int(len(target_inventory)),
         "auto_target_values": sorted(AUTO_TARGET_VALUES),
+        "inventory_min_support_sufficient_configs": args.inventory_min_support_sufficient_configs,
+        "inventory_min_metric_parents": args.inventory_min_metric_parents,
+        "inventory_max_targets": args.inventory_max_targets,
+        "inventory_target_side": args.inventory_target_side,
         "risk_selectors": risk_selectors,
         "score_modes": score_modes,
         "replacement_context_specs": replacement_context_specs,
@@ -882,23 +1000,29 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     print("Support-sufficient selector surface summary:")
     print(summary.head(int(args.print_rows)).to_string(index=False))
     if not target_inventory.empty:
+        inventory_columns = [
+            "role",
+            "family",
+            "month",
+            "target_side",
+            "evaluated_by_surface",
+            "month_pnl",
+            "baseline_month_pnl",
+            "best_month_pnl",
+            "worst_month_pnl",
+            "trade_count",
+            "loss_trade_count",
+            "support_sufficient_config_count",
+            "support_limited_config_count",
+            "metric_parent_count",
+            "extra_long_needed",
+            "extra_short_needed",
+            "support_sufficient_negative_month",
+            "support_limited_negative_month",
+        ]
+        display_columns = [column for column in inventory_columns if column in target_inventory.columns]
         print("\nTarget inventory:")
-        print(
-            target_inventory[
-                [
-                    "role",
-                    "family",
-                    "month",
-                    "month_pnl",
-                    "trade_count",
-                    "loss_trade_count",
-                    "extra_long_needed",
-                    "extra_short_needed",
-                    "support_sufficient_negative_month",
-                    "support_limited_negative_month",
-                ]
-            ].to_string(index=False)
-        )
+        print(target_inventory[display_columns].to_string(index=False))
     print(f"artifacts: {run_dir}")
     return run_dir
 
@@ -907,6 +1031,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--targets", default=DEFAULT_TARGETS)
+    parser.add_argument(
+        "--targets-inventory",
+        type=Path,
+        default=None,
+        help=(
+            "Use a support_negative_month_target_summary.csv file as the target source. "
+            "When set, --targets is ignored."
+        ),
+    )
+    parser.add_argument("--inventory-min-support-sufficient-configs", type=int, default=1)
+    parser.add_argument("--inventory-min-metric-parents", type=int, default=1)
+    parser.add_argument("--inventory-max-targets", type=int, default=0)
+    parser.add_argument("--inventory-target-side", default="both")
     parser.add_argument("--replacement-context-specs", default=DEFAULT_CONTEXT_SPECS)
     parser.add_argument("--risk-context-specs", default=DEFAULT_RISK_CONTEXT_SPECS)
     parser.add_argument("--risk-selectors", default=DEFAULT_RISK_SELECTORS)

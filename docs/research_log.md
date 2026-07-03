@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 17:07 Entry EV canonical support-sufficient selector surface
+
+作業:
+
+- 00370のinventoryを使い、`entry_ev_support_sufficient_selector_surface_diagnostics.py` に `--targets-inventory` を追加した。
+- `support_negative_month_target_summary.csv` からsupport-sufficient config数 `>=50`、metric parent数 `>=5` のcanonical target setを作り、00368/00369のselector surfaceを複数targetへ広げた。
+- target inventory outputへ `evaluated_by_surface` と現config baselineを追加した。
+- report: `docs/reports/00371_2026-07-03_entry_ev_canonical_support_sufficient_selector_surface.md`
+
+結果:
+
+- inventory targetは11件、現00314/00318 configで評価できたtargetは10件。`refit2025 2025-08` はunblocked current tradesがなく評価対象外。
+- 評価対象10件のbaselineは9件がpositive month、negativeは `refit2025 2025-03` の1件だけ。baseline mean `+20.9330`、min `-0.4730`。
+- non-oracle bestは `combined:any_lossrisk` + `bias_corrected` + prior count `>=100` で、mean PnL `+33.2963`、mean delta `+12.3633`、positive months `9/10`。
+- ただし同bestはloss trade selected 3件 / winner selected 7件で、loss-risk selectorとしては危険。
+- `feature:side_gap_ge0p15_lossfirst_lt0p30` + `bias_corrected` + prior count `>=100` はmean delta `+5.3253` だが、loss selected 2件 / winner selected 5件で、`hgb2024_0306 2024-05` を `+0.9578 -> -19.3690` へ悪化させた。
+
+判断:
+
+- `--targets-inventory` とcanonical target filterはaccepted infrastructure。
+- 複数target stressでは、現loss-risk selectorはwinner damageが大きく、標準policy化しない。
+- baselineが既にpositiveのcross-artifact target identityと、現configでnegativeのrepair targetを分けて評価する必要がある。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_selector_surface_diagnostics.py tests/test_entry_ev_support_sufficient_selector_surface_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_selector_surface_diagnostics`: OK
+- 00371 canonical support-sufficient selector surface run: OK
+
 ### 16:52 Entry EV support negative month inventory
 
 作業:
