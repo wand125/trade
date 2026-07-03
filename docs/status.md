@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 15:39 JST
+最終更新: 2026-07-03 15:51 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-sufficient horizon abstention diagnosticsを追加した。00364でloss-riskはdirect entry blockにするとwinner damageが大きいと分かったため、fixed-horizon choiceのabstentionへ回した。全240 selected tradesでpredicted fixed-horizon argmaxを全採用するとcurrent exit比のextension deltaは `-221.4806`。`refit2025 2025-03` ではcurrent month PnL `-0.4730` から、predicted fixed-horizon全採用で `-50.9070` まで崩れる。`lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` はtarget harmful horizon 7/7を止め、target extension delta `-50.4340 -> +26.1200`、全体でも `-221.4806 -> +207.3556` へ反転した。判断: horizon abstention diagnosticsは採用、同ruleはstateful replay candidate。ただしselected-trade counterfactualであり、one-position constraint下のskip影響未検証なので標準policyにはしない。標準policyはNoTrade。詳細は `docs/reports/00365_2026-07-03_entry_ev_support_sufficient_horizon_abstention.md`。
 
 Entry EV support-sufficient loss-risk prior diagnosticsを追加した。00363の次アクションとして、`refit2025 2025-03` の既存tradeを実行時点で見える特徴とtrade timestamp以前だけのcontext priorで診断した。対象月内では `lossfirst_ge0p40_or_ev_ge5_lossfirst_lt0p30` が4/4 lossを捕捉し、target flagged PnL `-1.5900`、skip delta `+1.5900`。ただし全240 selected tradesでは176 tradesをflagし、flagged PnL `+332.3394` で勝ちtradeを大量に巻き込む。`ev_ge5_lossfirst_lt0p30` や `side_gap_ge0p15_lossfirst_lt0p30` も対象short損失2本を拾うが、全体では flagged PnL が大きくpositive。判断: loss-risk prior diagnosticsは採用、direct block / hard gateはreject。次はreplacement selector、horizon abstention、expected PnL calibrationの補助featureとして使う。標準policyはNoTrade。詳細は `docs/reports/00364_2026-07-03_entry_ev_support_sufficient_loss_risk_prior.md`。
 

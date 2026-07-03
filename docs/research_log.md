@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 15:51 Entry EV support-sufficient horizon abstention diagnostics
+
+作業:
+
+- 00364でloss-riskをentry blockに使うとwinner damageが大きいと分かったため、同じsignalをfixed-horizon choiceのabstentionへ回した。
+- `entry_ev_support_sufficient_horizon_abstention_diagnostics.py` を追加し、current exitとpredicted fixed-horizon argmaxの実現PnL差を教師/評価として、観測特徴と時系列priorで「predicted horizonを信じない」ruleを診断した。
+- report: `docs/reports/00365_2026-07-03_entry_ev_support_sufficient_horizon_abstention.md`
+
+結果:
+
+- 全240 selected tradesでpredicted fixed-horizon argmaxを全採用すると、current exit比のextension deltaは `-221.4806`。
+- `refit2025 2025-03` ではcurrent month PnL `-0.4730` に対し、predicted fixed-horizon全採用は delta `-50.4340`、month PnL `-50.9070` まで崩れる。
+- `lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` は対象月のharmful horizon 7/7をflagし、unflagged 2本のhelpだけを残す。target extension deltaは `-50.4340 -> +26.1200`。
+- 同ruleは全240 tradesでも flagged extension delta `-428.8362` をabstainし、extension deltaを `-221.4806 -> +207.3556` へ反転させる。
+
+判断:
+
+- horizon abstention diagnosticsはaccepted infrastructure。
+- `lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` はstateful replay candidate。
+- ただしこれはselected-trade counterfactualで、one-position constraint下のskip影響をまだ測っていないため標準policyにはしない。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_horizon_abstention_diagnostics.py tests/test_entry_ev_support_sufficient_horizon_abstention_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_horizon_abstention_diagnostics`: OK
+- 00365 support-sufficient horizon abstention diagnostic run: OK
+
 ### 15:39 Entry EV support-sufficient loss-risk prior diagnostics
 
 作業:
