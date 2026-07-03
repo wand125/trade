@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 16:20 JST
+最終更新: 2026-07-03 16:33 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-sufficient selector surface diagnosticsを追加した。00367のprior-calibrated replacementを、00364のloss-risk selectorと接続し、全current tradesからobservable risk selectorで外す1本を選んでからstatefully available replacementを選ぶsurfaceを作った。`refit2025 2025-03` では、min prior month `1` の最高値は `side_gap_ge0p15_lossfirst_lt0p30` + `side_score` でmonth PnL `+35.1570` だがcandidate prior month countが1なのでsupport不足。min prior month `2` / candidate prior count `>=50` / prior actual mean `>=0` でも、同risk selector + `bias_corrected` がworst short lossを選び、month PnL `+22.4970` まで残る。`prior_actual_mean` でも `+19.7740`。一方、`combined:any_lossrisk` や `score:loss_first_prob` はwinner `2025-03-31 03:40 short +1.3800` を外すため、broad risk selectorはまだ危険。min prior month `3` では候補0。判断: selector surfaceはaccepted infrastructure、標準policyはNoTrade。詳細は `docs/reports/00368_2026-07-03_entry_ev_support_sufficient_selector_surface.md`。
 
 Entry EV support-sufficient replacement calibration diagnosticsを追加した。00366でbroad horizon abstentionを本線vetoに使えないと分かったため、00363のsupport-sufficient negative month laneへ戻り、replacement candidateのexpected PnL calibrationを診断した。target月より前のside-row実績だけでcontext別bias/MAE/prior actual meanを作り、`refit2025 2025-03` のloss trade replacementをrank比較した。candidate rows `1710`、prior rows `664` / prior months `2`。min prior count `20` では `bias_corrected` がmean month PnL `+22.1670`、best `+23.6370` まで改善するが、`downside_bias_corrected` / `conservative` はmean `-18.7634` へ悪化。min prior count `50` では `prior_actual_mean` がmean `+18.3040`、best `+19.7740`、`bias_corrected` がmean `+8.0640`。判断: prior-calibrated replacement rankingは有望なdiagnostic infrastructure。ただしpriorが2ヶ月しかなくone-fail candidate依存なので標準policyではない。標準policyはNoTrade。詳細は `docs/reports/00367_2026-07-03_entry_ev_support_sufficient_replacement_calibration.md`。
 

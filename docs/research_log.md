@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 16:33 Entry EV support-sufficient selector surface
+
+作業:
+
+- 00367のprior-calibrated replacementを、00364のloss-risk selectorと接続した。
+- `entry_ev_support_sufficient_selector_surface_diagnostics.py` を追加し、全current tradesからobservable risk selectorで外す1本を選び、そのtradeを外した状態でstatefully available replacementをprior-calibrated scoreで選ぶsurfaceを作った。
+- report: `docs/reports/00368_2026-07-03_entry_ev_support_sufficient_selector_surface.md`
+
+結果:
+
+- 対象は `refit2025_validation 2025-03`。baseline month PnL `-0.4730`、9 trades、loss 4本、candidate prior rows `664` / prior months `2`。
+- min prior month `1` では、`feature:side_gap_ge0p15_lossfirst_lt0p30` + `side_score` が `2025-03-21 14:00 short -2.3400` を外し、`2025-03-27 13:59 long` one-fail replacementを選んでmonth PnL `+35.1570`。ただしcandidate prior month countは `1`。
+- min prior month `2` / candidate prior count `>=50` / prior actual mean `>=0` でも、同risk selectorがworst short lossを選び、`bias_corrected` はmonth PnL `+22.4970`、`prior_actual_mean` は `+19.7740`。
+- min prior month `3` ではreplacement候補0。現targetのprior spanは2ヶ月しかない。
+- `combined:any_lossrisk`、`score:loss_first_prob`、`prior:direction,combined_regime:prior_count_ge5_lossrate_ge0p50` はwinner `2025-03-31 03:40 short +1.3800` を外す。
+
+判断:
+
+- loss-risk + calibrated replacement selector surfaceはaccepted infrastructure。
+- `side_gap_ge0p15_lossfirst_lt0p30` はsupport-sufficient loss-risk selector feature候補。
+- min prior month `2` + prior count `>=50` filterは有望だが、単一target月・one-fail依存なので標準policyにはしない。
+- broad risk aggregationやpure loss-first selectorはwinner damageが残るためreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_selector_surface_diagnostics.py tests/test_entry_ev_support_sufficient_selector_surface_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_selector_surface_diagnostics`: OK
+- 00368 selector surface run: OK
+
 ### 16:20 Entry EV support-sufficient replacement calibration
 
 作業:
