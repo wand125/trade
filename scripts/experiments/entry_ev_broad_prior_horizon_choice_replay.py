@@ -96,6 +96,27 @@ DEFAULT_RESIDUAL_CONTEXT_SPECS = (
     "horizon_bucket;"
     "global"
 )
+DEFAULT_HEAD_RELIABILITY_CONTEXT_SPECS = "horizon_bucket,row_scope;horizon_bucket;row_scope;global"
+HEAD_RELIABILITY_SPECS = {
+    "delta": (
+        "ranker_pred_delta_vs_60",
+        "horizon_actual_delta_vs_60",
+        "regressor",
+        "spearman",
+    ),
+    "beats60": (
+        "ranker_pred_beats60_prob",
+        "target_horizon_beats_60",
+        "classifier",
+        "auc",
+    ),
+    "tail": (
+        "ranker_pred_tail_loss_prob",
+        "target_horizon_tail_loss",
+        "classifier",
+        "auc",
+    ),
+}
 
 
 def local_json_default(value: Any) -> Any:
@@ -484,6 +505,206 @@ def add_residual_prior_columns(
     return output
 
 
+def head_reliability_metrics(
+    group: pd.DataFrame,
+    *,
+    pred_column: str,
+    actual_column: str,
+    kind: str,
+) -> dict[str, float]:
+    pred = numeric_series(group, pred_column, default=np.nan)
+    actual = (
+        bool_series(group, actual_column).astype(float)
+        if kind == "classifier"
+        else numeric_series(group, actual_column, default=np.nan)
+    )
+    valid = pred.notna() & actual.notna()
+    if not valid.any():
+        return {
+            "count": 0.0,
+            "months": 0.0,
+            "auc": np.nan,
+            "spearman": np.nan,
+            "mae": np.nan,
+            "score": 0.0,
+        }
+    count = float(valid.sum())
+    months = float(group.loc[valid, "month"].astype(str).nunique())
+    error = pred[valid] - actual[valid]
+    auc = float("nan")
+    spearman = float("nan")
+    if kind == "classifier":
+        target = actual[valid].astype(int)
+        if target.nunique(dropna=True) >= 2:
+            auc = float(roc_auc_score(target, pred[valid]))
+        score = 2.0 * (auc - 0.5) if np.isfinite(auc) else 0.0
+    else:
+        spearman = safe_spearman(pred[valid], actual[valid])
+        score = spearman if np.isfinite(spearman) else 0.0
+    return {
+        "count": count,
+        "months": months,
+        "auc": auc,
+        "spearman": spearman,
+        "mae": float(error.abs().mean()),
+        "score": float(np.clip(score, -1.0, 1.0)),
+    }
+
+
+def select_head_reliability(
+    row: pd.Series,
+    prior: pd.DataFrame,
+    *,
+    pred_column: str,
+    actual_column: str,
+    kind: str,
+    context_specs: list[list[str]],
+    min_prior_rows: int,
+    min_prior_months: int,
+    shrinkage_count: float,
+) -> dict[str, Any]:
+    empty = {
+        "context_spec": "none",
+        "context_key": "",
+        "count": 0,
+        "months": 0,
+        "auc": np.nan,
+        "spearman": np.nan,
+        "mae": np.nan,
+        "score": 0.0,
+        "positive_score": 0.0,
+        "used": False,
+    }
+    if prior.empty:
+        return empty
+
+    global_metrics = head_reliability_metrics(
+        prior,
+        pred_column=pred_column,
+        actual_column=actual_column,
+        kind=kind,
+    )
+    selected_spec: list[str] = []
+    selected_metrics = global_metrics
+    used = False
+    for spec in context_specs:
+        group = prior
+        missing_column = False
+        for column in spec:
+            if column not in group.columns or column not in row.index:
+                missing_column = True
+                break
+            group = group[group[column].astype(str).eq(str(row[column]))]
+        if missing_column:
+            continue
+        metrics = head_reliability_metrics(
+            group,
+            pred_column=pred_column,
+            actual_column=actual_column,
+            kind=kind,
+        )
+        if int(metrics["count"]) >= min_prior_rows and int(metrics["months"]) >= min_prior_months:
+            selected_spec = spec
+            selected_metrics = metrics
+            used = True
+            break
+
+    if not used and int(global_metrics["count"]) > 0:
+        selected_spec = []
+        selected_metrics = global_metrics
+        used = (
+            int(global_metrics["count"]) >= min_prior_rows
+            and int(global_metrics["months"]) >= min_prior_months
+        )
+
+    count = float(selected_metrics["count"])
+    score = shrink_metric(
+        float(selected_metrics["score"]),
+        0.0,
+        count,
+        shrinkage_count,
+    )
+    key = "|".join(str(row[column]) for column in selected_spec) if selected_spec else "global"
+    return {
+        "context_spec": ",".join(selected_spec) if selected_spec else "global",
+        "context_key": key,
+        "count": int(selected_metrics["count"]),
+        "months": int(selected_metrics["months"]),
+        "auc": float(selected_metrics["auc"]),
+        "spearman": float(selected_metrics["spearman"]),
+        "mae": float(selected_metrics["mae"]),
+        "score": float(score),
+        "positive_score": float(max(score, 0.0)) if used else 0.0,
+        "used": bool(used),
+    }
+
+
+def add_head_reliability_columns(
+    scored_examples: pd.DataFrame,
+    *,
+    context_specs: list[list[str]],
+    min_prior_rows: int,
+    min_prior_months: int,
+    shrinkage_count: float,
+) -> pd.DataFrame:
+    output = scored_examples.copy()
+    periods = pd.Series(pd.PeriodIndex(output["month"].astype(str), freq="M"), index=output.index)
+    context_columns = sorted({column for spec in context_specs for column in spec})
+    key_columns = [
+        "month",
+        "hv_chosen_horizon_minutes",
+        *[column for column in context_columns if column in output.columns],
+    ]
+    reliability_rows: list[dict[str, Any]] = []
+    for _, row in output[key_columns].drop_duplicates().iterrows():
+        target_period = pd.Period(str(row["month"]), freq="M")
+        prior = output[periods < target_period]
+        metrics: dict[str, Any] = {column: row[column] for column in key_columns}
+        for name, (pred_column, actual_column, kind, _metric_name) in HEAD_RELIABILITY_SPECS.items():
+            selected = select_head_reliability(
+                row,
+                prior,
+                pred_column=pred_column,
+                actual_column=actual_column,
+                kind=kind,
+                context_specs=context_specs,
+                min_prior_rows=min_prior_rows,
+                min_prior_months=min_prior_months,
+                shrinkage_count=shrinkage_count,
+            )
+            prefix = f"{name}_reliability"
+            for metric_name, metric_value in selected.items():
+                metrics[f"{prefix}_{metric_name}"] = metric_value
+        reliability_rows.append(metrics)
+
+    reliability = pd.DataFrame(reliability_rows)
+    output = output.merge(reliability, on=key_columns, how="left")
+    for name in HEAD_RELIABILITY_SPECS:
+        prefix = f"{name}_reliability"
+        for column in [
+            f"{prefix}_count",
+            f"{prefix}_months",
+            f"{prefix}_auc",
+            f"{prefix}_spearman",
+            f"{prefix}_mae",
+            f"{prefix}_score",
+            f"{prefix}_positive_score",
+        ]:
+            output[column] = numeric_series(output, column, default=0.0)
+        output[f"{prefix}_used"] = bool_series(output, f"{prefix}_used", default=False)
+        output[f"{prefix}_context_spec"] = text_series(
+            output,
+            f"{prefix}_context_spec",
+            default="none",
+        )
+        output[f"{prefix}_context_key"] = text_series(
+            output,
+            f"{prefix}_context_key",
+            default="",
+        )
+    return output
+
+
 def score_predictions(
     frame: pd.DataFrame,
     *,
@@ -535,6 +756,30 @@ def score_predictions(
             + delta_weight * delta
             + beats60_weight * beats60
             - tail_score_weight * support_gated_tail
+        )
+    delta_reliability = numeric_series(
+        frame,
+        "delta_reliability_positive_score",
+        default=0.0,
+    ).clip(0.0, 1.0)
+    beats60_reliability = numeric_series(
+        frame,
+        "beats60_reliability_positive_score",
+        default=0.0,
+    ).clip(0.0, 1.0)
+    tail_reliability = numeric_series(
+        frame,
+        "tail_reliability_positive_score",
+        default=0.0,
+    ).clip(0.0, 1.0)
+    if score_mode == "pnl_tail_reliability_gated":
+        return pnl - tail_score_weight * tail * tail_reliability
+    if score_mode == "pnl_delta_tail_reliability_gated":
+        return (
+            pnl
+            + delta_weight * delta * delta_reliability
+            + beats60_weight * beats60 * beats60_reliability
+            - tail_score_weight * tail * tail_reliability
         )
     harmful = numeric_series(frame, "ranker_pred_harmful_overestimate_prob", default=0.0)
     support_needed = (
@@ -942,6 +1187,12 @@ def pivot_ranker_predictions(
             "ranker_pred_tail_loss_prob_train_months": 0.0,
             "ranker_pred_tail_loss_prob_train_rows": 0.0,
             "ranker_pred_tail_loss_prob_train_rows_full": 0.0,
+            "delta_reliability_positive_score": 0.0,
+            "beats60_reliability_positive_score": 0.0,
+            "tail_reliability_positive_score": 0.0,
+            "delta_reliability_used": False,
+            "beats60_reliability_used": False,
+            "tail_reliability_used": False,
         }.items():
             if column not in scored.columns:
                 scored[column] = default
@@ -959,6 +1210,12 @@ def pivot_ranker_predictions(
                 "ranker_pred_tail_loss_prob_train_months",
                 "ranker_pred_tail_loss_prob_train_rows",
                 "ranker_pred_tail_loss_prob_train_rows_full",
+                "delta_reliability_positive_score",
+                "beats60_reliability_positive_score",
+                "tail_reliability_positive_score",
+                "delta_reliability_used",
+                "beats60_reliability_used",
+                "tail_reliability_used",
                 "ranker_choice_score",
                 "ranker_core_model_used",
                 "duration_prior_count",
@@ -993,6 +1250,14 @@ def pivot_ranker_predictions(
             "ranker_pred_tail_loss_prob_train_rows_full": (
                 f"ranker_hv_{horizon}m_tail_train_rows_full"
             ),
+            "delta_reliability_positive_score": f"ranker_hv_{horizon}m_delta_reliability",
+            "beats60_reliability_positive_score": (
+                f"ranker_hv_{horizon}m_beats60_reliability"
+            ),
+            "tail_reliability_positive_score": f"ranker_hv_{horizon}m_tail_reliability",
+            "delta_reliability_used": f"ranker_hv_{horizon}m_delta_reliability_used",
+            "beats60_reliability_used": f"ranker_hv_{horizon}m_beats60_reliability_used",
+            "tail_reliability_used": f"ranker_hv_{horizon}m_tail_reliability_used",
             "duration_prior_count": f"ranker_hv_{horizon}m_prior_count",
             "duration_prior_months": f"ranker_hv_{horizon}m_prior_months",
             "duration_prior_mean_pnl": f"ranker_hv_{horizon}m_prior_mean_pnl",
@@ -1068,6 +1333,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
     horizons = parse_int_csv(args.horizons)
     context_specs = parse_context_specs(args.context_specs)
     residual_context_specs = parse_context_specs(args.residual_context_specs)
+    head_reliability_context_specs = parse_context_specs(args.head_reliability_context_specs)
     score_modes = parse_csv(args.score_modes)
     broad_train_rows = pd.read_csv(args.broad_train_rows)
     eval_rows = pd.read_csv(args.predictions)
@@ -1159,6 +1425,13 @@ def run_experiment(args: argparse.Namespace) -> Path:
         l2_regularization=args.l2_regularization,
         max_leaf_nodes=args.max_leaf_nodes,
         random_state=args.random_state,
+    )
+    scored_examples = add_head_reliability_columns(
+        scored_examples,
+        context_specs=head_reliability_context_specs,
+        min_prior_rows=args.min_head_reliability_rows,
+        min_prior_months=args.min_head_reliability_months,
+        shrinkage_count=args.head_reliability_shrinkage_count,
     )
     metrics = metric_summary(scored_examples)
 
@@ -1320,6 +1593,7 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "random_state": args.random_state,
         "context_specs": context_specs,
         "residual_context_specs": residual_context_specs,
+        "head_reliability_context_specs": head_reliability_context_specs,
         "min_prior_rows": args.min_prior_rows,
         "min_prior_months": args.min_prior_months,
         "shrinkage_count": args.shrinkage_count,
@@ -1333,6 +1607,9 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "min_residual_prior_rows": args.min_residual_prior_rows,
         "min_residual_prior_months": args.min_residual_prior_months,
         "residual_shrinkage_count": args.residual_shrinkage_count,
+        "min_head_reliability_rows": args.min_head_reliability_rows,
+        "min_head_reliability_months": args.min_head_reliability_months,
+        "head_reliability_shrinkage_count": args.head_reliability_shrinkage_count,
         "delta_weight": args.delta_weight,
         "beats60_weight": args.beats60_weight,
         "tail_score_weight": args.tail_score_weight,
@@ -1411,6 +1688,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--require-model-used-options", default="true")
     parser.add_argument("--context-specs", default=DEFAULT_CONTEXT_SPECS)
     parser.add_argument("--residual-context-specs", default=DEFAULT_RESIDUAL_CONTEXT_SPECS)
+    parser.add_argument(
+        "--head-reliability-context-specs",
+        default=DEFAULT_HEAD_RELIABILITY_CONTEXT_SPECS,
+    )
     parser.add_argument("--min-prior-rows", type=int, default=20)
     parser.add_argument("--min-prior-months", type=int, default=2)
     parser.add_argument("--shrinkage-count", type=float, default=20.0)
@@ -1426,6 +1707,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-residual-prior-rows", type=int, default=20)
     parser.add_argument("--min-residual-prior-months", type=int, default=2)
     parser.add_argument("--residual-shrinkage-count", type=float, default=20.0)
+    parser.add_argument("--min-head-reliability-rows", type=int, default=20)
+    parser.add_argument("--min-head-reliability-months", type=int, default=2)
+    parser.add_argument("--head-reliability-shrinkage-count", type=float, default=20.0)
     parser.add_argument("--delta-weight", type=float, default=0.25)
     parser.add_argument("--beats60-weight", type=float, default=0.5)
     parser.add_argument("--tail-score-weight", type=float, default=2.0)

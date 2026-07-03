@@ -4,6 +4,32 @@
 
 ## 2026-07-03 JST
 
+### 10:06 Entry EV prior/OOB reliability horizon choice
+
+作業:
+
+- 00342の次アクションとして、train support countだけではなく、対象月より前のprediction-vs-actual実績からhead reliabilityを測る列を追加した。
+- `delta`, `beats60`, `tail` の各headに対し、context fallback付きで Spearman / AUC / MAE / shrink済みpositive reliability scoreを作るようにした。
+- score mode `pnl_tail_reliability_gated` / `pnl_delta_tail_reliability_gated` を追加し、prediction artifactsへhorizon別reliability列も出すようにした。
+- report: `docs/reports/00343_2026-07-03_entry_ev_prior_oob_reliability_horizon_choice.md`
+
+結果:
+
+- full replay bestでは `pnl_tail_reliability_gated` と `pnl_delta_tail_reliability_gated` がplain `pnl` と同じ5 tradesを選び、combined `+400.1440` で同点。
+- `pnl_delta_tail` の `+389.5310` よりは改善したが、これは新しい優位性ではなく、悪いdelta/tail補正をreliability gateで実質的に無効化した結果。
+- target-level available choicesでは、`pnl_delta_tail_reliability_gated` が2024-08を `-46.3536 -> -99.7540`、2025-07を `-185.5712 -> -213.0308` に悪化させた。
+
+判断:
+
+- prior/OOB head reliability columnsとprediction artifactsへの出力はaccepted infrastructure。
+- reliability scoreを直接score加点・減点に使う現score modeはpolicy候補としてreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00343 prior/OOB reliability replay: OK
+
 ### 09:49 Entry EV tail support gated horizon choice
 
 作業:

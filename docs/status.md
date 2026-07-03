@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 09:49 JST
+最終更新: 2026-07-03 10:06 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV prior/OOB reliability horizon choiceを追加した。00342でtrain support count gateだけでは粗いと分かったため、対象月より前のprediction-vs-actual実績から `delta` / `beats60` / `tail` headのreliabilityを作り、prediction artifactsへhorizon別reliability列を出すようにした。full replayでは `pnl_tail_reliability_gated` と `pnl_delta_tail_reliability_gated` がplain `pnl` と同じ5 tradesを選び、combined `+400.1440` で同点。`pnl_delta_tail` の `+389.5310` よりは良いが、新しい優位性ではなく悪いdelta/tail補正を無効化した結果。target-levelでは `pnl_delta_tail_reliability_gated` が2024-08を `-46.3536 -> -99.7540`、2025-07を `-185.5712 -> -213.0308` に悪化させた。判断: prior/OOB head reliability columnsはaccepted infrastructure、direct score multiplierとしてのreliability scoreはreject、標準policyはNoTrade。詳細は `docs/reports/00343_2026-07-03_entry_ev_prior_oob_reliability_horizon_choice.md`。
 
 Entry EV tail support gated horizon choiceを追加した。00341でtail-aware scoreがfresh03を悪化させたため、tail-loss penaltyをtail headのtrain supportが十分な時だけ有効化する `pnl_tail_support_gated` / `pnl_delta_tail_support_gated` を追加し、tail headのtrain months / rowsをprediction artifactsへ出した。`fresh2024_validation 2024-03 long` では `pnl_delta_tail` のavailable choice `-111.0260` に対し、`pnl_delta_tail_support_gated` は `-19.2310`、greedyも `-14.1240 -> -3.5280` に改善。ただしfull replayでは従来の `pnl` combined `+400.1440` が最良で、gated delta-tailは `+389.5310`、gated pnl-tailは `+378.7510`。strict gateは2024-08を悪化させた。判断: tail support metadata/gated score modesはaccepted infrastructure、train support countだけのtail gatingはpolicy候補としてreject、標準policyはNoTrade。詳細は `docs/reports/00342_2026-07-03_entry_ev_tail_support_gated_horizon_choice.md`。
 

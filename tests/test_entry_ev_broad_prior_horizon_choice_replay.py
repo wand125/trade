@@ -8,6 +8,7 @@ from scripts.experiments.entry_ev_broad_prior_horizon_choice_replay import (
     DEFAULT_HORIZON_CATEGORICAL_FEATURES,
     DEFAULT_HORIZON_NUMERIC_FEATURES,
     add_residual_prior_columns,
+    add_head_reliability_columns,
     chronological_ranker_predictions,
     expand_horizon_examples,
     pivot_ranker_predictions,
@@ -250,6 +251,62 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
 
         self.assertAlmostEqual(float(score.iloc[0]), 4.0)
         self.assertAlmostEqual(float(score.iloc[1]), 2.4)
+
+    def test_head_reliability_columns_use_only_prior_months(self) -> None:
+        scored = pd.DataFrame(
+            {
+                "month": ["2026-01", "2026-01", "2026-02"],
+                "hv_chosen_horizon_minutes": [720.0, 720.0, 720.0],
+                "horizon_bucket": ["720m", "720m", "720m"],
+                "row_scope": ["available_candidates"] * 3,
+                "ranker_pred_delta_vs_60": [0.1, 0.9, 0.8],
+                "horizon_actual_delta_vs_60": [0.0, 1.0, 0.0],
+                "ranker_pred_beats60_prob": [0.1, 0.9, 0.8],
+                "target_horizon_beats_60": [False, True, False],
+                "ranker_pred_tail_loss_prob": [0.1, 0.9, 0.8],
+                "target_horizon_tail_loss": [False, True, False],
+            }
+        )
+
+        output = add_head_reliability_columns(
+            scored,
+            context_specs=[["horizon_bucket"], []],
+            min_prior_rows=2,
+            min_prior_months=1,
+            shrinkage_count=0.0,
+        )
+
+        jan = output[output["month"].eq("2026-01")].iloc[0]
+        feb = output[output["month"].eq("2026-02")].iloc[0]
+        self.assertFalse(bool(jan["tail_reliability_used"]))
+        self.assertEqual(int(feb["tail_reliability_count"]), 2)
+        self.assertEqual(int(feb["tail_reliability_months"]), 1)
+        self.assertAlmostEqual(float(feb["tail_reliability_positive_score"]), 1.0)
+
+        scored_frame = pd.DataFrame(
+            {
+                "ranker_pred_pnl": [4.0],
+                "ranker_pred_delta_vs_60": [0.0],
+                "ranker_pred_beats60_prob": [0.0],
+                "ranker_pred_tail_loss_prob": [0.8],
+                "tail_reliability_positive_score": [
+                    float(feb["tail_reliability_positive_score"])
+                ],
+            }
+        )
+        score = score_predictions(
+            scored_frame,
+            score_mode="pnl_tail_reliability_gated",
+            delta_weight=0.25,
+            beats60_weight=0.5,
+            tail_score_weight=2.0,
+            support_score_weight=2.0,
+            harmful_score_weight=5.0,
+            lower_bound_mae_weight=0.25,
+            lower_bound_bias_weight=0.25,
+            lower_bound_tail_miss_weight=5.0,
+        )
+        self.assertAlmostEqual(float(score.iloc[0]), 2.4)
 
     def test_residual_prior_columns_are_score_only_by_default(self) -> None:
         self.assertNotIn("residual_prior_mae", DEFAULT_HORIZON_NUMERIC_FEATURES)
