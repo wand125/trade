@@ -10,7 +10,9 @@ from scripts.experiments.entry_ev_support_sufficient_replacement_calibration_dia
     choose_top_candidate,
     choice_row,
     parse_context_specs,
+    prior_rows_for_scope,
     prior_metric_row,
+    supported_candidates,
 )
 
 
@@ -143,6 +145,58 @@ class EntryEvSupportSufficientReplacementCalibrationDiagnosticsTest(unittest.Tes
 
         self.assertAlmostEqual(row["month_pnl_at_pred_horizon"], 3.0)
         self.assertAlmostEqual(row["month_pnl_at_oracle_horizon"], 5.0)
+
+    def test_prior_rows_for_scope_can_pool_prior_families(self) -> None:
+        prior_cache = {
+            "a": pd.DataFrame(
+                {
+                    "month": ["2024-01", "2024-03"],
+                    "candidate_stage": ["strict", "strict"],
+                    "value": [1, 2],
+                }
+            ),
+            "b": pd.DataFrame(
+                {
+                    "month": ["2024-02", "2024-04"],
+                    "candidate_stage": ["one_failed_strict_stage", "non_candidate"],
+                    "value": [3, 4],
+                }
+            ),
+        }
+
+        same = prior_rows_for_scope(
+            prior_cache,
+            family="a",
+            month="2024-03",
+            prior_scope="same_family",
+        )
+        pooled = prior_rows_for_scope(
+            prior_cache,
+            family="a",
+            month="2024-03",
+            prior_scope="all_families_prior_months",
+        )
+
+        self.assertEqual(same["value"].tolist(), [1])
+        self.assertEqual(sorted(pooled["value"].tolist()), [1, 3])
+        self.assertEqual(set(pooled["prior_source_family"].astype(str)), {"a", "b"})
+
+    def test_supported_candidates_filters_insufficient_context(self) -> None:
+        pool = pd.DataFrame(
+            {
+                "prior_count": [20, 5, 30],
+                "calibration_context_insufficient": [False, False, True],
+                "value": [1, 2, 3],
+            }
+        )
+
+        output = supported_candidates(
+            pool,
+            min_prior_count=10,
+            require_supported=True,
+        )
+
+        self.assertEqual(output["value"].tolist(), [1])
 
 
 if __name__ == "__main__":

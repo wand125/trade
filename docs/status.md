@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 21:54 JST
+最終更新: 2026-07-03 22:04 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV cross-family prior calibrationを追加した。00378で見えたearly-month prior不足に対し、replacement calibration診断へ `--prior-scope all_families_prior_months` と `--require-supported-candidates` を追加し、same-family priorと比較した。same-familyでは `hgb2024_0306 2024-03` のprior rows 0 / supported candidate 0。all-familyではprior rows 276 / supported candidate 1211まで増えたが、全体summaryは `side_score` mean month PnL `-5.5427`、`prior_actual_mean` `-13.1994` で不安定。hgb2024 2024-03のworst lossだけなら `side_score` が月PnL `+10.5674` まで改善する一方、raw/bias/conservative系は悪い720m candidateを選び `-43.5812` へ悪化した。判断: cross-family priorはsupport sourceとして診断採用、direct policy採用はreject。標準policyはNoTrade。詳細は `docs/reports/00379_2026-07-03_entry_ev_cross_family_prior_calibration.md`。
 
 Entry EV second aligned surface support gapを追加した。00377の再現確認として `short_entryblock_replacement_holdext_block_overlay_s1` へ00318 configを合成し、`loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` / `holdext_long_range_normal_ny` でsurfaceを実行した。5 current-negative targetを評価し、support-sufficient negative targetは `hgb2024_0306 2024-03` と `refit2025 2025-03` の2件に増えた。非oracleの `ev_ge5` + `prior_actual_mean` はloss selected 4、winner selected 0、precision 1.0で制約通過したが、mean after PnLは `-0.3246`。改善は `refit2025 2025-03` の `+18.2394` のみで、`hgb2024_0306 2024-03` はloss tradeを選べてもsupported replacement candidate 0で `-17.6936` が残った。判断: early-month prior不足をfirst-class blockerとして扱う。標準policyはNoTrade。詳細は `docs/reports/00378_2026-07-03_entry_ev_second_aligned_surface_support_gap.md`。
 

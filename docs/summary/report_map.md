@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-03 21:54 JST
+最終更新: 2026-07-03 22:04 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -31,12 +31,13 @@
 | `00376` | Surface artifact readiness | 00370 inventoryの17 metric parentsを棚卸し。surface-ready artifactは0件だが、10件はtrade schema readyで、00310/short replacement block overlayはconfig合成候補。 |
 | `00377` | Aligned current-negative surface | 00310へ00318 configを合成しaligned current-negative surfaceを実行。非oracle passは出たが改善はrefit2025 2025-03のみで、support-limited月は候補不足。 |
 | `00378` | Second aligned surface support gap | short replacement holdext overlayでsupport-sufficient targetを2件へ増やしたが、hgb2024 2024-03はearly-month prior不足でsupported candidate 0。 |
+| `00379` | Cross-family prior calibration | all-family priorでearly-month supportは作れるが、raw/bias系は720m大損を選び不安定。direct採用はreject。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00378` | second aligned surfaceでsupport-sufficient current-negative targetは増えたが、early-month prior不足で追加targetを修復できない。replacement calibration support gapが次の主課題。標準policyはNoTrade。 |
+| Latest decision | `00379` | cross-family priorはsupport不足を解くが、selectorとしては不安定。hgb worst lossはside_scoreで救える一方、raw/bias系は720m大損を選ぶ。標準policyはNoTrade。 |
 | Recent trajectory | `00258`..`00365` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00325ではtarget-aware repair utilityを接続し、actual-floor upper-boundならcombined `+371.6610` まで伸びた。00326ではrow x horizon化とhpen0.25でpred-onlyでもcombined `+374.6110` まで到達した。00329ではpriorをfeatureとしてchronological horizon-choice rankerへ入れ、低複雑度版がcombined `+403.2680` まで伸びた。00335でactual PnL tie-breaker leakを修正し、best combinedはleak-free `+400.1440` に下方修正。00339でthin-month候補面を診断し、fresh03はfallback/non-model calibration問題、fresh11/refit03は候補生成不足と確認。00340/00341でfresh03のhorizon confidence / tail calibration問題を確認。00342でtail support gateはfresh03局所を改善したがfull replayではplain PnLに負けた。00343/00344でprior/OOB reliabilityを検証し、direct score multiplierはtarget subset/all rowsの両方で悪化。00346 stateful pred-pnl negative vetoはplain `pnl` bestを改善せず、00347でpositive predicted PnL failureを診断するとmarket dedup positive pred 205件中124件が損失だった。00348でstateful hard gateへ戻すと、tail gateはbest no-op、positive-bias gateはbest悪化。00349でsoft penalty化してもbestはno-op、強いtail_prob penaltyは悪化。00350でover-gatingを分解し、tail probabilityはcontext-specific risk priorとして有用だがglobal gateではなく、harmful/residual系はwinner damageが大きいと確認。00351でcontext-specific abstention confidenceを試したが、market dedup後はdefault confident context 0、min4ではwinner over-gating。00352でsupport countを追加し、`horizon,side` + support2 + positive-biasをstateful replay候補にした。00353 hard gateと00354 soft penaltyはいずれも候補riskは検出するが最終採用は不変。00355でこれらのpenalized rowsは全件既存 `tail_prob_ceiling` に落とされていたと判明。00356でtail ceiling通過後の残存failureを見たが、global residual hard gateは勝ち候補削除が大きい。00357でactual selected lossは `fresh2024_validation 2024-08 long 720m` のsingletonに狭まり、00358で `singleton_720_pred_pnl_lt2` をstateful replayへ戻した。known lossは止まるが既存EV2 no-gate bestと同点。00359で残targetを監査し、EV2 bestは候補0、external oracleはmodel-used 0、2024-11/refit2025-03は候補0。00360で2024-11はavailable row-scope不足、refit2025-03はpost-00318 feed上の候補0と切り分けた。00362でrefit2025-03はraw rows/candidatesがあり、support-sufficient negative monthのrepair-target objective mismatchと確認。00363で既存trade repair診断を作り、現predicted fixed-horizon argmaxはreject。00364でloss-risk priorを追加し、target loss recallだけではwinner damageを抑えられないと確認した。00365でhorizon abstention診断を追加し、`lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` をstateful replay candidateにした。標準policyはNoTrade。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
@@ -168,6 +169,7 @@
 119. `00376_2026-07-03_entry_ev_surface_artifact_readiness.md`
 120. `00377_2026-07-03_entry_ev_aligned_current_negative_surface.md`
 121. `00378_2026-07-03_entry_ev_second_aligned_surface_support_gap.md`
+122. `00379_2026-07-03_entry_ev_cross_family_prior_calibration.md`
 
 component targetの流れを読む:
 
@@ -214,10 +216,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00378 Entry EV Second Aligned Surface Support Gap
+Report: 00379 Entry EV Cross-Family Prior Calibration
 Status: accepted infrastructure / standard NoTrade
-Question: 別のschema-ready artifactでもcurrent-negative repairが複数targetへ広がるか
-Best evidence: 5 target評価で `ev_ge5` + `prior_actual_mean` はloss selected 4 / winner 0 / precision 1.0だが、mean after PnLは -0.3246。hgb2024 2024-03はsupported candidate 0で -17.6936が残る。
-Decision: aligned surfaceは採用。early-month prior不足をfirst-class blockerにする。
-Next: same-family priorがないearly-month向けreplacement calibration laneを作る
+Question: all-family priorでearly-month replacement support不足を解けるか
+Best evidence: hgb2024 2024-03はprior rows 0 -> 276、supported candidates 0 -> 1211。ただし all-family prior summaryはside_score mean -5.5427、prior_actual_mean -13.1994。worst lossはside_scoreで +10.5674 へ救えるが raw/bias系は -43.5812 へ悪化。
+Decision: cross-family priorはdiagnostic support sourceとして採用。direct policy採用はreject。
+Next: target-level outcome categoryとshrunk cross-family priorを診断する
 ```

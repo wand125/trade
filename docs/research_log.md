@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 22:04 Entry EV cross-family prior calibration
+
+作業:
+
+- 00378のearly-month prior不足に対し、replacement calibration診断へ `--prior-scope all_families_prior_months` と `--require-supported-candidates` を追加した。
+- 00378 config / target setで、same-family priorとall-family priorを比較した。
+- report: `docs/reports/00379_2026-07-03_entry_ev_cross_family_prior_calibration.md`
+
+結果:
+
+- same-family priorでは `hgb2024_0306 2024-03` のprior rows 0 / supported candidates 0。
+- all-family priorでは同targetにprior rows 276 / supported candidates 1211ができた。
+- ただしall-family priorの全体summaryは不安定で、`side_score` でもmean month PnL `-5.5427`、`prior_actual_mean` は `-13.1994`。
+- `hgb2024_0306 2024-03` のworst loss `-20.1840` だけなら、`side_score` はcandidate actual `+8.0770` を選び月PnL `+10.5674` まで改善できる。
+- 一方、raw/bias/conservative系は同じ悪い720m candidateを選び月PnL `-43.5812` へ悪化。`prior_actual_mean` も losing long 60m を選び `-0.8696` 止まり。
+
+判断:
+
+- cross-family priorはsupport不足を解くが、replacement calibrationとしては安全ではない。
+- direct all-family prior採用はreject。
+- 次はtarget-level outcome categoryと、720m overestimateを抑えるshrunk cross-family priorを診断する。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_replacement_calibration_diagnostics.py tests/test_entry_ev_support_sufficient_replacement_calibration_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_replacement_calibration_diagnostics`: OK
+- 00379 same-family supported calibration run: OK
+- 00379 all-family supported calibration run: OK
+
 ### 21:54 Entry EV second aligned surface support gap
 
 作業:

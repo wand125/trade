@@ -66,6 +66,7 @@ SCORE_COLUMNS = {
     "conservative": "calibrated_conservative_pred_pnl",
     "prior_actual_mean": "calibrated_prior_actual_mean",
 }
+PRIOR_SCOPES = {"same_family", "all_families_prior_months"}
 
 
 def parse_csv(value: str) -> list[str]:
@@ -352,6 +353,45 @@ def choose_top_candidate(
     ).iloc[0]
 
 
+def supported_candidates(
+    pool: pd.DataFrame,
+    *,
+    min_prior_count: int,
+    require_supported: bool,
+) -> pd.DataFrame:
+    if pool.empty or not require_supported:
+        return pool.copy()
+    supported = numeric_series(pool, "prior_count", default=0.0).ge(float(min_prior_count))
+    supported &= ~bool_series(pool, "calibration_context_insufficient", default=False)
+    return pool.loc[supported.fillna(False)].copy()
+
+
+def prior_rows_for_scope(
+    prior_cache: dict[str, pd.DataFrame],
+    *,
+    family: str,
+    month: str,
+    prior_scope: str,
+) -> pd.DataFrame:
+    if prior_scope not in PRIOR_SCOPES:
+        raise ValueError(f"unknown prior scope: {prior_scope}")
+    families = [family] if prior_scope == "same_family" else sorted(prior_cache)
+    frames: list[pd.DataFrame] = []
+    for source_family in families:
+        frame = prior_cache.get(source_family, pd.DataFrame()).copy()
+        if frame.empty:
+            continue
+        keep = frame[frame["month"].astype(str).lt(str(month))].copy()
+        keep = keep[keep["candidate_stage"].astype(str).ne("non_candidate")].copy()
+        if keep.empty:
+            continue
+        keep["prior_source_family"] = str(source_family)
+        frames.append(keep)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True, sort=False)
+
+
 def choice_row(
     *,
     month_pnl: float,
@@ -487,6 +527,9 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         for family, path in dict(config["family_predictions"]).items()
     }
     context_specs = parse_context_specs(args.context_specs)
+    prior_scope = str(args.prior_scope)
+    if prior_scope not in PRIOR_SCOPES:
+        raise ValueError(f"unknown prior scope: {prior_scope}")
 
     all_candidate_frames: list[pd.DataFrame] = []
     choice_rows: list[dict[str, Any]] = []
@@ -515,19 +558,28 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
             month=month,
             config=config,
         )
-        if family not in prior_cache:
-            prior_cache[family] = load_family_side_rows(
-                prediction_path=prediction_path,
-                family=family,
+        prior_families = [family] if prior_scope == "same_family" else sorted(family_predictions)
+        for prior_family in prior_families:
+            if prior_family in prior_cache:
+                continue
+            prior_path = family_predictions.get(prior_family)
+            if prior_path is None:
+                continue
+            prior_cache[prior_family] = load_family_side_rows(
+                prediction_path=prior_path,
+                family=prior_family,
                 config=config,
             )
-        prior_rows = prior_cache[family][prior_cache[family]["month"].astype(str).lt(month)].copy()
-        prior_rows = prior_rows[
-            prior_rows["candidate_stage"].astype(str).ne("non_candidate")
-        ].copy()
+        prior_rows = prior_rows_for_scope(
+            prior_cache,
+            family=family,
+            month=month,
+            prior_scope=prior_scope,
+        )
         month_pnl = float(numeric_series(current_target, "adjusted_pnl", default=0.0).sum())
         losses = current_target[bool_series(current_target, "is_loss_trade")].copy()
         target_candidate_count = 0
+        target_supported_candidate_count = 0
         for _, loss_trade in losses.iterrows():
             pool = candidate_pool_for_loss(
                 side_rows=target_side_rows,
@@ -542,6 +594,12 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
                 min_prior_count=args.min_prior_count,
             )
             target_candidate_count += len(pool)
+            supported_pool = supported_candidates(
+                pool,
+                min_prior_count=args.min_prior_count,
+                require_supported=bool(args.require_supported_candidates),
+            )
+            target_supported_candidate_count += len(supported_pool)
             if not pool.empty:
                 all_candidate_frames.append(pool)
             for score_mode in SCORE_COLUMNS:
@@ -550,7 +608,7 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
                         month_pnl=month_pnl,
                         loss_trade=loss_trade,
                         score_mode=score_mode,
-                        candidate=choose_top_candidate(pool, score_mode=score_mode),
+                        candidate=choose_top_candidate(supported_pool, score_mode=score_mode),
                     )
                 )
         target_rows.append(
@@ -561,9 +619,13 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
                 "month_pnl": month_pnl,
                 "loss_trade_count": int(len(losses)),
                 "candidate_rows": int(target_candidate_count),
+                "supported_candidate_rows": int(target_supported_candidate_count),
                 "prior_rows": int(len(prior_rows)),
                 "prior_month_count": int(prior_rows["month"].astype(str).nunique())
                 if len(prior_rows)
+                else 0,
+                "prior_family_count": int(prior_rows["prior_source_family"].astype(str).nunique())
+                if len(prior_rows) and "prior_source_family" in prior_rows.columns
                 else 0,
             }
         )
@@ -599,6 +661,8 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
         "targets": parse_targets(args.targets),
         "context_specs": context_specs,
         "min_prior_count": args.min_prior_count,
+        "prior_scope": prior_scope,
+        "require_supported_candidates": bool(args.require_supported_candidates),
         "include_non_candidate_top_score": args.include_non_candidate_top_score,
         "score_modes": SCORE_COLUMNS,
         "note": (
@@ -623,6 +687,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--targets", default=DEFAULT_TARGETS)
     parser.add_argument("--context-specs", default=DEFAULT_CONTEXT_SPECS)
     parser.add_argument("--min-prior-count", type=int, default=20)
+    parser.add_argument(
+        "--prior-scope",
+        choices=sorted(PRIOR_SCOPES),
+        default="same_family",
+        help="Use same-family prior rows or all family rows strictly before the target month.",
+    )
+    parser.add_argument(
+        "--require-supported-candidates",
+        action="store_true",
+        help="Only select replacement candidates whose calibration context meets --min-prior-count.",
+    )
     parser.add_argument("--output-root", type=Path, default=ROOT / "data/reports/backtests")
     parser.add_argument(
         "--run-label",
