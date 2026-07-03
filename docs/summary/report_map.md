@@ -1,6 +1,6 @@
 # Report Map
 
-最終更新: 2026-07-03 08:51 JST
+最終更新: 2026-07-03 09:06 JST
 
 `docs/reports/` を個別に読む前の研究地図。番号はレポート本文の `日時:` 順に由来する。
 
@@ -17,13 +17,13 @@
 | `00208`..`00224` | Entry EV admission | raw/calibrated EV、rank、quantile、positive floor、hold-cap sensitivityを検証。NoTrade-first selectorは通らない。 |
 | `00225`..`00239` | Executable EV / side balance / composite | executable EV、dense capture、side balance、composite gateを検証。hard gateでは候補が生まれずcomponent targetへ分解。 |
 | `00240`..`00257` | Component targets / direction-exit | EV overestimate、forced-exit、direction/exit residualを分解。fixed 2025で有望なsignalは出るがvalidation再現が不足。 |
-| `00258`..`00338` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318から00322で反対側near-missをexit target化し、広いcandidate universeのhorizon viabilityを試した。00323でsupport repairへ接続するとcombined `+362.7000` まで伸びたがstandard blockersが残る。00325 actual-floor upper-boundはcombined `+371.6610`。00326でrow x horizon化とhorizon penalty `0.25` を試すと、actual-floorなしでもfresh2024 2024-08を60mへ切り替え、combined `+374.6110` まで伸びた。00327でsupport-repair-only calibrationはprior不足で失敗。00329でbroad priorをhorizon-choice ranker featureへ入れ、低複雑度版はcombined `+403.2680` まで伸びた。00335でactual PnL tie-breaker leakを修正し、leak-free best combinedは `+400.1440` に下方修正。00336でlistwise teacher化を診断したが、EV -2のfresh singleton negativeはreranking不能。00337/00338でsingleton abstentionを広げ、available-onlyでは条件付きruleが同じ負けsingletonだけをpositive damage 0でflagしたが、unique負例は1件だけ。scalar penalty / simple switch rule / simple reranker / direct feature selector / singleton_anyはreject。標準policyはNoTrade。 |
+| `00258`..`00339` | Exit-regret / replacement guard / executable EV insight | exit-regret selectorとreplacement guard replayが改善。ただしadmission gateではNoTrade。00278で q95 + raw `loss_exit30_cd15` が combined total `+118.6900` / month min `-6.8324` まで改善。00307でshort entry-block replacementを未選択entry候補feedへ戻し、raw replacementは `+126.8118`。00308でreplacement pathへhold-extensionを統合し、require-model-used guardでfallback fixed720 tailを防いだ。00310でentry-time observableなposition-quality proxy `long_range_normal_ny_fixed60_pred_gt0` が total `+337.6010` / month min `-0.7200` まで改善したが、00311で非refit holdout発火0件と確認。00314でfixed60 uncertainty soft marginのfamily-aware w5がposition-quality overlay後 `+339.2910` / month min `-0.7200` までdiagnostic bestを更新。00317でstandard admission repair targetを計算し、side/support修復に `8` extra tradesが必要と確認。00318から00322で反対側near-missをexit target化し、広いcandidate universeのhorizon viabilityを試した。00323でsupport repairへ接続するとcombined `+362.7000` まで伸びたがstandard blockersが残る。00325 actual-floor upper-boundはcombined `+371.6610`。00326でrow x horizon化とhorizon penalty `0.25` を試すと、actual-floorなしでもfresh2024 2024-08を60mへ切り替え、combined `+374.6110` まで伸びた。00327でsupport-repair-only calibrationはprior不足で失敗。00329でbroad priorをhorizon-choice ranker featureへ入れ、低複雑度版はcombined `+403.2680` まで伸びた。00335でactual PnL tie-breaker leakを修正し、leak-free best combinedは `+400.1440` に下方修正。00336でlistwise teacher化を診断したが、EV -2のfresh singleton negativeはreranking不能。00337/00338でsingleton abstentionを広げ、available-onlyでは条件付きruleが同じ負けsingletonだけをpositive damage 0でflagしたが、unique負例は1件だけ。00339でthin-month候補面を見直し、fresh2024 2024-03はoracle positiveがあってもmodel-used 0、fresh2024 2024-11/refit2025 2025-03は候補生成不足と確認。scalar penalty / simple switch rule / simple reranker / direct feature selector / singleton_any / global fallback緩和はreject。標準policyはNoTrade。 |
 
 ## Current Clusters
 
 | Cluster | Key reports | What to remember |
 |---|---|---|
-| Latest decision | `00258`..`00338` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00325ではtarget-aware repair utilityを接続し、actual-floor upper-boundならcombined `+371.6610` まで伸びた。00326ではrow x horizon化とhpen0.25でpred-onlyでもcombined `+374.6110` まで到達した。00329ではpriorをfeatureとしてchronological horizon-choice rankerへ入れ、低複雑度版がcombined `+403.2680` まで伸びた。00335でactual PnL tie-breaker leakを修正し、best combinedはleak-free `+400.1440` に下方修正。00336でteacher化したが、baseline bestのoracle改善は `+5.7600` だけで、EV -2の悪いfresh唯一候補はsingleton negativeのためreranking不能。00337/00338でabstention surfaceを広げたが、independent negative supportはまだ1 unique候補だけ。標準policyはNoTrade。次はsingleton事例を増やし、fresh/thin month候補生成へ進む。 |
+| Latest decision | `00258`..`00339` | q95 + raw `loss_exit30_cd15` dynamic exit cooldownを軸に、short entry-block replacement、require-model-used hold-extension、entry-time position-quality proxyへ進んだ。00314でfixed60 uncertainty soft marginのfamily-aware w5がdiagnostic bestを更新したが、00315のtrade-set deltaでは改善源がrefit2025の少数removed tradeに集中し、added 0 / common_changed 0 と確認。00317のrepair targetでは00314 w5のtotal改善がstandard-admission readinessを改善していないと確認した。00318から00322でnear-miss support候補のexit timing / horizon viabilityを改善し、00323でstateful-compatible support repairへ接続したがstandard gateは未通過。00325ではtarget-aware repair utilityを接続し、actual-floor upper-boundならcombined `+371.6610` まで伸びた。00326ではrow x horizon化とhpen0.25でpred-onlyでもcombined `+374.6110` まで到達した。00329ではpriorをfeatureとしてchronological horizon-choice rankerへ入れ、低複雑度版がcombined `+403.2680` まで伸びた。00335でactual PnL tie-breaker leakを修正し、best combinedはleak-free `+400.1440` に下方修正。00336でteacher化したが、baseline bestのoracle改善は `+5.7600` だけで、EV -2の悪いfresh唯一候補はsingleton negativeのためreranking不能。00337/00338でabstention surfaceを広げたが、independent negative supportはまだ1 unique候補だけ。00339でthin-month候補面を診断し、fresh03はfallback/non-model calibration問題、fresh11/refit03は候補生成不足と確認。標準policyはNoTrade。次はtarget-local confidenceと候補生成へ進む。 |
 | Entry EV selector | `00208`..`00221` | 絶対EVはscale driftに弱く、quantile/rankもrole/month floorを通らない。 |
 | Exit capture | `00222`..`00232` | 720mやexecutable EVは診断上改善するが、direction/context errorが残る。 |
 | Side balance | `00233`..`00239` | side-balance単独では不安定。component targetへ分解。 |
@@ -114,6 +114,7 @@
 79. `00336_2026-07-03_entry_ev_support_repair_listwise_teacher.md`
 80. `00337_2026-07-03_entry_ev_support_repair_singleton_abstention.md`
 81. `00338_2026-07-03_entry_ev_support_repair_singleton_surface.md`
+82. `00339_2026-07-03_entry_ev_support_repair_thin_month_candidates.md`
 
 component targetの流れを読む:
 
@@ -160,10 +161,10 @@ entry admissionの流れを読む:
 ## Summary Card Template
 
 ```text
-Report: 00338 Entry EV Support Repair Singleton Surface
+Report: 00339 Entry EV Support Repair Thin Month Candidates
 Status: accepted infrastructure / standard NoTrade
-Question: singleton abstention signalは複数scenario surfaceでも残るか
-Best evidence: available-only 36 scenariosでは条件付きruleが24 scenario-rowsをflagし、全て同じfresh2024 2024-08 long -29.1360でpositive damage 0。ただしunique負例は1件のみ。
+Question: remaining thin/negative monthsに代替候補は存在するか
+Best evidence: stateful-onlyではEV2 target 4件に候補0。00324外部候補を混ぜるとfresh2024 2024-03 longにoracle positive 18本 / +90.5230があるがmodel-used 0で、実行可能policy evidenceではない。
 Decision: 標準policyはNoTrade
-Next: singleton事例を追加生成し、fresh/thin month代替候補生成を追加
+Next: target-local confidenceと候補生成を追加
 ```

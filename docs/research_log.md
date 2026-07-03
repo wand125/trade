@@ -4,6 +4,31 @@
 
 ## 2026-07-03 JST
 
+### 09:06 Entry EV support repair thin-month candidate diagnostics
+
+作業:
+
+- 00338の次アクションとして、leak-free support repair後に残る負け月/薄い月へ代替候補が存在するかを診断した。
+- `scripts/experiments/entry_ev_support_repair_thin_month_candidate_diagnostics.py` を追加し、00335 stateful候補面と00324 external row x horizon候補を同じschemaへ正規化した。
+- report: `docs/reports/00339_2026-07-03_entry_ev_support_repair_thin_month_candidates.md`
+
+結果:
+
+- stateful-onlyではEV2のtarget 4件に候補0。EV -2では `fresh2024 2024-08` だけ13 unique候補があり、他targetは候補0。
+- 00324 external候補を混ぜると `fresh2024 2024-03 long` に51 unique / oracle positive 18 / positive sum `+90.5230` があるが、model-used 0、strict/relaxed guarded pass 0。
+- `fresh2024 2024-08` はmodel-used候補があるが、top predicted PnLは720m selected `-29.1360`。00338のsingleton guardを入れると60/240mの小幅positive候補へ戻る。
+
+判断:
+
+- thin-month candidate diagnosticsはaccepted infrastructure。
+- remaining thin monthsは単純rerankingでは解けない。`fresh2024 2024-03` はfallback/non-model calibration問題、`fresh2024 2024-11` / `refit2025 2025-03` は候補生成不足。
+- global fallback採用やEV threshold緩和はreject。標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_support_repair_thin_month_candidate_diagnostics`: OK
+- stateful-only / external horizon mixed diagnostics: OK
+
 ### 08:03 Entry EV support repair listwise cluster diagnostics
 
 作業:

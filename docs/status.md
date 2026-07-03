@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 08:51 JST
+最終更新: 2026-07-03 09:06 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support repair thin-month candidate diagnosticsを追加した。00335 leak-free support repair後に残る負け月/薄い月について、00335 stateful候補面と00324 external row x horizon候補を同じschemaへ正規化し、代替候補の存在と観測可能gateを診断した。stateful-onlyではEV2のtarget 4件に候補0、EV -2では `fresh2024 2024-08` だけ13 unique候補があり他targetは候補0。00324 external候補を混ぜると `fresh2024 2024-03 long` に51 unique / oracle positive 18 / positive sum `+90.5230` / best `+13.4900` が見えるが、model-used 0、strict/relaxed guarded pass 0で、実行可能policy evidenceではない。`fresh2024 2024-08` はmodel-used候補があるがtop predicted PnLは720m selected `-29.1360` で、00338のsingleton guardにより60/240m小幅positive候補へ戻る。判断: thin-month candidate diagnosticsはaccepted infrastructure、remaining thin monthsは単純rerankingでは解けない。global fallback採用やEV threshold緩和はreject、標準policyはNoTrade。詳細は `docs/reports/00339_2026-07-03_entry_ev_support_repair_thin_month_candidates.md`。
 
 Entry EV support repair singleton surface diagnosticsを追加した。00337のsingleton abstentionを00335 leak-free replayの複数scenarioへ広げ、`selected + quota_full/overlap` candidate universeからsingleton groupをscenario-weighted / unique dedupの両方で集計した。all scopesは72 scenarios / 2218 candidate rows / 79 singleton rows / 7 unique、available-onlyは36 scenarios / 2047 rows / 46 singleton rows / 4 unique。available-onlyではprior mean/tail/risk、pred PnL、pred fixed-best 60m ruleがいずれも `fresh2024_validation 2024-08 long -29.1360` だけをflagし、scenario-weighted 24 rows / unique 1 / positive damage 0。ただしunique負例は1件だけなので標準policyにはしない。all scopesではprior系がpositive 720m singletonもflagするため、hard policy化は危険。判断: singleton surface diagnosticsはaccepted infrastructure、`singleton_720_pred_pnl_lt2` は次のdiagnostic guard候補、標準policyはNoTrade。詳細は `docs/reports/00338_2026-07-03_entry_ev_support_repair_singleton_surface.md`。
 
