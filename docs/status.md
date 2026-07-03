@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 10:06 JST
+最終更新: 2026-07-03 10:17 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV horizon reliability diagnosticsを追加した。00343のreliability-gated score同点/悪化を受け、baseline `pnl` とのhorizon選択差分、悪化case、horizon/head別prediction error、missing target coverageをCSV化する `entry_ev_horizon_reliability_diagnostics.py` を追加した。target subsetでは `pnl_delta_tail_reliability_gated` がavailable candidates合計でplain `pnl` 比 `-131.8792`、`pnl_tail_reliability_gated` が `-87.8104`。all rowsでもそれぞれ `-137.6916`, `-93.6228` と悪化。最悪caseは `fresh2024 2024-08 long` の `60m +9.4600 -> 240m -43.9404` で、positive reliabilityが実行PnL上の正しいhorizonを保証しないと確認した。判断: horizon reliability diagnosticsはaccepted infrastructure、reliabilityはdirect scoreではなくhead selection / abstention / confidence reportへ回す、標準policyはNoTrade。詳細は `docs/reports/00344_2026-07-03_entry_ev_horizon_reliability_diagnostics.md`。
 
 Entry EV prior/OOB reliability horizon choiceを追加した。00342でtrain support count gateだけでは粗いと分かったため、対象月より前のprediction-vs-actual実績から `delta` / `beats60` / `tail` headのreliabilityを作り、prediction artifactsへhorizon別reliability列を出すようにした。full replayでは `pnl_tail_reliability_gated` と `pnl_delta_tail_reliability_gated` がplain `pnl` と同じ5 tradesを選び、combined `+400.1440` で同点。`pnl_delta_tail` の `+389.5310` よりは良いが、新しい優位性ではなく悪いdelta/tail補正を無効化した結果。target-levelでは `pnl_delta_tail_reliability_gated` が2024-08を `-46.3536 -> -99.7540`、2025-07を `-185.5712 -> -213.0308` に悪化させた。判断: prior/OOB head reliability columnsはaccepted infrastructure、direct score multiplierとしてのreliability scoreはreject、標準policyはNoTrade。詳細は `docs/reports/00343_2026-07-03_entry_ev_prior_oob_reliability_horizon_choice.md`。
 

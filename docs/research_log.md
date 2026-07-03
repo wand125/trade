@@ -4,6 +4,33 @@
 
 ## 2026-07-03 JST
 
+### 10:17 Entry EV horizon reliability diagnostics
+
+作業:
+
+- 00343の次アクションとして、reliabilityをdirect score multiplierではなく、score modeごとのhorizon選択差分とhead errorとして診断するスクリプトを追加した。
+- `scripts/experiments/entry_ev_horizon_reliability_diagnostics.py` を追加し、baseline `pnl` との選択差分、悪化case、horizon/head別prediction error、missing target coverageをCSV化できるようにした。
+- target subsetとall rowsの両方で00343 scored examplesへ適用した。
+- report: `docs/reports/00344_2026-07-03_entry_ev_horizon_reliability_diagnostics.md`
+
+結果:
+
+- target subset available candidatesでは、`pnl_delta_tail_reliability_gated` がplain `pnl` に対して `-131.8792`、`pnl_tail_reliability_gated` が `-87.8104` 悪化。
+- all rowsでも `pnl_delta_tail_reliability_gated` は `-137.6916`、`pnl_tail_reliability_gated` は `-93.6228` 悪化。
+- 最悪caseは `fresh2024 2024-08 long` の `60m +9.4600 -> 240m -43.9404` で、beats60 reliability `+0.5786` とdelta reliability `+0.3910` が悪いhorizon switchを後押しした。
+
+判断:
+
+- horizon reliability diagnosticsはaccepted infrastructure。
+- positive reliabilityを実行PnL上の正しいhorizon選択と同一視しない。
+- reliabilityはdirect scoreではなく、head selection / abstention / confidence report / candidate generation priorityへ回す。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_horizon_reliability_diagnostics`: OK
+- 00344 target subset / all rows diagnostics: OK
+
 ### 10:06 Entry EV prior/OOB reliability horizon choice
 
 作業:
