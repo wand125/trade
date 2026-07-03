@@ -5,14 +5,51 @@ import unittest
 import pandas as pd
 
 from scripts.experiments.entry_ev_support_sufficient_selector_surface_diagnostics import (
+    build_target_inventory,
     candidate_support_mask,
     choose_supported_candidate,
     choose_trade_by_risk,
+    resolve_target_specs,
     selector_choice_row,
 )
 
 
 class EntryEvSupportSufficientSelectorSurfaceDiagnosticsTest(unittest.TestCase):
+    def test_auto_target_inventory_selects_only_support_sufficient_negative_months(self) -> None:
+        current = pd.DataFrame(
+            {
+                "role": ["r1", "r1", "r2", "r3"],
+                "family": ["f1", "f1", "f2", "f3"],
+                "month": ["2025-01", "2025-01", "2025-02", "2025-03"],
+                "direction": ["long", "short", "short", "long"],
+                "adjusted_pnl": [-2.0, 1.0, -1.0, -3.0],
+            }
+        )
+        repair_targets = pd.DataFrame(
+            {
+                "role": ["r1", "r2"],
+                "month": ["2025-01", "2025-02"],
+                "variant": ["v", "v"],
+                "entry_block_rule": ["e", "e"],
+                "family": ["f1", "f2"],
+                "extra_long_needed": [0, 1],
+                "extra_short_needed": [0, 0],
+            }
+        )
+
+        inventory = build_target_inventory(current=current, repair_targets=repair_targets)
+        specs, resolved_inventory = resolve_target_specs(
+            "auto_support_sufficient_negative",
+            current=current,
+            repair_targets=repair_targets,
+        )
+
+        self.assertEqual(len(inventory), 3)
+        self.assertEqual(specs, [("r1", "2025-01", "long")])
+        self.assertEqual(len(resolved_inventory), 3)
+        support_limited = inventory[inventory["role"].eq("r2")].iloc[0]
+        self.assertTrue(bool(support_limited["support_limited_negative_month"]))
+
     def test_candidate_support_mask_requires_count_months_and_actual_floor(self) -> None:
         pool = pd.DataFrame(
             {

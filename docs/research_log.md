@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 16:42 Entry EV support-sufficient selector surface auto targets
+
+作業:
+
+- 00368のselector surfaceを手動target指定から外すため、`entry_ev_support_sufficient_selector_surface_diagnostics.py` に `--targets auto_support_sufficient_negative` を追加した。
+- current trades / repair targetsからtarget inventoryを作り、support-sufficient negative monthとsupport-limited negative monthを分けて出力するようにした。
+- report: `docs/reports/00369_2026-07-03_entry_ev_support_sufficient_selector_surface_auto_targets.md`
+
+結果:
+
+- 現00314/00318 branchのnegative monthは4件。
+- support-sufficient negative monthは `refit2025_validation 2025-03` の1件だけ。
+- `fresh2024 2024-03`, `fresh2024 2024-11`, `hybrid2025_0912 2025-11` は `extra_long_needed` または `extra_short_needed` が1のsupport-limited negative month。
+- auto runのsurface結果は00368と同じ。min prior month2 / prior count>=50 / prior actual mean>=0では、`side_gap_ge0p15_lossfirst_lt0p30` + `bias_corrected` がmonth PnL `+22.4970`、`prior_actual_mean` が `+19.7740`。
+
+判断:
+
+- auto target inventory / auto runはaccepted infrastructure。
+- 現branchのsupport-sufficient selector surfaceはtarget count 1なので、標準policy evidenceにはならない。
+- 複数targetで評価するには、他branch/variantでsupport-sufficient negative monthを探すか、support-limited laneを別目的関数として分ける。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_selector_surface_diagnostics.py tests/test_entry_ev_support_sufficient_selector_surface_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_selector_surface_diagnostics`: OK
+- 00369 auto support-sufficient selector surface run: OK
+
 ### 16:33 Entry EV support-sufficient selector surface
 
 作業:

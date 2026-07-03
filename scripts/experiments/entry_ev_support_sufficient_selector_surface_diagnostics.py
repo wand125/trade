@@ -70,6 +70,7 @@ DEFAULT_RISK_SELECTORS = (
     "oracle:worst_loss"
 )
 DEFAULT_SCORE_MODES = "prior_actual_mean,bias_corrected,raw_pred_fixed,side_score"
+AUTO_TARGET_VALUES = {"auto", "auto_support_sufficient_negative"}
 
 
 def parse_int_grid(value: str) -> list[int]:
@@ -117,6 +118,90 @@ def parse_score_modes(value: str) -> list[str]:
 
 def timestamp_key(values: pd.Series) -> pd.Series:
     return pd.to_datetime(values, utc=True, errors="coerce").dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def infer_target_side(trades: pd.DataFrame) -> str:
+    if trades.empty or "direction" not in trades.columns:
+        return "both"
+    frame = trades.copy()
+    pnl = numeric_series(frame, "adjusted_pnl", default=0.0)
+    losses = frame.loc[pnl.lt(0.0)].copy()
+    if losses.empty:
+        counts = frame["direction"].astype(str).value_counts()
+        return str(counts.index[0]) if len(counts) else "both"
+    losses["_loss_abs"] = -numeric_series(losses, "adjusted_pnl", default=0.0)
+    by_side = losses.groupby(losses["direction"].astype(str))["_loss_abs"].sum()
+    return str(by_side.sort_values(ascending=False).index[0]) if len(by_side) else "both"
+
+
+def build_target_inventory(
+    *,
+    current: pd.DataFrame,
+    repair_targets: pd.DataFrame,
+) -> pd.DataFrame:
+    if current.empty:
+        return pd.DataFrame()
+    rows: list[dict[str, Any]] = []
+    current_frame = current.copy()
+    current_frame["month"] = current_frame["month"].astype(str).str.slice(0, 7)
+    for (role, family, month), group in current_frame.groupby(
+        ["role", "family", "month"],
+        dropna=False,
+    ):
+        repair_row = select_repair_row(repair_targets, role=str(role), month=str(month))
+        pnl = numeric_series(group, "adjusted_pnl", default=0.0)
+        extra_long = int(repair_row.get("extra_long_needed", 0)) if repair_row is not None else 0
+        extra_short = int(repair_row.get("extra_short_needed", 0)) if repair_row is not None else 0
+        rows.append(
+            {
+                "role": str(role),
+                "family": str(family),
+                "month": str(month),
+                "target_side": infer_target_side(group),
+                "month_pnl": float(pnl.sum()),
+                "trade_count": int(len(group)),
+                "loss_trade_count": int(pnl.lt(0.0).sum()),
+                "long_trade_count": int(group["direction"].astype(str).eq("long").sum())
+                if "direction" in group.columns
+                else 0,
+                "short_trade_count": int(group["direction"].astype(str).eq("short").sum())
+                if "direction" in group.columns
+                else 0,
+                "repair_target_present": bool(repair_row is not None),
+                "extra_long_needed": extra_long,
+                "extra_short_needed": extra_short,
+                "extra_trades_needed": extra_long + extra_short,
+                "support_sufficient_negative_month": bool(
+                    pnl.sum() < 0.0
+                    and repair_row is not None
+                    and extra_long == 0
+                    and extra_short == 0
+                ),
+                "support_limited_negative_month": bool(
+                    pnl.sum() < 0.0
+                    and repair_row is not None
+                    and (extra_long > 0 or extra_short > 0)
+                ),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["month_pnl", "role", "month"]).reset_index(drop=True)
+
+
+def resolve_target_specs(
+    targets: str,
+    *,
+    current: pd.DataFrame,
+    repair_targets: pd.DataFrame,
+) -> tuple[list[tuple[str, str, str]], pd.DataFrame]:
+    inventory = build_target_inventory(current=current, repair_targets=repair_targets)
+    if str(targets).strip() not in AUTO_TARGET_VALUES:
+        return parse_targets(targets), inventory
+    selected = inventory[bool_series(inventory, "support_sufficient_negative_month")].copy()
+    specs = [
+        (str(row["role"]), str(row["month"]), str(row["target_side"]))
+        for _, row in selected.iterrows()
+    ]
+    return specs, inventory
 
 
 def feature_score(frame: pd.DataFrame, selector: str) -> pd.Series:
@@ -578,6 +663,11 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     candidate_min_prior_counts = parse_int_grid(args.candidate_min_prior_counts)
     candidate_min_prior_month_counts = parse_int_grid(args.candidate_min_prior_month_counts)
     candidate_min_prior_actual_means = parse_float_grid(args.candidate_min_prior_actual_means)
+    target_specs, target_inventory = resolve_target_specs(
+        args.targets,
+        current=current,
+        repair_targets=repair_targets,
+    )
 
     choice_rows: list[dict[str, Any]] = []
     target_rows: list[dict[str, Any]] = []
@@ -586,7 +676,7 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     candidate_frames: list[pd.DataFrame] = []
     prior_cache: dict[str, pd.DataFrame] = {}
 
-    for role, month, target_side in parse_targets(args.targets):
+    for role, month, target_side in target_specs:
         family = role_to_family(role)
         repair_row = select_repair_row(repair_targets, role=role, month=month)
         if repair_row is not None:
@@ -756,12 +846,19 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
     choices.to_csv(run_dir / "support_sufficient_selector_surface_choices.csv", index=False)
     summary.to_csv(run_dir / "support_sufficient_selector_surface_summary.csv", index=False)
     targets.to_csv(run_dir / "support_sufficient_selector_surface_targets.csv", index=False)
+    target_inventory.to_csv(
+        run_dir / "support_sufficient_selector_surface_target_inventory.csv",
+        index=False,
+    )
     risk_trades.to_csv(run_dir / "support_sufficient_selector_surface_risk_trades.csv", index=False)
     risk_hits_out.to_csv(run_dir / "support_sufficient_selector_surface_risk_hits.csv", index=False)
     candidates.to_csv(run_dir / "support_sufficient_selector_surface_candidates.csv", index=False)
     meta = {
         "config": config_path,
-        "targets": parse_targets(args.targets),
+        "targets_arg": args.targets,
+        "targets": target_specs,
+        "target_inventory_rows": int(len(target_inventory)),
+        "auto_target_values": sorted(AUTO_TARGET_VALUES),
         "risk_selectors": risk_selectors,
         "score_modes": score_modes,
         "replacement_context_specs": replacement_context_specs,
@@ -784,6 +881,24 @@ def run_diagnostics(args: argparse.Namespace) -> Path:
 
     print("Support-sufficient selector surface summary:")
     print(summary.head(int(args.print_rows)).to_string(index=False))
+    if not target_inventory.empty:
+        print("\nTarget inventory:")
+        print(
+            target_inventory[
+                [
+                    "role",
+                    "family",
+                    "month",
+                    "month_pnl",
+                    "trade_count",
+                    "loss_trade_count",
+                    "extra_long_needed",
+                    "extra_short_needed",
+                    "support_sufficient_negative_month",
+                    "support_limited_negative_month",
+                ]
+            ].to_string(index=False)
+        )
     print(f"artifacts: {run_dir}")
     return run_dir
 
