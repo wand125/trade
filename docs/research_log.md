@@ -4,6 +4,33 @@
 
 ## 2026-07-03 JST
 
+### 11:04 Entry EV positive predicted PnL failure diagnostics
+
+作業:
+
+- 00346で `ranker_pred_pnl < 0` vetoがbest replayを改善しなかったため、positive predicted PnL failureの候補面診断を追加した。
+- `scripts/experiments/entry_ev_positive_pnl_failure_diagnostics.py` を追加し、00346の `ranker_replay_candidates_*.csv` 8本を横断して、tail / harmful / prior / residual / reliability条件別にpositive-pred lossを集計した。
+- report: `docs/reports/00347_2026-07-03_entry_ev_positive_pnl_failure_diagnostics.md`
+
+結果:
+
+- market candidate dedupではpositive predicted PnL 205件中124件が実損失、合計PnL `-1104.5216`。candidate-key dedupでも1623件中981件が実損失、合計 `-8781.2836`。
+- `positive_bias_and_tail_miss_ge_0p10` はmarket dedupで109件flag、loss precision `0.7706`、recall `0.6774`、flagged PnL `-1044.5162`。勝ち候補25件 / `+124.2130` も削る。
+- `tail_prob_ge_0p30` は86件flag、loss precision `0.7209`、recall `0.5000`、flagged PnL `-999.3158`。勝ち候補24件 / `+219.3130` も削る。
+- `harmful_prob_ge_0p30` はstandaloneでは弱く、`refit2025 2025-07 short` の大きなpositive-pred lossを拾えない。
+
+判断:
+
+- positive predicted PnL failure diagnosticsはaccepted infrastructure。
+- positive pred PnLをそのまま信用するのは危険。`positive_bias_and_tail_miss_ge_0p10` と `tail_prob_ge_0p30` は次のstateful gate sensitivity候補。
+- ただし現時点ではpointwise candidate-surface診断であり、標準policyではない。標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_positive_pnl_failure_diagnostics.py tests/test_entry_ev_positive_pnl_failure_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_positive_pnl_failure_diagnostics`: OK
+- 00347 positive PnL failure diagnostics: OK
+
 ### 10:49 Entry EV stateful reliability abstention replay
 
 作業:
