@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 21:54 Entry EV second aligned surface support gap
+
+作業:
+
+- 00377の再現確認として、00376上位候補 `short_entryblock_replacement_holdext_block_overlay_s1` へ00318 configを合成した。
+- `loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` / `holdext_long_range_normal_ny` に揃え、current-negative target surfaceとreplacement abstentionを実行した。
+- report: `docs/reports/00378_2026-07-03_entry_ev_second_aligned_surface_support_gap.md`
+
+結果:
+
+- 5 current-negative targetを評価し、support-sufficient negative targetは `hgb2024_0306 2024-03` と `refit2025 2025-03` の2件に増えた。
+- 非oracleでは `feature:ev_ge5_lossfirst_lt0p30` + `prior_actual_mean` がloss selected 4、winner selected 0、precision 1.0で制約通過。
+- ただしmean after PnLは `-0.3246` のまま。改善は `refit2025 2025-03` の `+18.2394` に集中した。
+- `hgb2024_0306 2024-03` はloss tradeを選べたが、supported replacement candidateが0で `-17.6936` のまま残った。
+- oracleでは `hybrid2025_0912 2025-11` も `+21.0100` 改善できるが、非oracle risk selectorは同targetへ届かない。
+
+判断:
+
+- 00378 aligned surfaceはaccepted stress infrastructure。
+- 追加support-sufficient current-negative targetは見つかったが、early-month prior不足でreplacement selectorが動けない。
+- 次はsame-family priorがないearly-month向けのreplacement calibration laneを分ける。
+- 標準policyはNoTrade。
+
+検証:
+
+- 00378 generated config: OK
+- 00378 selector surface run: OK
+- 00378 replacement abstention run: OK
+
 ### 21:47 Entry EV aligned current-negative surface
 
 作業:

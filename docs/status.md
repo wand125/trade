@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 21:47 JST
+最終更新: 2026-07-03 21:54 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV second aligned surface support gapを追加した。00377の再現確認として `short_entryblock_replacement_holdext_block_overlay_s1` へ00318 configを合成し、`loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` / `holdext_long_range_normal_ny` でsurfaceを実行した。5 current-negative targetを評価し、support-sufficient negative targetは `hgb2024_0306 2024-03` と `refit2025 2025-03` の2件に増えた。非oracleの `ev_ge5` + `prior_actual_mean` はloss selected 4、winner selected 0、precision 1.0で制約通過したが、mean after PnLは `-0.3246`。改善は `refit2025 2025-03` の `+18.2394` のみで、`hgb2024_0306 2024-03` はloss tradeを選べてもsupported replacement candidate 0で `-17.6936` が残った。判断: early-month prior不足をfirst-class blockerとして扱う。標準policyはNoTrade。詳細は `docs/reports/00378_2026-07-03_entry_ev_second_aligned_surface_support_gap.md`。
 
 Entry EV aligned current-negative surfaceを追加した。00376の次アクションとして `00310_position_quality_proxy_overlay_s1` の `entry_block_overlay_trades.csv` に00318 configを合成し、`loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` 系にvariant familyを揃えてsurfaceを実行した。5 target指定中4 target評価。非oracleの `side_gap` + `prior_actual_mean` と `ev_ge5` + `prior_actual_mean` はwinner-damage制約を通過し、代表行はloss selected 3、winner selected 0、loss precision 1.0、mean delta `+5.0618`。ただし改善は `refit2025 2025-03` の `+20.2470` に集中し、`fresh2024 2024-03/11` はsupported replacement candidate 0、`hybrid2025_0912 2025-11` はrisk trade選択なしでbaseline維持。判断: aligned surfaceはaccepted stress infrastructureだがmulti-target repair evidenceではない。support-sufficient laneとsupport-limited candidate-generation laneを分ける。標準policyはNoTrade。詳細は `docs/reports/00377_2026-07-03_entry_ev_aligned_current_negative_surface.md`。
 
