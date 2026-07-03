@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 09:30 JST
+最終更新: 2026-07-03 09:49 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV tail support gated horizon choiceを追加した。00341でtail-aware scoreがfresh03を悪化させたため、tail-loss penaltyをtail headのtrain supportが十分な時だけ有効化する `pnl_tail_support_gated` / `pnl_delta_tail_support_gated` を追加し、tail headのtrain months / rowsをprediction artifactsへ出した。`fresh2024_validation 2024-03 long` では `pnl_delta_tail` のavailable choice `-111.0260` に対し、`pnl_delta_tail_support_gated` は `-19.2310`、greedyも `-14.1240 -> -3.5280` に改善。ただしfull replayでは従来の `pnl` combined `+400.1440` が最良で、gated delta-tailは `+389.5310`、gated pnl-tailは `+378.7510`。strict gateは2024-08を悪化させた。判断: tail support metadata/gated score modesはaccepted infrastructure、train support countだけのtail gatingはpolicy候補としてreject、標準policyはNoTrade。詳細は `docs/reports/00342_2026-07-03_entry_ev_tail_support_gated_horizon_choice.md`。
 
 Entry EV horizon confidence support auditを追加した。00340で見えた `fresh2024 2024-03` の240m優位をtarget-local ruleではなく、00329/00341 scored examples上のprediction-only horizon choiceとして監査した。00329 baselineでは `fresh2024_validation 2024-03 long` は51 rows / 17 decisionsが全て `ranker_core_model_used=false` で、60mを17/17選び `-137.9060`。fixed 240mは `+49.0950`。`min_train_months=1` / `min_train_rows=50` に緩めるとmodel-used 17/17となり、`score_pnl` は240mを7/17選んで `-69.6140` まで改善したが、fixed 240mには遠い。tail-aware scoreは `-128.0160` / `-111.0260` へ悪化し、fold summaryでも `tail_loss` AUC `0.2384` と悪い。判断: horizon-confidence support auditはaccepted infrastructure、mintrain1は診断のみ、global early-support relaxationと現headのtail-aware early scoreはreject、標準policyはNoTrade。詳細は `docs/reports/00341_2026-07-03_entry_ev_horizon_confidence_support_audit.md`。
 

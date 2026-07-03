@@ -220,6 +220,37 @@ class EntryEvBroadPriorHorizonChoiceReplayTest(unittest.TestCase):
 
         self.assertGreater(float(score.iloc[0]), float(score.iloc[1]))
 
+    def test_tail_support_gated_score_uses_train_support_before_penalty(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "ranker_pred_pnl": [4.0, 4.0],
+                "ranker_pred_delta_vs_60": [0.0, 0.0],
+                "ranker_pred_beats60_prob": [0.0, 0.0],
+                "ranker_pred_tail_loss_prob": [0.8, 0.8],
+                "ranker_pred_tail_loss_prob_model_used": [True, True],
+                "ranker_pred_tail_loss_prob_train_months": [1, 3],
+                "ranker_pred_tail_loss_prob_train_rows": [100, 300],
+            }
+        )
+
+        score = score_predictions(
+            frame,
+            score_mode="pnl_delta_tail_support_gated",
+            delta_weight=0.25,
+            beats60_weight=0.5,
+            tail_score_weight=2.0,
+            support_score_weight=2.0,
+            harmful_score_weight=5.0,
+            lower_bound_mae_weight=0.25,
+            lower_bound_bias_weight=0.25,
+            lower_bound_tail_miss_weight=5.0,
+            tail_penalty_min_train_months=2,
+            tail_penalty_min_train_rows=200,
+        )
+
+        self.assertAlmostEqual(float(score.iloc[0]), 4.0)
+        self.assertAlmostEqual(float(score.iloc[1]), 2.4)
+
     def test_residual_prior_columns_are_score_only_by_default(self) -> None:
         self.assertNotIn("residual_prior_mae", DEFAULT_HORIZON_NUMERIC_FEATURES)
         self.assertNotIn("residual_prior_tail_miss_rate", DEFAULT_HORIZON_NUMERIC_FEATURES)

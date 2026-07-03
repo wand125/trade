@@ -496,6 +496,8 @@ def score_predictions(
     lower_bound_mae_weight: float,
     lower_bound_bias_weight: float,
     lower_bound_tail_miss_weight: float,
+    tail_penalty_min_train_months: int = 0,
+    tail_penalty_min_train_rows: int = 0,
 ) -> pd.Series:
     pnl = numeric_series(frame, "ranker_pred_pnl", default=0.0)
     if score_mode == "pnl":
@@ -507,6 +509,33 @@ def score_predictions(
         return pnl + delta_weight * delta + beats60_weight * beats60
     if score_mode == "pnl_delta_tail":
         return pnl + delta_weight * delta + beats60_weight * beats60 - tail_score_weight * tail
+    tail_support_ok = bool_series(
+        frame,
+        "ranker_pred_tail_loss_prob_model_used",
+        default=False,
+    )
+    if tail_penalty_min_train_months > 0:
+        tail_support_ok &= numeric_series(
+            frame,
+            "ranker_pred_tail_loss_prob_train_months",
+            default=0.0,
+        ).ge(float(tail_penalty_min_train_months))
+    if tail_penalty_min_train_rows > 0:
+        tail_support_ok &= numeric_series(
+            frame,
+            "ranker_pred_tail_loss_prob_train_rows",
+            default=0.0,
+        ).ge(float(tail_penalty_min_train_rows))
+    support_gated_tail = tail * tail_support_ok.astype(float)
+    if score_mode == "pnl_tail_support_gated":
+        return pnl - tail_score_weight * support_gated_tail
+    if score_mode == "pnl_delta_tail_support_gated":
+        return (
+            pnl
+            + delta_weight * delta
+            + beats60_weight * beats60
+            - tail_score_weight * support_gated_tail
+        )
     harmful = numeric_series(frame, "ranker_pred_harmful_overestimate_prob", default=0.0)
     support_needed = (
         text_series(frame, "side", default="")
@@ -695,6 +724,9 @@ def chronological_ranker_predictions(
     for _, _, pred_column, _ in target_specs:
         scored[pred_column] = 0.0
         scored[f"{pred_column}_model_used"] = False
+        scored[f"{pred_column}_train_months"] = 0
+        scored[f"{pred_column}_train_rows"] = 0
+        scored[f"{pred_column}_train_rows_full"] = 0
 
     for month in eval_months:
         target_period = pd.Period(month, freq="M")
@@ -734,6 +766,9 @@ def chronological_ranker_predictions(
             scored.loc[target.index, f"{pred_column}_model_used"] = bool(
                 fit_info["model_used"]
             )
+            scored.loc[target.index, f"{pred_column}_train_months"] = train_months
+            scored.loc[target.index, f"{pred_column}_train_rows"] = int(len(train))
+            scored.loc[target.index, f"{pred_column}_train_rows_full"] = int(len(train_full))
             actual = (
                 bool_series(target, target_column).astype(float)
                 if model_kind == "classifier"
@@ -869,6 +904,8 @@ def pivot_ranker_predictions(
     lower_bound_mae_weight: float,
     lower_bound_bias_weight: float,
     lower_bound_tail_miss_weight: float,
+    tail_penalty_min_train_months: int = 0,
+    tail_penalty_min_train_rows: int = 0,
 ) -> pd.DataFrame:
     output = normalize_source_rows(base_rows)
     stale_prediction_columns = [
@@ -891,6 +928,8 @@ def pivot_ranker_predictions(
         lower_bound_mae_weight=lower_bound_mae_weight,
         lower_bound_bias_weight=lower_bound_bias_weight,
         lower_bound_tail_miss_weight=lower_bound_tail_miss_weight,
+        tail_penalty_min_train_months=tail_penalty_min_train_months,
+        tail_penalty_min_train_rows=tail_penalty_min_train_rows,
     )
     for horizon in horizons:
         for column, default in {
@@ -900,6 +939,9 @@ def pivot_ranker_predictions(
             "residual_prior_mae": 0.0,
             "residual_prior_overestimate_rate": 0.0,
             "residual_prior_tail_miss_rate": 0.0,
+            "ranker_pred_tail_loss_prob_train_months": 0.0,
+            "ranker_pred_tail_loss_prob_train_rows": 0.0,
+            "ranker_pred_tail_loss_prob_train_rows_full": 0.0,
         }.items():
             if column not in scored.columns:
                 scored[column] = default
@@ -914,6 +956,9 @@ def pivot_ranker_predictions(
                 "ranker_pred_delta_vs_60",
                 "ranker_pred_beats60_prob",
                 "ranker_pred_harmful_overestimate_prob",
+                "ranker_pred_tail_loss_prob_train_months",
+                "ranker_pred_tail_loss_prob_train_rows",
+                "ranker_pred_tail_loss_prob_train_rows_full",
                 "ranker_choice_score",
                 "ranker_core_model_used",
                 "duration_prior_count",
@@ -940,6 +985,13 @@ def pivot_ranker_predictions(
             "ranker_pred_beats60_prob": f"ranker_hv_{horizon}m_pred_beats60_prob",
             "ranker_pred_harmful_overestimate_prob": (
                 f"ranker_hv_{horizon}m_pred_harmful_overestimate_prob"
+            ),
+            "ranker_pred_tail_loss_prob_train_months": (
+                f"ranker_hv_{horizon}m_tail_train_months"
+            ),
+            "ranker_pred_tail_loss_prob_train_rows": f"ranker_hv_{horizon}m_tail_train_rows",
+            "ranker_pred_tail_loss_prob_train_rows_full": (
+                f"ranker_hv_{horizon}m_tail_train_rows_full"
             ),
             "duration_prior_count": f"ranker_hv_{horizon}m_prior_count",
             "duration_prior_months": f"ranker_hv_{horizon}m_prior_months",
@@ -1146,6 +1198,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
             lower_bound_mae_weight=args.lower_bound_mae_weight,
             lower_bound_bias_weight=args.lower_bound_bias_weight,
             lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
+            tail_penalty_min_train_months=args.tail_penalty_min_train_months,
+            tail_penalty_min_train_rows=args.tail_penalty_min_train_rows,
         )
         choice_summary_frames.append(
             summarize_ranker_choices(scored_for_mode, score_mode=score_mode)
@@ -1163,6 +1217,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
             lower_bound_mae_weight=args.lower_bound_mae_weight,
             lower_bound_bias_weight=args.lower_bound_bias_weight,
             lower_bound_tail_miss_weight=args.lower_bound_tail_miss_weight,
+            tail_penalty_min_train_months=args.tail_penalty_min_train_months,
+            tail_penalty_min_train_rows=args.tail_penalty_min_train_rows,
         )
         prediction_path = run_dir / f"ranker_predictions_{score_mode}.csv"
         prediction_rows.to_csv(prediction_path, index=False)
@@ -1285,6 +1341,8 @@ def run_experiment(args: argparse.Namespace) -> Path:
         "lower_bound_mae_weight": args.lower_bound_mae_weight,
         "lower_bound_bias_weight": args.lower_bound_bias_weight,
         "lower_bound_tail_miss_weight": args.lower_bound_tail_miss_weight,
+        "tail_penalty_min_train_months": args.tail_penalty_min_train_months,
+        "tail_penalty_min_train_rows": args.tail_penalty_min_train_rows,
         "prob_thresholds": args.prob_thresholds,
         "ev_thresholds": args.ev_thresholds,
         "tail_prob_thresholds": args.tail_prob_thresholds,
@@ -1376,6 +1434,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lower-bound-mae-weight", type=float, default=0.25)
     parser.add_argument("--lower-bound-bias-weight", type=float, default=0.25)
     parser.add_argument("--lower-bound-tail-miss-weight", type=float, default=5.0)
+    parser.add_argument("--tail-penalty-min-train-months", type=int, default=0)
+    parser.add_argument("--tail-penalty-min-train-rows", type=int, default=0)
     parser.add_argument("--min-train-months", type=int, default=2)
     parser.add_argument("--min-train-rows", type=int, default=200)
     parser.add_argument("--max-train-rows", type=int, default=80000)

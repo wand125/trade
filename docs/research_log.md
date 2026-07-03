@@ -4,6 +4,32 @@
 
 ## 2026-07-03 JST
 
+### 09:49 Entry EV tail support gated horizon choice
+
+作業:
+
+- 00341の次アクションとして、tail-loss headのpenaltyをtrain supportが十分なときだけ使うscore modeを追加した。
+- `entry_ev_broad_prior_horizon_choice_replay.py` に `pnl_tail_support_gated` / `pnl_delta_tail_support_gated` を追加し、tail headのtrain months / rowsをscored examplesとprediction rowsへ出すようにした。
+- mintrain1条件で `tail_penalty_min_train_months=2`, `tail_penalty_min_train_rows=200` と、strict gate `10 months / 10000 rows` を比較した。
+- report: `docs/reports/00342_2026-07-03_entry_ev_tail_support_gated_horizon_choice.md`
+
+結果:
+
+- `fresh2024_validation 2024-03 long` のavailable choicesでは `pnl_delta_tail` が `-111.0260`、`pnl_delta_tail_support_gated` が `-19.2310`。greedy 1 decisionも `-14.1240 -> -3.5280` に改善した。
+- ただしfull replay bestは従来の `pnl` がcombined `+400.1440` で最良。`pnl_delta_tail_support_gated` は `+389.5310`、`pnl_tail_support_gated` は `+378.7510`。
+- strict gateはfull replayを改善せず、2024-08 available choiceは `-46.3536 -> -99.7540` へ悪化した。
+
+判断:
+
+- tail support metadataとgated score modesはaccepted infrastructure。
+- train support countだけのtail gatingはpolicy候補としてreject。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m unittest tests.test_entry_ev_broad_prior_horizon_choice_replay`: OK
+- 00342 loose / strict tail-support-gated replay: OK
+
 ### 09:30 Entry EV horizon confidence support audit
 
 作業:
