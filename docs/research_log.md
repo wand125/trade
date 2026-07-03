@@ -4,6 +4,35 @@
 
 ## 2026-07-03 JST
 
+### 15:39 Entry EV support-sufficient loss-risk prior diagnostics
+
+作業:
+
+- 00363の次アクションとして、support-sufficient negative monthの既存tradeを、実行時点で見えている特徴と時系列priorだけでloss-risk診断できるか確認した。
+- `entry_ev_support_sufficient_loss_risk_prior_diagnostics.py` を追加し、selected trade features、trade timestamp以前だけのcontext prior、feature/prior rule hits、rule summaryを出力した。
+- report: `docs/reports/00364_2026-07-03_entry_ev_support_sufficient_loss_risk_prior.md`
+
+結果:
+
+- 対象は `refit2025_validation 2025-03`。9 trades / loss 4本 / month PnL `-0.4730`。
+- `lossfirst_ge0p40_or_ev_ge5_lossfirst_lt0p30` は対象月内の4/4 lossを捕捉し、target flagged PnL `-1.5900`、skip delta `+1.5900`。
+- ただし同ruleは全240 selected tradesでは176 tradesをflagし、flagged PnL `+332.3394`。勝ちtradeを大量に巻き込む。
+- `ev_ge5_lossfirst_lt0p30` と `side_gap_ge0p15_lossfirst_lt0p30` は対象月のshort損失2本をcleanに拾うが、全体では flagged PnL `+284.9458` / `+210.1174` でglobal hard gateにはできない。
+- `direction,combined_regime` priorの `prior_count_ge5_lossrate_ge0p50` はtarget loss recall `0.75` だが、全体 flagged PnL `+70.4174`。
+
+判断:
+
+- loss-risk prior diagnosticsはaccepted infrastructure。
+- Direct block / hard gateとしてはreject。target月のloss recallは高いが、全期間ではwinner damageが大きい。
+- 次はloss-riskをreplacement selector、horizon abstention、expected PnL calibrationの補助featureとして使う。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_support_sufficient_loss_risk_prior_diagnostics.py tests/test_entry_ev_support_sufficient_loss_risk_prior_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_support_sufficient_loss_risk_prior_diagnostics`: OK
+- 00364 support-sufficient loss-risk prior diagnostic run: OK
+
 ### 15:24 Entry EV support-sufficient negative month repair
 
 作業:

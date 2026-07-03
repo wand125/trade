@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 15:24 JST
+最終更新: 2026-07-03 15:39 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV support-sufficient loss-risk prior diagnosticsを追加した。00363の次アクションとして、`refit2025 2025-03` の既存tradeを実行時点で見える特徴とtrade timestamp以前だけのcontext priorで診断した。対象月内では `lossfirst_ge0p40_or_ev_ge5_lossfirst_lt0p30` が4/4 lossを捕捉し、target flagged PnL `-1.5900`、skip delta `+1.5900`。ただし全240 selected tradesでは176 tradesをflagし、flagged PnL `+332.3394` で勝ちtradeを大量に巻き込む。`ev_ge5_lossfirst_lt0p30` や `side_gap_ge0p15_lossfirst_lt0p30` も対象short損失2本を拾うが、全体では flagged PnL が大きくpositive。判断: loss-risk prior diagnosticsは採用、direct block / hard gateはreject。次はreplacement selector、horizon abstention、expected PnL calibrationの補助featureとして使う。標準policyはNoTrade。詳細は `docs/reports/00364_2026-07-03_entry_ev_support_sufficient_loss_risk_prior.md`。
 
 Entry EV support-sufficient negative month repair diagnosticsを追加した。00362で `refit2025 2025-03` はraw prediction不足ではなくsupport-sufficient negative monthと分かったため、既存trade起点のrepair診断を作った。同月は9 trades、5L / 4S、month PnL `-0.4730`、loss trades 4本 / loss PnL `-3.4800`。事後oracleではloss全skip `+3.0070`、single worst skip `+1.8670`、single fixed-best exit repair `+4.1230`、top-score replacement `+4.2170` まで改善余地がある。ただし現predicted fixed-horizon argmaxはsingle bestでも `-8.8574` へ悪化するためexit selectorとしてreject。次はloss-risk classifier、horizon abstention、target-aware replacement selectorへ進む。標準policyはNoTrade。詳細は `docs/reports/00363_2026-07-03_entry_ev_support_sufficient_negative_month_repair.md`。
 
