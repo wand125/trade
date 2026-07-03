@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 14:40 JST
+最終更新: 2026-07-03 14:53 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV selected replacement scope diagnosticsを追加した。00360で `fresh2024 2024-11 long` が `available_candidates` ではなく `greedy_selected` にだけ存在すると分かったため、selected one-fail行を `selected_onefail_replacement` として再露出する診断を作った。`fresh2024 2024-11` は1行出るがstrictでは通らずrelaxedのみ通る。00358 rankerでは60m `+0.3000`, 240m `+2.4500`, 720m `-5.2800`。ただしselected one-failをglobalに戻すと、00358 ranker strict choices 6件 / actual sum `-83.4028`, relaxed choices 8件 / `-68.0198` と悪化する。大きな悪化要因は `refit2025 2025-07 short 720m`, `hybrid2025 2025-11 short 720m`, `fresh2024 2024-08 long 720m`。判断: diagnostic scopeは採用、global wideningはreject。標準policyはNoTrade。詳細は `docs/reports/00361_2026-07-03_entry_ev_selected_replacement_scope_diagnostics.md`。
 
 Entry EV candidate generation gap auditを追加した。00359で残った薄い月を `role/month/side/row_scope` 別に分解し、00322 base predictionと00358 ranker predictionでcandidate generationの落ち段階を比較した。`fresh2024 2024-11 long` はrole/month rowが1件あるが `available_candidates` は0件で、`greedy_selected` の1行だけがrelaxed条件で候補になる。00358 rankerでは60m `+0.3000`, 240m `+2.4500`, 720m `-5.2800` だがpred PnLは負でstrict gateを通らない。`refit2025 2025-03 short` は00322 base / 00358 rankerの両方でprediction row自体が0。したがって `fresh2024 2024-11` はrow-scope/candidate availability問題、`refit2025 2025-03` はprediction-row universe coverage問題として分ける。actual PnLは診断専用でstage分類やgate選択には使わない。標準policyはNoTrade。詳細は `docs/reports/00360_2026-07-03_entry_ev_candidate_generation_gap_audit.md`。
 

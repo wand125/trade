@@ -4,6 +4,36 @@
 
 ## 2026-07-03 JST
 
+### 14:53 Entry EV selected replacement scope diagnostics
+
+作業:
+
+- 00360で `fresh2024 2024-11 long` が `available_candidates` ではなく `greedy_selected` にだけ存在すると分かったため、selected one-fail行をreplacement用の別scopeとして再露出する診断を追加した。
+- `entry_ev_selected_replacement_scope_diagnostics.py` を追加し、`selected_any=true`, `stateful_available=true`, `selection_bucket=one_failed_strict_stage`, `side=needed_side`, `extra_side_needed>0` の行を `selected_onefail_replacement` として複製した。
+- actual PnLは診断専用で、synthetic scope作成やgateには使わない。
+- report: `docs/reports/00361_2026-07-03_entry_ev_selected_replacement_scope_diagnostics.md`
+
+結果:
+
+- `fresh2024 2024-11 long` は `selected_onefail_replacement` に1行出るが、strictでは通らずrelaxedのみ通る。00358 rankerでは60m `+0.3000`, 240m `+2.4500`, 720m `-5.2800`。
+- selected one-fail replacement rowsは8件あり、00358 rankerでglobal strict choicesは6件 / actual sum `-83.4028`、relaxed choicesは8件 / `-68.0198`。
+- 大きな悪化要因は `refit2025 2025-07 short 720m -45.4596`, `hybrid2025 2025-11 short 720m -39.9600`, `fresh2024 2024-08 long 720m -21.7452` など。
+- 00322 baseのrelaxedでは `fresh2024 2024-11` も720mを選びactual `-5.2800` になり、horizon confidenceなしのrelaxed化が危険と確認した。
+
+判断:
+
+- `selected_onefail_replacement` はaccepted diagnostic scope。
+- global selected-onefail row-scope wideningはreject。
+- `fresh2024 2024-11` はtarget-aware replacement / horizon-calibration問題。
+- `refit2025 2025-03` は引き続きprediction-row universe coverage問題。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_selected_replacement_scope_diagnostics.py tests/test_entry_ev_selected_replacement_scope_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_selected_replacement_scope_diagnostics`: OK
+- 00361 ranker/base selected replacement scope diagnostics: OK
+
 ### 14:40 Entry EV candidate generation gap audit
 
 作業:
