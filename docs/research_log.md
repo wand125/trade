@@ -4,6 +4,34 @@
 
 ## 2026-07-03 JST
 
+### 13:26 Entry EV contextual penalty near-selected diagnostics
+
+作業:
+
+- 00354でpenalizedされたrowsがquota group内で何位か、selected rowとの差分がどれだけあるかを診断した。
+- `entry_ev_contextual_penalty_near_selected_diagnostics.py` を追加し、00354のcandidate/additions/rejectionsをscenario/candidate keyで突き合わせた。
+- report: `docs/reports/00355_2026-07-03_entry_ev_contextual_penalty_near_selected_diagnostics.md`
+
+結果:
+
+- 各contextual labelは656 rows / 26 unique candidate identitiesをpenalizeし、penalized PnL `-9779.2960`, loss 624 / win 32。
+- selected additionsとの交差は0件のまま。
+- 一部はquota rank 1にいるが、penalized rowsは全件 `tail_prob_ceiling` でpre-filter rejectされていた。
+- 00354の `max_chosen_tail_prob=0.3` に対して、penalized rowsのtail probは min `0.312885`, median `0.381267`, max `0.451762`。
+
+判断:
+
+- soft penaltyが効かなかった主因はrepair score順位ではなく、既存tail hard filterが先に全件を落としていたこと。
+- contextual positive-bias confidenceは、現standard replayではtail ceilingの説明/監査signalとして扱う。
+- `max_chosen_tail_prob=0.3` を安易に外さない。外すならcounterfactual replayとtail-filter通過後の残存failure診断を先に行う。
+- 標準policyはNoTrade。
+
+検証:
+
+- `uv run python -m py_compile scripts/experiments/entry_ev_contextual_penalty_near_selected_diagnostics.py tests/test_entry_ev_contextual_penalty_near_selected_diagnostics.py`: OK
+- `uv run python -m unittest tests.test_entry_ev_contextual_penalty_near_selected_diagnostics`: OK
+- 00355 contextual penalty near-selected diagnostics: OK
+
 ### 13:09 Entry EV contextual positive PnL soft penalty replay
 
 作業:

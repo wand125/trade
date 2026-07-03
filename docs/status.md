@@ -1,6 +1,6 @@
 # Current Status
 
-最終更新: 2026-07-03 13:09 JST
+最終更新: 2026-07-03 13:26 JST
 
 ## 現在の状態
 
@@ -11,6 +11,8 @@
 バックテスト基盤とベースライン戦略は作成済み。
 
 特徴量・教師ラベル生成パイプラインは作成済み。
+
+Entry EV contextual penalty near-selected diagnosticsを追加した。00354でpenalizedされたrowsのquota rank / selected boundary / rejection reasonを、00354のcandidate/additions/rejectionsから突き合わせた。各contextual labelは656 rows / 26 unique candidate identitiesをpenalizeし、penalized PnL `-9779.2960`, loss 624 / win 32。selected additionsとの交差は0件のまま。一部はquota rank 1にいるが、penalized rowsは全件 `tail_prob_ceiling` でpre-filter rejectされていた。00354の `max_chosen_tail_prob=0.3` に対し、penalized rowsのtail probは min `0.312885`, median `0.381267`, max `0.451762`。判断: soft penalty no-opの主因はrepair score順位ではなく既存tail hard filter。contextual positive-bias confidenceはtail ceilingの説明/監査signalとして扱い、標準policyはNoTrade。詳細は `docs/reports/00355_2026-07-03_entry_ev_contextual_penalty_near_selected_diagnostics.md`。
 
 Entry EV contextual positive PnL soft penalty replayを追加した。00353の次アクションとして、contextual positive-bias confidenceをhard gateではなくrepair scoreのsoft penaltyへ接続し、`contextual_confidence` / `contextual_confidence_delta` を追加した。00353と同じ条件で `none`, `contextual_confidence:1/2/5`, `contextual_confidence_delta:1/2/5` を比較した。候補段階では各labelで656 rowsをpenalizeし、penalized PnL `-9779.2960`、loss 624 / win 32 とrisk signalは再現。ただし選択された additions で penalty amount > 0 は0件。最終summary差分は全penalty labelで `0 / 288` scenarios、best combinedはすべて `+400.1440`。判断: soft penalty modesはaccepted infrastructure、標準policyはNoTrade。詳細は `docs/reports/00354_2026-07-03_entry_ev_contextual_positive_pnl_soft_penalty_replay.md`。
 
