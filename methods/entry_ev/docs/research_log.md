@@ -11,7 +11,7 @@
 - 00382で残ったcandidate gapを、candidate pool / prior count / prior month / prior actual meanのどこで落ちたかに分解する診断を追加した。
 - `scripts/experiments/entry_ev_surface_support_gap_diagnostics.py` を追加した。
 - 同じrisk tradeを複数risk selectorが共有する場合に備え、risk selector完全一致がないcandidate poolはfamily/month/risk_trade/calibration単位でfallback照合するようにした。
-- report: `docs/reports/00383_2026-07-03_entry_ev_surface_support_gap.md`
+- report: `methods/entry_ev/docs/reports/00383_2026-07-03_entry_ev_surface_support_gap.md`
 
 結果:
 
@@ -40,7 +40,7 @@
 - replacement calibrationへ `shrunk_prior_actual_mean` を追加した。
 - selector surfaceへ `--prior-scope all_families_prior_months` とshrinkage parametersを接続した。
 - 00381と同じ00378 aligned surface条件で、all-family prior + `shrunk_prior_actual_mean,prior_actual_mean,side_score,bias_corrected` を評価した。
-- report: `docs/reports/00382_2026-07-03_entry_ev_all_family_shrunk_prior_surface.md`
+- report: `methods/entry_ev/docs/reports/00382_2026-07-03_entry_ev_all_family_shrunk_prior_surface.md`
 
 結果:
 
@@ -70,7 +70,7 @@
 - 00380のtarget outcome categoryを、selector surface本体のsummaryへ統合した。
 - `support_sufficient_selector_surface_choices.csv` に outcome columns を出力し、summaryに `passes_target_outcome_constraints` を追加した。
 - 00378と同じconfig / target / risk selector / score条件でsurfaceを再実行した。
-- report: `docs/reports/00381_2026-07-03_entry_ev_outcome_constrained_surface.md`
+- report: `methods/entry_ev/docs/reports/00381_2026-07-03_entry_ev_outcome_constrained_surface.md`
 
 結果:
 
@@ -98,7 +98,7 @@
 
 - 00378 surfaceの制約通過をtarget単位に分解する診断を追加した。
 - `scripts/experiments/entry_ev_surface_target_outcome_diagnostics.py` を追加し、surface choicesへ outcome category を付与した。
-- report: `docs/reports/00380_2026-07-03_entry_ev_surface_target_outcome.md`
+- report: `methods/entry_ev/docs/reports/00380_2026-07-03_entry_ev_surface_target_outcome.md`
 
 結果:
 
@@ -126,7 +126,7 @@
 
 - 00378のearly-month prior不足に対し、replacement calibration診断へ `--prior-scope all_families_prior_months` と `--require-supported-candidates` を追加した。
 - 00378 config / target setで、same-family priorとall-family priorを比較した。
-- report: `docs/reports/00379_2026-07-03_entry_ev_cross_family_prior_calibration.md`
+- report: `methods/entry_ev/docs/reports/00379_2026-07-03_entry_ev_cross_family_prior_calibration.md`
 
 結果:
 
@@ -156,7 +156,7 @@
 
 - 00377の再現確認として、00376上位候補 `short_entryblock_replacement_holdext_block_overlay_s1` へ00318 configを合成した。
 - `loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` / `holdext_long_range_normal_ny` に揃え、current-negative target surfaceとreplacement abstentionを実行した。
-- report: `docs/reports/00378_2026-07-03_entry_ev_second_aligned_surface_support_gap.md`
+- report: `methods/entry_ev/docs/reports/00378_2026-07-03_entry_ev_second_aligned_surface_support_gap.md`
 
 結果:
 
@@ -185,7 +185,7 @@
 
 - 00376の次アクションとして、`00310_position_quality_proxy_overlay_s1` の `entry_block_overlay_trades.csv` に既存00318 configのprediction/repair target設定を合成した。
 - variant familyを `loss_exit30_cd15__holdext_isolated_large_loss_long_t-5_h720` に揃え、current-negative targetを明示指定してselector surfaceとreplacement abstentionを実行した。
-- report: `docs/reports/00377_2026-07-03_entry_ev_aligned_current_negative_surface.md`
+- report: `methods/entry_ev/docs/reports/00377_2026-07-03_entry_ev_aligned_current_negative_surface.md`
 
 結果:
 
@@ -213,7 +213,7 @@
 
 - 00375で残った「current-negative evaluated targetを増やす」課題に対し、00370 inventoryに出ている既存artifactがselector surfaceへ流用可能かを棚卸しした。
 - `scripts/experiments/entry_ev_surface_artifact_readiness_diagnostics.py` を追加し、metric parentごとに近傍の `*trades.csv` と `config.json` を検査した。
-- report: `docs/reports/00376_2026-07-03_entry_ev_surface_artifact_readiness.md`
+- report: `methods/entry_ev/docs/reports/00376_2026-07-03_entry_ev_surface_artifact_readiness.md`
 
 結果:
 
@@ -242,7 +242,7 @@
 
 - 00374のabstention gateが11-target setに過適合していないかを見るため、00370 inventoryの条件を `support_sufficient_config_count >=1`、`metric_parent_count >=2` へ緩めた。
 - 同じselector/replacement gridで広めのsurfaceを再実行し、そのartifactへ00374のreplacement abstention sweepを適用した。
-- report: `docs/reports/00375_2026-07-03_entry_ev_broad_support_abstention_stability.md`
+- report: `methods/entry_ev/docs/reports/00375_2026-07-03_entry_ev_broad_support_abstention_stability.md`
 
 結果:
 
@@ -271,7 +271,7 @@
 - 00373の次アクションとして、replacement candidateを通す/捨てるabstention gateをsurface上で診断した。
 - `entry_ev_replacement_abstention_surface_diagnostics.py` を追加した。
 - 候補を捨てた場合はskip-onlyではなくbaseline維持に戻し、winner damageは実際にreplacement interventionしたtradeだけで数えた。
-- report: `docs/reports/00374_2026-07-03_entry_ev_replacement_abstention_surface.md`
+- report: `methods/entry_ev/docs/reports/00374_2026-07-03_entry_ev_replacement_abstention_surface.md`
 
 結果:
 
@@ -300,7 +300,7 @@
 - 00372のwinner-damage post-process制約を `entry_ev_support_sufficient_selector_surface_diagnostics.py` 本体へ組み込んだ。
 - `summarize_surface()` にloss precision、winner selected、baseline-positive degradation、current-negative delta、違反数、合否列を追加した。
 - summary rankingを、mean PnLではなくwinner-damage制約 pass / violation countを先に見る順序へ変更した。
-- report: `docs/reports/00373_2026-07-03_entry_ev_winner_damage_ranked_selector_surface.md`
+- report: `methods/entry_ev/docs/reports/00373_2026-07-03_entry_ev_winner_damage_ranked_selector_surface.md`
 
 結果:
 
@@ -329,7 +329,7 @@
 
 - 00371のselector surfaceをpost-processし、current-negative repairとcross-artifact robustnessを分けるwinner-damage diagnosticsを追加した。
 - `entry_ev_selector_surface_winner_damage_diagnostics.py` を追加し、loss precision、winner selected count、baseline-positive degradation、current-negative deltaを制約として集計した。
-- report: `docs/reports/00372_2026-07-03_entry_ev_selector_surface_winner_damage.md`
+- report: `methods/entry_ev/docs/reports/00372_2026-07-03_entry_ev_selector_surface_winner_damage.md`
 
 結果:
 
@@ -361,7 +361,7 @@
 - 00370のinventoryを使い、`entry_ev_support_sufficient_selector_surface_diagnostics.py` に `--targets-inventory` を追加した。
 - `support_negative_month_target_summary.csv` からsupport-sufficient config数 `>=50`、metric parent数 `>=5` のcanonical target setを作り、00368/00369のselector surfaceを複数targetへ広げた。
 - target inventory outputへ `evaluated_by_surface` と現config baselineを追加した。
-- report: `docs/reports/00371_2026-07-03_entry_ev_canonical_support_sufficient_selector_surface.md`
+- report: `methods/entry_ev/docs/reports/00371_2026-07-03_entry_ev_canonical_support_sufficient_selector_surface.md`
 
 結果:
 
@@ -390,7 +390,7 @@
 
 - 00369で現branchのsupport-sufficient negative targetが1件だけと分かったため、過去のselector monthly metrics全体を棚卸しするdiagnosticsを追加した。
 - `entry_ev_support_negative_month_inventory_diagnostics.py` を追加し、`data/reports/backtests` 配下の `*selector_monthly_metrics.csv` からsupport-sufficient / support-limited negative monthを分類した。
-- report: `docs/reports/00370_2026-07-03_entry_ev_support_negative_month_inventory.md`
+- report: `methods/entry_ev/docs/reports/00370_2026-07-03_entry_ev_support_negative_month_inventory.md`
 
 結果:
 
@@ -421,7 +421,7 @@
 
 - 00368のselector surfaceを手動target指定から外すため、`entry_ev_support_sufficient_selector_surface_diagnostics.py` に `--targets auto_support_sufficient_negative` を追加した。
 - current trades / repair targetsからtarget inventoryを作り、support-sufficient negative monthとsupport-limited negative monthを分けて出力するようにした。
-- report: `docs/reports/00369_2026-07-03_entry_ev_support_sufficient_selector_surface_auto_targets.md`
+- report: `methods/entry_ev/docs/reports/00369_2026-07-03_entry_ev_support_sufficient_selector_surface_auto_targets.md`
 
 結果:
 
@@ -449,7 +449,7 @@
 
 - 00367のprior-calibrated replacementを、00364のloss-risk selectorと接続した。
 - `entry_ev_support_sufficient_selector_surface_diagnostics.py` を追加し、全current tradesからobservable risk selectorで外す1本を選び、そのtradeを外した状態でstatefully available replacementをprior-calibrated scoreで選ぶsurfaceを作った。
-- report: `docs/reports/00368_2026-07-03_entry_ev_support_sufficient_selector_surface.md`
+- report: `methods/entry_ev/docs/reports/00368_2026-07-03_entry_ev_support_sufficient_selector_surface.md`
 
 結果:
 
@@ -479,7 +479,7 @@
 
 - 00366でbroad horizon abstentionを本線vetoに使えないと分かったため、00363のsupport-sufficient negative month laneへ戻した。
 - `entry_ev_support_sufficient_replacement_calibration_diagnostics.py` を追加し、target月より前のside-row実績だけでcontext別 `actual - predicted` bias / MAE / prior actual meanを作り、replacement candidate rankingを比較した。
-- report: `docs/reports/00367_2026-07-03_entry_ev_support_sufficient_replacement_calibration.md`
+- report: `methods/entry_ev/docs/reports/00367_2026-07-03_entry_ev_support_sufficient_replacement_calibration.md`
 
 結果:
 
@@ -508,7 +508,7 @@
 
 - 00365のcandidate rule `lossfirst_ge0p40_or_pred_best_ge5_or_ev_lowlf` を `entry_ev_hold_extension_stateful_replay.py` のextension veto hookへ接続した。
 - 00314 w5 hold-extension targetを入力に、`--require-model-used`、one-position constraint、overlap skip込みでstateful replayした。
-- report: `docs/reports/00366_2026-07-03_entry_ev_horizon_abstention_stateful_replay.md`
+- report: `methods/entry_ev/docs/reports/00366_2026-07-03_entry_ev_horizon_abstention_stateful_replay.md`
 
 結果:
 
@@ -536,7 +536,7 @@
 
 - 00364でloss-riskをentry blockに使うとwinner damageが大きいと分かったため、同じsignalをfixed-horizon choiceのabstentionへ回した。
 - `entry_ev_support_sufficient_horizon_abstention_diagnostics.py` を追加し、current exitとpredicted fixed-horizon argmaxの実現PnL差を教師/評価として、観測特徴と時系列priorで「predicted horizonを信じない」ruleを診断した。
-- report: `docs/reports/00365_2026-07-03_entry_ev_support_sufficient_horizon_abstention.md`
+- report: `methods/entry_ev/docs/reports/00365_2026-07-03_entry_ev_support_sufficient_horizon_abstention.md`
 
 結果:
 
@@ -564,7 +564,7 @@
 
 - 00363の次アクションとして、support-sufficient negative monthの既存tradeを、実行時点で見えている特徴と時系列priorだけでloss-risk診断できるか確認した。
 - `entry_ev_support_sufficient_loss_risk_prior_diagnostics.py` を追加し、selected trade features、trade timestamp以前だけのcontext prior、feature/prior rule hits、rule summaryを出力した。
-- report: `docs/reports/00364_2026-07-03_entry_ev_support_sufficient_loss_risk_prior.md`
+- report: `methods/entry_ev/docs/reports/00364_2026-07-03_entry_ev_support_sufficient_loss_risk_prior.md`
 
 結果:
 
@@ -593,7 +593,7 @@
 
 - 00362で `refit2025 2025-03` はraw prediction不足ではなくsupport-sufficient negative monthと分かったため、既存trade起点のrepair診断を追加した。
 - `entry_ev_support_sufficient_negative_month_repair_diagnostics.py` を追加し、既存tradeのskip / fixed-horizon exit extension / predicted fixed-horizon choice / replacement candidateを分けて出力した。
-- report: `docs/reports/00363_2026-07-03_entry_ev_support_sufficient_negative_month_repair.md`
+- report: `methods/entry_ev/docs/reports/00363_2026-07-03_entry_ev_support_sufficient_negative_month_repair.md`
 
 結果:
 
@@ -621,7 +621,7 @@
 
 - 00361の次アクションとして、`refit2025 2025-03 short` が00318/00322で0件になった原因をrepair target生成前から監査した。
 - `entry_ev_upstream_universe_coverage_diagnostics.py` を追加し、00318 s2 configをそのまま読み、repair targetを `extra_*_needed > 0` で落とさずにraw prediction rows / side rows / candidate rows / stateful availabilityを出すようにした。
-- report: `docs/reports/00362_2026-07-03_entry_ev_upstream_universe_coverage_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00362_2026-07-03_entry_ev_upstream_universe_coverage_diagnostics.md`
 
 結果:
 
@@ -650,7 +650,7 @@
 - 00360で `fresh2024 2024-11 long` が `available_candidates` ではなく `greedy_selected` にだけ存在すると分かったため、selected one-fail行をreplacement用の別scopeとして再露出する診断を追加した。
 - `entry_ev_selected_replacement_scope_diagnostics.py` を追加し、`selected_any=true`, `stateful_available=true`, `selection_bucket=one_failed_strict_stage`, `side=needed_side`, `extra_side_needed>0` の行を `selected_onefail_replacement` として複製した。
 - actual PnLは診断専用で、synthetic scope作成やgateには使わない。
-- report: `docs/reports/00361_2026-07-03_entry_ev_selected_replacement_scope_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00361_2026-07-03_entry_ev_selected_replacement_scope_diagnostics.md`
 
 結果:
 
@@ -680,7 +680,7 @@
 - 00359で残った薄い月について、candidate generationのどこで落ちているかを `role/month/side/row_scope` 別に診断した。
 - `entry_ev_candidate_generation_gap_audit.py` を追加し、00322 base prediction、00358 ranker prediction、00358 replay candidateを同じtarget-scope schemaで比較した。
 - stageは `no_prediction_rows`, `no_rows_in_scope`, `no_target_side_rows`, `no_target_support_rows`, `threshold_filtered`, `relaxed_only_candidate`, `strict_candidate_exists` へ分類した。
-- report: `docs/reports/00360_2026-07-03_entry_ev_candidate_generation_gap_audit.md`
+- report: `methods/entry_ev/docs/reports/00360_2026-07-03_entry_ev_candidate_generation_gap_audit.md`
 
 結果:
 
@@ -709,7 +709,7 @@
 - 00358後の残blocker (`month_pnl_below_floor`, `role_trades_low`, `side_share_high`) が候補生成不足かselection問題かを診断した。
 - `entry_ev_support_repair_thin_month_candidate_diagnostics.py` にdiagnostic-onlyの `needed_top_oracle_actual_*` 列を追加した。actual PnLはteacher/audit専用で、実行featureやselector tie-breakerには使わない。
 - 00358 EV2 best、EV -2 + `singleton_720_pred_pnl_lt2`、それぞれの00324 external horizon coverage追加版を比較した。
-- report: `docs/reports/00359_2026-07-03_entry_ev_00358_thin_month_candidate_audit.md`
+- report: `methods/entry_ev/docs/reports/00359_2026-07-03_entry_ev_00358_thin_month_candidate_audit.md`
 
 結果:
 
@@ -738,7 +738,7 @@
 - 00357のpre-registered候補をstateful replayへ戻した。
 - `entry_ev_broad_prior_horizon_choice_replay.py` に `selected_tail_pass_pred_pnl_lt2` と `singleton_720_pred_pnl_lt2` positive PnL gate ruleを追加した。
 - 両ruleは実行時に `selected_addition` やactual PnLを使わず、`hv_chosen_pred_pnl`, `hv_chosen_pred_tail_loss_prob`, `hv_chosen_horizon_minutes` だけを使う。
-- report: `docs/reports/00358_2026-07-03_entry_ev_selected_tail_pred_pnl_gate_replay.md`
+- report: `methods/entry_ev/docs/reports/00358_2026-07-03_entry_ev_selected_tail_pred_pnl_gate_replay.md`
 
 結果:
 
@@ -768,7 +768,7 @@
 - 00356で見えたtail ceiling通過後のpositive predicted PnL failureを、実際のselected / near-selected候補へ絞って診断した。
 - `entry_ev_tail_selected_residual_diagnostics.py` を追加し、00354 no-penalty candidatesを00354 `broad_prior_horizon_choice_additions.csv` / `rejections.csv` とscenario/candidate keyで突き合わせた。
 - 同じmarket eventがscore mode / threshold scenarioで重複するため、row-weightedに加えて `candidate_identity_key` dedupを追加した。
-- report: `docs/reports/00357_2026-07-03_entry_ev_tail_selected_residual_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00357_2026-07-03_entry_ev_tail_selected_residual_diagnostics.md`
 
 結果:
 
@@ -798,7 +798,7 @@
 
 - 00355で全件tail ceiling済みと分かったcontextual penalty rowsの先を確認するため、tail ceiling通過後のpositive predicted PnL failureを診断した。
 - `entry_ev_tail_ceiling_residual_failure_diagnostics.py` を追加し、00354 no-penalty candidatesを `max_chosen_tail_prob=0.3` のpass/blockedで分解した。
-- report: `docs/reports/00356_2026-07-03_entry_ev_tail_ceiling_residual_failure_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00356_2026-07-03_entry_ev_tail_ceiling_residual_failure_diagnostics.md`
 
 結果:
 
@@ -827,7 +827,7 @@
 
 - 00354でpenalizedされたrowsがquota group内で何位か、selected rowとの差分がどれだけあるかを診断した。
 - `entry_ev_contextual_penalty_near_selected_diagnostics.py` を追加し、00354のcandidate/additions/rejectionsをscenario/candidate keyで突き合わせた。
-- report: `docs/reports/00355_2026-07-03_entry_ev_contextual_penalty_near_selected_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00355_2026-07-03_entry_ev_contextual_penalty_near_selected_diagnostics.md`
 
 結果:
 
@@ -856,7 +856,7 @@
 - 00353のcontextual positive-bias confidenceをhard gateではなくsoft repair penaltyへ接続した。
 - `--positive-pnl-penalty-specs` に `contextual_confidence` と `contextual_confidence_delta` を追加した。
 - 00353と同じreplay条件で `none`, `contextual_confidence:1/2/5`, `contextual_confidence_delta:1/2/5` を比較した。
-- report: `docs/reports/00354_2026-07-03_entry_ev_contextual_positive_pnl_soft_penalty_replay.md`
+- report: `methods/entry_ev/docs/reports/00354_2026-07-03_entry_ev_contextual_positive_pnl_soft_penalty_replay.md`
 
 結果:
 
@@ -887,7 +887,7 @@
 - `scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py` に `context_hs_support2_positive_bias_tail_miss_ge_0p10` gateを追加した。
 - gateはscenario / chosen horizon / side / month単位で、過去月だけのmonthly prior confidenceを使う。support条件は observed months >= 2, flagged months >= 2, decisions >= 5 など。
 - residual context spec/keyもranker candidateへ残し、vetoed rows監査に使えるようにした。
-- report: `docs/reports/00353_2026-07-03_entry_ev_context_hs_support2_positive_pnl_gate_replay.md`
+- report: `methods/entry_ev/docs/reports/00353_2026-07-03_entry_ev_context_hs_support2_positive_pnl_gate_replay.md`
 
 結果:
 
@@ -916,7 +916,7 @@
 - 00351のcontext confidenceへ、prior月数・flag月数・unique decision / market candidate supportを追加した。
 - `--min-prior-months`, `--min-prior-flagged-months`, `--min-prior-decisions` を追加した。defaultは0で既存挙動は維持。
 - exact context、`horizon,side`、`horizon,side` support2、`horizon,side,combined_regime` support2を比較した。
-- report: `docs/reports/00352_2026-07-03_entry_ev_context_support_count_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00352_2026-07-03_entry_ev_context_support_count_diagnostics.md`
 
 結果:
 
@@ -947,7 +947,7 @@
 - 00350で見えたcontext-specific tail riskを、過去月の同一contextだけで信用できるか検証した。
 - `entry_ev_contextual_risk_confidence_diagnostics.py` を追加し、risk rule x context x monthのprior-only confidenceを出力した。
 - 初回row-weighted集計は同じmarket candidateをscenario数ぶんsupportに数えていたため、prior confidenceを `market_candidate_key` dedup既定へ修正した。
-- report: `docs/reports/00351_2026-07-03_entry_ev_contextual_risk_confidence_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00351_2026-07-03_entry_ev_contextual_risk_confidence_diagnostics.md`
 
 結果:
 
@@ -977,7 +977,7 @@
 
 - 00348/00349のglobal gate/penalty失敗を受け、risk ruleの損失捕捉とselected winner巻き込みを同時に見るover-gating診断を追加した。
 - `entry_ev_over_gating_diagnostics.py` を追加し、00349のsummary/additions/candidate filesからfocus scenario、rule tradeoff、context tradeoff、selected casesを出力した。
-- report: `docs/reports/00350_2026-07-03_entry_ev_over_gating_context_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00350_2026-07-03_entry_ev_over_gating_context_diagnostics.md`
 
 結果:
 
@@ -1005,7 +1005,7 @@
 
 - 00348でpositive-PnL hard gateがno-opまたは悪化だったため、候補を削らずrepair scoreだけを下げるsoft penaltyを追加した。
 - `entry_ev_broad_prior_horizon_choice_replay.py` に `--positive-pnl-penalty-specs` と penalty summary artifactを追加した。
-- report: `docs/reports/00349_2026-07-03_entry_ev_positive_pnl_soft_penalty_replay.md`
+- report: `methods/entry_ev/docs/reports/00349_2026-07-03_entry_ev_positive_pnl_soft_penalty_replay.md`
 
 結果:
 
@@ -1032,7 +1032,7 @@
 
 - 00347のpositive predicted PnL failure候補ruleを、pointwise診断からstateful replayへ戻した。
 - `scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py` に `--positive-pnl-gate-rules`、gate veto artifact、gate summary artifactを追加した。defaultは `none` のまま。
-- report: `docs/reports/00348_2026-07-03_entry_ev_positive_pnl_gate_stateful_replay.md`
+- report: `methods/entry_ev/docs/reports/00348_2026-07-03_entry_ev_positive_pnl_gate_stateful_replay.md`
 
 結果:
 
@@ -1060,7 +1060,7 @@
 
 - 00346で `ranker_pred_pnl < 0` vetoがbest replayを改善しなかったため、positive predicted PnL failureの候補面診断を追加した。
 - `scripts/experiments/entry_ev_positive_pnl_failure_diagnostics.py` を追加し、00346の `ranker_replay_candidates_*.csv` 8本を横断して、tail / harmful / prior / residual / reliability条件別にpositive-pred lossを集計した。
-- report: `docs/reports/00347_2026-07-03_entry_ev_positive_pnl_failure_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00347_2026-07-03_entry_ev_positive_pnl_failure_diagnostics.md`
 
 結果:
 
@@ -1087,7 +1087,7 @@
 
 - 00345で有望だった `ranker_pred_pnl < 0` horizon-switch vetoを、post-hoc診断ではなく `entry_ev_broad_prior_horizon_choice_replay.py` のstateful replay経路へ入れた。
 - `--abstention-rules none,pred_pnl_lt0_switch_veto` と `--baseline-score-mode pnl` を追加し、defaultは `none` のまま既存挙動を維持した。
-- report: `docs/reports/00346_2026-07-03_entry_ev_stateful_reliability_abstention_replay.md`
+- report: `methods/entry_ev/docs/reports/00346_2026-07-03_entry_ev_stateful_reliability_abstention_replay.md`
 
 結果:
 
@@ -1113,7 +1113,7 @@
 
 - 00344でdirect reliability multiplierが悪化したため、reliability-driven horizon switchをbaseline `pnl` horizonへ戻すabstention/veto診断を追加した。
 - `scripts/experiments/entry_ev_horizon_reliability_abstention_diagnostics.py` を追加し、`horizon_reliability_choice_deltas.csv` に対して複数ruleのpost-veto delta、veto件数、回復損失、削除利益をCSV化できるようにした。
-- report: `docs/reports/00345_2026-07-03_entry_ev_horizon_reliability_abstention.md`
+- report: `methods/entry_ev/docs/reports/00345_2026-07-03_entry_ev_horizon_reliability_abstention.md`
 
 結果:
 
@@ -1139,7 +1139,7 @@
 - 00343の次アクションとして、reliabilityをdirect score multiplierではなく、score modeごとのhorizon選択差分とhead errorとして診断するスクリプトを追加した。
 - `scripts/experiments/entry_ev_horizon_reliability_diagnostics.py` を追加し、baseline `pnl` との選択差分、悪化case、horizon/head別prediction error、missing target coverageをCSV化できるようにした。
 - target subsetとall rowsの両方で00343 scored examplesへ適用した。
-- report: `docs/reports/00344_2026-07-03_entry_ev_horizon_reliability_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00344_2026-07-03_entry_ev_horizon_reliability_diagnostics.md`
 
 結果:
 
@@ -1166,7 +1166,7 @@
 - 00342の次アクションとして、train support countだけではなく、対象月より前のprediction-vs-actual実績からhead reliabilityを測る列を追加した。
 - `delta`, `beats60`, `tail` の各headに対し、context fallback付きで Spearman / AUC / MAE / shrink済みpositive reliability scoreを作るようにした。
 - score mode `pnl_tail_reliability_gated` / `pnl_delta_tail_reliability_gated` を追加し、prediction artifactsへhorizon別reliability列も出すようにした。
-- report: `docs/reports/00343_2026-07-03_entry_ev_prior_oob_reliability_horizon_choice.md`
+- report: `methods/entry_ev/docs/reports/00343_2026-07-03_entry_ev_prior_oob_reliability_horizon_choice.md`
 
 結果:
 
@@ -1192,7 +1192,7 @@
 - 00341の次アクションとして、tail-loss headのpenaltyをtrain supportが十分なときだけ使うscore modeを追加した。
 - `entry_ev_broad_prior_horizon_choice_replay.py` に `pnl_tail_support_gated` / `pnl_delta_tail_support_gated` を追加し、tail headのtrain months / rowsをscored examplesとprediction rowsへ出すようにした。
 - mintrain1条件で `tail_penalty_min_train_months=2`, `tail_penalty_min_train_rows=200` と、strict gate `10 months / 10000 rows` を比較した。
-- report: `docs/reports/00342_2026-07-03_entry_ev_tail_support_gated_horizon_choice.md`
+- report: `methods/entry_ev/docs/reports/00342_2026-07-03_entry_ev_tail_support_gated_horizon_choice.md`
 
 結果:
 
@@ -1218,7 +1218,7 @@
 - 00340のtarget-local confidence診断を広いscored examplesへ拡張し、horizon-confidence support auditを追加した。
 - `scripts/experiments/entry_ev_horizon_confidence_support_audit.py` を追加し、target別のcandidate availability、prediction-only score choice、fixed horizon / oracle比較、fold supportを出力するようにした。
 - 00329 baselineと、`min_train_months=1` / `min_train_rows=50` の00341 sensitivityを比較した。
-- report: `docs/reports/00341_2026-07-03_entry_ev_horizon_confidence_support_audit.md`
+- report: `methods/entry_ev/docs/reports/00341_2026-07-03_entry_ev_horizon_confidence_support_audit.md`
 
 結果:
 
@@ -1245,7 +1245,7 @@
 
 - 00339の次アクションとして、`fresh2024 2024-03` のfallback/non-model horizon rowsに対するtarget-local confidence診断を追加した。
 - `scripts/experiments/entry_ev_support_repair_target_local_confidence_diagnostics.py` を追加し、00324 horizon rowsから対象role/month/side/row_scopeを切り出してhorizon別rule surfaceとfeature binsを出すようにした。
-- report: `docs/reports/00340_2026-07-03_entry_ev_support_repair_target_local_confidence.md`
+- report: `methods/entry_ev/docs/reports/00340_2026-07-03_entry_ev_support_repair_target_local_confidence.md`
 
 結果:
 
@@ -1271,7 +1271,7 @@
 
 - 00338の次アクションとして、leak-free support repair後に残る負け月/薄い月へ代替候補が存在するかを診断した。
 - `scripts/experiments/entry_ev_support_repair_thin_month_candidate_diagnostics.py` を追加し、00335 stateful候補面と00324 external row x horizon候補を同じschemaへ正規化した。
-- report: `docs/reports/00339_2026-07-03_entry_ev_support_repair_thin_month_candidates.md`
+- report: `methods/entry_ev/docs/reports/00339_2026-07-03_entry_ev_support_repair_thin_month_candidates.md`
 
 結果:
 
@@ -1296,7 +1296,7 @@
 
 - 00333で薄かったselected addition近傍から一段戻り、stateful selection直前の広いgated候補面を診断した。
 - `scripts/experiments/entry_ev_support_repair_listwise_cluster_diagnostics.py` を追加し、`selected + quota_full` rowsを再構成して、quotaと一玉非重複制約つきのlistwise greedy selectorを比較した。
-- report: `docs/reports/00334_2026-07-03_entry_ev_support_repair_listwise_cluster.md`
+- report: `methods/entry_ev/docs/reports/00334_2026-07-03_entry_ev_support_repair_listwise_cluster.md`
 
 結果:
 
@@ -1321,7 +1321,7 @@
 
 - 00332の次アクションとして、scalar harmful penaltyではなくpairwise/listwise switching診断へ進んだ。
 - `scripts/experiments/entry_ev_support_repair_pairwise_switch_diagnostics.py` を追加し、選択済みsupport repair候補と近傍代替候補を `(scenario_label, role, month, side)` 内で比較した。
-- report: `docs/reports/00333_2026-07-03_entry_ev_support_repair_pairwise_switch.md`
+- report: `methods/entry_ev/docs/reports/00333_2026-07-03_entry_ev_support_repair_pairwise_switch.md`
 
 結果:
 
@@ -1349,7 +1349,7 @@
 - 00331の次アクションとして、harmful probabilityをsupport-aware objectiveへ入れた。
 - horizon-choice score側に `pnl_support_harmful_guard` 系modeを追加した。
 - support repair層に `hv_chosen_pred_harmful_overestimate_prob`, `repair_support_success_proxy`, `repair_harmful_penalty_weight`, `repair_harmful_penalty_threshold` を追加した。
-- report: `docs/reports/00332_2026-07-03_entry_ev_support_aware_harmful_objective.md`
+- report: `methods/entry_ev/docs/reports/00332_2026-07-03_entry_ev_support_aware_harmful_objective.md`
 
 結果:
 
@@ -1377,7 +1377,7 @@
 - 00330の次アクションとして、harmful overestimate と profitable high-variance 720m を分離するtarget診断を追加した。
 - `scripts/experiments/entry_ev_horizon_overestimate_target_diagnostics.py` を追加し、`harmful_overestimate`, `support_harmful_overestimate`, `profitable_high_variance_720`, `dangerous_high_variance_720` を出力するようにした。
 - 既存horizon-choice rankerに `target_horizon_harmful_overestimate` classifier headと `pnl_harmful_guard` 系score modeを追加した。
-- report: `docs/reports/00331_2026-07-03_entry_ev_harmful_overestimate_target.md`
+- report: `methods/entry_ev/docs/reports/00331_2026-07-03_entry_ev_harmful_overestimate_target.md`
 
 結果:
 
@@ -1406,7 +1406,7 @@
 - `entry_ev_broad_prior_horizon_choice_replay.py` に `pnl_lower`, `pnl_delta_lower`, `pnl_delta_tail_lower` を追加した。
 - residual priorはtarget月より前のhorizon prediction errorだけで作り、`bias / mae / rmse / overestimate_rate / tail_miss_rate` を出す。
 - 公平な比較のため、residual prior列はデフォルトではranker学習featureに入れず、score-only / diagnosticsとして扱うようにした。
-- report: `docs/reports/00330_2026-07-03_entry_ev_horizon_choice_lower_bound.md`
+- report: `methods/entry_ev/docs/reports/00330_2026-07-03_entry_ev_horizon_choice_lower_bound.md`
 
 結果:
 
@@ -1435,7 +1435,7 @@
 
 - 00328の次アクションとして、broad duration priorを静的penaltyではなくchronological horizon-choice ranker/headのfeatureとして使った。
 - `scripts/experiments/entry_ev_broad_prior_horizon_choice_replay.py` を追加し、broad train rowsを60/240/720mのhorizon-level examplesへ展開して `pnl / delta_vs_60 / executable / tail_loss / beats_60` headを学習した。
-- report: `docs/reports/00329_2026-07-03_entry_ev_broad_prior_horizon_choice_ranker.md`
+- report: `methods/entry_ev/docs/reports/00329_2026-07-03_entry_ev_broad_prior_horizon_choice_ranker.md`
 
 結果:
 
@@ -1462,7 +1462,7 @@
 
 - 00327でsupport-repair-only priorが疎すぎると分かったため、00322 s2 broad candidate universeを `--write-train-rows` で再生成し、9697 train rowsを保存した。
 - `scripts/experiments/entry_ev_broad_duration_prior_repair_replay.py` を追加し、target月より前のbroad rowsからcontext別duration priorを作り、support repair replayへ接続した。
-- report: `docs/reports/00328_2026-07-03_entry_ev_broad_duration_prior_repair_replay.md`
+- report: `methods/entry_ev/docs/reports/00328_2026-07-03_entry_ev_broad_duration_prior_repair_replay.md`
 
 結果:
 
@@ -1490,7 +1490,7 @@
 
 - 00326で見つけたhpen0.25を同一repair set上の診断値で終わらせず、target monthより前の候補だけでduration penaltyを選ぶchronological calibrationを実装した。
 - `scripts/experiments/entry_ev_horizon_duration_penalty_calibration.py` を追加し、row-specific `repair_horizon_penalty_weight_effective` を既存support repair replayへ渡せるようにした。
-- report: `docs/reports/00327_2026-07-03_entry_ev_horizon_duration_penalty_calibration.md`
+- report: `methods/entry_ev/docs/reports/00327_2026-07-03_entry_ev_horizon_duration_penalty_calibration.md`
 
 結果:
 
@@ -1519,7 +1519,7 @@
 
 - 00325で残った「pre-chosen horizonをrepairする」弱点に対し、prediction rowsから60/240/720mを別候補として展開するrow x horizon replayを実装した。
 - `scripts/experiments/entry_ev_support_repair_horizon_replay.py` に `--choice-input-mode row_horizon_grid` と `--repair-horizon-penalty-weight` を追加した。
-- report: `docs/reports/00326_2026-07-03_entry_ev_row_horizon_support_repair.md`
+- report: `methods/entry_ev/docs/reports/00326_2026-07-03_entry_ev_row_horizon_support_repair.md`
 
 結果:
 
@@ -1548,7 +1548,7 @@
 
 - 00324のcoverage診断を受けて、00323 support repair replayへtarget-aware repair utilityを接続した。
 - `scripts/experiments/entry_ev_support_repair_horizon_replay.py` に `--selection-mode repair_score`、chosen-horizon prediction列、repair utility列、pred/actual/tail prefilterを追加した。
-- report: `docs/reports/00325_2026-07-03_entry_ev_target_aware_support_repair_replay.md`
+- report: `methods/entry_ev/docs/reports/00325_2026-07-03_entry_ev_target_aware_support_repair_replay.md`
 
 結果:
 
@@ -1577,7 +1577,7 @@
 
 - 00323で残った `fresh2024 2024-03`, `fresh2024 2024-11`, `refit2025 2025-07` のsupport repair target月について、00322 s2 predictions上のcoverageを分解した。
 - `scripts/experiments/entry_ev_support_repair_target_coverage_diagnostics.py` を追加し、target summary、row x horizon detail、threshold gate coverage、best candidatesを出力する診断を実装した。
-- report: `docs/reports/00324_2026-07-03_entry_ev_support_repair_target_coverage.md`
+- report: `methods/entry_ev/docs/reports/00324_2026-07-03_entry_ev_support_repair_target_coverage.md`
 
 結果:
 
@@ -1606,7 +1606,7 @@
 
 - 00322の次アクションとして、q90 + one-failed broad horizon viability outputを00314 best branchのsupport repairへ接続した。
 - `scripts/experiments/entry_ev_support_repair_horizon_replay.py` を追加し、必要side・必要本数・既存stateful trade非重複制約つきでnear-miss horizon choicesを追加する診断を実装した。
-- report: `docs/reports/00323_2026-07-02_entry_ev_support_repair_horizon_replay.md`
+- report: `methods/entry_ev/docs/reports/00323_2026-07-02_entry_ev_support_repair_horizon_replay.md`
 
 結果:
 
@@ -1635,7 +1635,7 @@
 - 00321の次アクションとして、near-miss-only headを広いprediction-row candidate universeで再学習する診断を実装した。
 - `scripts/experiments/entry_ev_broad_horizon_viability.py` を追加し、60/240/720mのhorizon-specific executable / PnL / tail-loss headをprior-month-only chronological splitで学習した。
 - `scripts/experiments/entry_ev_horizon_choice_nonoverlap_audit.py` を追加し、raw threshold choicesを一玉制約に近いnon-overlap greedy監査へ通した。
-- report: `docs/reports/00322_2026-07-02_entry_ev_broad_horizon_viability.md`
+- report: `methods/entry_ev/docs/reports/00322_2026-07-02_entry_ev_broad_horizon_viability.md`
 
 結果:
 
@@ -1664,7 +1664,7 @@
 
 - 00320の次アクションとして、horizon-specific binary viability / abstention-first decisionを実装した。
 - `scripts/experiments/entry_ev_near_miss_horizon_viability.py` を追加し、60/240/720mごとに executable classifier、PnL regressor、tail-loss classifierをchronologicalに学習した。
-- report: `docs/reports/00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`
+- report: `methods/entry_ev/docs/reports/00321_2026-07-02_entry_ev_near_miss_horizon_viability.md`
 
 結果:
 
@@ -1694,7 +1694,7 @@
 
 - 00319の次アクションとして、near-miss fixed-best targetをchronological exit-viability / horizon headへ接続した。
 - `scripts/experiments/entry_ev_near_miss_exit_head.py` を追加し、評価月より前のnear-miss rowsだけで `target_fixed_executable` と `side_fixed_60/240/720m_adjusted_pnl` を予測した。
-- report: `docs/reports/00320_2026-07-02_entry_ev_near_miss_exit_head.md`
+- report: `methods/entry_ev/docs/reports/00320_2026-07-02_entry_ev_near_miss_exit_head.md`
 
 結果:
 
@@ -1724,7 +1724,7 @@
 
 - 00318の次アクションとして、near-miss support candidatesをexit timing / EV calibration targetへ変換した。
 - `scripts/experiments/entry_ev_near_miss_exit_target_diagnostics.py` を追加し、00318候補へfixed 60/240/720の最良target、oracle gap、prediction parquet上のfixed-horizon予測選択をjoinした。
-- report: `docs/reports/00319_2026-07-02_entry_ev_near_miss_exit_target.md`
+- report: `methods/entry_ev/docs/reports/00319_2026-07-02_entry_ev_near_miss_exit_target.md`
 
 結果:
 
@@ -1754,7 +1754,7 @@
 
 - 00317の次アクションとして、thin monthに反対側candidateがprediction rows上に存在するかを診断した。
 - `scripts/experiments/entry_ev_thin_month_opposite_candidate_diagnostics.py` を追加し、repair target、現行trade interval、prediction parquetを突き合わせた。
-- report: `docs/reports/00318_2026-07-02_entry_ev_thin_month_opposite_candidates.md`
+- report: `methods/entry_ev/docs/reports/00318_2026-07-02_entry_ev_thin_month_opposite_candidates.md`
 
 結果:
 
@@ -1784,7 +1784,7 @@
 
 - 00316の次アクションとして、support-limited negative months と side-share blockersをstandard admissionへ戻すための修復targetへ分解した。
 - `scripts/experiments/entry_ev_admission_repair_target_diagnostics.py` を追加し、monthly metricsから月別PnL hurdle、追加long/short trade数、role support修復後の状態を算出できるようにした。
-- report: `docs/reports/00317_2026-07-02_entry_ev_admission_repair_targets.md`
+- report: `methods/entry_ev/docs/reports/00317_2026-07-02_entry_ev_admission_repair_targets.md`
 
 結果:
 
@@ -1815,7 +1815,7 @@
 - 00315の次アクションとして、00314 family-aware w5のrefit集中改善を粗いpriorへ寄せても再現できるか検証した。
 - `scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py` に prior shrinkageを追加した。
 - child `family,direction,combined_regime,session_regime` を parent `direction,combined_regime,session_regime` へ疑似カウントalphaで寄せるscore kindを生成した。
-- report: `docs/reports/00316_2026-07-02_entry_ev_fixed60_margin_prior_shrinkage.md`
+- report: `methods/entry_ev/docs/reports/00316_2026-07-02_entry_ev_fixed60_margin_prior_shrinkage.md`
 
 結果:
 
@@ -1846,7 +1846,7 @@
 - 00314の次アクションとして、w5で消えた/置換されたtradeを00310 referenceと差分比較した。
 - `scripts/experiments/entry_ev_trade_set_delta_diagnostics.py` を追加し、entry-block overlay trade setを `added / removed / common_changed / common_same` に分解できるようにした。
 - 00310 `position_quality_proxy_overlay` と00314 `fixed60_margin_w5_position_quality_overlay` の `isolated_large_loss_long / t-5 / h720` branchを比較した。
-- report: `docs/reports/00315_2026-07-02_entry_ev_fixed60_margin_trade_set_delta.md`
+- report: `methods/entry_ev/docs/reports/00315_2026-07-02_entry_ev_fixed60_margin_trade_set_delta.md`
 
 結果:
 
@@ -1878,7 +1878,7 @@
 - `scripts/experiments/entry_ev_fixed60_uncertainty_margin_policy_inputs.py` を追加し、selected-trade実績から対象月より前だけのfixed60 false-positive priorを作り、prediction parquetのlong/short両側へmargin scoreを生成した。
 - w0 controlで、新score kindのside-gap quantileを再計算するとbaselineを再現できないことを確認した。
 - `--side-gap-source-score-kind` を追加し、既存 `preblockgap` side-gap quantileを継承できるようにした。
-- report: `docs/reports/00314_2026-07-02_entry_ev_fixed60_uncertainty_soft_margin.md`
+- report: `methods/entry_ev/docs/reports/00314_2026-07-02_entry_ev_fixed60_uncertainty_soft_margin.md`
 
 結果:
 
@@ -1912,7 +1912,7 @@
 - `scripts/experiments/entry_ev_fixed60_prior_uncertainty_head.py` を追加し、`fixed_false_positive` と `is_loss` の `base` vs `base_fixed_prior` を比較できるようにした。
 - role/family/group_keyを含むdefault runと、それらを外したnorole runを実施した。
 - `tests/test_entry_ev_fixed60_prior_uncertainty_head.py` を追加した。
-- report: `docs/reports/00313_2026-07-02_entry_ev_fixed60_prior_uncertainty_head.md`
+- report: `methods/entry_ev/docs/reports/00313_2026-07-02_entry_ev_fixed60_prior_uncertainty_head.md`
 
 結果:
 
@@ -1941,7 +1941,7 @@
 - 00311でhard-block昇格を止めた `long_range_normal_ny_fixed60_pred_gt0` を、短期path過大評価のprior-only feature候補へ戻した。
 - `scripts/experiments/entry_ev_short_horizon_prior_uncertainty.py` を追加し、`selected_fixed_60m_pred_pnl > 0` かつ `selected_fixed_60m_actual_pnl < 0` を診断targetとして、対象月より前だけのcontext prior統計を生成できるようにした。
 - `tests/test_entry_ev_short_horizon_prior_uncertainty.py` を追加した。
-- report: `docs/reports/00312_2026-07-02_entry_ev_fixed60_prior_uncertainty.md`
+- report: `methods/entry_ev/docs/reports/00312_2026-07-02_entry_ev_fixed60_prior_uncertainty.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -1971,7 +1971,7 @@
 - 00310の `long_range_normal_ny_fixed60_pred_gt0` を未使用chronologyへ再探索なしで適用できるか確認した。
 - `scripts/experiments/entry_ev_entry_block_holdout_support_diagnostics.py` を追加し、entry-block overlayの効果を discovery / holdout に分解できるようにした。
 - `tests/test_entry_ev_entry_block_holdout_support_diagnostics.py` を追加した。
-- report: `docs/reports/00311_2026-07-02_entry_ev_position_quality_holdout_support.md`
+- report: `methods/entry_ev/docs/reports/00311_2026-07-02_entry_ev_position_quality_holdout_support.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2001,7 +2001,7 @@
 - 00309のnegative resultを受け、`holdext_long_range_normal_ny` をextension vetoではなくentry/no-entryまたはposition-quality問題として扱った。
 - `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` に entry-time observableな `long_range_normal_ny*` rulesを追加した。
 - `tests/test_entry_ev_stateful_entry_block_overlay.py` に long / `range_normal_vol` / `ny_overlap` 系ruleのunit testを追加した。
-- report: `docs/reports/00310_2026-07-02_entry_ev_position_quality_proxy_overlay.md`
+- report: `methods/entry_ev/docs/reports/00310_2026-07-02_entry_ev_position_quality_proxy_overlay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2034,7 +2034,7 @@
 - 00308 branchをdefault / support2 / shallow025のsupport-aware admissionで再評価した。
 - `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` に `--extension-veto-rules` を追加し、`holdext_long_range_normal_ny` を実行時extension vetoとして検証した。
 - `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` は `extension_veto_rule` を任意group次元として扱うようにした。
-- report: `docs/reports/00309_2026-07-02_entry_ev_hold_extension_veto_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00309_2026-07-02_entry_ev_hold_extension_veto_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2065,7 +2065,7 @@
 - 00307のshort entry-block replacement後trade pathをenrichし、isolated/capture特徴を再生成してhold-extension target / stateful replayへ戻した。
 - `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` に `--require-model-used` を追加した。
 - `tests/test_entry_ev_hold_extension_stateful_replay.py` にfallback scoreではextensionしないテストを追加した。
-- report: `docs/reports/00308_2026-07-02_entry_ev_replacement_hold_extension_integration.md`
+- report: `methods/entry_ev/docs/reports/00308_2026-07-02_entry_ev_replacement_hold_extension_integration.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2099,7 +2099,7 @@
 - 00306の次アクションとして、未選択entry候補feedを使うreplacement replayへ戻した。
 - `scripts/experiments/entry_ev_entry_block_prediction_flags.py` を追加し、prediction parquetへentry-block用のobservable flagを付与できるようにした。
 - `scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` に `--side-ev-penalty-rules` と `--side-ev-penalty-replacement-min-margin` を追加し、片側EVをpenaltyして反対側replacementを許せるようにした。
-- report: `docs/reports/00307_2026-07-02_entry_ev_short_entryblock_replacement_replay.md`
+- report: `methods/entry_ev/docs/reports/00307_2026-07-02_entry_ev_short_entryblock_replacement_replay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2134,7 +2134,7 @@
 - `scripts/experiments/entry_ev_uncompensated_candidate_path_diagnostics.py` を追加し、context-month compensation、sequence state、monthly path summary、candidate summary、target rowsを出せるようにした。
 - `tests/test_entry_ev_uncompensated_candidate_path_diagnostics.py` を追加した。
 - `selector_variant` をpath variantとして扱い、`entry_blocked` はデフォルトで除外するようにした。
-- report: `docs/reports/00306_2026-07-02_entry_ev_uncompensated_candidate_path.md`
+- report: `methods/entry_ev/docs/reports/00306_2026-07-02_entry_ev_uncompensated_candidate_path.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2167,7 +2167,7 @@
 - 00303の次アクションどおり、`is_large_loss` ではなく `large_loss_uncompensated_by_context` を教師候補にしたchronological OOF headを追加した。
 - `scripts/experiments/entry_ev_selected_trade_uncompensated_loss_head.py` を追加し、00303 path compensation rowsから「同context-month内で補償されない大損」を予測できるか診断した。
 - `tests/test_entry_ev_selected_trade_uncompensated_loss_head.py` を追加した。
-- report: `docs/reports/00304_2026-07-02_entry_ev_uncompensated_loss_head.md`
+- report: `methods/entry_ev/docs/reports/00304_2026-07-02_entry_ev_uncompensated_loss_head.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2202,7 +2202,7 @@
 - 00302でlarge-loss probabilityのdirect hard gateが勝ちtradeを削ると分かったため、同じrisk scoreを「同じcontext-month内で大損が勝ちに補償されるか」というpath-aware軸で分解した。
 - `scripts/experiments/entry_ev_selected_trade_path_compensation_diagnostics.py` を追加し、selected-trade large-loss head predictionsから context-month PnL、compensated large loss、risk threshold別のflagged context PnLを出せるようにした。
 - `tests/test_entry_ev_selected_trade_path_compensation_diagnostics.py` を追加した。
-- report: `docs/reports/00303_2026-07-02_entry_ev_path_compensation_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00303_2026-07-02_entry_ev_path_compensation_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2236,7 +2236,7 @@
 - 00301の結論どおり、prior residual pressureをhard gateではなくlarge-loss / uncertainty headのfeatureとして使えるか診断した。
 - `scripts/experiments/entry_ev_selected_trade_large_loss_head.py` を追加し、selected-trade prior pressure rowsからchronological OOF large-loss classifierを作れるようにした。
 - `tests/test_entry_ev_selected_trade_large_loss_head.py` を追加した。
-- report: `docs/reports/00302_2026-07-02_entry_ev_prior_pressure_large_loss_head.md`
+- report: `methods/entry_ev/docs/reports/00302_2026-07-02_entry_ev_prior_pressure_large_loss_head.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2271,7 +2271,7 @@
 - 00300で見えた危険contextを、同一windowのstatic blacklistではなく、対象月より前だけで作るprior residual pressureとして診断した。
 - `scripts/experiments/entry_ev_selected_trade_prior_residual_pressure.py` を追加し、context別に `month < target_month` のみで prior PnL、loss rate、large-loss rate、bias、pressureを作るようにした。同月内のtrade結果はpriorに含めない。
 - `tests/test_entry_ev_selected_trade_prior_residual_pressure.py` を追加した。
-- report: `docs/reports/00301_2026-07-02_entry_ev_prior_residual_pressure.md`
+- report: `methods/entry_ev/docs/reports/00301_2026-07-02_entry_ev_prior_residual_pressure.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2306,7 +2306,7 @@
 - 00299でOOF calibrationはscale補正に有効だがdirect gateには弱いと分かったため、calibration residualをcontext / support / score binへ分解した。
 - `scripts/experiments/entry_ev_selected_trade_calibration_diagnostics.py` を追加し、selected-trade OOF predictionsからmode別score、bias、MAE、overestimate、loss rate、large loss、train supportをCSV化できるようにした。
 - `tests/test_entry_ev_selected_trade_calibration_diagnostics.py` を追加した。
-- report: `docs/reports/00300_2026-07-02_entry_ev_calibration_residual_context_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00300_2026-07-02_entry_ev_calibration_residual_context_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2340,7 +2340,7 @@
 - 00298でconfidence hard gateをrejectしたため、同じ00293 residual combo diagnostic branchを対象に、selected-trade expected PnL calibrationをchronological OOFで再診断した。
 - `scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py` に `--selector-variants` と `--exclude-entry-blocked` を追加し、entry-block overlay後の採用branchだけを抽出できるようにした。
 - `tests/test_entry_ev_selected_trade_supervised_shrinkage.py` にselector variant / entry blocked filterのテストを追加した。
-- report: `docs/reports/00299_2026-07-02_entry_ev_residual_combo_selected_trade_calibration.md`
+- report: `methods/entry_ev/docs/reports/00299_2026-07-02_entry_ev_residual_combo_selected_trade_calibration.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2374,7 +2374,7 @@
 - 00297の次アクションとして、thin-support residual monthsを月内順序削除ではなくモデル出力confidenceで扱えるか診断した。
 - `scripts/experiments/entry_ev_confidence_gate_overlay.py` を追加し、既存entry-block overlay trade pathへ rank / side-gap / loss-first probability / predicted EV / fixed-horizon predicted PnL のgateをno-replacementで重ねられるようにした。
 - `tests/test_entry_ev_confidence_gate_overlay.py` を追加した。
-- report: `docs/reports/00298_2026-07-02_entry_ev_confidence_gate_overlay.md`
+- report: `methods/entry_ev/docs/reports/00298_2026-07-02_entry_ev_confidence_gate_overlay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2406,7 +2406,7 @@
 - 00296の次アクションとして、remaining thin-support negative monthsを単発blacklistではなく月内サポート形成待ちで扱えるか診断した。
 - `scripts/experiments/entry_ev_month_warmup_overlay.py` を追加し、既存entry-block overlay trade pathへ `skip_first_N` / `wait_opposite_seen` / `wait_both_sides_seen` をno-replacementで重ねられるようにした。
 - `tests/test_entry_ev_month_warmup_overlay.py` を追加した。
-- report: `docs/reports/00297_2026-07-02_entry_ev_month_warmup_overlay.md`
+- report: `methods/entry_ev/docs/reports/00297_2026-07-02_entry_ev_month_warmup_overlay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2437,7 +2437,7 @@
 
 - 00295のsupport-aware分類を、raw cd15 -> hold-extension -> side horizon -> entry block -> residual combo の候補系列へ横断適用した。
 - raw cd15 internal/external、00290、00291、00292、00293のmonthly metricsを同じsupport-aware selectorへ入力した。
-- report: `docs/reports/00296_2026-07-02_entry_ev_support_aware_progression_compare.md`
+- report: `methods/entry_ev/docs/reports/00296_2026-07-02_entry_ev_support_aware_progression_compare.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2466,7 +2466,7 @@
 - 00294の次アクションとして、月次floor breachをsupport-limited / shallow / structuralへ分けるdiagnostic selectorを追加した。
 - `scripts/experiments/entry_ev_stateful_support_aware_admission.py` を追加し、strict standard gateとsupport-aware floor gateを並べて出せるようにした。
 - `tests/test_entry_ev_stateful_support_aware_admission.py` を追加した。
-- report: `docs/reports/00295_2026-07-02_entry_ev_support_aware_admission.md`
+- report: `methods/entry_ev/docs/reports/00295_2026-07-02_entry_ev_support_aware_admission.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2496,7 +2496,7 @@
 - 00293で残ったsmall negative monthsを、追加blacklistではなくsupport / side concentration / fixed-horizon rescueの観点で診断した。
 - `scripts/experiments/entry_ev_overlay_residual_floor_diagnostics.py` を追加し、entry-block overlay tradesとmonthly metricsからunblocked tradesだけを対象に残存floor breachを抽出できるようにした。
 - `tests/test_entry_ev_overlay_residual_floor_diagnostics.py` を追加した。
-- report: `docs/reports/00294_2026-07-02_entry_ev_overlay_residual_floor_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00294_2026-07-02_entry_ev_overlay_residual_floor_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2528,7 +2528,7 @@
 - 00292で残ったrefit2025 2025-03/08 floorを、entry-block overlay上で追加診断した。
 - `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` に `short_london_midloss_sidegap_pos`, `holdext_long_range_normal_ny`, `short_rollover_or_london_midloss_or_holdext_range_ny` を追加した。
 - `tests/test_entry_ev_stateful_entry_block_overlay.py` にresidual floor向けruleのmask testを追加した。
-- report: `docs/reports/00293_2026-07-02_entry_ev_residual_floor_combo_overlay.md`
+- report: `methods/entry_ev/docs/reports/00293_2026-07-02_entry_ev_residual_floor_combo_overlay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2560,7 +2560,7 @@
 - 00291の次アクションとして、hybrid 2025-12 short lossをentry/no-entry側から診断した。
 - `scripts/experiments/entry_ev_stateful_entry_block_overlay.py` を追加し、既存stateful trade pathに観測可能featureをjoinして、entry block ruleをno-replacement overlayで月次/selector形式へ戻せるようにした。
 - `tests/test_entry_ev_stateful_entry_block_overlay.py` を追加した。
-- report: `docs/reports/00292_2026-07-02_entry_ev_stateful_entry_block_overlay.md`
+- report: `methods/entry_ev/docs/reports/00292_2026-07-02_entry_ev_stateful_entry_block_overlay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2592,7 +2592,7 @@
 - 00290で残った2025-09/2025-06 isolated large-loss long recall不足に対し、stateful hold-extension replayへ side suffix universe と fixed horizon mode を追加した。
 - `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` に `--horizon-modes` を追加し、`isolated_large_loss_long` / `isolated_large_loss_short` のようなside-aware apply universeを扱えるようにした。
 - predicted best horizonだけでなく、fixed `720` horizonを使ってthreshold評価列 `pred_hold_extension_delta_720m` と実行horizonを揃えた。
-- report: `docs/reports/00291_2026-07-02_entry_ev_hold_extension_side_horizon_replay.md`
+- report: `methods/entry_ev/docs/reports/00291_2026-07-02_entry_ev_hold_extension_side_horizon_replay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2624,7 +2624,7 @@
 - `scripts/experiments/entry_ev_supervised_shrinkage_policy_inputs.py` を追加し、selected tradesの実現PnL/factorを対象月より前だけで学び、各prediction parquetのlong/short両側へ `pred_supervised_shrink_factor_*_best_adjusted_pnl` とquantile列を付与した。
 - raw `loss_exit30_cd15` と同じ6 familyへfactor shrinkage scoreを付与し、`entry_ev_quantile_exit_timing_sensitivity.py` でstateful replayした。
 - q95/q96/q97/q98/q99近傍も確認し、最高点ではなく安定台地があるかを診断した。
-- report: `docs/reports/00283_2026-07-02_entry_ev_supervised_shrinkage_policy_inputs.md`
+- report: `methods/entry_ev/docs/reports/00283_2026-07-02_entry_ev_supervised_shrinkage_policy_inputs.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2657,7 +2657,7 @@
 - 00281の次アクションとして、prior capture factorを直接scoreに掛けるのではなく、selected raw `loss_exit30_cd15` trades上でsupervised realized-PnL shrinkageを試した。
 - `scripts/experiments/entry_ev_selected_trade_supervised_shrinkage.py` を追加し、対象月より前のselected tradesだけで `adjusted_pnl` 直接回帰と `adjusted_pnl / pred_taken_ev` factor回帰を学習するchronological foldを実装した。
 - 特徴量はprediction / prior-risk系に限定し、実現 `adjusted_pnl`、oracle、exit regretはtarget/evaluation専用としてfeatureから除外した。
-- report: `docs/reports/00282_2026-07-02_entry_ev_selected_trade_supervised_shrinkage.md`
+- report: `methods/entry_ev/docs/reports/00282_2026-07-02_entry_ev_selected_trade_supervised_shrinkage.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2688,7 +2688,7 @@
 - 00280の次アクションとして、raw `loss_exit30_cd15` を固定benchmarkにし、prior exit-capture risk、executable EV calibration、direct score shrink overlayを検証した。
 - `entry_ev_exit_capture_target_diagnostics.py` と `entry_ev_executable_ev_*` 系に `--context-columns` を追加し、`direction,combined_regime,session_regime` と `family,direction,combined_regime,session_regime` を切り替えられるようにした。
 - `entry_ev_executable_ev_policy_inputs.py` に `--capture-shrink-strength` を追加し、historical capture factorをそのまま掛けるfull shrinkと、`strength=0.25` の弱いshrinkを比較した。
-- report: `docs/reports/00281_2026-07-02_entry_ev_capture_shrink_overlay.md`
+- report: `methods/entry_ev/docs/reports/00281_2026-07-02_entry_ev_capture_shrink_overlay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2718,7 +2718,7 @@
 - 00279の次アクションとして、q95 + raw `loss_exit30_cd15` を固定したまま、internal / external HGB / external hybrid の実行tradeをprediction文脈へjoinした。
 - `entry_ev_multifamily_policy_trade_enrichment.py` を `monthly_exit_timing_metrics.csv`、variant付きtrade path、`--variants` / `--candidates` などのフィルタに対応させた。
 - raw `loss_exit30_cd15` のenrichmentを3系統で実行し、統合 residual loss diagnostics を作成した。
-- report: `docs/reports/00280_2026-07-02_entry_ev_raw_cd15_residual_loss_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00280_2026-07-02_entry_ev_raw_cd15_residual_loss_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2752,7 +2752,7 @@
 - `entry_ev_quantile_exit_timing_sensitivity.py` に `--long-loss-first-column` / `--short-loss-first-column` を追加した。
 - fit不足時にNaNを出すとrequired column欠損でentry自体が消えるため、fit不足時は `0.0` fillにしてdynamic exitだけを無効化する扱いにした。
 - q95 + `cd15` 固定で `lfq30/50/60/70/80/90` を内部chronologyへ適用し、良さそうな `lfq30/50/60` を外部HGB/hybridへ固定適用した。
-- report: `docs/reports/00279_2026-07-02_entry_ev_loss_first_global_expanding_quantile.md`
+- report: `methods/entry_ev/docs/reports/00279_2026-07-02_entry_ev_loss_first_global_expanding_quantile.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2784,7 +2784,7 @@
 - `entry_ev_quantile_exit_timing_sensitivity.py` のvariant形式を後方互換のまま7要素へ拡張した。
 - 内部chronologyで `loss_exit30` に `mh5/15/30/60`, `cd5/15/30/60`, `mh+cd` を固定overlayとして比較した。
 - 内部で良かった `cd15/cd60` を外部HGBと外部hybridへ再探索なしで固定適用した。
-- report: `docs/reports/00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`
+- report: `methods/entry_ev/docs/reports/00278_2026-07-02_entry_ev_loss_exit30_dynamic_exit_cooldown.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2818,7 +2818,7 @@
 - tail-risk score生成時に既存pre-block side-gap quantileが引き継がれず、priorなしのHGB 2024側までtrade pathが変わる不整合を発見した。
 - `entry_ev_side_regime_tail_policy_inputs.py` に `--side-gap-source-score-kind` を追加し、既存score kindの `side_gap_pct_*` を新score kindへコピーできるようにした。
 - 修正後のdir-inv s0.25 / exit-cap s0.1をq99/floor5/rank90でreplayし、support、admission、trade enrichment、deltaを確認した。
-- report: `docs/reports/00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`
+- report: `methods/entry_ev/docs/reports/00275_2026-07-02_entry_ev_external_hgb_side_regime_tail_check.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2850,7 +2850,7 @@
 - `scripts/experiments/entry_ev_side_regime_tail_policy_inputs.py` を追加し、common-entry targetを対象月より前だけで `direction + combined_regime` / `direction + combined_regime + session_regime` に集計してprediction rowへ戻した。
 - `direction_side_inversion_target` と `exit_capture_failure_target` を `direction_regime` で試し、negative controlとして `side_context` も試した。
 - q99/q95 floor5/rank90をstateful replayし、support、admission、trade enrichmentを実行した。
-- report: `docs/reports/00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`
+- report: `methods/entry_ev/docs/reports/00274_2026-07-02_entry_ev_external_hybrid_side_regime_tail_risk.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2881,7 +2881,7 @@
 - 00272の反省を受け、capture factorをpost-selector scoreではなくselector前のbase calibrated scoreへ掛けた。
 - base executable score上でexit-regret riskとpre-block side-gap selectorを再生成した。
 - q99/q95 floor5/rank90をstateful replayし、support、admission、trade enrichmentを実行した。
-- report: `docs/reports/00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`
+- report: `methods/entry_ev/docs/reports/00273_2026-07-02_entry_ev_external_hybrid_base_executable_selector.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2913,7 +2913,7 @@
 - 00271のEV過大評価 / exit-capture failureに対し、既存のprior-only executable EV補正を外部hybrid `2025-09..12` へ固定適用した。
 - `entry_ev_executable_ev_policy_inputs.py` で、post-selector score `pred_exit_regret_selector_replguard_preblockgap_confidenceexit_bucket_t0p4_*` にcapture factorを掛けた `external_executable` scoreを生成した。
 - q99/q95 floor5/rank90をstateful replayし、support、admission、trade enrichmentを実行した。
-- report: `docs/reports/00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`
+- report: `methods/entry_ev/docs/reports/00272_2026-07-02_entry_ev_external_hybrid_executable_ev_preflight.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2946,7 +2946,7 @@
 - `entry_ev_multifamily_policy_trade_enrichment.py` でq99/q95のtrade CSVをprior-guard predictionへjoinした。
 - q99/q95の損失月 `2025-09,2025-12` を `entry_ev_residual_month_loss_diagnostics.py` で分解した。
 - `entry_ev_exit_shortening_target_diagnostics.py` でsame-side missed / low-capture / late-exit-regret / profit-barrier miss targetを確認した。
-- report: `docs/reports/00271_2026-07-02_entry_ev_external_hybrid_loss_target_insight.md`
+- report: `methods/entry_ev/docs/reports/00271_2026-07-02_entry_ev_external_hybrid_loss_target_insight.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -2980,7 +2980,7 @@
 - q99/floor5/rank90をno-guard / prior-guardでreplayした。
 - q95/floor5/rank90をstress比較としてreplayした。
 - support、episode、combined admissionを実行した。
-- report: `docs/reports/00270_2026-07-02_entry_ev_external_hybrid_2025_09_12_replay.md`
+- report: `methods/entry_ev/docs/reports/00270_2026-07-02_entry_ev_external_hybrid_2025_09_12_replay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -3017,7 +3017,7 @@
 - HGB 2024-03..06 と HGB 2025-08 に、`confidence_exit` exit-regret risk、pre-block side-gap selector、prior `direction_regime` guardを固定適用した。
 - q99/floor5/rank90で no-guard と prior-guard をstateful replayした。
 - support、episode、admission診断を実行した。
-- report: `docs/reports/00269_2026-07-02_entry_ev_external_hgb_prior_guard_replay.md`
+- report: `methods/entry_ev/docs/reports/00269_2026-07-02_entry_ev_external_hgb_prior_guard_replay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -3050,7 +3050,7 @@
 - `scripts/experiments/entry_ev_candidate_episode_support_diagnostics.py` を追加した。
 - q99/rank90/floor5、q95/rank90/floor5、q99/rank0/floor5のfresh supportを比較した。
 - q99/rank0/floor5をcal/fresh/refitへstress replayし、strict admissionへ通した。
-- report: `docs/reports/00268_2026-07-02_entry_ev_fresh_support_episode_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00268_2026-07-02_entry_ev_fresh_support_episode_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -3087,7 +3087,7 @@
 - q99/floor5 loss20を本命、q95/floor5 loss60をstressとしてstateful replayした。
 - strict / relaxed / support-relaxed admissionを実行した。
 - pre-block no-guard q99 vs prior guard q99のtrade deltaを作った。
-- report: `docs/reports/00267_2026-07-02_entry_ev_preblock_prior_guard_stateful_replay.md`
+- report: `methods/entry_ev/docs/reports/00267_2026-07-02_entry_ev_preblock_prior_guard_stateful_replay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -3127,7 +3127,7 @@ Admission:
 - pre-block追加only-candidate rowsに対し、前月までの同context損失だけでflagするprior-only診断を作った。
 - 同じ月の先行rowはpriorに含めず、current monthより前だけを見るようにした。
 - `direction_regime` と `context_id` のscopeを比較した。
-- report: `docs/reports/00266_2026-07-02_entry_ev_preblock_prior_context_guard.md`
+- report: `methods/entry_ev/docs/reports/00266_2026-07-02_entry_ev_preblock_prior_context_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 結果:
@@ -3163,7 +3163,7 @@ Admission:
 - `trade_delta_rows.csv` をprediction parquetへ戻し、`direction/combined_regime/session_regime` 単位でonly-candidate悪化を見られるようにした。
 - 実delta artifactは `entry_decision_timestamp` 共通列を持つため、候補/ベース別timestamp列がない場合は共通列へfallbackするようにした。
 - post-block replacement guard vs pre-block side-gap guardのrefit2025 deltaを診断した。
-- report: `docs/reports/00265_2026-07-02_entry_ev_preblock_delta_context_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00265_2026-07-02_entry_ev_preblock_delta_context_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -3208,7 +3208,7 @@ Admission:
 - broad replayでは q99/floor5 total `-23.5882`, worst `-128.3504`, trades `70`; q95/floor5 total `-14.6536`, worst `-140.8024`, trades `119`。
 - strict/relaxed admissionはNoTrade。
 - 判断: pre-block side-gap quantile infrastructureはaccepted。現pre-block `sg95` policyはreject。標準policyはNoTrade。
-- report: `docs/reports/00264_2026-07-02_entry_ev_preblock_side_gap_quantile.md`
+- report: `methods/entry_ev/docs/reports/00264_2026-07-02_entry_ev_preblock_side_gap_quantile.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: forced-exit selector input unit tests OK; py_compile OK; pre-block input generation OK; support diagnostic OK; broad replay OK; admission selector runs OK
 
@@ -3230,7 +3230,7 @@ Admission:
 - `sg0` では fresh supportが q99/floor5 `26`, q95/floor5 `38` に戻る。
 - replguard `sg0` replayは q95/floor5 total `+117.7700` だが worst month `-133.6988`, trades `181`, max DD `133.6988`。strict/relaxed admissionはNoTrade。
 - 判断: candidate support diagnosticはaccepted。`side_gap_pct` post-block汚染を修正候補にする。`sg0` は診断だけで、標準policyにはしない。標準policyはNoTrade。
-- report: `docs/reports/00263_2026-07-02_entry_ev_quantile_candidate_support_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00263_2026-07-02_entry_ev_quantile_candidate_support_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: candidate support unit test OK; py_compile OK; support diagnostic runs OK; `sg0` replay OK; `sg0` admission selector runs OK
 
@@ -3246,7 +3246,7 @@ Admission:
 - support-only relaxationとして `min_role_trades=0`, `min_month_trades=0` を許すと q99/floor5だけが通り、validation total `+27.1222`, min role total `0.0000`, worst month `-54.2268`, trades `36`, max DD `54.5368`, max side share `0.6944`。
 - q95/floor5は total `+63.5468` だが positive role countが1で、support-relaxedでも不合格。
 - 判断: replacement guard admission diagnosticはaccepted。q99/floor5は追加chronology用のsupport-relaxed diagnostic candidateに留め、標準policyにはしない。標準policyはNoTrade。
-- report: `docs/reports/00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`
+- report: `methods/entry_ev/docs/reports/00262_2026-07-02_entry_ev_exit_regret_replacement_guard_admission.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: strict admission selector run OK; relaxed diagnostic admission selector run OK; support-relaxed diagnostic admission selector run OK
 
@@ -3266,7 +3266,7 @@ Admission:
 - guard vs no-guard deltaは broad/fixedとも q99/floor5 `+8.2150`, q95/floor5 `+93.8440`。q95は removed negative `-91.0920` が大きい。
 - 一方、q99/floor5は 2025-11 `-20.6930`, 2025-12 `-4.1300` と勝ちtrade削除も発生。May tailは残る。
 - 判断: replacement guard stateful replayはaccepted。`exit_regret_selector_replguard_confidenceexit_bucket_t0p4` はdiagnostic replay candidate。ただしguardは00260のsame-window診断から作ったため、標準policyにはしない。標準policyはNoTrade。
-- report: `docs/reports/00261_2026-07-02_entry_ev_exit_regret_replacement_guard_replay.md`
+- report: `methods/entry_ev/docs/reports/00261_2026-07-02_entry_ev_exit_regret_replacement_guard_replay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: forced-exit selector input unit tests OK; replacement-risk unit test OK; policy trade delta unit test OK; docs report test OK; py_compile OK; guard input generation OK; broad/fixed replay OK; broad/fixed guard delta OK
 
@@ -3286,7 +3286,7 @@ Admission:
 - `selected_conf_gap_bucket in {strong, nonpositive}` はbroadで10 rows / harmful 8 / stateful net `-378.9356`, nonharm flagged net `+10.7900`。fixedも同じ10 rows / harmful 8 / `-378.9356`。
 - `conf_gap_extreme_and_profit_miss` はbroad/fixedとも4 rows / harmful 4 / stateful net `-246.6400` でcleanだが、残るharmが大きい。
 - 判断: replacement-risk delta diagnosticはaccepted。`conf_gap_extreme` は次のstateful replay candidate。ただし現時点ではpointwise suppression estimateであり、標準policyにはしない。標準policyはNoTrade。
-- report: `docs/reports/00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
+- report: `methods/entry_ev/docs/reports/00260_2026-07-02_entry_ev_exit_regret_replacement_risk.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: replacement-risk unit test OK; policy trade delta unit test OK; docs report test OK; py_compile OK; broad/fixed all-candidate delta run OK; broad/fixed replacement-risk diagnostic run OK
 
@@ -3303,7 +3303,7 @@ Admission:
 - s1 exposure baseline broad q99/floor5は `-46.3822`, max DD `118.8072`, 28 trades。exit-regret selectorは `+18.9072`, max DD `54.5368`, 36 tradesで、単なるs1型の取引削減より良い。
 - 月別では 2025-04 `+94.1720`, 2025-05 `+107.9724`, 2025-10 `+46.6100` が改善主因。一方 2025-11 `-39.6980`, 2025-09 `-27.5460`, 2025-03 `-26.8204`, 2024-03 `-24.0400` は悪化。
 - 判断: delta診断はaccepted。candidateはpre-registeredのまま維持するが、勝ちtrade削除、replacement悪化、月別悪化が残るため標準policyにはしない。標準policyはNoTrade。
-- report: `docs/reports/00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
+- report: `methods/entry_ev/docs/reports/00259_2026-07-02_entry_ev_exit_regret_selector_delta.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: policy trade delta unit test OK; py_compile OK; broad/fixed q99 delta run OK
 
@@ -3319,7 +3319,7 @@ Admission:
 - hard selector broad replay `data/reports/backtests/20260701_164827_20260702_entry_ev_exit_regret_selector_confexit_t0p4_broad_validation_backtest_s1/` では q99/floor5 `-142.3776 -> +18.9072`, max DD `162.1992 -> 54.5368`; q95/floor5 `-84.1626 -> -30.2972`。
 - fixed 2025-03..12 replay `data/reports/backtests/20260701_165213_20260702_entry_ev_exit_regret_selector_confexit_t0p4_fixed2025_03_12_backtest_s1/` では q99/floor5 `-177.3790 -> +19.1218`, q95/floor5 `-160.8606 -> -67.8612`。
 - 判断: `exit_regret_selector_confidenceexit_bucket_t0p4` q99/floor5をpre-registered diagnostic candidateへ昇格。ただし同じbroad target/replay loop由来なので標準policyにはしない。標準policyはNoTrade。
-- report: `docs/reports/00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
+- report: `methods/entry_ev/docs/reports/00258_2026-07-02_entry_ev_exit_regret_selector_candidate.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: forced-exit policy input unit tests OK; py_compile OK; risk input generation OK; selector input generation OK; broad/fixed replay OK
 
@@ -3333,7 +3333,7 @@ Admission:
 - s1は108 selected rows。`side_context -> same_side_large_regret_loss_target` pooled AUC `0.7008`, `confidence_exit -> large_exit_regret_loss_target` `0.6677`。pointwiseでは `selected_loss_first_prob` が same-side large regret AUC `0.8100`。
 - direction/profit-barrier missは両scoreでchronological bucketが弱い。s0.5のdirection best pooled AUC `0.4569`, profit-barrier miss best `0.4758`; s1のdirection best `0.4087`, profit-barrier miss best `0.4638`。
 - 判断: broad validation diagnosticはaccepted。exit-regret risk auxiliary featureへ進めるが、hard blockや標準policyにはしない。標準policyはNoTrade。
-- report: `docs/reports/00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
+- report: `methods/entry_ev/docs/reports/00257_2026-07-02_entry_ev_direction_exit_broad_validation.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: s0.5/s1 broad policy replay OK; s0.5/s1 enrichment OK; s0.5/s1 direction/exit diagnostic OK
 
@@ -3348,7 +3348,7 @@ Admission:
 - pointwiseでは `selected_loss_first_prob` が `same_side_missed_loss_target` / `low_capture_loss_target` に AUC `0.7325`、`same_side_large_regret_loss_target` に `0.7182`。
 - chronological calibrationはsupportが増えてもbest pooled AUCが `side_context -> same_side_large_regret_loss_target 0.5922`, `profit_exit -> large_exit_regret_loss_target 0.5621` 程度。policy化には弱い。
 - 判断: fixed 2025 stress diagnosticはaccepted。これはvalidation evidenceではなく、loss-first / exit-capture feature候補の発見として扱う。標準policyはNoTrade。
-- report: `docs/reports/00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
+- report: `methods/entry_ev/docs/reports/00256_2026-07-02_entry_ev_direction_exit_fixed2025_stress.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: fixed 2025 enrichment run OK; fixed 2025 direction/exit residual diagnostic run OK
 
@@ -3362,7 +3362,7 @@ Admission:
 - pointwiseでは `selected_ev_overestimate_risk` が direction/profit-barrier miss系に AUC `0.7083` だが、predicted rowsは20件のみ。`selected_time_exit_prob` は realized lossに AUC `0.6802`。
 - chronological calibrationは no-prior share `0.7403` が大きい。bestは `profit_exit -> hold_too_long_loss_target` pooled AUC `0.6875`, `profit_exit -> large_exit_regret_loss_target` `0.6667`。direction error系は `side_context` pooled AUC `0.5208`。
 - 判断: direction/exit residual target generationはaccepted。現validation supportだけではentry blockerや標準policyには接続しない。標準policyはNoTrade。
-- report: `docs/reports/00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00255_2026-07-02_entry_ev_direction_exit_residual_target_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: direction/exit residual target unit tests OK; validation diagnostic run OK; docs report tests OK
 
@@ -3376,7 +3376,7 @@ Admission:
 - `exitrisk_t0p02/t0p04` は q95/floor5 total `+41.4470`, trades `28`。`exitrisk_t0p01` は q95/floor5 `-5.3622`。`evexit_t0p01` は q95/floor5 `+54.8862`。
 - 低閾値selectorはfresh2024の1勝ちtradeやrefit2025の勝ちtradeを削り、00253 fixed 2025の改善はvalidationで再現しなかった。
 - 判断: multi-family enrichment infrastructureはaccepted。validation forced-exit selectorは標準採用しない。標準policyはNoTrade。
-- report: `docs/reports/00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
+- report: `methods/entry_ev/docs/reports/00254_2026-07-02_entry_ev_forced_exit_validation_selector_check.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: multifamily enrichment unit test OK; validation trade enrichment OK; forced-exit target diagnostics OK; forced-exit policy/selector input generation OK; validation selector replay 7 settings OK
 
@@ -3390,7 +3390,7 @@ Admission:
 - `evexit_bucket_t0p10` は q99 worst month `-48.1024`, max DD `55.0276` とtailを縮めるが、q99 total `-90.8702`。tail-risk diagnosticに留める。
 - May residualでは `exitrisk_t0p10` q99 `-74.7354`, q95 `-98.8414`。合算では direction error rate `0.7188`, same-side oracle profitable `0.9688`, large exit regret `0.7500`。forced-exit selector後の残差は方向/exit-capture問題。
 - 判断: hard selector input/replay infrastructureはaccepted。`exit_risk bucket t0.10..t0.20` は有望候補だが固定2025で見つけたため標準policyにはしない。次はchronological validationへ戻す。
-- report: `docs/reports/00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`
+- report: `methods/entry_ev/docs/reports/00253_2026-07-02_entry_ev_forced_exit_selector_inputs.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: forced-exit selector unit test OK; py_compile OK; selector input generation OK; fixed 2025 replay 10 settings OK; representative trade-output replays OK; May residual diagnostics OK
 
@@ -3404,7 +3404,7 @@ Admission:
 - q99総損益ベストは `forced_exit_loss_exitrisk_bucket_s0p25` `-93.3284`。baseline q99 `-147.3314` から改善するが worst month `-162.0092` が残る。
 - q99 worst monthベストは `forced_exit_loss_evexit_bucket_s1` の `-86.6640` だが、total `-185.0306` で4月・11月の勝ちを削りすぎる。
 - 判断: forced-exit prediction-row inputとstateful replay infrastructureはaccepted。現penalty scoreは標準policyにしない。forced-exit riskはdirect scoreよりcandidate selector / tail-risk objective / hold-cap adjustmentのfeatureへ回す。
-- report: `docs/reports/00252_2026-07-02_entry_ev_forced_exit_policy_inputs.md`
+- report: `methods/entry_ev/docs/reports/00252_2026-07-02_entry_ev_forced_exit_policy_inputs.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: forced-exit input unit test OK; py_compile OK; prediction-row input generation OK; fixed 2025 replay 12 settings OK; representative trade-output replays OK
 
@@ -3420,7 +3420,7 @@ Admission:
 - q99 chronological OOFでは、`hold_too_long_loss_target` の最良 pooled AUCは `exit_risk 0.5016`、`exit_shortening_residual_target` の最良 pooled AUCは `exit_plan 0.4487`。現featureだけでは標準化できるheadではない。
 - `forced_exit_loss_target` は q99で 4 trades / `-152.5164` と小さいが、pooled AUCは `exit_risk 0.7561`, `ev_exit 0.6870` と最も良い。
 - 判断: exit-shortening target generationとOOF calibrationはaccepted。hold-too-longはauxiliary labelに留め、次はforced-exit loss / late-exit-regretをentry suppressionまたはhold-cap adjustmentとしてstateful replayする。
-- report: `docs/reports/00251_2026-07-01_entry_ev_exit_shortening_target_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00251_2026-07-01_entry_ev_exit_shortening_target_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: exit shortening target unit tests OK; py_compile OK; q95/q99 and q99-only chronological OOF diagnostic runs OK
 
@@ -3434,7 +3434,7 @@ Admission:
 - `hold_too_long_loss_target` は q99で 11 trades / loss PnL `-322.7892` を覆い、exit shortening系target候補として強い。
 - 低direction-risk大損も3件 / `-104.5680` あり、2025-10 `long/range_normal_vol/ny_overlap` は risk `0.2544` のまま `-55.9080`。direction risk単独では拾えない。
 - 判断: residual diagnosticsはaccepted。次はexit captureをhold-too-long / low-capture / forced-exit lossへ細分化し、chronological OOF targetへ戻す。
-- report: `docs/reports/00250_2026-07-01_entry_ev_direction_s0p1_residual_loss_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00250_2026-07-01_entry_ev_direction_s0p1_residual_loss_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: residual loss diagnostic unit test OK; py_compile OK; fixed 2025 diagnostic run OK
 
@@ -3448,7 +3448,7 @@ Admission:
 - fixed 2025-03..12では、q99/floor5の最良は引き続きdirection s0.1 `-147.3314`。combined最良は `risk_pressure drbucket_or_global/qbucket_or_global s0.25` の `-156.6124`。
 - q95/floor5は `side_context drbucket_or_global/qbucket_or_global s0.25` が total `-156.9854` でside-priorを僅かに上回るが、min month `-223.9294` でNoTrade未満。
 - 判断: replacement-quality prediction-row inputとcombined stateful replay infrastructureはaccepted。現行headとcombined scoreは標準policyにしない。
-- report: `docs/reports/00249_2026-07-01_entry_ev_replacement_quality_policy_inputs.md`
+- report: `methods/entry_ev/docs/reports/00249_2026-07-01_entry_ev_replacement_quality_policy_inputs.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: replacement quality input unit tests OK; py_compile OK; input generation OK; fixed 2025 stateful replay 6 settings OK
 
@@ -3461,7 +3461,7 @@ Admission:
 - direction s0.1 q99/floor5は total `-147.3314`, min month `-153.9192`, bucket high-risk PnL `-51.3254`, global high-risk PnL `-68.8644`。
 - pointwiseでは side-prior q95/floor5 の `bucket_or_global_high` 削除が `-160.8606 -> +79.3774` に見えるが、kept min month `-55.3686` で、replacement replayではない。
 - 判断: selector/ranking diagnosticsはaccepted。direction inversion risk単独では標準候補にならない。次はreplacement positive-quality headと組み合わせ、stateful replayで確認する。
-- report: `docs/reports/00248_2026-07-01_entry_ev_direction_inversion_selector_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00248_2026-07-01_entry_ev_direction_inversion_selector_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: direction inversion selector unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3475,7 +3475,7 @@ Admission:
 - s0.25は q99/floor5 `-159.2316` まで改善するが、q95/floor5 `-292.1924` と大きく悪化。s0.5はq99/floor5 `-204.4412` と過剰penalty。
 - path診断では、s0.1 q99の改善はreplacement delta `+33.5480` が主で、common-entry deltaは `-3.5004`。s0.25はreplacement delta `+76.2274` だがcommon-entry delta `-58.0800` が大きく悪化。
 - 判断: direction inversion risk input generationはaccepted。direct score penaltyは標準policyにせず、s0.1をdiagnostic baselineに留める。
-- report: `docs/reports/00247_2026-07-01_entry_ev_direction_inversion_policy_inputs.md`
+- report: `methods/entry_ev/docs/reports/00247_2026-07-01_entry_ev_direction_inversion_policy_inputs.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: direction inversion input unit tests OK; py_compile OK; input generation OK; fixed 2025 backtests OK; path diagnostics OK
 
@@ -3490,7 +3490,7 @@ Admission:
 - 低risk大損は3 rows / `-145.8552` で、全てdirection inversionとexit failureも立つ。EV-overestimate riskをさらに調整するのではなく、direction/exit headへ戻す。
 - replacement 43 rowsでも `replacement_direction_side_inversion_target` が 19 rows / `-524.9992` を拾う。
 - 判断: common/replacement target generationはaccepted。次は `direction_side_inversion_target` の低容量chronological headをprediction rowへ接続する。
-- report: `docs/reports/00246_2026-07-01_entry_ev_common_loss_target_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00246_2026-07-01_entry_ev_common_loss_target_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: common loss target unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3503,7 +3503,7 @@ Admission:
 - q99/floor5は base `-229.7382` から side-prior `-177.3790` へ改善。common-entry delta `-8.3400`、replacement delta `+60.6992`。
 - worst contextは common側の `long/down_normal_vol/rollover`, `long/range_normal_vol/ny_overlap`, `short/down_normal_vol/ny_overlap`。`range_normal_vol/ny_overlap` は selected risk `0.173913` と低く、EV-overestimate riskだけでは拾えない。
 - 判断: path diagnosticsはaccepted。`side_prior_pressure_s0p5` は標準policyにしない。次はcommon lossを抑える direction/exit/replacement-aware targetへ進む。
-- report: `docs/reports/00245_2026-07-01_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00245_2026-07-01_entry_ev_side_prior_pressure_fixed2025_failure_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: failure diagnostics unit tests OK; py_compile OK; fixed 2025 diagnostic run OK
 
@@ -3516,7 +3516,7 @@ Admission:
 - fixed 2024-05..12では q99/floor5 0 trade、q95/floor5 2 trades / `+8.6980` とsupportが薄い。
 - fixed 2025-03..12では q99/floor5 `-177.3790`, q95/floor5 `-160.8606` と大きく崩れた。
 - 判断: prediction-row side-prior-pressure risk generation and stateful replayはaccepted。s0.5はvalidation改善のdiagnostic baselineに留め、標準policyにはしない。
-- report: `docs/reports/00244_2026-07-01_entry_ev_side_prior_pressure_policy_inputs.md`
+- report: `methods/entry_ev/docs/reports/00244_2026-07-01_entry_ev_side_prior_pressure_policy_inputs.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: side-prior-pressure input unit tests OK; py_compile OK; input generation OK; validation/fixed stateful backtests OK
 
@@ -3529,7 +3529,7 @@ Admission:
 - `side_drift` は chronological AUC `0.3102`, role holdout AUC `0.3883`、`full_context` は chronological AUC `0.3489`, role holdout AUC `0.4903`。現データ量ではbucket直入れが過細分化している。
 - pointwiseでは `side_prior_pressure` q99/floor5 threshold `0.50` が 14 trades / `-60.0334` を除去し、kept total `+49.8048`, kept min role `+0.1230`, zero-filled kept min month `0.0000` まで改善する。ただしreplacement未評価なのでpolicyではない。
 - 判断: context calibration sweepはaccepted。`side_prior_pressure` を次のEV-overestimate ranking/calibration head候補にし、`side_drift_bucket` 直入れとpointwise screen採用はしない。
-- report: `docs/reports/00243_2026-07-01_entry_ev_context_calibration_sweep.md`
+- report: `methods/entry_ev/docs/reports/00243_2026-07-01_entry_ev_context_calibration_sweep.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: context calibration sweep unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3542,7 +3542,7 @@ Admission:
 - `short / medium / high / medium / medium / neutral` は 1 row / `-32.0364` でfresh-specific lossだがsupportが薄い。
 - 逆に `short / missing / low / missing / low / negative` は high-riskで `+89.2040` とrefitで強く勝っている。`missing/low` を一律に悪い文脈として扱えない。
 - 判断: EV-overestimate risk context decompositionはaccepted。EV overestimate riskは削除gateではなく、`direction + side drift + support/pressure` 付きのranking/calibration headへ回す。
-- report: `docs/reports/00242_2026-07-01_entry_ev_overestimate_context_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00242_2026-07-01_entry_ev_overestimate_context_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: overestimate context diagnostics unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3555,7 +3555,7 @@ Admission:
 - strict gateは全候補NoTrade。PnL床だけ `min role -15`, `min month -10` へ緩め、risk coverage条件も入れたrelaxed gateでも全候補NoTrade。risk sensitivity 480行も全てNoTradeだった。
 - pointwiseには q95 floor5 の high-risk rows が 24 trades / `-35.7612` を拾い、kept totalを `+14.6138 -> +50.3750` へ改善する。ただし q95 floor5のrefit勝ちroleにも high-risk rows `+46.1476` があり、hard blockは利益も削る。
 - 判断: EV-overestimate risk selector diagnosticsはaccepted。候補昇格はしない。EV overestimateはrisk blockerではなく、entry ranking / calibration head / downside-weighted targetへ移す。
-- report: `docs/reports/00241_2026-07-01_entry_ev_overestimate_risk_selector.md`
+- report: `methods/entry_ev/docs/reports/00241_2026-07-01_entry_ev_overestimate_risk_selector.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: overestimate risk selector unit tests OK; py_compile OK; strict/relaxed diagnostic runs OK
 
@@ -3569,7 +3569,7 @@ Admission:
 - role holdout mean AUCは `executable_ev_overestimate_target 0.6401`, `realized_loss_target 0.5009`, `direction_side_inversion_target 0.2587`, `exit_capture_failure_target 0.2716`。
 - `medium/high` groupは3 rowsでEV overestimate / exit failure / realized lossが全て `1.0000`、total `-43.1964` だがsupportが小さいためhard blockerにしない。`missing/low` は81 rowsでtotal `-1.6042` とほぼflatなので、missing supportの自動拒否もしない。
 - 判断: component target calibration infrastructureはaccepted。`support+pressure` だけを十分なtarget modelとは扱わない。EV overestimateはcalibration target候補、direction/exitはside/context/holding/capture特徴を足した別headへ進める。
-- report: `docs/reports/00240_2026-07-01_entry_ev_component_target_calibration.md`
+- report: `methods/entry_ev/docs/reports/00240_2026-07-01_entry_ev_component_target_calibration.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: component target calibration unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3584,7 +3584,7 @@ Admission:
 - 各candidateの `composite_failure_target_rate` は `0.8621..0.9130` と高いが、targetが立っても利益になるoverlapがある。`none` overlapは 14 trades / `+176.8770`、large exit + low captureだけのoverlapは 13 trades / `+72.4700`。
 - 損失overlapは realized loss と EV overestimate がdirection/exit targetと重なる部分に集中する。direction + large exit + low capture + EV overestimate + realized lossは 11 trades / `-96.4764`、direction + large exit + EV overestimate + realized lossは 8 trades / `-146.2824`。
 - 判断: target decompositionはaccepted。`composite_failure_target` は単一no-trade labelにせず、direction-side inversion、exit capture、executable EV overestimate、realized lossを別target headとして扱う。
-- report: `docs/reports/00239_2026-06-30_entry_ev_composite_target_decomposition.md`
+- report: `methods/entry_ev/docs/reports/00239_2026-06-30_entry_ev_composite_target_decomposition.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: target decomposition unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3597,7 +3597,7 @@ Admission:
 - strict composite gateでは全候補NoTrade。PnL床だけ `min required role total -15`, `min required month -10` に緩めても全候補NoTrade。
 - relaxed sensitivity 288行も全てNoTrade。q99/q95 floor10はfresh role欠損で落ち、q99/q95 floor5はfresh tail、cal2024 prior-zero、direction error、EV過大評価が重なって落ちる。
 - 判断: composite selector diagnosticsはaccepted。現候補は標準採用しない。EV overestimateと実PnL floorはvalidation calibration diagnosticであり、model-time input featureではない。
-- report: `docs/reports/00238_2026-06-30_entry_ev_side_balance_downside_composite_selector.md`
+- report: `methods/entry_ev/docs/reports/00238_2026-06-30_entry_ev_side_balance_downside_composite_selector.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: composite selector unit tests OK; py_compile OK; strict/relaxed composite selector OK
 
@@ -3611,7 +3611,7 @@ Admission:
 - PnL床だけ `min required role total -15`, `min required month -10` に緩めても全候補NoTrade。coverage sensitivity 216行も全てNoTradeだった。
 - 低pressure floor10候補は「安全」ではなく、fresh role未観測とprior support欠損が原因。covered floor5候補はfresh tailが解けていない。
 - 判断: coverage/support auditはaccepted。pressure/risk featuresはsupport/coverage preflight後にだけ使う。現候補は標準採用しない。
-- report: `docs/reports/00237_2026-06-30_entry_ev_side_balance_downside_coverage_audit.md`
+- report: `methods/entry_ev/docs/reports/00237_2026-06-30_entry_ev_side_balance_downside_coverage_audit.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: coverage audit unit tests OK; py_compile OK; strict/relaxed coverage audit OK
 
@@ -3625,7 +3625,7 @@ Admission:
 - 診断用の緩和gateでは q99/q95 floor10 がeligibleになり、feature grid 320行中128行が q99 floor10 を選んだ。ただし floor10系はactive roleが2、prior zero shareが `0.9000..0.9130` で、fresh role coverage不足とprior evidence不足を伴う薄い候補。
 - q95 floor5は `risk_high_share 0.2642`, `interaction_high_share 0.3396`, `feature_pressure 0.3116`, `uncovered_loss_pnl -153.0528`。fresh tailの説明には効くが、pressureが低い候補を選ぶだけではcoverage不足候補を拾う。
 - 判断: candidate-level aggregationはaccepted。feature pressure単独selectorは標準採用しない。次はsupport/coverage constraints、executable EV、exit capture、direction-side inversionと組み合わせる。
-- report: `docs/reports/00236_2026-06-30_entry_ev_side_balance_downside_selector.md`
+- report: `methods/entry_ev/docs/reports/00236_2026-06-30_entry_ev_side_balance_downside_selector.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: side-balance downside selector unit tests OK; py_compile OK; strict/relaxed diagnostics OK
 
@@ -3640,7 +3640,7 @@ Admission:
 - q95 floor5では `risk_and_underrepresented >=0.20, drift>=0.02` が9 trades / `-11.7604` を拾うが、kept min role `-74.8268`。`risk_only >=0.20` でも kept min role `-42.7904` で、fresh tailを救えない。
 - 最大損失の `fresh2024 2024-04 long range_low_vol/london -33.4920` はprior support 0でrisk/intersection 0。`fresh2024 2024-03 short range_low_vol/london -32.0364` はrisk高だがdrift `0.0131` と低く、interaction scoreでは弱い。
 - refit勝ちroleにも高risk/high interactionがあり、risk-only hard blockも危険。判断: interaction diagnosticsはaccepted、hard gate/direct penaltyは採用しない。selector/ranking特徴、downside-weighted dense target、stateful replacement-aware診断へ回す。
-- report: `docs/reports/00235_2026-06-30_entry_ev_side_balance_downside_interaction.md`
+- report: `methods/entry_ev/docs/reports/00235_2026-06-30_entry_ev_side_balance_downside_interaction.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: side-balance downside interaction unit tests OK; py_compile OK; diagnostics run OK
 
@@ -3654,7 +3654,7 @@ Admission:
 - q99 floor5では `selected_underrepresented >=0.02` が11 trades / `-16.8394` を拾い、kept total `+6.6108`, kept min role `+1.6420` へ改善する。ただしq95 floor5では `selected_underrepresented >=0.05` が `+14.0236` の利益を削り、`selected_overrepresented >=0.05` も `+35.3140` を削る。
 - 最大fresh損失は、long `range_low_vol/london -33.4920` が signed drift `-0.1400` でunderrepresented、short `range_low_vol/london -32.0364` が signed drift `+0.0131` で通常閾値未満。side drift単体ではtailを拾えない。
 - 判断: side-balance selected-trade feature diagnosticsはaccepted。side-balance単独gateは採用しない。次はprior side PnL、direction error、exit capture failure、context loss、realized executable EVと組み合わせる。
-- report: `docs/reports/00234_2026-06-30_entry_ev_side_balance_feature_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00234_2026-06-30_entry_ev_side_balance_feature_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: side-balance feature diagnostics unit tests OK; py_compile OK; validation `--write-trades` backtest OK; feature diagnostics OK
 
@@ -3669,7 +3669,7 @@ Admission:
 - 一方、fresh validationは q95 floor5 `-82.2428`, q99 floor5 `-38.3550`。overall q95 floor5は total `+14.6138` だが min role `-82.2428`, min month `-46.5308`。selectorはNoTrade。
 - fresh fixed `2024-10..11` は q99 floor5 `+27.3080` だが2 tradesだけ、q95 floor5は `-33.9804`。
 - 判断: side-balance score infrastructureはaccepted。generic side-balance penaltyをdirect scoreとして標準採用しない。side-balance driftはselector/ranking feature、downside-conditioned penalty、context-specific correctionへ回す。
-- report: `docs/reports/00233_2026-06-30_entry_ev_side_balance_score_penalty.md`
+- report: `methods/entry_ev/docs/reports/00233_2026-06-30_entry_ev_side_balance_score_penalty.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: side-balance unit tests OK; py_compile OK; input generation, stateful backtest, selector, fresh fixed diagnostic OK
 
@@ -3684,7 +3684,7 @@ Admission:
 - fixed720 targetでは row-level EV MAEが `2025-01 17.0734 -> 10.6154`, `2025-02 19.9742 -> 13.9449` へ改善。fixed240 targetでは `2025-01 16.0786 -> 6.0691`, `2025-02 17.4734 -> 8.1887` へ改善。
 - 一方、stateful validationではfixed720 q95 floor5が total `+16.4192` でも fresh role `-76.2788`、q99 floor5は total `-25.4216`。fixed240も q99 floor10が total `+8.5684` だが min month `-1.8000` とsupport不足でNoTrade。
 - 判断: dense capture model infrastructureはaccepted。fixed720/fixed240 dense scoreを標準policyへ昇格しない。row-level MAE改善だけでは一玉制約下のadmission品質を保証しない。
-- report: `docs/reports/00232_2026-06-30_entry_ev_dense_executable_capture_model.md`
+- report: `methods/entry_ev/docs/reports/00232_2026-06-30_entry_ev_dense_executable_capture_model.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: dense capture unit tests OK; py_compile OK; fixed720/fixed240 input generation, stateful backtest, selector OK
 
@@ -3699,7 +3699,7 @@ Admission:
 - `720m q99 floor5` は validation total `+43.0418`, min role `+2.4158`, validation trades `19` まで改善したが、validation min month `-1.8000` と0-trade月でNoTrade。fresh fixedにも `2024-10 -10.3560` が残る。
 - `260m` は `q99 floor5` validation total `+33.4638` で720mに負ける。floorなしは q99 validation `-51.2934`、q95 validation `-36.5868` と悪化。floor `2/3/4` に安定台地はない。
 - 判断: executable EV stateful score infrastructureはaccepted。tested policiesはNoTrade-first gateを通らないため標準policyはNoTrade。
-- report: `docs/reports/00231_2026-06-30_entry_ev_executable_ev_stateful_score.md`
+- report: `methods/entry_ev/docs/reports/00231_2026-06-30_entry_ev_executable_ev_stateful_score.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: executable EV policy input / calibration / scale quantile / policy backtest / selector / docs report tests OK; py_compile OK
 
@@ -3713,7 +3713,7 @@ Admission:
 - validation q95/q99ではq99候補が `capture_ev_mean > 5`, `capture_ev_low2_share < 0.10` を満たすが、refit role totalと月次floorが負でNoTrade。
 - fresh q95/720は validation total `+76.2204`、fixed total `+325.8914` だが、validation min month `-9.1718` でNoTrade。
 - 判断: executable EV featureはcandidate説明には有用だが、promotion gateを超えない。次はpost-trade selectorではなくstateful entry ranking / replacement choiceへ入れる。
-- report: `docs/reports/00230_2026-06-30_entry_ev_executable_ev_selector_feature.md`
+- report: `methods/entry_ev/docs/reports/00230_2026-06-30_entry_ev_executable_ev_selector_feature.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: executable EV selector unit tests OK; py_compile OK; validation/fresh selector runs OK
 
@@ -3727,7 +3727,7 @@ Admission:
 - fresh q95/720でも、validation `14.7507 -> 8.4237`、fixed `13.4582 -> 7.0417` とMAE改善は一貫した。
 - 一方、低calibrated EV hard thresholdは不安定。`EV<3` はvalidation横断で `+87.4464` 改善するがfresh q95/720では `-31.9218` 悪化。`EV<2` はfresh q95/720で `+49.6632` 改善するがvalidation横断では `-5.3592` 悪化。
 - 判断: executable EV calibrationはaccepted diagnostic/continuous feature。hard thresholdは標準採用しない。標準policyはNoTrade。
-- report: `docs/reports/00229_2026-06-30_entry_ev_executable_ev_calibration.md`
+- report: `methods/entry_ev/docs/reports/00229_2026-06-30_entry_ev_executable_ev_calibration.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: executable EV calibration unit tests OK; py_compile OK; validation/fresh diagnostic runs OK
 
@@ -3741,7 +3741,7 @@ Admission:
 - prior exit risk thresholdはvalidation横断では `>=0.20` が68 trades / `-23.1116` を拾うが、`>=0.25` は42 trades / `+62.7204` を消して悪化する。
 - fresh q95/720 fixedでは `>=0.20` が77 trades / `+225.3034`、`>=0.25` が60 trades / `+218.1610`、`>=0.50` が32 trades / `+26.4952` を消す。hard blockとしては不採用。
 - 判断: exit-capture targetはaccepted diagnostic/training label。`prior_exit_capture_risk_score` はhard blockではなくselector/ranking/calibration feature候補。標準policyはNoTrade。
-- report: `docs/reports/00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00228_2026-06-30_entry_ev_exit_capture_target_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: exit capture target unit tests OK; py_compile OK; validation/fresh diagnostic runs OK
 
@@ -3755,7 +3755,7 @@ Admission:
 - direction errorは7件 / `-46.3626`、large exit regretは13件 / `-30.5188`、large best-side regretは15件 / `-34.7518`。
 - `prior_context_risk>=0.50` は0件で、この月の損失を拾えない。`>=0.20` なら4件 / `-31.2560` を拾うが、局所的な後付けなので採用しない。
 - 判断: この残差月はentry floor不足ではなく、direction-side inversion、exit capture、realized-executable EV calibration不足として扱う。標準policyはNoTrade。
-- report: `docs/reports/00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00227_2026-06-30_entry_ev_residual_2024_03_loss_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: residual diagnostics unit tests OK; py_compile OK; main residual diagnostic run OK; prior threshold sensitivity run OK
 
@@ -3772,7 +3772,7 @@ Admission:
 - stateful validationでは q95_floor5/720m が no-guard `+117.0340 / min role +16.2628 / min month -9.1718` から prior_risk `+133.2270 / min role +24.5508 / min month -9.1718` へ改善した。
 - fresh fixedでは fresh-only prior が `+402.1118 -> +396.0818` と小幅悪化。cal+fresh priorでは `+427.6524` へ改善したが、min month `-9.1718` は残る。
 - 判断: risk score diagnostics、`prior_risk` guard、`--prior-roles` はaccepted infrastructure。現guardは標準採用しない。標準policyはNoTrade。
-- report: `docs/reports/00226_2026-06-30_entry_ev_prior_context_risk_score.md`
+- report: `methods/entry_ev/docs/reports/00226_2026-06-30_entry_ev_prior_context_risk_score.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: prior context risk diagnostics unit tests OK; hold-cap sensitivity unit tests OK; py_compile OK; pointwise diagnostics OK; stateful prior_risk runs OK
 
@@ -3787,7 +3787,7 @@ Admission:
 - fast priorでは `720m q95_floor5` が `+139.0422 / min role +17.7308 / min month -0.4914` まで近づいたが、NoTrade-first gateはまだ通らない。
 - fresh fixed diagnosticでは no-guard `720m q95_floor5` が `+402.1118 / min role +76.2204`、prior guard `720m` は `+373.4814 / min role +2.0982`。guardは悪いcontextを拾う一方で良い取引も削る。
 - 判断: prior-only guard infrastructureはaccepted。現prior inversion guardはover-blocking気味なので標準採用しない。`720m` は診断capとして残す。標準policyはNoTrade。
-- report: `docs/reports/00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`
+- report: `methods/entry_ev/docs/reports/00225_2026-06-30_entry_ev_quantile_prior_inversion_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: hold-cap sensitivity unit tests OK; py_compile OK; strict prior-only run OK; fast prior-only run OK; fresh fixed diagnostic run OK
 
@@ -3802,7 +3802,7 @@ Admission:
 - 全候補が `month_pnl_below_floor` で落ち、selected policyはNoTrade。
 - 判断: hold-cap sensitivityはaccepted infrastructure。`720m` は次の診断capだが、blind cap延長やsame-validation inversion guardは標準採用しない。
 - 次は00224のdiagnostic inversion contextを、対象月より前だけで作る prior-only context-side inversion detectorへ置き換え、`720m` vs `260m` を再評価する。
-- report: `docs/reports/00224_2026-06-30_entry_ev_quantile_hold_cap_sensitivity.md`
+- report: `methods/entry_ev/docs/reports/00224_2026-06-30_entry_ev_quantile_hold_cap_sensitivity.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: hold-cap sensitivity unit tests OK; py_compile OK; main run OK; guard_min_trade_count=4 support check OK
 
@@ -3816,7 +3816,7 @@ Admission:
 - top exit-regret contextにはfresh short `up_normal_vol/london`, fresh long `range_low_vol/london`, refit short `down_low_vol/rollover` などが出る。loss-with-oracle-edge率も高く、entry潜在値をexitで取り逃しているtradeが多い。
 - 判断: exit capture diagnosticsはaccepted infrastructure。`260m` capがbindingしていることは明確だが、refit負けにはdirection/context errorも混ざるため、blind hold cap延長は採用しない。標準policyはNoTrade。
 - 次はq95/q99について `260/480/720/1440` hold-cap sensitivityをvalidation roleだけで事前登録し、context-side inversion guardなし/ありを分けて確認する。
-- report: `docs/reports/00223_2026-06-30_entry_ev_quantile_exit_capture_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00223_2026-06-30_entry_ev_quantile_exit_capture_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: exit capture diagnostics unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3830,7 +3830,7 @@ Admission:
 - q90系はfresh2024 validationが主に壊れる。`q90_sg90_floor5` freshは total `-50.8200`, loss PnL `-189.6420`。
 - worst context aggregateは refit short `range_normal_vol/ny_overlap` total `-256.8672`, direction error `1.0`、fresh short `up_normal_vol/ny_late` total `-214.2720`, direction error `1.0`。
 - 判断: entry floorの細密探索ではなく、context-side inversionとexit captureを分離して診断する。現quantile/floor候補は標準採用しない。標準policyはNoTrade。
-- report: `docs/reports/00222_2026-06-30_entry_ev_quantile_trade_context_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00222_2026-06-30_entry_ev_quantile_trade_context_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: quantile trade diagnostics unit tests OK; py_compile OK; trade-writing backtest run OK; trade context diagnostics run OK
 
@@ -3843,7 +3843,7 @@ Admission:
 - `q90_sg90_rank90_floor5` は候補数を増やすが、fresh2024 validation total `-50.8200`, worst `-37.3312` とtailを悪化させた。
 - strict3 selectorもclean2 selectorもNoTrade。全8候補が `positive_roles_low`, `role_total_pnl_below_floor`, `month_pnl_below_floor` で落ちた。
 - 判断: positive EV floor構文はaccepted infrastructure。現floor候補は標準採用しない。失敗は「selected EVが正か」では解けず、role/regime instabilityに残っている。
-- report: `docs/reports/00221_2026-06-30_entry_ev_quantile_positive_floor.md`
+- report: `methods/entry_ev/docs/reports/00221_2026-06-30_entry_ev_quantile_positive_floor.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: quantile policy backtest unit tests OK; py_compile OK; floor policy backtest run OK; strict3/clean2 selector runs OK
 
@@ -3856,7 +3856,7 @@ Admission:
 - strict3 (`cal2024_calibration_validation`, `fresh2024_validation`, `refit2025_validation`) はNoTrade。主blockerは `positive_roles_low` 7件、`role_total_pnl_below_floor` 6件、`month_pnl_below_floor` 6件。
 - clean2 (`fresh2024_validation`, `refit2025_validation`) もNoTrade。絶対閾値baselineは validation total `+254.7066`, min role total `+16.1220`, min month `+1.0490` だが、`role_trades_low` と `side_share_high` で落ちる。
 - 判断: role-level selectorはaccepted infrastructure。現quantile候補は標準採用しない。固定diagnostic PnLでvalidation-failing候補を救済しない。
-- report: `docs/reports/00220_2026-06-30_entry_ev_quantile_role_selector.md`
+- report: `methods/entry_ev/docs/reports/00220_2026-06-30_entry_ev_quantile_role_selector.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: quantile role selector unit tests OK; py_compile OK; strict3/clean2 selector runs OK
 
@@ -3871,7 +3871,7 @@ Admission:
 - ただし同候補は fresh2024 validation total `+34.2940` でも worst `-12.4240`、refit2025 validation total `-27.9456`。`q95` もrefit validation `-23.2338`、rank gate offはfresh validation `-70.7894`。
 - 絶対閾値baseline `entry10/short9/side5/rank0` はpositiveだが、cal2024は0 trades、refit2025はlong share `0.9763`。scale driftを解いた証拠ではない。
 - 判断: quantile admissionはaccepted infrastructure。標準policyはNoTrade。次は追加chronological validation windowsとrole-level selector gateを先に整える。
-- report: `docs/reports/00219_2026-06-30_entry_ev_quantile_policy_backtest.md`
+- report: `methods/entry_ev/docs/reports/00219_2026-06-30_entry_ev_quantile_policy_backtest.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: backtest / scale quantile / quantile policy tests OK; py_compile OK; quantile input run OK; quantile policy backtest run OK
 
@@ -3883,7 +3883,7 @@ Admission:
 - calibrated `score>=q99`, `side_gap>=q95`, `rank>=q90` は `month` scopeで cal2024 `103`, fresh2024 `738`, refit2025 `50` entries。cal2024のno-entry問題は解消するが、freshはshort-only、refitはlong-onlyに近い。
 - 同条件を `side_regime_session_month` scopeにすると cal2024 `41`, fresh2024 `316`, refit2025 `32` entriesで、side構成も cal `23/18`, fresh `59/257`, refit `26/6` まで改善する。
 - 判断: quantile admissionは次にstateful backtestへ接続する価値がある。ただし今回の出力はstateless入力診断であり、標準policyはNoTrade。
-- report: `docs/reports/00218_2026-06-30_entry_ev_scale_quantile_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00218_2026-06-30_entry_ev_scale_quantile_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: scale quantile diagnostics unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3896,7 +3896,7 @@ Admission:
 - refit2025は同configで `29,567` entries、うちlong `29,522`。long EV q95が `23.52..23.71` とcal/freshの約2倍で、fold間scale driftが強い。
 - sparse fixed-positiveの `entry14/short9/min_rank0.6` はfresh2024で0 entry、refit2025で25 long-only entries。validation入力側でもshort-positiveの根拠はない。
 - 判断: 絶対EV threshold + side margin + rank gateはfold間scale driftに弱い。標準policyはNoTrade。次はside/regime-local EV quantile / rank quantileと新chronological foldを優先する。
-- report: `docs/reports/00217_2026-06-30_entry_ev_admission_input_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00217_2026-06-30_entry_ev_admission_input_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: admission input diagnostics unit tests OK; py_compile OK; diagnostic run OK
 
@@ -3908,7 +3908,7 @@ Admission:
 - cal2024 rank window全体は `144` rows, trade count `8`, total `-70.3272`。active rowsはすべてshort-side lossesで、非負上位はほぼno-trade row。
 - cal2024 + fresh2024 + refit2025の3-window selectorを実行した。strict support10/worst0 (`positive_windows=3`, `min_window_trades=10`) はNoTrade。cal2024を0-trade非負確認扱いにしたrelaxed gateは以前と同じ `entry10/short9/min_rank0.0` を選び、side share `0.9595`。`max_side_trade_share=0.95` を入れるとNoTradeへ戻る。
 - 判断: cal2024 full rank化はaccepted artifactだが、validation supportを増やしていない。relaxed rowは00212/00213と同じで、固定test崩壊済みなので標準採用しない。標準policyはNoTrade。
-- report: `docs/reports/00216_2026-06-30_entry_ev_cal2024_rank_window.md`
+- report: `methods/entry_ev/docs/reports/00216_2026-06-30_entry_ev_cal2024_rank_window.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: inventory/admission py_compile OK; inventory/admission/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; cal2024 rank sweeps OK; 3-window selector runs OK; inventory v3 OK
 
@@ -3920,7 +3920,7 @@ Admission:
 - refit2025 `2025-03..12` はfull rank gridだが固定testなので同じaudit内でvalidationへ流用しない。chrono2024 `2024-05..12` は固定test扱いで、しかも `18` rows/month の部分rank gridとentry8の `1` row/month add-onだけなので、完全rank validationとして比較できない。
 - `2024-01..02` はnon-rank gridで、rank gridとして使うには再生成が必要。使う場合もcalibration-validationであり、clean outer holdoutとは分ける。
 - 判断: sparse high-rank rowを評価するには追加validation windowが必要だが、既存fixed-test artifactをそのままvalidation化しない。新しいchronological fold、またはrank grid再生成 + 新しいouter test予約を先に決める。
-- report: `docs/reports/00215_2026-06-30_entry_ev_validation_inventory.md`
+- report: `methods/entry_ev/docs/reports/00215_2026-06-30_entry_ev_validation_inventory.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: validation inventory/admission scripts py_compile OK; validation inventory/sparse/gate/selector/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; inventory run OK
 
@@ -3933,7 +3933,7 @@ Admission:
 - 同rowは fixed total `+98.9868` だが、validation total `-0.3844`, trades `3`, active months `2`, min window trades `0`, side share `1.0000`。fresh2024 windowは0 trade、refit2025 windowは3 long-only tradesで `-0.3844`。
 - blockerは `validation_total_not_positive`, `validation_trades_low`, `validation_active_months_low`, `validation_worst_below_floor`, `validation_worst_window_below_floor`, `validation_window_trades_low`, `validation_side_share_high` の複合。これは「薄いが良いvalidation signal」ではなく「validationでは観測できていない候補」。
 - 判断: sparse high-rank rowを現2-window validationから標準採用する根拠はない。fixed-positive rowはhindsight clueとして残すが、採用には追加validation windowsかside/regime-aware rank calibrationが必要。標準policyはNoTrade。
-- report: `docs/reports/00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00214_2026-06-30_entry_ev_sparse_rank_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: sparse rank diagnostics/admission scripts py_compile OK; sparse/gate/selector/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; diagnostic run OK
 
@@ -3947,7 +3947,7 @@ Admission:
 - 選択された全gateのfixed testは同じく total `-943.9322`, worst `-294.1980`, trades `1144`。`max_side_trade_share<=0.95`, `min_window_trades=10`, `min_combined_regime_pnl>=-50` は全てNoTrade。
 - fixed-test positiveの `entry14/short9/min_rank0.6` は total `+98.9868` だが、validation total `-0.3844`, min window trades `0`, side share `1.0000` のため現selectorでは採用不可。固定testを見て昇格させるとhindsight selectionになる。
 - 判断: gate sensitivityはaccepted infrastructure。単純なside/regime/window gate閾値調整では汎化候補は見つからず、標準policyはNoTradeのまま。次はvalidation window数を増やし、sparse high-rank rowを固定test PnLなしで説明できるrank/EV calibrationへ進む。
-- report: `docs/reports/00213_2026-06-30_entry_ev_gate_sensitivity.md`
+- report: `methods/entry_ev/docs/reports/00213_2026-06-30_entry_ev_gate_sensitivity.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: selector/gate sensitivity py_compile OK; selector/gate sensitivity/docs unit tests OK; `git diff --check` OK; internal `日時` report order audit OK; gate sensitivity run OK
 
@@ -3961,7 +3961,7 @@ Admission:
 - `max_side_trade_share<=0.95` を足すと標準selectorはNoTradeに戻る。side-balance gateは有望なrejection axisだが、閾値 `0.95` はこの単発auditから標準化しない。
 - 両test windowに存在するconfigだけのhindsight topは `entry14/short9/min_rank0.6` の total `+98.9868` だが worst `-133.6912`。robust standard candidateではない。
 - 判断: multi-window selectorはaccepted infrastructure。標準policyはNoTrade。今後のentry admission reviewは単一2ヶ月validationではなくmulti-windowを標準経路にする。
-- report: `docs/reports/00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`
+- report: `methods/entry_ev/docs/reports/00212_2026-06-30_entry_ev_multiwindow_admission_selector.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: selector py_compile OK; selector unit tests OK; strict/relaxed/side-balance multi-window runs OK; fixed test audit CSV生成 OK
 
@@ -3973,7 +3973,7 @@ Admission:
 - 固定test `2025-03..12` では同rowが total `-1002.1534`, worst `-294.1980`, trades `1147`, max DD `332.4446`、long PnL `-424.4576`, short PnL `-577.6958` へ崩れた。NoTrade `0` に大きく負ける。
 - Test hindsight topは `entry14/short9/min_rank0.7` の total `+324.5040`, worst `-38.0640`, trades `17` だが、validationでは取引ゼロなので採用できない。これを選ぶとtest leakageになる。
 - 判断: rank gateの閾値調整より、2ヶ月validationだけで未来10ヶ月を代表させる設計が弱い。次は複数chronological validation window、side/regime worst bucket、side balance、trade frequency制約をselectorに入れる。
-- report: `docs/reports/00211_2026-06-30_entry_ev_rank_refit_2025_fold.md`
+- report: `methods/entry_ev/docs/reports/00211_2026-06-30_entry_ev_rank_refit_2025_fold.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: HGB/MLP train OK; hybrid merge OK; validation/test rank sweeps OK; selector support gate OK; aggregation OK
 
@@ -3984,7 +3984,7 @@ Admission:
 - `entry_ev_admission_selection.py` に `validation_active_months`、`--min-active-months`、`--min-worst-pnl` を追加した。`min_trades=1` では `entry10/short9/min_rank0.0` が選ばれるが、`min_trades=10`, `min_active_months=2`, `min_worst_pnl=0` では標準selectorはNoTradeを返す。
 - Fixed `2024-05..12` では validation-selected low-support row `entry10/short9/min_rank0.0` が total `+87.8942`, worst `-2.2800`, trades `10`。rank候補 `entry8/short9/min_rank0.6` は total `+74.2970`, worst `-20.1600`, trades `11`。
 - 判断: `min_entry_rank` はdiagnostic admission axisとして残す。support gateはaccepted infrastructure。ただしvalidation supportが薄く、月10trades条件を満たさないため標準policyはNoTradeのまま。
-- report: `docs/reports/00210_2026-06-30_entry_ev_rank_gate_support_audit.md`
+- report: `methods/entry_ev/docs/reports/00210_2026-06-30_entry_ev_rank_gate_support_audit.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: rank validation sweeps OK; fixed test sweeps OK; selector support gate unit tests OK
 
@@ -3995,7 +3995,7 @@ Admission:
 - Fresh foldとして `2024-03..04` をvalidationにした。bestは calibrated `entry12/short6` の validation total `-1.8610`, worst `-16.3290`, trades `7` で、標準selectorはNoTradeを選んだ。raw系は fresh validation時点で既に大きく負け、raw `entry12/short6` は `-115.7246`。
 - 診断selectorは calibrated `entry12/short6` を選び、`2024-05..12` fixed testでは total `+65.4014`, worst `-37.8326`, max DD `37.8326`, trades `19`, forced exits `0`。ただしvalidation totalが負なので、これはpromotion signalではない。13:34の00210で、このfixed testは `min_entry_rank=0.5` 入りだったと訂正した。
 - 判断: selectorはaccepted infrastructure。標準policyはNoTrade。`cal12/short6` は低頻度diagnostic candidateとして残すが、validation-positiveになるまで標準採用しない。
-- report: `docs/reports/00209_2026-06-30_entry_ev_notrade_selector_fresh_fold.md`
+- report: `methods/entry_ev/docs/reports/00209_2026-06-30_entry_ev_notrade_selector_fresh_fold.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: fresh validation raw/calibrated sweeps OK; selector artifact生成 OK; diagnostic fixed test OK; selector unit tests OK
 
@@ -4006,7 +4006,7 @@ Admission:
 - calibrated EVはvalidationでは `entry=10, short_offset=6`、`12/3`、`12/6` がいずれも `0` trade / `0` PnL のNoTrade tieになった。これはpositive edgeではなく「validationでは入らなかった」だけ。
 - full 2024 fixed testでは calibrated `entry10/short6` が total `+100.3612`, worst `-43.2296`, max DD `51.5828`, trades `60`、calibrated `entry12/short6` が total `+74.0644`, worst `-37.8326`, max DD `37.8326`, trades `26`。一方、calibrated `entry12/short3` は `-27.2164` で、short thresholdを緩めると壊れる。
 - 判断: calibrated EV + 高いshort thresholdは診断候補として残すが、validationで選べたわけではないため標準採用しない。threshold selectorはNoTrade tieの扱いを事前固定し、fresh chronological foldsで再確認する。
-- report: `docs/reports/00208_2026-06-30_entry_ev_calibration_admission.md`
+- report: `methods/entry_ev/docs/reports/00208_2026-06-30_entry_ev_calibration_admission.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: validation hybrid生成 OK; validation raw/calibrated sweeps OK; full 2024 fixed tests OK; compact comparison artifact生成 OK
 
@@ -4019,7 +4019,7 @@ Admission:
 - 新しい2024-only side-penalty deltaから session context walk-forward stress examplesを作り、stateful risk OOFを `2024-05..12` に出力した。OOF AUCは `0.6689`、candidate count `736`。
 - OOF 8ヶ月固定比較では source p10/replm10 が total `-3.1736` で最良、risk5 side `-10.4618`、risk0 side `-32.7828`、risk0 no-side `-141.8816`。bestでもNoTrade `0` に届かない。
 - 判断: 標準採用なし。source/risk5は診断比較対象として残す。次はside hook追加ではなく、entry EV calibration / admission layer、NoTrade firstの評価、より広いtrain history / purged walk-forwardを優先する。
-- report: `docs/reports/00207_2026-06-30_chrono_2024_full_protocol.md`
+- report: `methods/entry_ev/docs/reports/00207_2026-06-30_chrono_2024_full_protocol.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: HGB/MLP train OK; hybrid merge OK; raw fixed backtests OK; delta examples OK; walk-forward stress OK; stateful risk OOF OK; OOF fixed comparisons OK
 
@@ -4031,7 +4031,7 @@ Admission:
 - early examplesを既存stateful examplesへ足し、session context walk-forward stressを12ヶ月へ拡張した。stateful risk OOFは `2024-05, 2024-06, 2024-07, 2024-09, 2024-11, 2024-12, 2025-01..04` に出力でき、OOF AUC `0.6800`。
 - 純2024の利用可能6ヶ月固定比較では source p10/replm10 `+21.6688`, no-side `+12.0322`, risk5 side `+2.1998`, risk0 side `-20.0128`。sourceは合計最良だが、no-sideの worst `-74.9020` / max DD `112.0964` が最も防御的。
 - 判断: source/side penaltyは標準採用しない。early risk OOFを診断artifactとして残し、`gap0/gap5/budget0` pure-2024へ進む前に、全2024を同一chronological protocolで再生成するか判断する。
-- report: `docs/reports/00206_2026-06-30_early2024_chrono_risk_oof.md`
+- report: `methods/entry_ev/docs/reports/00206_2026-06-30_early2024_chrono_risk_oof.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: HGB/MLP train OK; hybrid merge OK; walk-forward stress OK; stateful risk OOF OK; fixed comparison OK
 
@@ -4043,7 +4043,7 @@ Admission:
 - しかし `gap5/budget0` は追加applyでshort tradesを `190 -> 87` に削り、source short PnL `+37.4170` を `-15.4126` へ悪化させた。特に2025-06は source short `+68.8738` に対して gap5 short `-17.3392`。
 - gap5後の代表損失は `2025-07 down_low_vol/ny_overlap long -97.4172`、`2025-06 range_normal_vol/ny_overlap short -42.0708`、`2025-08 up_low_vol/asia long -36.7772`。short-only suppression後はlong側の残存riskも大きい。
 - 判断: 同じ2025系列でshort-only hookを増やさない。`side_drift_diagnostics.py` をfuture candidate preflightにし、次は早期2024のHGB+MLP forced prediction生成と同一risk列拡張へ進む。
-- report: `docs/reports/00205_2026-06-30_samefamily_side_calibration_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00205_2026-06-30_samefamily_side_calibration_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: baseline/source/gap5 side drift diagnostics artifact生成 OK; data coverage preflight OK
 
@@ -4054,7 +4054,7 @@ Admission:
 - 10ヶ月合計では baseline `+433.3572 / worst -26.2112`、source `+219.9460 / worst -102.2830`、`gap0/budget0 +273.3682 / worst -80.9772`、`gap5/budget0 +384.6968 / worst -90.5606`。
 - 追加apply `2025-05..08` だけでは baseline `+176.8236`、source `+66.7730`、`gap0/budget0 +57.1198`、`gap5/budget0 +13.9434`。`gap5` は2025-06の勝ちをsource比 `-86.2130` 削った。
 - 判断: `gap5/budget0` は強い時期があるが、追加same-family applyで安定しない。標準採用候補から外し、diagnostic baseline / intervention locatorへ降格する。これ以上同じ2025系列でshort hookを積むより、純2024または別regimeの同一risk列生成とside prediction calibration再評価を優先する。
-- report: `docs/reports/00204_2026-06-30_gap5_budget_samefamily_extension.md`
+- report: `methods/entry_ev/docs/reports/00204_2026-06-30_gap5_budget_samefamily_extension.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: holding max baseline / side drift p10+replm10 / short raw-gap budget artifact生成 OK; `python3 -m unittest tests.test_docs_reports`: OK
 
@@ -4065,7 +4065,7 @@ Admission:
 - `gap5/budget0` は total `+445.8266`, worst `-39.0766`。`gap0/budget0` は total `+190.6394`, worst `-50.5156`。
 - 00202固定の triggered profit-miss min4 は total `+367.8768`, worst `-39.0766`。2025-03 `+69.1790 -> +33.6446`、2025-04 `+267.2254 -> +224.8100` と、発火月で勝ちを削った。
 - 判断: triggered profit-missは最有力candidateから診断candidateへ降格。`gap5/budget0` がこのsmokeでも最も強い。次は `gap5/budget0` 自体を追加same-family windowへ固定適用する。
-- report: `docs/reports/00203_2026-06-30_triggered_profit_miss_samefamily_check.md`
+- report: `methods/entry_ev/docs/reports/00203_2026-06-30_triggered_profit_miss_samefamily_check.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: holding max baseline / side drift p10+replm10 / short raw-gap budget / triggered hook fixed apply artifact生成 OK
 
@@ -4078,7 +4078,7 @@ Admission:
 - min_priorなしだと total `+660.4748`。2025-02..04の少数履歴で発火し、勝ちを削るため、min4が必要。
 - `pred_short_profit_barrier_hit` は0/1列。threshold 0.40/0.45/0.55/0.60 はすべて `+790.3634` で、微小な閾値最適化ではない。
 - 判断: triggered profit-missは最有力candidateに昇格。ただし同じ2025系列で作ったルールなので標準採用はしない。次はcoststress 260 + stateful risk5 + replacement margin10の2024同一familyを生成し、再探索なしで固定適用する。
-- report: `docs/reports/00202_2026-06-30_triggered_replacement_risk_hook.md`
+- report: `methods/entry_ev/docs/reports/00202_2026-06-30_triggered_replacement_risk_hook.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_side_context_interaction_guard_apply`: OK, 9 tests; `python3 -m unittest tests.test_side_context_interaction_guard_apply tests.test_docs_reports tests.test_backtest`: OK, 112 tests; `git diff --check`: OK; dynamic hook / threshold stability artifact生成 OK
 
@@ -4090,7 +4090,7 @@ Admission:
 - late `global_gap5_budget0` では `pred_taken_profit_barrier_hit < 0.5` が `-291.8810` を覆い、残りは `+4.8932`。ただし全12ヶ月では同条件covered PnLが `+144.2660` で、global gateにすると良いreplacementを消す。
 - `pred_taken_ev < 15` はsupportが少ないが、全12ヶ月 `-87.9540`、late `-83.8596` と一貫して悪いreplacementに寄った。
 - 判断: replacement risk target化は有効。`profit_hit_lt0p5` はprior deterioration後に限定しないと危険。次は `pred_ev_lt15` またはtrigger限定 `profit_hit_lt0p5` をdynamic hookで検証する。
-- report: `docs/reports/00201_2026-06-30_replacement_risk_target_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00201_2026-06-30_replacement_risk_target_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/short_replacement_risk_target_diagnostics.py tests/test_short_replacement_risk_target_diagnostics.py`: OK; `python3 -m unittest tests.test_short_replacement_risk_target_diagnostics tests.test_short_budget_replacement_trade_audit tests.test_short_budget_entry_signal_audit tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 16 tests; `git diff --check`: OK; replacement risk diagnostics artifact生成 OK
 
@@ -4102,7 +4102,7 @@ Admission:
 - side-gap onlyも `+504.5282` へ悪化。rank-onlyは小幅改善し、`pred_short_entry_local_rank >= 0.53` が total `+511.5964`, worst `-215.1172`, max DD `215.1172`。
 - 判断: hookはdiagnostic infrastructureとして残す。OR条件とside-gap-onlyは標準採用しない。rank-only `0.53` は弱いcandidateだが改善幅が小さく、標準採用しない。
 - 次はentry削除条件を増やすのではなく、`model-trade-delta` の `only_candidate` shortをreplacement risk targetとして扱い、replacement後の候補品質を事前評価する。
-- report: `docs/reports/00200_2026-06-30_focus_entry_dynamic_hook.md`
+- report: `methods/entry_ev/docs/reports/00200_2026-06-30_focus_entry_dynamic_hook.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_side_context_interaction_guard_apply tests.test_backtest tests.test_short_budget_entry_signal_audit tests.test_short_budget_replacement_signal_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_fixed_rule_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 127 tests; `git diff --check`: OK; dynamic hook sweep/delta生成 OK
 
@@ -4114,7 +4114,7 @@ Admission:
 - `range_low_vol/ny_overlap` 限定の `pred_side_confidence_gap <= 0 OR pred_taken_entry_local_rank >= 0.52` は同context `-86.5792` のうち `-80.9316` を覆う。
 - 00198の `prior alert OR prior pred-bias` にfocus entry signalを足すと、`gap5` late replacement shortの残存は `-94.5582` から `-34.8906` まで縮む。
 - 判断: dynamic policy候補として残す。ただし実行済みreplacement row削除の上限診断であり、標準採用しない。次は `side_context_interaction_guard_apply.py` にfocus context + entry-level conditionのbudget/admission hookを入れて再replacement込みで確認する。
-- report: `docs/reports/00199_2026-06-30_entry_signal_residual_context_audit.md`
+- report: `methods/entry_ev/docs/reports/00199_2026-06-30_entry_signal_residual_context_audit.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/short_budget_entry_signal_audit.py tests/test_short_budget_entry_signal_audit.py`: OK; `python3 -m unittest tests.test_short_budget_entry_signal_audit tests.test_short_budget_replacement_signal_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_fixed_rule_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 20 tests; `git diff --check`: OK
 
@@ -4126,7 +4126,7 @@ Admission:
 - prior alert OR prior max prediction short bias `>= 0.30` は `-192.4296` を覆い、残存を `-94.5582` まで縮める。ただしこれは実行済みreplacement row削除の上限診断で、dynamic policyではない。
 - context別では `up_low_vol/ny_overlap -103.5756` は prior prediction biasで拾えるが、`range_low_vol/ny_overlap -86.5792` は prior alert 0、prior biasも弱く、既存prior context signalではほぼ拾えない。
 - 判断: context alert強化だけでは不足。次は `range_low_vol/ny_overlap` のentry-level EV overestimate、NY overlap固有side inversion、またはcurrent-month first-loss controlを調べる。
-- report: `docs/reports/00198_2026-06-30_replacement_prior_signal_audit.md`
+- report: `methods/entry_ev/docs/reports/00198_2026-06-30_replacement_prior_signal_audit.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/short_budget_replacement_signal_audit.py tests/test_short_budget_replacement_signal_audit.py`: OK; `python3 -m unittest tests.test_short_budget_replacement_signal_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_fixed_rule_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 18 tests; `git diff --check`: OK
 
@@ -4139,7 +4139,7 @@ Admission:
 - `short_budget_replacement_trade_audit.py` を追加し、`model-trade-delta` の `only_candidate` shortをtrade単位で集計した。late 2025-08..12 replacement shortは `gap5/budget0` が67件 `-286.9878`、`gap0/budget0` が16件 `-38.6214`。
 - `gap5` の損失集中は 2025-09 `-182.3932`、contextでは `up_low_vol/ny_overlap -103.5756`, `range_low_vol/ny_overlap -86.5792`, `range_low_vol/asia -82.6692`。
 - 判断: fixed triggerはdiagnostic candidate / preflightに留める。標準採用せず、追加未使用月または2024側の同一familyへ固定適用する。
-- report: `docs/reports/00197_2026-06-30_fixed_short_budget_trigger_audit.md`
+- report: `methods/entry_ev/docs/reports/00197_2026-06-30_fixed_short_budget_trigger_audit.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile ...`: OK; `python3 -m unittest tests.test_short_budget_fixed_rule_audit tests.test_short_budget_replacement_trade_audit tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_docs_reports`: OK, 16 tests; `git diff --check`: OK
 
@@ -4151,7 +4151,7 @@ Admission:
 - global `gap0/budget0` は late base short `-716.6702` を全て消し、replacement shortを `-38.6214` に抑える。これがalert context限定との差分。
 - global `gap5/budget0` は early windowを `+832.6886` まで伸ばしall-window topだが、late replacement short `-286.9878` が残る。
 - 判断: alert context限定gateを本流として増やさない。次は `gap5/budget0` をearlyで使い、deterioration後に `gap0/budget0` へ落とすtriggerを追加未使用月・追加データで再探索なし検証する。
-- report: `docs/reports/00196_2026-06-30_budget0_replacement_path_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00196_2026-06-30_budget0_replacement_path_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `model-trade-delta` 3系統 OK; comparison artifact OK
 
@@ -4164,7 +4164,7 @@ Admission:
 - `threshold=0.01` は total `-155.3242`, short PnL `-499.5802` で悪化。即時first-loss blockは有益なalert-context tradeも消し、replacement exposureを悪化させる。
 - prior-only selectionは min4 total `-396.3152`, min8 total `-609.1884` と明確に失敗。
 - 判断: alert-context first-loss / fast-stopは標準採用しない。次はalert contextだけに閉じず、非alert short exposure、global `gap0/budget0` の再探索なし検証、budget0後のreplacement path診断へ戻る。
-- report: `docs/reports/00195_2026-06-30_alert_context_first_loss_cap.md`
+- report: `methods/entry_ev/docs/reports/00195_2026-06-30_alert_context_first_loss_cap.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: clean sweep OK; min4/min8 selection OK
 
@@ -4176,7 +4176,7 @@ Admission:
 - active margin filterはreplacement tradeを増やして悪化した。`active_min_entry_margin=10,budget=inf` は total `-299.3786`、`20,budget=inf` は `-132.9616`。
 - prior-only selectionも失敗。min4 best `worst` は target 8ヶ月 total `-316.4554`、min8 best `worst` は target 4ヶ月 total `-542.9034`。
 - 判断: hookは診断infraとして残すが標準採用しない。alert contextだけへの単純budget/admissionは狭すぎる。次は context-specific first-loss cap、または現在月realized context lossを使ったfast stopへ進む。
-- report: `docs/reports/00194_2026-06-30_alert_context_budget_admission.md`
+- report: `methods/entry_ev/docs/reports/00194_2026-06-30_alert_context_budget_admission.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_side_context_interaction_guard_apply tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_docs_reports tests.test_short_budget_drift_trigger_selection`: OK, 119 tests; `git diff --check`: OK
 
@@ -4188,7 +4188,7 @@ Admission:
 - composite `recent_short_alert_and_short_losing_months >= 1` は min4 total `+232.2466`, worst `-46.0150`, max DD `129.7364`, short PnL `+154.7572`。00191のrealized triggerと同一成績。
 - min8は total `-15.0104`, worst `-45.4774` のままでNoTrade未満。
 - 判断: context alertは単独triggerとして採用しない。compositeは00191を「context drift付きshort loss」として説明する診断。次は月全体budget0ではなく、alert contextだけのbudget/admission marginを試す。
-- report: `docs/reports/00193_2026-06-30_context_alert_budget_trigger.md`
+- report: `methods/entry_ev/docs/reports/00193_2026-06-30_context_alert_budget_trigger.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/short_budget_drift_trigger_selection.py tests/test_short_budget_drift_trigger_selection.py`: OK; `python3 -m unittest tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 124 tests; `git diff --check`: OK
 
@@ -4201,7 +4201,7 @@ Admission:
 - `recent_pred_short_bias_mean >= 0.15` や `recent_pred_match_rate_mean < 0.55` は早すぎて全target月でdefensive `gap0/budget0` に倒れ、min4 total `+150.3206` まで落ちた。
 - min8はどのprediction系triggerもほぼ `gap0/budget0` に潰れ、total `-15.0104`, worst `-45.4774` のまま。
 - 判断: prediction-share月次平均triggerは標準採用しない。実装は残し、次は context/session単位のside drift alert、または realized first-lossとのAND条件で試す。
-- report: `docs/reports/00192_2026-06-30_prediction_side_drift_trigger.md`
+- report: `methods/entry_ev/docs/reports/00192_2026-06-30_prediction_side_drift_trigger.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/short_budget_drift_trigger_selection.py tests/test_short_budget_drift_trigger_selection.py`: OK; `python3 -m unittest tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 123 tests; `git diff --check`: OK
 
@@ -4213,7 +4213,7 @@ Admission:
 - min8は直近prior deteriorationがすでに見えるため、ほぼ常時 `gap0/budget0` へ落ち、total `-15.0104`, worst `-45.4774`。tailは小さいがNoTrade未満。
 - wide primary候補に `gap10/budget0` を入れても、min4 total `+223.1380`, worst `-79.0794` で `gap5/budget0 -> gap0/budget0` に負けた。
 - 判断: trigger scriptは残す。標準採用はしない。これは性能改善ではなく、budget0発火をtarget-month-independentに説明する診断。次はprediction-share / label-share side drift featuresを足す。
-- report: `docs/reports/00191_2026-06-30_short_budget_drift_trigger.md`
+- report: `methods/entry_ev/docs/reports/00191_2026-06-30_short_budget_drift_trigger.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/short_budget_drift_trigger_selection.py tests/test_short_budget_drift_trigger_selection.py`: OK; `python3 -m unittest tests.test_short_budget_drift_trigger_selection tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 122 tests; `git diff --check`: OK
 
@@ -4227,7 +4227,7 @@ Admission:
 - prior-only min4では `defensive_budget` が target 8ヶ月 total `+232.2466`, worst `-46.0150`, short PnL `+154.7572`。`00189` の min4 `-4.8828` から大幅改善。
 - prior-only min8では `defensive_budget` / `recent_active_stability` が `gap0/budget0` を選び、target 4ヶ月 total `-15.0104`, worst `-45.4774`, max DD `81.8860`。`00189` の min8 `-226.5946` から改善したが、まだNoTrade未満。
 - 判断: `gap0/budget0` はこのfamilyの現時点の防御候補として残す。ただし標準採用は保留。次は budget0 を常時使うのではなく、prior side-drift deterioration から発火させる検知器を作る。
-- report: `docs/reports/00190_2026-06-30_context_entry_budget_zero.md`
+- report: `methods/entry_ev/docs/reports/00190_2026-06-30_context_entry_budget_zero.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/side_context_interaction_guard_apply.py tests/test_backtest.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 119 tests; `git diff --check`: OK
 
@@ -4240,7 +4240,7 @@ Admission:
 - budget-only min8では target 4ヶ月 total `-226.5946`, worst `-118.5098`。`gap0/budget1` に固定されるが、2025-09..12のlate short regimeはまだ防ぎ切れない。
 - budget + drawdown候補でも `defensive_budget` は同じ aggregate で、drawdown threshold追加の価値は薄い。
 - 判断: `defensive_budget` はこのfamilyの現時点best selection ruleとして残す。ただし標準採用はしない。active/short PnL最大化は早期月のshort成功へ寄り、late regimeで崩れるためselectorとして使わない。
-- report: `docs/reports/00189_2026-06-30_short_budget_selection.md`
+- report: `methods/entry_ev/docs/reports/00189_2026-06-30_short_budget_selection.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/short_budget_guard_selection.py tests/test_short_budget_guard_selection.py`: OK; `python3 -m unittest tests.test_short_budget_guard_selection tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 115 tests; `git diff --check`: OK
 
@@ -4253,7 +4253,7 @@ Admission:
 - prior-onlyでは min4/worst が total `-15.9692`, worst `-132.1382`, short PnL `-93.4586` まで改善。`00187` の short raw gap prior-only min4/worst `-274.9360` より大幅改善だが、NoTradeはまだ上回らない。min8/worstは total `-240.2230`。
 - budget + drawdown hard guardも試したが、strict budget候補ではdrawdown threshold `20/40/60/inf` が同一結果になり、prior-only改善はなかった。
 - 判断: `context_entry_budget` は有望な実験hookとして残すが標準採用しない。次は total/worst集計だけではなく、prior short active PnL、short losing month count、short-side deterioration profileでbudgetを選ぶ。
-- report: `docs/reports/00188_2026-06-30_short_entry_budget_guard.md`
+- report: `methods/entry_ev/docs/reports/00188_2026-06-30_short_entry_budget_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/side_context_interaction_guard_apply.py tests/test_backtest.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 111 tests; `git diff --check`: OK
 
@@ -4264,7 +4264,7 @@ Admission:
 - 全12ヶ月を見たbestは `short_gap=5, threshold=20, min_entry_margin=20` で total `+18.5106`、trades `921`、worst month `-259.3024`、max DD `259.3024`。baseline source run `-90.1378` からは改善し、short PnLも `-434.3938 -> -325.7454` へ改善した。
 - ただしprior-only selectionは失敗。min4/worstは target 8ヶ月 total `-274.9360`、min4 total/risk系は `-353.6094`。min8/worstは target 4ヶ月 total `-527.8212`、min8 total/risk系は `-606.4946`。
 - 判断: `signal_short_raw_gap` は短期short driftの診断軸として残すが、all-windowで良い候補は後知恵。標準policyには昇格しない。次は raw score gap単独ではなく、target-month-independent な prior side-drift profile と short exposure budget を評価する。
-- report: `docs/reports/00187_2026-06-30_short_raw_gap_context_guard.md`
+- report: `methods/entry_ev/docs/reports/00187_2026-06-30_short_raw_gap_context_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 109 tests; `git diff --check`: OK
 
@@ -4275,7 +4275,7 @@ Admission:
 - `context_columns=dataset_month` では `selected_side_rule` が実約定active trade 4件だけで全く変化なし。`any_rule` は threshold `60` でも total `-93.2048` で baseline `-90.1378` より悪化。
 - `context_columns=dataset_month,combined_regime` では `any_rule / threshold20` が total `-46.8210` へ改善したが、worst monthは `-292.2070`、max DD `292.2070` へ悪化し、short PnLは `-434.3938` のまま。margin20もhard blockと同一。
 - 判断: dynamic interactionとしてはpost-filterより妥当だが、core late-year short driftを直せていない。標準採用しない。次に進むなら short側限定の `prior side/context loss + prediction short bias + strong margin/stay-flat` に絞る。
-- report: `docs/reports/00186_2026-06-30_side_context_interaction_guard.md`
+- report: `methods/entry_ev/docs/reports/00186_2026-06-30_side_context_interaction_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/side_context_interaction_guard_apply.py tests/test_side_context_interaction_guard_apply.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_side_context_interaction_guard_apply tests.test_docs_reports`: OK, 108 tests
 
@@ -4286,7 +4286,7 @@ Admission:
 - min4では base/nonpositive AUC `0.5622`, base/large_loss AUC `0.5810` に対し、context/nonpositive `0.5517`, context/large_loss `0.5606` で、online context追加はAUCを改善しなかった。
 - min8でも base/nonpositive AUC `0.6207`, base/large_loss `0.5523` に対し、context/nonpositive `0.5471`, context/large_loss `0.5364`。後半4ヶ月のpost-filterでは context/large_loss/q70 が `-626.1752 -> -271.9178` と損失を削るが、実行済みtrade削除でありreplacementを再現しない。
 - 判断: raw online context stateを標準featureへ昇格しない。side drift / prediction-side-biasとの相互作用に絞り、採用判断は真のdynamic backtestで行う。
-- report: `docs/reports/00185_2026-06-30_online_context_feature_model.md`
+- report: `methods/entry_ev/docs/reports/00185_2026-06-30_online_context_feature_model.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/online_context_feature_model.py tests/test_online_context_feature_model.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_online_context_state_diagnostics tests.test_online_context_feature_model tests.test_docs_reports`: OK, 107 tests
 
@@ -4298,7 +4298,7 @@ Admission:
 - all-windowでは `20/20` が recovery false `-208.7024` から true `-123.7850` へ改善。ただし `60/20` は `142.9750 -> 134.0626` と悪化し、topにはならない。
 - prior-only selectionでは、min4/worst が total `15.2092`, worst `-153.6646` で `00182` の `69.9374 / -116.4516` より悪化。min8/worst は `-199.4438 / -116.4516` で `00182` と同等止まり。
 - 判断: recovery hookは残すが標準採用しない。online context stateは手書きguardを増やすより、meta feature / selection featureへ戻す。
-- report: `docs/reports/00184_2026-06-30_online_context_state_recovery.md`
+- report: `methods/entry_ev/docs/reports/00184_2026-06-30_online_context_state_recovery.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/online_context_state_diagnostics.py`: OK; `python3 -m unittest tests.test_backtest tests.test_online_context_state_diagnostics`: OK, 97 tests
 
@@ -4310,7 +4310,7 @@ Admission:
 - prior-only selectionでは cooldown候補込み `worst` が min4 total `38.8288`, worst `-126.1230`; min8 total `-209.1152`, worst `-126.1230`。`00182` の cooldownなし margin-aware `worst` より悪化。
 - 月別には cooldown `60` が2025-05..07を改善する一方、2025-08/09/11/12のshort損失を再入場させる。side drift が強い局面では時間経過だけでは回復判定にならない。
 - 判断: cooldown infrastructureは残すが標準採用しない。次はbreach後の再入場を、recent side drift / realized context loss / prediction-side biasの特徴量・selectionで審査する。
-- report: `docs/reports/00183_2026-06-30_context_drawdown_guard_cooldown_sweep.md`
+- report: `methods/entry_ev/docs/reports/00183_2026-06-30_context_drawdown_guard_cooldown_sweep.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/context_drawdown_guard_selection.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection`: OK, 99 tests
 
@@ -4322,7 +4322,7 @@ Admission:
 - prior-only selectionでは、`min_train_months=4` の `worst` が total `69.9374`, worst `-116.4516`, trades `450`。`00181` の threshold-only `worst` total `63.3054` から小幅改善。
 - `min_train_months=8` の `worst` は total `-199.4438`, worst `-116.4516`, trades `56`。`00181` の threshold-only `-206.0758` から小幅改善。
 - total基準はmargin込みでも `20/0` や `60/15` を選び、2025-09の大崩れを防げない。結論は変わらず、これは利益最大化ではなくtail-risk mandate。
-- report: `docs/reports/00182_2026-06-30_context_drawdown_guard_margin_sweep.md`
+- report: `methods/entry_ev/docs/reports/00182_2026-06-30_context_drawdown_guard_margin_sweep.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/context_drawdown_guard_selection.py`: OK; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection`: OK, 96 tests; `python3 -m unittest tests.test_backtest tests.test_context_drawdown_guard_selection tests.test_docs_reports`: OK, 99 tests
 
@@ -4335,7 +4335,7 @@ Admission:
 - `min_train_months=4` では target 2025-05..12。`worst` 基準は total `63.3054`, worst `-116.4516`, max DD `129.1668`, trades `448`。2025-05..08では `inf`、2025-09以降は `20` を選ぶ形になる。
 - tight-tail risk budget (`min_validation_worst_month_pnl=-80`) は2025-09の `inf` を事前に落とせるが、2025-10以降はeligible候補がなくfallbackが混ざるため、採用候補ではなく制約感度診断として読む。
 - 判断: fixed all-window `40/60` は後知恵なので採用しない。prior-only `worst` objective はrisk-control candidateとして残すが、利益最大化policyではない。未使用月/追加データで mandate 固定後に再探索なし検証する。
-- report: `docs/reports/00181_2026-06-29_context_drawdown_guard_threshold_selection.md`
+- report: `methods/entry_ev/docs/reports/00181_2026-06-29_context_drawdown_guard_threshold_selection.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/context_drawdown_guard_selection.py`: OK; `python3 -m unittest tests.test_context_drawdown_guard_selection`: OK, 5 tests; `python3 -m unittest tests.test_backtest tests.test_residual_trade_failure_diagnostics tests.test_context_drawdown_guard_selection tests.test_docs_reports`: OK, 97 tests
 
@@ -4347,7 +4347,7 @@ Admission:
 - `combined_regime` onlyは threshold `20` で total `-56.3298`, worst `-249.3830` まで改善したが、まだNoTrade未満。
 - side-month guardとして `context_columns=dataset_month` を使うと、threshold `60` が total `135.6350`, worst `-153.6646`, trades `841`、threshold `40` が total `100.5640`, worst `-138.4960`, trades `692`。
 - ただし疑似validation `2025-01..08` でtotal基準選択すると `inf` が選ばれ、future `2025-09..12` の大崩れを防げない。`40/60` は全12ヶ月を見た後知恵なので標準採用しない。
-- report: `docs/reports/00180_2026-06-29_online_context_drawdown_guard.md`
+- report: `methods/entry_ev/docs/reports/00180_2026-06-29_online_context_drawdown_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/context_drawdown_guard_apply.py scripts/experiments/residual_trade_failure_diagnostics.py`: OK; `python3 -m unittest tests.test_backtest tests.test_residual_trade_failure_diagnostics tests.test_docs_reports`: OK, 92 tests
 
@@ -4359,7 +4359,7 @@ Admission:
 - 最大文脈は `2025-09 short/range_low_vol/ny_overlap` 5 trades `-144.2160`。direction error `0.8000`, actual profit-barrier hit `0.0000`, EV overestimate mean `50.9439`。
 - side gapやconfidenceだけのhard thresholdでは解けない。`pred_side_gap > 10` でも `2025-09 short/range_low_vol/ny_overlap -89.6280` が残る。
 - 判断: `p10 + margin10` は標準採用しない。次は静的session blockではなく、決済済み実績だけを使うonline context drawdown guardを検証する。
-- report: `docs/reports/00179_2026-06-29_side_drift_guard_residual_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00179_2026-06-29_side_drift_guard_residual_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile scripts/experiments/residual_trade_failure_diagnostics.py`: OK; `python3 -m unittest tests.test_residual_trade_failure_diagnostics`: OK, 2 tests
 
@@ -4371,7 +4371,7 @@ Admission:
 - delta vs no-guard replm10では、`only_base short +409.1420`, `only_candidate short -278.4984`, common short `+75.9150`。まだadded shortが主なdrag。
 - 残存 worst added contextは2025-09 `short/range_low_vol -138.6240`, 2025-11 `short/range_low_vol -62.9580`, 2025-09 `short/range_normal_vol -42.7320`, 2025-12 `short/range_low_vol -35.0640`。
 - 判断: 大幅改善だがNoTrade未満なので標準採用しない。`p10 + margin10` を次の残存失敗診断baselineにし、2025-08/09/11/12と `short/range_low_vol` をsession/time/side-gap/qualityで分解する。
-- report: `docs/reports/00178_2026-06-29_side_drift_guard_admission_margin.md`
+- report: `methods/entry_ev/docs/reports/00178_2026-06-29_side_drift_guard_admission_margin.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m py_compile src/trade_data/backtest.py scripts/experiments/side_drift_guard_walkforward.py`: OK; `python3 -m unittest tests.test_backtest tests.test_side_drift_guard_walkforward`: OK, 88 tests
 
@@ -4383,9 +4383,9 @@ Admission:
 - 方向別ではstrict p10の `only_base short +431.5526` に対して `only_candidate short -435.4884`。悪いshort文脈を検出して消す力はあるが、空いた時間に入る新規shortがまだ壊れる。
 - 最大replacement損失は2025-09 `short/range_low_vol -119.5560`、2025-12 `short/range_low_vol -74.2140`。最大removed lossは2025-09 `short/range_low_vol +128.0052`、2025-12 `short/range_low_vol +106.4744`。
 - 判断: side drift guard単独は標準policyにしない。次はguard後の代替tradeを `stateful_positive_cost_value` / `positive_replacement_regret` で審査し、margin不足ならstay flatまたはcooldownにする。
-- report: `docs/reports/00177_2026-06-29_side_drift_guard_delta.md`
+- report: `methods/entry_ev/docs/reports/00177_2026-06-29_side_drift_guard_delta.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
-- 検証: 既存 `docs/reports/*.md` は本文内 `日時` 順で問題0件。
+- 検証: 既存 `methods/entry_ev/docs/reports/*.md` は本文内 `日時` 順で問題0件。
 
 ### 22:47 Side drift guard walk-forward
 
@@ -4395,7 +4395,7 @@ Admission:
 - broad guardは `short,long`, min side bias `0.20`, min selected trades `5`, min selected months `2`。p5は total `-394.7214`, worst `-308.3412`, max DD `308.3412` で防御面を改善したが、2025-05/06/08/10を悪化させた。
 - strict short-onlyは `short`のみ、min side bias `0.30`, min selected trades `10`, min selected months `3`。p10は total `-317.4998` で最大改善だが、worst `-364.5482`, max DD `369.7462` は大きく改善しない。
 - 判断: guard infrastructureは有効。悪いshort文脈の検出はできているが、代替tradeが別の損失を作るため標準採用しない。次はno-guard vs guardのtrade deltaで「悪いshort除外」と「悪いreplacement追加」を分ける。
-- report: `docs/reports/00176_2026-06-29_side_drift_guard_walkforward.md`
+- report: `methods/entry_ev/docs/reports/00176_2026-06-29_side_drift_guard_walkforward.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m unittest tests.test_side_drift_guard_walkforward`: OK, 4 tests; `python3 -m py_compile scripts/experiments/side_drift_guard_walkforward.py`: OK
 
@@ -4408,7 +4408,7 @@ Admission:
 - 参考の2025-01..08 coststress `260m` も同じ診断にかけた。平均short過剰予測 `+0.2211`, nonflat label match `0.5117`, total `+458.9738`, short PnL `+51.5792`。
 - fresh active alertsは12件で、11件がshort。最大は2025-09 `range_low_vol/london` shortで、pred short share `0.9873`, actual short label share `0.1877`, 17 trades PnL `-140.3796`, direction error `0.8235`。
 - 判断: fresh windowのhard blockは作らない。次は対象月より前だけでside overpredictionとselected-side lossが繰り返す文脈を選ぶwalk-forward side prior drift guardを作る。
-- report: `docs/reports/00175_2026-06-29_side_drift_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00175_2026-06-29_side_drift_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m unittest tests.test_side_drift_diagnostics`: OK, 4 tests; `python3 -m py_compile scripts/experiments/side_drift_diagnostics.py`: OK
 
@@ -4423,7 +4423,7 @@ Admission:
 - `--require-post-coverage` は2025-10で失敗した。2025-11-01..2025-11-02 UTCが週末でXAUUSD rowsがないためで、trading-calendar-aware coverage判定が必要。
 - 重要診断: actual labelはlong優勢だが、予測EVはshort偏重。2025-09..12のactual long shareは `0.541..0.635`、predicted short EV shareは `0.743..0.838`、predicted label short shareは `0.737..0.805`。
 - 判断: `250..260m` は`480m`より相対的にましな場面があるが、fresh windowでは採用根拠にならない。holding cap探索ではなくside calibration / side prior drift controlを次の本流にする。
-- report: `docs/reports/00174_2026-06-29_holding_max_fresh_2025_09_12.md`
+- report: `methods/entry_ev/docs/reports/00174_2026-06-29_holding_max_fresh_2025_09_12.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 22:06 Holding max grid 2025-01..08
@@ -4435,7 +4435,7 @@ Admission:
 - fine gridでは no-cost `240m` total `803.6572` が最高だが、`260m` は `798.2040` と僅差でworst month `57.5406`、max DD `215.8250` が良い。cost stressでは `260m` total `458.9738` が `240m` `436.4600` と `480m` `403.4864` を上回った。
 - 判断: `240m` を単独候補にするのは早い。次のprimary fixed candidateは `260m`、defensive sensitivityは `250m`。`720m` はcost-stress totalが高いが、forced exitsとworst month/max DDが悪いためpromoteしない。
 - stitched predictionでは2025-01/02/08のpost-exit coverageが不完全なので、この8ヶ月結果は同一入力比較として読む。fresh applyではfull prediction frameと `--require-post-coverage` を使う。
-- report: `docs/reports/00173_2026-06-29_holding_max_grid_2025_01_08.md`
+- report: `methods/entry_ev/docs/reports/00173_2026-06-29_holding_max_grid_2025_01_08.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 - 検証: `python3 -m unittest tests.test_holding_max_grid`: OK, 3 tests; `python3 -m py_compile scripts/experiments/holding_max_grid.py`: OK
 
@@ -4447,7 +4447,7 @@ Admission:
 - fine gridでも `240m` が no-cost `339.5826`, cost stress `215.3210` で最良。`200m/260m` 周辺も多くはbaselineを上回るが、完全な台地ではない。
 - deltaでは no-cost `240m` は2025-06 `+78.8592`, 2025-07 `+9.1048`, 2025-08 `-24.7742`。cost stressでは2025-08が `-35.8810` まで悪化する。追加 `long/down_low_vol` など残存失敗を次に診断する。
 - 判断: `max_predicted_hold_minutes=240` は次の固定候補に昇格。ただし2025-08悪化があるため標準採用せず、より広いchronological windowで再探索なし検証する。
-- report: `docs/reports/00172_2026-06-29_holding_max_cap_fullpred_apply_2025_06_08.md`
+- report: `methods/entry_ev/docs/reports/00172_2026-06-29_holding_max_cap_fullpred_apply_2025_06_08.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 19:12 Dense holding OOF smoke
@@ -4458,7 +4458,7 @@ Admission:
 - `target-set holding_shortening` を追加し、exit-event adjusted PnL、fixed-vs-event delta、fixed-vs-event beat labelだけを学習できるようにした。
 - 2025-02..2025-04、`sample-frac=0.2`, `max_iter=40` のOOF smokeでは、delta回帰R2は概ね `-0.026..0.015`、beat分類balanced accuracyは `0.5214..0.5430`。
 - 判断: 連続deltaを直接policyへ使うには弱い。beat probability、bucket化、regime別calibration、candidate/ranking特徴として試す。
-- report updated: `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`
+- report updated: `methods/entry_ev/docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 18:45 Dense holding shortening targets
@@ -4469,7 +4469,7 @@ Admission:
 - 2025-08 smoke datasetを `data/processed/datasets/xauusd_m1_dense_holding_target_smoke/` へ生成し、rows `28,971`、新targetは全行非欠損。60分beat rateはlong `0.5032`, short `0.5530`。
 - `python3 -m unittest tests.test_dataset tests.test_modeling` と `python3 -m py_compile src/trade_data/dataset.py src/trade_data/modeling.py` はOK。
 - 判断: これはpolicy改善確認ではなくschema/teacher target実装。次は主dataset再生成、chronological OOF、holding policyへの接続で検証する。
-- report: `docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`
+- report: `methods/entry_ev/docs/reports/00160_2026-06-29_dense_holding_shortening_targets.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 18:06 Holding risk overlay
@@ -4481,7 +4481,7 @@ Admission:
 - 2025-07固定適用でも小幅に改善し、risk0は `-9.4002 -> -0.8914`、risk5は `8.2858 -> 16.7946`。ただしshort active率は `6.75%` と低く、改善幅は小さい。
 - delta診断では2025-04 `common short/range_normal_vol` が `-77.8268 -> +30.0540` へ改善した一方、2025-02/03では追加short損失が出た。2025-07でも `common short/up_low_vol` は悪化している。
 - 判断: `short-only q0.75 cap60` は固定候補に昇格するが、標準採用はまだしない。次は2025-08固定、またはshort context filterで `range_low_vol/range_normal_vol` に絞る。
-- report: `docs/reports/00157_2026-06-29_holding_risk_overlay.md`
+- report: `methods/entry_ev/docs/reports/00157_2026-06-29_holding_risk_overlay.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 17:43 Predhit overestimate fixed 2025-06
@@ -4492,7 +4492,7 @@ Admission:
 - `predhit_evhigh` interactionはw4/w6ともbaselineと同一で、risk scaleが小さすぎる。
 - delta診断では、q75 w4/w6とも baseline側の良い `only_base short/range_normal_vol +25.6700` を落とし、追加分で完全には取り返せなかった。`only_candidate long/up_low_vol -3.9156` も悪化に寄与した。
 - 判断: `predhit_q75_w4` / `w6` は固定候補から降格し、標準policyへ採用しない。q75 high-overestimateは直接risk penaltyではなく、exit timing calibration / EV過大評価校正 / selected trade診断特徴として残す。
-- report: `docs/reports/00156_2026-06-29_predhit_overestimate_fixed_2025_06.md`
+- report: `methods/entry_ev/docs/reports/00156_2026-06-29_predhit_overestimate_fixed_2025_06.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 17:28 Predhit overestimate interaction
@@ -4503,7 +4503,7 @@ Admission:
 - fine gridでは `predhit_q75_w4` が total PnL `107.2486`, min month `-22.9762`, max monthly DD `233.5124`, trades `386`。risk0は `101.5974 / -61.3708 / 259.0392 / 408`、baseline risk5は `91.9002 / -48.2052 / 224.7524 / 386`。
 - ただし `w3=80.5836`, `w5=97.4686`, `w8=62.9580` と周辺が安定せず、安定した台地ではない。標準採用せず、`w4` / `w6` を固定候補として未使用月・別walk-forwardへ再探索なしで適用する。
 - 2025-05改善はcommon `long/down_low_vol` の損失が `-117.9480 -> -94.0680` へ縮んだことが主因。2025-04悪化は `only_base long/down_high_vol +8.7600` と `only_base short/range_normal_vol +7.0000` を落としたことが主因。
-- report: `docs/reports/00155_2026-06-29_predhit_overestimate_interaction.md`
+- report: `methods/entry_ev/docs/reports/00155_2026-06-29_predhit_overestimate_interaction.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 16:19 Trade overestimate scale diagnostics
@@ -4513,7 +4513,7 @@ Admission:
 - q75診断では、selected target >= fit q75が79件、selected prediction > fit q75が12件、全side prediction行では13093件発火。q75なら発火するが捕捉は弱く、short側は全foldでselected prediction > fit q75が0件。
 - fold-local q75 threshold + lambda `2.0` をpolicy接続したが、2025-02..2025-04 totalは baseline `154.6374` に対して `135.9620`、delta `-18.6754`。2025-02で良いlongを落とし、悪いshortを追加した。
 - 判断: q90は発火せず、q75は発火するが悪化。thresholdを下げるだけでは解決しない。次はhigh-overestimate分類、side別calibration、stateful/context downside targetとの統合へ進む。
-- report: `docs/reports/00151_2026-06-29_trade_overestimate_scale_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00151_2026-06-29_trade_overestimate_scale_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 16:05 Trade overestimate chronological q90 check
@@ -4523,7 +4523,7 @@ Admission:
 - `00148` の固定threshold long `18.8171`, short `21.1886`, lambda `2.0` を再調整せず適用したところ、chronological prediction maxは long `7.1065`, short `7.8064` で、active rowsは `0 / 85361`。
 - 2025-02..2025-04のbacktestはbaselineと完全同一。total PnLは baseline `154.6374`, leave-one-month q90 `165.9728`, chronological q90 `154.6374`。`model-trade-delta` でもonly_base/only_candidateは0。
 - fit側selected-trade target q90も long `10.9981..12.8793`, short `13.3550..13.5405` でprediction maxより高く、q90方式では発火しない。問題はthreshold参照元だけでなく、chronological fit時のamount prediction scaleが低く潰れる点。
-- report: `docs/reports/00150_2026-06-29_trade_overestimate_chronological_q90_check.md`
+- report: `methods/entry_ev/docs/reports/00150_2026-06-29_trade_overestimate_chronological_q90_check.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 15:49 Trade overestimate q90 delta diagnostics
@@ -4533,7 +4533,7 @@ Admission:
 - 2025-05では base `-52.9764`, candidate `25.5248`, delta `+78.5012`。ただし改善の主因は only_base の悪いtrade除外 `+158.6046` で、only_candidateは `-92.9324` と大きく悪化。
 - group driftでは、validationで良かった `only_candidate short/up_normal_vol` が `+109.0090 -> -93.7270` に反転。statefulでも `common long/down_low_vol` が `+33.7666 -> -106.9060` に反転した。
 - `model-trade-delta-preflight` はPnL条件ではpassしたが、group drift validation-positive/holdout-negativeが3件、stateful group driftが2件。q90 w2.0は固定候補に残すが、標準policyへ即採用しない。
-- report: `docs/reports/00149_2026-06-29_trade_overestimate_q90_delta_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00149_2026-06-29_trade_overestimate_q90_delta_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 15:39 Trade overestimate amount model
@@ -4543,7 +4543,7 @@ Admission:
 - amount全体を直接penaltyする方式はbaseline `407.8172` を下回った。lambda `0.005` でも `385.1526`、`0.05` は `314.3812`。平均水準を引いて良いtradeも落とすため不採用。
 - validation OOF prediction分布のq90超過分だけをpenaltyする方式は改善した。`q90 w2.0` はvalidation合計 `460.6640`, trades `529`, min month `-2.3046`, max DD `204.8324` でbaseline `407.8172 / 502 / -16.9006 / 224.7524` を上回った。
 - 2025-05固定適用では、baseline stateful risk5 `-52.9764` に対して `q90 w2.0` が `+25.5248`, 106 trades, profit factor `1.0531`。max DDは `151.0632` でbaselineより悪化するため、即標準化ではなく固定候補として次月・delta診断へ進める。
-- report: `docs/reports/00148_2026-06-29_trade_overestimate_amount_model.md`
+- report: `methods/entry_ev/docs/reports/00148_2026-06-29_trade_overestimate_amount_model.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 15:17 Quality secondary tiebreak validation
@@ -4552,7 +4552,7 @@ Admission:
 - highcost risk5 OOF validation 2024-11..2025-04では、baseline total PnL `407.8172`、margin 5は完全同一、margin 10は `154.2024`、margin 20は `-84.8690`。
 - margin 10は2025-04を `14.3072 -> 105.1364` に改善したが、2025-03を `27.1660 -> -156.0008` へ壊した。margin 20は2024-11を `129.9968 -> -212.8968` へ壊した。
 - 判断: quality secondary tiebreakは採用しない。2025-05固定適用も行わない。次はside反転ではなく、同一side内ranking、EV overestimate residual、連続/分位targetへ進む。
-- report: `docs/reports/00147_2026-06-29_quality_secondary_tiebreak_validation.md`
+- report: `methods/entry_ev/docs/reports/00147_2026-06-29_quality_secondary_tiebreak_validation.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 15:09 Failure probability quality feature
@@ -4562,7 +4562,7 @@ Admission:
 - highcost risk5の2024-11..2025-04 OOF qualityでは、failure-prob feature入りが calibrated bias `0.2061`, overestimate mean `4.4255`, MAE `8.6450`。baseline qualityは `0.2806`, `4.4680`, `8.6555`。微改善だが、RMSE/R2は改善しない。
 - 2025-05 policyでは `min_trade_quality=0.5` がbaseline quality `-92.2498`, failure-prob quality `-101.9736` と悪化。failure-prob quality `1.0` は `-124.0614` でさらに悪い。
 - 判断: failure probabilityをEV校正featureとして使う配線は残すが、quality hard filterには採用しない。次はnear-tie ranking、EV overestimate residual、連続/分位targetへ進む。
-- report: `docs/reports/00146_2026-06-29_failure_probability_quality_feature.md`
+- report: `methods/entry_ev/docs/reports/00146_2026-06-29_failure_probability_quality_feature.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 14:58 Pred-hit actual-miss failure target
@@ -4572,7 +4572,7 @@ Admission:
 - 2025-05 highcostでは `failure only risk10` が adjusted PnL `-52.9764 -> -7.1330` へ改善したが、max DDは `137.4392 -> 147.1096` へ悪化した。
 - OOF validation 2024-11..2025-04へ戻すと、baseline stateful risk5 は PnL `407.8172`、`failure only risk10` は `325.8466`、`stateful + predhit w1` は `240.9596`。単月改善は採用条件を満たさない。
 - 判断: `pred_hit_actual_miss` 実装は残すが、今回のrisk penaltyを標準policyへ採用しない。次はrisk hard penaltyではなく、exit timing / EV calibration / ranking featureとして使う。
-- report: `docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`
+- report: `methods/entry_ev/docs/reports/00145_2026-06-29_pred_hit_actual_miss_failure_target.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 14:38 Selected trade exit/EV/confidence diagnostics
@@ -4582,7 +4582,7 @@ Admission:
 - `short/up_normal_vol/london` はside gap mean `14.6367`、side confidence mean `0.6674`、predicted profit-barrier hit rate `1.0000` だが actual hit rate `0.3750`。低confidenceではなく、profit-barrier / EV overestimate / exit timingの過大評価が主因。
 - side confidence hard screenでは `min_side_confidence=0.75` が7ヶ月highcost minを `-12.2140` に縮めるが、22 tradesしか残らない。`0.60` は2025-04を壊すため採用しない。
 - 判断: side confidenceはhard gateではなくinteraction featureに留める。次は `pred_hit_actual_miss`, `ev_overestimate_vs_realized`, `exit_regret`, `holding_ratio_actual_vs_pred` をchronological OOFのtarget/featureへ戻す。
-- report: `docs/reports/00144_2026-06-29_selected_trade_exit_ev_confidence_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00144_2026-06-29_selected_trade_exit_ev_confidence_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 14:23 Prior context floor risk target
@@ -4593,7 +4593,7 @@ Admission:
 - 2025-05 quick screenでは、base/highcostとも既存 `floor_lowered risk=5` が最良。`prior_nonpositive risk=5` はbase `-109.5876`、highcost `-171.5662` と悪化した。
 - 2024-11..2025-05の7ヶ月でも、`prior_lowered risk=5` はbase total `491.7438`、highcost total `278.3902` で、既存 `floor_lowered risk=5` のbase `567.7900`、highcost `354.8408` に負けた。
 - 判断: prior floorは単独risk penaltyには採用しない。`prior_floor_nonpositive` はEV calibration / ranking feature候補として残し、残存損失はexit timing / EV overestimate / side-confidence interactionへ戻す。
-- report: `docs/reports/00143_2026-06-29_prior_context_floor_risk_target.md`
+- report: `methods/entry_ev/docs/reports/00143_2026-06-29_prior_context_floor_risk_target.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 13:16 Selected trade walk-forward context
@@ -4605,7 +4605,7 @@ Admission:
 - ただし `short:up_normal_vol:london` は2025-05で大きく負けたが過去平均は正。contextだけでは捕捉しにくいため、exit timing / EV calibration / higher-order feature側へ戻す。
 - docs運用として、OSのmtimeが逆でもレポート本文の `日時` を採番・最新判断に使うテストを追加した。`更新日時` も採番には使わない。
 - 判断: hard blockにはしない。`target_walkforward_context_stress_adjusted` と `target_walkforward_prior_context_mean_floor` をdownside分類・EV校正・ranking featureへ戻す。
-- report: `docs/reports/00142_2026-06-29_selected_trade_walkforward_context.md`
+- report: `methods/entry_ev/docs/reports/00142_2026-06-29_selected_trade_walkforward_context.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 12:36 Stateful downside mean-match 2025-05 fixed
@@ -4615,7 +4615,7 @@ Admission:
 - 固定policyでは、baseが `risk0=13.9990 -> risk5=25.3104`、highcostが `risk0=-66.1420 -> risk5=-52.9764`。防御方向には働いたが、highcostはNoTrade未満で、`00140` のcost min基準 `>= -20` を満たさない。
 - trade deltaでは改善が少数の入れ替えに依存し、common tradeには `long:down_low_vol` と `short:up_normal_vol` の大きな損失が残った。risk=5後のstateful target meanもhighcostでは `-0.6984` と負。
 - 判断: `risk=5` は標準policyへ採用しない。candidate ranking / diagnostic featureへ降格寄りに扱い、同じ2025-05上でrisk閾値を追加最適化しない。
-- report: `docs/reports/00141_2026-06-29_stateful_downside_mean_match_2025_05_fixed.md`
+- report: `methods/entry_ev/docs/reports/00141_2026-06-29_stateful_downside_mean_match_2025_05_fixed.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 12:23 Stateful downside mean-match risk budget
@@ -4624,7 +4624,7 @@ Admission:
 - `session_floor_lowered` のexpanding OOFでは predicted mean が `0.1051 -> 0.1214`、biasが `-0.1703 -> -0.1540`、Brierが `0.2181 -> 0.2129` に改善した。一方、AUCは `0.6473 -> 0.6371` に低下した。
 - 6ヶ月policy接続では `risk=5` がbase合計をほぼ維持しつつ最悪月を `-18.7168 -> +8.0868` に改善し、high costも合計 `391.2374 -> 407.8172`、最悪月 `-34.3748 -> -16.9006`、max DD `259.0392 -> 224.7524` に改善した。
 - candidate selectionでは `risk=5` だけがbase/high cost条件を通過した。ただし同じ6ヶ月診断セット上で選んだため標準採用はせず、次の未使用月で固定確認する事前登録candidateにする。
-- report: `docs/reports/00140_2026-06-29_stateful_downside_mean_match_risk_budget.md`
+- report: `methods/entry_ev/docs/reports/00140_2026-06-29_stateful_downside_mean_match_risk_budget.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 12:11 Stateful downside risk policy
@@ -4633,7 +4633,7 @@ Admission:
 - expanding OOFでは、available `walkforward_stress_flag` AUC `0.6512`、session `walkforward_floor_lowered` AUC `0.6473`。stateful value回帰よりrank signalはあるが、predicted meanがprevalenceを大きく下回りcalibrationは弱い。
 - 6ヶ月policy接続では、`session_floor_lowered risk=10` がbase最悪月を `-18.7168 -> +8.0320`、high cost最悪月を `-34.3748 -> -20.8080` へ改善した。一方でbase合計PnLは `543.9972 -> 422.1416`、high cost合計は `391.2374 -> 311.0372` へ低下した。
 - 判断: `session_floor_lowered` は防御signalとして残すが、標準policyには採用しない。risk budget / drawdown-aware ranking / candidate selectionの補助特徴として扱い、calibrationと追加月再現性を確認する。
-- report: `docs/reports/00139_2026-06-29_stateful_downside_risk_policy.md`
+- report: `methods/entry_ev/docs/reports/00139_2026-06-29_stateful_downside_risk_policy.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 11:56 Stateful value walk-forward target comparison
@@ -4642,7 +4642,7 @@ Admission:
 - `00137` のwalk-forward stress targetをstateful value modelの教師候補として比較した。leave-one-monthではbase targetだけR2 `+0.0052` だったが、chronologicalなexpandingではbase targetもR2 `-0.0113`、bias `+1.5287` へ悪化した。
 - available/session floor targetはMAE/RMSEを下げるが、targetを保守的に落とした効果が大きく、expandingではavailable floor R2 `-0.0945`, bias `+4.1365`、session floor R2 `-0.0498`, bias `+3.1195`。EV replacementには使えない。
 - 判断: walk-forward stress/floor targetは現時点でpolicyへ直接gate/EV置換しない。下方リスク分類、support-aware calibration、追加月でのchronological OOF診断に回す。
-- report: `docs/reports/00138_2026-06-29_stateful_value_walkforward_target_comparison.md`
+- report: `methods/entry_ev/docs/reports/00138_2026-06-29_stateful_value_walkforward_target_comparison.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 11:42 Stateful walk-forward stress target
@@ -4653,7 +4653,7 @@ Admission:
 - session contextはsupport `10/5` で1544例中208例がstress flag、penalty mean `1.3989`、stress-adjusted mean `-0.7835`。
 - 2025-03/04でpenaltyが強く出た。availableでは2025-03の `short/up_normal_vol`, `long/up_low_vol`, `short/range_normal_vol`, `short/down_normal_vol` が大きく、sessionでは2025-03の `long/up_low_vol/london`, `short/down_normal_vol/london`, `short/range_normal_vol/london` が目立つ。
 - 判断: これは対象月より未来を見ないので、次のstateful value modelのtarget候補にできる。ただし月数はまだ8ヶ月で少ないため、まずtarget比較・OOF診断に使い、policyへの直接gate化はしない。
-- report: `docs/reports/00137_2026-06-29_stateful_walkforward_stress_target.md`
+- report: `methods/entry_ev/docs/reports/00137_2026-06-29_stateful_walkforward_stress_target.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 11:30 Stateful context stress target
@@ -4663,7 +4663,7 @@ Admission:
 - available contextでは1544例中1083例がstress flag、penalty mean `3.6772`、target mean `+0.6154`、stress-adjusted mean `-3.0618`。
 - session contextでは1544例中387例がstress flag、penalty mean `2.7589`、stress-adjusted mean `-2.1435`。
 - 判断: これはholdoutを見た事後監査列なので、そのままlive学習targetにはしない。次はwalk-forwardで過去foldだけからstress penaltyを作り、OOF stateful modelへ使えるtargetに落とす。
-- report: `docs/reports/00136_2026-06-29_stateful_context_stress_target.md`
+- report: `methods/entry_ev/docs/reports/00136_2026-06-29_stateful_context_stress_target.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 11:23 Stateful examples drift
@@ -4673,7 +4673,7 @@ Admission:
 - `candidate_side + combined_regime` では15group中6groupがmean/sumとも反転。主な反転は `short/range_normal_vol` `+501.7660 -> -298.2216`, `long/down_low_vol` `+358.3530 -> -234.8292`, `short/down_normal_vol` `+303.8836 -> -19.4788`。
 - `session_regime` も加えると52group中10groupが反転し、`long/up_low_vol:london` `+254.3226 -> -284.4936`, `short/range_normal_vol:rollover` `+125.9528 -> -227.1028` が目立つ。
 - 判断: これはhard ruleにしない。validation内でよく見える文脈がholdout/stressで反転することを、stress-aware target / 追加walk-forward / candidate採用前監査に使う。
-- report: `docs/reports/00135_2026-06-29_stateful_examples_drift.md`
+- report: `methods/entry_ev/docs/reports/00135_2026-06-29_stateful_examples_drift.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 11:17 Available-context drift
@@ -4683,7 +4683,7 @@ Admission:
 - guard top / stack0の再実行では、通常PnLの共通available flipは `short/down_normal_vol` 1件、statefulの共通available flipは `long/down_low_vol`, `long/up_normal_vol` 2件。
 - stateful OOF context reportでは、`short/down_normal_vol` はsupport 15, target mean `+4.7383`、`long/down_low_vol` はsupport 66, target mean `+2.1228`。既存validation OOFだけでは、これらを悪い文脈として学べていない。
 - 判断: available contextは診断として有効だが、単純な教師特徴追加やhard gateでは不足。次は追加walk-forwardでexamplesを増やし、stress-aware targetやregime driftを学習・評価設計へ戻す。
-- report: `docs/reports/00134_2026-06-29_available_context_drift.md`
+- report: `methods/entry_ev/docs/reports/00134_2026-06-29_available_context_drift.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 11:07 Drift stability monthly support
@@ -4693,7 +4693,7 @@ Admission:
 - guard top / stack0 の共通flipに対し、通常PnL supportは49行、stateful supportは99行。`only_candidate long down_low_vol` はguard topでvalidation 4ヶ月/holdout 3ヶ月、stack0でvalidation 3ヶ月/holdout 2ヶ月に出ており、単月だけの偶然ではない。
 - 一方、validation側にも負の月が混じる。たとえばguard topの `only_candidate long down_low_vol` はvalidation合計 `+84.3218` だが負月2、holdout合計 `-93.4838` で負月2。hard blockではなくsupport-aware downside / stateful risk特徴として扱う。
 - 判断: 共通flip groupは「候補が追加する取引の危険な文脈」として教師/特徴へ戻す。次は、予測時点で見える `direction + combined_regime + candidate_added_context` をOOF examplesへ結合し、hard ruleではなくdownside targetで評価する。
-- report: `docs/reports/00133_2026-06-29_drift_stability_monthly_support.md`
+- report: `methods/entry_ev/docs/reports/00133_2026-06-29_drift_stability_monthly_support.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 11:01 Model trade delta drift stability
@@ -4703,7 +4703,7 @@ Admission:
 - 通常PnLで共通反転したのは `only_candidate long down_low_vol`, `only_candidate short down_normal_vol`, `only_candidate short up_normal_vol`。合計ではそれぞれ validation `+223.8686`, `+52.0400`, `+49.9340` に対し、holdout `-159.6508`, `-101.0994`, `-36.5278`。
 - statefulでは `only_candidate long down_low_vol`, `only_candidate long up_low_vol`, `only_candidate short down_normal_vol`, `only_candidate short up_normal_vol` など6件が共通反転した。
 - 判断: これらはhard block候補ではなく、regime drift / downside / stateful opportunity-cost特徴として扱う。次は共通flip groupを教師特徴へ戻す前に、月単位supportと予測時点で利用可能な情報だけで表現できるかを確認する。
-- report: `docs/reports/00132_2026-06-29_model_trade_delta_drift_stability.md`
+- report: `methods/entry_ev/docs/reports/00132_2026-06-29_model_trade_delta_drift_stability.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 10:54 Model trade delta preflight group drift
@@ -4713,7 +4713,7 @@ Admission:
 - 標準候補 vs validation top候補では、通常PnLのvalidation-positive/holdout-negative groupが10件、stateful groupも10件。`only_candidate long down_low_vol` は通常PnL `+84.3218 -> -93.4838`、stateful `+107.4676 -> -136.4816` に反転した。
 - `only_candidate short down_normal_vol` は通常PnL `+25.4090 -> -91.0014`、stateful `+25.4090 -> -228.1214` に反転し、2025-02/04側の機会損失を強く示す。
 - 判断: 次はこれらの反転groupを直接hard blockしない。先に追加walk-forwardで同じ反転groupが再現するかを確認し、OOF/downside/stateful target側に特徴として戻す。
-- report: `docs/reports/00131_2026-06-29_model_trade_delta_preflight_group_drift.md`
+- report: `methods/entry_ev/docs/reports/00131_2026-06-29_model_trade_delta_preflight_group_drift.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 10:48 Model trade delta preflight audit
@@ -4723,7 +4723,7 @@ Admission:
 - `00128` / `00129` の標準候補 vs validation top候補に適用したところ、validation 2件はpass、holdout/apply 2件はfail。preflight全体は `False` で、validation top候補を採用前に棄却できる。
 - 出力先: `data/reports/backtests/20260629_014830_guard_fixed_entry_side_preflight/`
 - 判断: 今後の候補採用前には、validation summaryだけでなく `model-trade-delta-preflight` のholdout passを確認する。これはpolicy変更ではなく、過適合候補を殺す検証フローの追加。
-- report: `docs/reports/00130_2026-06-29_model_trade_delta_preflight.md`
+- report: `methods/entry_ev/docs/reports/00130_2026-06-29_model_trade_delta_preflight.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 10:40 Model trade delta parent pairing
@@ -4733,7 +4733,7 @@ Admission:
 - READMEにも、親ディレクトリ比較ではディレクトリ名やmtimeではなくrun内部の評価月で対応付けることを追記した。
 - `00128` と同じ標準候補 vs validation top候補を親ディレクトリ指定だけで再実行し、validation base/high cost delta `+62.8970 / +86.4218`, apply base/high cost delta `-289.3090 / -290.4310` を再現した。
 - 判断: `model-trade-delta` の親ディレクトリ比較を、候補採用前のstateful delta診断フローに使う。今回の変更は診断基盤の改善であり、trade policy自体は変更しない。
-- report: `docs/reports/00129_2026-06-29_model_trade_delta_parent_pairing.md`
+- report: `methods/entry_ev/docs/reports/00129_2026-06-29_model_trade_delta_parent_pairing.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 10:33 Guard-fixed entry/side drift diagnostics
@@ -4744,7 +4744,7 @@ Admission:
 - top候補側のstateful target meanはvalidation baseで全月プラス (`1.8330`, `1.7054`, `2.8303`, `1.9971`) だが、apply baseでは `2025-02=-1.7983`, `2025-03=-0.1697`, `2025-04=-2.1726` と3/4ヶ月でマイナス化した。
 - 2025-02のtop専用 `long:up_low_vol` は自身 `-42.9714` に加え、標準側 `+101.6036` をブロックし、stateful net `-144.5750`。一玉制約下の機会損失が主因。
 - 判断: validation topは採用しない。entry threshold / short offset / side penaltyの追加grid探索は本流にしない。次はOOF calibration、stateful blocking / replacement regret target、より広いwalk-forwardへ戻る。
-- report: `docs/reports/00128_2026-06-29_guard_fixed_entry_side_drift_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00128_2026-06-29_guard_fixed_entry_side_drift_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 10:23 Guard-fixed entry/side grid
@@ -4755,7 +4755,7 @@ Admission:
 - 現行標準 `entry=12`, short offset `6`, side margin `5`, `short:down_low_vol:5,up_low_vol:10` は validation base/high cost sum/min `622.6486 / 138.0338`, `500.5422 / 96.8776`。
 - しかしvalidation topをapply 4ヶ月へ固定すると base sum/min `-42.4328 / -50.1562`, high cost sum/min `-157.7340 / -69.2394`。現行標準guard候補の apply base/high cost `246.8762 / -18.7168`, `132.6970 / -34.3748` を大きく下回った。
 - 判断: guardは高回転破綻を止めるが、entry threshold / short offset / side penaltyのvalidation最適化はまだ外挿しない。validation top候補は標準採用しない。次はパラメータ探索を増やさず、OOF校正・downside feature・regime drift診断へ戻る。
-- report: `docs/reports/00127_2026-06-29_guard_fixed_entry_side_grid.md`
+- report: `methods/entry_ev/docs/reports/00127_2026-06-29_guard_fixed_entry_side_grid.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 10:13 MLP holding auto guard CLI
@@ -4766,7 +4766,7 @@ Admission:
 - `ModelPolicyConfig` のdataclass defaultは従来通り `-inf` のままにし、CLI標準だけを変えた。直接API利用や非MLP holding実験の互換性を保つため。
 - 2025-04 smokeでは config に `min_valid_predicted_hold_minutes=30.0` が入り、前回の `skip min_valid=30` と同じ adjusted PnL `-18.7168`, trades `77`, max DD `249.9600`, forced `1` を再現した。
 - 判断: MLP holdingを使う標準比較では、今後フラグを明示しなくてもfail-close guardが入る。従来clip-onlyを再現する場合だけ `--min-valid-predicted-hold-minutes -inf` を明示する。
-- report: `docs/reports/00126_2026-06-29_mlp_holding_auto_guard_cli.md`
+- report: `methods/entry_ev/docs/reports/00126_2026-06-29_mlp_holding_auto_guard_cli.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 10:05 Holding guard validation/apply
@@ -4776,8 +4776,8 @@ Admission:
 - apply 4ヶ月 (`2024-12`, `2025-02`, `2025-03`, `2025-04`) では、従来挙動が2025-04で異常高回転化し、base/high costとも大きく崩れた。`skip min_valid=30` はbase sum PnL `-261.3216 -> 246.8762`, high cost sum PnL `-1435.1746 -> 132.6970` に改善し、trade数を約2910件から約380件へ抑えた。
 - `fallback` は損失を縮めるがskipより弱い。HGB holdingへ逃がすことで、壊れたMLP holding候補を取引として残してしまう。
 - 判断: `min_valid_predicted_hold_minutes=30` の fail-close skip を、MLP holdingを使う `timed_ev` 実験の標準安全制約にする。ただしvalidation PnLで選ばれたedgeではなく、外挿破綻値を売買ルールへ渡さないための固定制約として扱う。
-- report: `docs/reports/00125_2026-06-29_holding_guard_validation_apply.md`
-- decision: `docs/decisions/0009_mlp_holding_fail_close_guard.md`
+- report: `methods/entry_ev/docs/reports/00125_2026-06-29_holding_guard_validation_apply.md`
+- decision: `methods/entry_ev/docs/decisions/0009_mlp_holding_fail_close_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 09:53 Stateful blocking risk 2025-04 fixed check
@@ -4787,7 +4787,7 @@ Admission:
 - 2025-04結果は baseline `-503.8224`, risk `5` `-509.6742`, risk `10` `-494.0544`, risk `20` `-486.2782`。risk `5` は改善せず、risk `20` でもNoTradeには遠い。
 - apply 4ヶ月合計では baseline sum/min/DD `-261.3216 / -503.8224 / 718.7252` に対し、risk `5` は `-310.6882 / -509.6742 / 729.0912`。
 - 判断: `positive_blocking risk=5` は標準policyにも事前登録候補にも昇格しない。2025-04の主因はstateful entry riskではなく、MLP holding外挿による異常高回転なので、先にholding guard/fallbackを標準候補として再評価する。
-- report: `docs/reports/00124_2026-06-29_stateful_blocking_risk_2025_04_fixed_check.md`
+- report: `methods/entry_ev/docs/reports/00124_2026-06-29_stateful_blocking_risk_2025_04_fixed_check.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 09:48 Stateful blocking risk model
@@ -4798,7 +4798,7 @@ Admission:
 - `positive_replacement_regret_high risk=5` はsum `683.7320` だがmin month `91.4356` へ悪化し、`stateful_nonpositive` は取引を削りすぎた。
 - apply 3ヶ月では `positive_blocking risk=5` が2024-12を `-20.8252 -> -3.5260` に改善した一方、2025-02/2025-03を削り、sum `242.5008 -> 198.9860`, maxDD `122.9852 -> 128.1944` に悪化した。
 - 判断: stateful risk modelの実装は採用するが、標準policyのrisk penaltyにはまだ採用しない。`positive_blocking risk=5` は追加walk-forwardで固定評価する事前登録候補にする。
-- report: `docs/reports/00123_2026-06-29_stateful_blocking_risk_model.md`
+- report: `methods/entry_ev/docs/reports/00123_2026-06-29_stateful_blocking_risk_model.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 09:30 Stateful near-tie local diagnostics
@@ -4810,7 +4810,7 @@ Admission:
 - margin `20` のsecondary score bucketでは最高score bucket `q05` のtarget meanが `-0.1244` と最悪で、最低score bucket `q01` が `2.6477`。
 - 判断: `stateful_positive_cost_value` meanは校正値として有用だが、ranking scoreとしては使わない。`00121` のtie-break悪化はscoreのrank能力不足と整合する。
 - 次は追加月examplesでsupportを増やし、`blocking_cost` / `replacement_regret` を分類・下方リスクtargetとして扱う。
-- report: `docs/reports/00122_2026-06-29_stateful_near_tie_local_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00122_2026-06-29_stateful_near_tie_local_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 09:22 Stateful secondary tie-break
@@ -4820,7 +4820,7 @@ Admission:
 - `stateful_positive_cost_value` meanをsecondaryにしたvalidation 4ヶ月では、baseline `sum=622.6486`, min `138.0338`, trades `275`。margin `5` は完全一致、`10` はsum `563.7984`, min `115.1392`、`15` はsum `582.0794`, min `120.2830`、`20` はsum `582.2844`, min `120.2830`。
 - 判断: secondary tie-break機構は探索軸として採用するが、今回のstateful positive-cost tie-break設定は標準policyに採用しない。validationで棄却されたためapply holdoutは実行しない。
 - 次はside反転ではなく、entry優先順位、risk budget、near-tie局所OOF診断、追加月examplesへ進む。
-- report: `docs/reports/00121_2026-06-29_stateful_secondary_tiebreak.md`
+- report: `methods/entry_ev/docs/reports/00121_2026-06-29_stateful_secondary_tiebreak.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 09:10 Stateful positive cost value
@@ -4830,7 +4830,7 @@ Admission:
 - direct replacement validationはbestでも threshold `2.0`, side margin `0.0`, sum `270.3750`, min `-64.5430`, trades `1349` でbaselineを下回る。閾値を上げると一部月が0 tradeになる。
 - positive-cost overestimate risk validationはbaseline `sum=622.6486`, `min=138.0338` に対し、`risk=0.10` がsum `606.7320`, min `73.5066`。applyでもbaseline `sum=242.5008`, min `-20.8252` に対し、`risk=0.10` がsum `14.1920`, min `-38.4826`。
 - 判断: `stateful_positive_cost_value` は校正信号として残すが、direct replacement / scalar penaltyは標準policyに採用しない。現行policyでは補正後EVがentry集合まで変えてしまうため、次はnear-tie専用secondary scoreを実装する。
-- report: `docs/reports/00120_2026-06-29_stateful_positive_cost_value.md`
+- report: `methods/entry_ev/docs/reports/00120_2026-06-29_stateful_positive_cost_value.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 09:05 Stateful EV blend risk
@@ -4840,7 +4840,7 @@ Admission:
 - apply 3ヶ月でも `0.10` は2024-12を `-20.8252 -> -10.1916` に改善するが、2025-02を `179.2484 -> 132.4320`、2025-03を `84.0776 -> -25.6206` に壊した。
 - 判断: stateful overestimate riskの単純な線形penaltyは標準policyに採用しない。stateful meanは校正信号として有用だが、順位付け能力が弱いため良い取引まで削る。
 - 次は `stateful_positive_cost_value` target、near-tie ranking/tie-break、追加月examples、month/regime別drift診断へ進む。
-- report: `docs/reports/00119_2026-06-29_stateful_ev_blend_risk.md`
+- report: `methods/entry_ev/docs/reports/00119_2026-06-29_stateful_ev_blend_risk.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 08:59 Stateful value model
@@ -4850,7 +4850,7 @@ Admission:
 - validation OOFでは raw bias `14.0151` が mean bias `0.0753`、raw overestimate mean `15.0311` が `4.2816` まで縮んだ。一方で mean R2 は `-0.0141`。
 - stateful mean direct replacementのvalidation sweepは threshold `3.5` がsum `148.5810`, min `-0.4126` だが2024-09が0 trade。apply 3ヶ月では同じthresholdが全月0 trade。
 - 判断: model列は校正・診断として採用するが、direct EV replacementは標準policyに採用しない。次は raw EVとの混合、near-tie ranking、または `stateful_positive_cost_value` targetを試す。
-- report: `docs/reports/00118_2026-06-29_stateful_value_model.md`
+- report: `methods/entry_ev/docs/reports/00118_2026-06-29_stateful_value_model.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 08:49 Validation stateful candidate examples
@@ -4860,7 +4860,7 @@ Admission:
 - `model-trade-delta` で `stateful_candidate_examples.csv` を作成。254例、target mean `2.4123`, target median `1.3995`, `target<=0` rate `0.3976`。
 - raw EVとのcalibrationは raw predicted mean `16.4274`, raw bias `14.0151`, raw overestimate mean `15.0311`, mean MAE `16.0471`。validationでもraw EVはstateful targetを大きく過大評価。
 - 判断: validation例を次の教師候補として採用。次は月抜きOOFで `stateful_entry_value` modelを作り、hard gateではなくEV補正/ranking tie-breakとして検証する。
-- report: `docs/reports/00117_2026-06-29_validation_stateful_candidate_examples.md`
+- report: `methods/entry_ev/docs/reports/00117_2026-06-29_validation_stateful_candidate_examples.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 08:42 Stateful candidate examples
@@ -4871,7 +4871,7 @@ Admission:
 - 2024-12/2025-03 smokeでは `stateful_candidate_examples.csv` は220行。target meanは2024-12 `0.5921`, 2025-03 `-0.4640`。positive-cost target meanは2024-12 `-0.5883`, 2025-03 `-0.7904`。
 - `candidate-quality-report` でraw EVとstateful targetのずれを測ると、support `220`, target mean `-0.0655`, raw predicted mean `18.4353`, raw bias `18.5008`, raw overestimate mean `18.7974`。raw EVはstateful targetにも大きく過大評価。
 - 判断: `stateful_candidate_examples.csv` を次の学習入力として採用。次は代表validation月で同じ形式を作り、月抜きOOFでstateful value modelを学習する。
-- report: `docs/reports/00116_2026-06-29_stateful_candidate_examples.md`
+- report: `methods/entry_ev/docs/reports/00116_2026-06-29_stateful_candidate_examples.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 08:35 Stateful blocking diagnostics
@@ -4881,7 +4881,7 @@ Admission:
 - 2025-03では `only_candidate long` がcandidate pnl `-18.8318`、blocked base pnl `+51.0776`、stateful net `-69.9094`。`only_candidate short` もcandidate pnl `-45.9878`、blocked base pnl `+7.1968`、stateful net `-53.1846`。
 - 2025-03 `only_candidate long/up_low_vol` はcandidate pnl `-18.0778`、blocked base pnl `+38.3476`、blocked positive `+65.5600`、stateful net `-56.4254`。gate quality meanは `0.7288` で正なので、pointwise qualityは機会費用を見ていない。
 - 判断: 次は `stateful_entry_value` / `stateful_positive_cost_value` をOOFで作る。base policyを固定し、hard gateではなくranking/tie-breakまたはEV補正として検証する。
-- report: `docs/reports/00115_2026-06-29_stateful_blocking_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00115_2026-06-29_stateful_blocking_diagnostics.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 08:27 Side outcome stack trade delta
@@ -4891,7 +4891,7 @@ Admission:
 - 2025-03はraw `84.0776`、stack gate `-5.2898` で差分 `-89.3674`。`only_base` が `+24.5478` の利益を持ち、`only_candidate` が `-64.8196` の損失を追加した。
 - 2025-03の最大悪化は `only_base long` の利益 `+73.4000` を失ったこと。`only_base` のquality `0-5` bucketにも `+51.0784` があり、`min_trade_quality >= 0` を満たす可能性のある良い後続取引が一玉制約の経路変化で消えている。
 - 判断: `side_outcome_stack_fixed >= 0` hard gateは標準policyへ採用しない。品質予測はhard gateではなく、近接候補の優先順位、risk budget、candidate ranking tie-breakへ回す。次は `blocking_cost` / `replacement_regret` / `stateful_entry_value` 系のstateful教師を検討する。
-- report: `docs/reports/00114_2026-06-29_side_outcome_stack_trade_delta.md`
+- report: `methods/entry_ev/docs/reports/00114_2026-06-29_side_outcome_stack_trade_delta.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 08:09 Side outcome stacking features
@@ -4902,7 +4902,7 @@ Admission:
 - validationでは `pred_candidate_quality_side_outcome_stack_fixed_*_adjusted_pnl >= 0` gateがsum `673.0854`, min `148.8660`, trades `254`, maxDD `81.8534` でraw `622.6486` / `138.0338` / `275` / `85.0166` を上回った。lower gateはvalidation時点でraw未満。
 - holdoutでは `mean>=0` が2024-12を `-20.8252 -> -18.7302`、maxDDを `122.9852 -> 109.2604` に少し改善したが、2025-03を `84.0776 -> -5.2898` に壊し、sumは `242.5008 -> 155.4990` に落ちた。
 - 判断: side-outcome/component特徴を二段目modelへ入れる実装は採用。ただし `side_outcome_stack_fixed` gateは標準policyには採用しない。risk budgetを明示したranking/tie-breakや診断特徴として残す。
-- report: `docs/reports/00113_2026-06-29_side_outcome_stacking_features.md`
+- report: `methods/entry_ev/docs/reports/00113_2026-06-29_side_outcome_stacking_features.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 07:58 Side outcome EV distribution calibration
@@ -4914,7 +4914,7 @@ Admission:
 - gateとしてはvalidationで `wrong_side_risk >= -0.45` が `sum=663.4534`, `min=148.1228`、`conservative_ev_score >= 10` が `sum=678.4180`, `min=143.8022` と改善した。
 - しかし既存holdout `2024-12`, `2025-02`, `2025-03` ではraw `sum=242.5008`, `min=-20.8252` に対し、`wrong_side_risk >= -0.45` は `sum=145.5712`, `min=-57.7274`、`conservative_ev_score >= 10` は `sum=192.3162`, `min=-28.4754` に悪化した。
 - 判断: side-outcome校正列は実装として採用し、診断・stacking特徴量として残す。ただし標準policyのEV差し替えやhard gateには採用しない。単一risk列の閾値化はvalidation改善がholdoutへ外挿しない。
-- report: `docs/reports/00112_2026-06-29_side_outcome_evdist_calibration.md`
+- report: `methods/entry_ev/docs/reports/00112_2026-06-29_side_outcome_evdist_calibration.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 07:16 Jackknife holdout gap
@@ -4924,7 +4924,7 @@ Admission:
 - `down5,up10` はholdout 9case中6通過、min pnl `-57.7402`, sum `473.2982`, positive rate `0.6667`。2024-12はbase/mid/high全て負けた。
 - `down5,range5` はholdout coverageが6caseのみで、2case通過、min pnl `-125.8666`, sum `-271.6002`, positive rate `0.3333`。2024-12と2025-02で負けた。
 - 判断: jackknifeはvalidation内の単月依存を殺す診断として有用だが、既存holdout stressの崩れを解消しない。候補は標準policyへ昇格しない。次は候補rankingの微調整ではなく、追加walk-forward foldまたはregime/session failureを明示的に扱う設計へ戻る。
-- report: `docs/reports/00109_2026-06-29_jackknife_holdout_gap.md`
+- report: `methods/entry_ev/docs/reports/00109_2026-06-29_jackknife_holdout_gap.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 07:10 Candidate selection jackknife
@@ -4935,7 +4935,7 @@ Admission:
 - 4fold全てで `holdout_pass=True`。3foldはfull top `down5,up10` と一致し、2024-11を抜いた場合だけ `down5,range5` が選ばれた。
 - 抜いたfoldでのworst minは `86.0172`、4foldの抜きfoldmin合計は `456.5626`。2024-11抜きで候補が変わっても、抜いた2024-11のbase/costは `94.6622 / 86.0172` で通過した。
 - 判断: この診断は候補選定の単月依存を調べる基盤として採用する。今回の4fold内では強いfold依存は見えないが、これは未使用holdoutの代替ではない。次は追加walk-forward foldまたは未使用月で同じ事前条件を確認する。
-- report: `docs/reports/00108_2026-06-29_candidate_selection_jackknife.md`
+- report: `methods/entry_ev/docs/reports/00108_2026-06-29_candidate_selection_jackknife.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 07:03 PnL stability candidate ranking
@@ -4945,7 +4945,7 @@ Admission:
 - 既存のbase 4fold + moderate/high cost 8fold validationで、`near_top_pnl_stability_weight=0/0.5/1.0` を比較した。topはいずれも `short:combined_regime=down_low_vol:5,short:combined_regime=up_low_vol:10` のまま。
 - top候補の `pnl_stability_risk_all` は `28.4510` でnear-top内では低い。一方 `down10,up10,range10` は `45.3052`、`down5,up10,range10` は `50.1692` と不安定性が高く、weight追加で順位が下がる。
 - 判断: PnL安定性rankingは採用するが、今回のvalidationでは標準候補を変える根拠にはしない。既存holdoutに合わせてweightを調整するとpost-hocになるため、診断・事前登録tie-breakとして扱う。
-- report: `docs/reports/00107_2026-06-29_pnl_stability_candidate_ranking.md`
+- report: `methods/entry_ev/docs/reports/00107_2026-06-29_pnl_stability_candidate_ranking.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 06:56 Entry timing calibration
@@ -4955,7 +4955,7 @@ Admission:
 - 代表4ヶ月OOFでは全体bad wait probabilityがlong `0.2404`, short `0.2201`。group sourceはlong `115203/115252`, short `115080/115252` で概ね十分。
 - validation 4foldでは `bad_wait_prob_risk` も `wait_excess_risk` もrisk `0` が最上位。baseline sum `673.9120`, min month `145.5682` に対し、bad prob risk `5` はsum `538.1352`, min `39.2836`、wait excess risk `0.5` はsum `589.5164`, min `98.7648`。
 - 判断: calibration列の実装は採用するが、soft risk penaltyとして標準policyへは採用しない。validationで棄却されたためholdout固定確認には進めない。
-- report: `docs/reports/00106_2026-06-29_entry_timing_calibration.md`
+- report: `methods/entry_ev/docs/reports/00106_2026-06-29_entry_timing_calibration.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 06:44 Entry timing wait regret gate
@@ -4967,7 +4967,7 @@ Admission:
 - high costでも同様で、`4` はmax DD `97.1906 -> 79.4966` だがsum/min monthは悪化。`2` は2024-11 `-17.4532`。
 - holdoutでは `max_wait_regret=2` がsum `180.4620` と良く見えるが、validationで棄却済みかつ2025-04を5 tradesまで落とす後付け効果に近い。採用しない。
 - 判断: 標準policyにwait_regret hard gateは追加しない。`wait_regret` はhard閾値ではなく、side/regime別の「待つべき確率」または「今入る価値のlower bound」として再校正する次候補にする。
-- report: `docs/reports/00105_2026-06-29_entry_timing_wait_regret_gate.md`
+- report: `methods/entry_ev/docs/reports/00105_2026-06-29_entry_timing_wait_regret_gate.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 06:36 Candidate quality downside calibration
@@ -4979,7 +4979,7 @@ Admission:
 - `downside_risk` penalty `2.0` はvalidation sum `684.8380` だがworst regime lossが悪化し、強いpenaltyは取引数を削りすぎる。
 - holdout 4ヶ月では `overestimate_risk` penalty `0.25` がsum `-116.0564 -> -88.1660`, max DD `474.6194 -> 406.1932` と改善した一方、2025-03/2025-04を悪化させた。`downside_risk` penalty `2.0` はsum `-160.0460`, min month `-326.0556` に悪化。
 - 判断: downside calibration列は診断・ranking特徴量として採用するが、標準policyのrisk penaltyには採用しない。次は2025-04へ後付けで合わせず、validation内で事前登録したregime/session exposure riskとentry timing target再設計を扱う。
-- report: `docs/reports/00104_2026-06-29_candidate_quality_downside_calibration.md`
+- report: `methods/entry_ev/docs/reports/00104_2026-06-29_candidate_quality_downside_calibration.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 06:17 Candidate quality downside drift report
@@ -4990,7 +4990,7 @@ Admission:
 - ただしfixed componentは2024-11で mean overestimate `5.4115`, lower coverage `0.6125`, `target<=-15` `0.1151` と下振れが大きい。2025-01も `target<=0` `0.4885` まで悪化する。
 - prediction bucket別では、fixed componentの上位 `q09/q10` がmean prediction高めにもかかわらずmean overestimate `6.5076` / `6.3060`、lower coverage `0.5844` / `0.6139` と悪い。quality scoreは単調なrankとして使えない。
 - 判断: `candidate-quality-report` は採用。fixed componentを中心に次はmonth/regime/bucket別のsupport-aware calibrated downside featureへ進む。global quality hard gateやscalar risk直結は継続して採用しない。
-- report: `docs/reports/00103_2026-06-29_candidate_quality_downside_drift_report.md`
+- report: `methods/entry_ev/docs/reports/00103_2026-06-29_candidate_quality_downside_drift_report.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 06:04 Candidate failure regime/session targets
@@ -5002,7 +5002,7 @@ Admission:
 - `normal_vol_selected_failure` riskをpolicyへ接続すると、base validationはrisk `10` で min pnl `145.5682 -> 147.5388`、high cost validationはrisk `20` で min pnl `120.5842 -> 124.4280` へ小改善した。
 - しかしrisk `20` を2024-12 / 2025-02 / 2025-03 / 2025-04 holdout baseへ固定適用すると、sum pnlは `-105.0100 -> -183.7474`、max DDは `474.6194 -> 516.4888` に悪化した。
 - 判断: `normal_vol_selected_failure` riskは標準採用しない。target拡張は診断基盤として残し、次は分類probability直結ではなく、candidate rowの連続的なrealizable PnL / lower quantile / calibrated downsideへ進む。
-- report: `docs/reports/00102_2026-06-29_candidate_failure_regime_session_targets.md`
+- report: `methods/entry_ev/docs/reports/00102_2026-06-29_candidate_failure_regime_session_targets.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 05:48 Normal vol / time risk validation
@@ -5014,7 +5014,7 @@ Admission:
 - `time5` はhigh cost min pnlを `120.5842 -> 125.4900` に小改善したが、base sum `673.9120 -> 644.3098`、cost sum `562.8784 -> 552.7068` と全体を削るため標準昇格しない。
 - `long_range5` もcost min `120.8868` とbaselineをわずかに上回るが、base/cost sumを削るため診断候補止まり。
 - 判断: normal-vol side EV penaltyを標準候補にしない。`time5` / `long_range5` はrisk診断・ranking特徴として残し、次はrule追加ではなくsession/regime別の選択失敗を教師化する。
-- report: `docs/reports/00101_2026-06-29_normal_time_risk_validation.md`
+- report: `methods/entry_ev/docs/reports/00101_2026-06-29_normal_time_risk_validation.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 05:38 Exit holding holdout stress
@@ -5026,7 +5026,7 @@ Admission:
 - 2025-04 baseの `bin_expected` は `-223.7292` まで崩れた。損失は `short:range_normal_vol` `-145.5636`, `short:up_normal_vol` `-144.7394`, `long:range_normal_vol` `-110.9304`、sessionでは `rollover` `-206.7266`, `ny_late` `-127.7102` に集中した。
 - 判断: `bin_expected cap=480` はvalidationでは有望だが、fixed holdout stressでは標準昇格しない。exit holding表現だけではなくentry/side selectionがnormal-volと時間帯で壊れている。
 - 次は2025-04へ直接合わせず、validation fold内でnormal-vol / rollover / ny_late riskを事前登録したcost-aware診断・rankingを試す。log-derived holding比較はlog列入りartifact再生成後に別枠で行う。
-- report: `docs/reports/00100_2026-06-29_exit_holding_holdout_stress.md`
+- report: `methods/entry_ev/docs/reports/00100_2026-06-29_exit_holding_holdout_stress.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 05:28 Exit holding multifold comparison
@@ -5039,7 +5039,7 @@ Admission:
 - `raw_event cap=480` との差は小さいため、bin expectedを新edgeとして採用するのではなく、raw event minutesと同等以上に機能するholding表現として扱う。
 - `bin_expected_hazard` はtrade数とforced exitを抑えるが、fold最低PnLと合計PnLを削るため、この固定条件では標準採用しない。
 - 既存artifactには `pred_*_exit_event_log_minutes` がないため、log-derived holdingの4fold比較は未実施。logを含めるにはdataset/train artifactを揃え直す。
-- report: `docs/reports/00099_2026-06-29_exit_holding_multifold_comparison.md`
+- report: `methods/entry_ev/docs/reports/00099_2026-06-29_exit_holding_multifold_comparison.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 05:18 Exit time bin holding columns
@@ -5051,7 +5051,7 @@ Admission:
 - ただし派生列は保存でき、time-bin expected holdingでbacktestへ接続できた。2025-04 smokeは base `32.6798`, high cost `13.4170`。
 - 同じHGB smoke内のlog-derived holdingも同じtrade集合になったため、今回の数字を採用根拠にしない。holding cap `480` で差が消えている可能性がある。
 - 判断: bin分類由来holding列は採用するが、モデル候補ではなく表現・接続基盤として扱う。次は複数foldでlog/bin/hazardを同じgrid比較する。
-- report: `docs/reports/00098_2026-06-29_exit_time_bin_holding_columns.md`
+- report: `methods/entry_ev/docs/reports/00098_2026-06-29_exit_time_bin_holding_columns.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 05:09 Log exit event minutes target
@@ -5062,7 +5062,7 @@ Admission:
 - ただし raw minutes回帰が `-54145.92` や `351152.22` を出す一方で、log派生holdingは `0..1440` に収まり、policyへ渡す出力制約としては機能した。
 - 2025-04 backtest smokeは base `-28.4370`, high cost `-57.1444`。NoTradeには届かないため採用候補ではないが、`00095` の負値holdingによる高回転破綻は止まった。
 - 判断: log exit minutes targetとbounded派生列は安全なexit timing表現として採用する。次はbin分類/hazard targetと複数fold validationへ戻す。
-- report: `docs/reports/00097_2026-06-29_log_exit_event_minutes_target.md`
+- report: `methods/entry_ev/docs/reports/00097_2026-06-29_log_exit_event_minutes_target.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 04:57 Timed EV holding guard
@@ -5073,7 +5073,7 @@ Admission:
 - primary holdingが非finiteまたは `min_valid_predicted_hold_minutes` 未満の場合、fallback columnがあればfallbackへ差し替え、fallbackも無効ならそのsideのentryを不可にする。
 - 2025-04 strict top診断では、HGB fallbackが base `-170.7302`, high `-182.3386`、fail-close skipが base `-111.2648`, high `-129.9124` まで損失を縮めた。
 - 判断: holding guardは採用するが、標準candidateではなく安全装置として扱う。NoTradeには届かないため、次は exit minutes targetを `log1p(minutes)`, bin分類, hazard/event probability型へ作り直し、walk-forward validationで評価する。
-- report: `docs/reports/00096_2026-06-29_timed_ev_holding_guard.md`
+- report: `methods/entry_ev/docs/reports/00096_2026-06-29_timed_ev_holding_guard.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 04:44 2025-04 stress score holdout
@@ -5084,7 +5084,7 @@ Admission:
 - MLP holding本線では、best availableでも base `-475.6374` / mid `-933.4812` / high `-1442.3792`。stress top `down5,up10` は base `-503.8224`, high `-1503.3702` で標準採用不可。
 - HGB holding fallbackでは高回転は止まり、best/strict `down5,up10,range5` が base `-157.1394`, high `-167.4006`、80-81 trades。ただしNoTradeには届かず、entry/side EVも2025-04で崩れている。
 - 判断: 2025-04は未使用holdout failureとして保存する。次は exit minutes の unconstrained regression をやめ、log/bin/hazard targetと fail-close guardを入れる。2025-04へ直接weight最適化はしない。
-- report: `docs/reports/00095_2026-06-29_2025_04_stress_score_holdout.md`
+- report: `methods/entry_ev/docs/reports/00095_2026-06-29_2025_04_stress_score_holdout.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 04:26 Stress score ranking audit
@@ -5094,7 +5094,7 @@ Admission:
 - base 4fold + moderate/high cost 8foldで stress score selectionを実行。topは `down5,up10`、cost min pnl `96.8776`, cost sum `1060.7086`, max DD `88.9514`。
 - 既存holdout stress監査では、全候補に負けcaseが残った。stress top `down5,up10` は holdout min pnl `-57.7402`, sum `473.2982`。`down10,up10,range10` は holdout min `-41.0256`, sum `569.9690`, max DD `127.9822` で相対的に良いが、validation stress scoreでは3位。
 - 判断: stress score実装は有用だが、この設定だけでは標準採用候補を作れない。既存holdoutに合わせてweight調整するとpost-hocになるため、次は2025-04以降へ同一形式predictionを生成して未使用holdoutで確認する。
-- report: `docs/reports/00094_2026-06-29_stress_score_ranking_audit.md`
+- report: `methods/entry_ev/docs/reports/00094_2026-06-29_stress_score_ranking_audit.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 04:14 High-stress cost selection failure
@@ -5105,7 +5105,7 @@ Admission:
 - ただし固定holdout stressでは同候補の全scenario min pnlが `-32.4176`、high cost合計が `-31.6628`、max drawdownが `181.6922` まで悪化した。
 - `down10,up10,range10` はvalidation topではないが、holdout全scenario合計 `569.9690` とmax drawdown `127.9822` は相対的に良い。現行rankingはこの外挿を拾えていない。
 - 判断: high-stress validation selectionを入れても標準採用候補はまだない。次はvalidation fold内でstress-aware rankingを定義し、未使用holdout月で確認する。
-- report: `docs/reports/00093_2026-06-29_highstress_cost_selection_failure.md`
+- report: `methods/entry_ev/docs/reports/00093_2026-06-29_highstress_cost_selection_failure.md`
 - 採番、最新判断、再採番はファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 ### 04:06 Cost-aware low-vol selection holdout
@@ -5114,7 +5114,7 @@ Admission:
 - strict candidate selectionでは `down5,up10,range5` がtop。validation base min pnl `138.3706`, cost min pnl `121.9972`, max drawdown `86.9156`。
 - ただし固定holdout cost stressでは2024-12 no-cost `-0.0572`, moderate cost `-11.7670`, high cost `-32.4176`。2025-03もhigh cost `-15.6634`、stress worst `-34.6572`。
 - 判断: cost-aware validation selectionは前進だが標準採用には未達。rule set探索を広げず、stress-aware drawdown、月別下振れ、局所direction/session損失、EV overestimateをrankingへ入れる。
-- report: `docs/reports/00092_2026-06-29_cost_aware_lowvol_selection_holdout.md`
+- report: `methods/entry_ev/docs/reports/00092_2026-06-29_cost_aware_lowvol_selection_holdout.md`
 - 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 03:59 Short low-vol side EV penalty cost stress
@@ -5125,7 +5125,7 @@ Admission:
 - ただしcost stressでは2024-12がmoderate cost `-22.8348`、high cost `-53.7684` へ落ち、3ヶ月合算もhigh costでマイナス。取引回数増加によるzero-cost改善の可能性が残る。
 - `entry=16`, `rank=0.5` で取引回数を減らす案は、holdoutで2024-12 `-18.6930`、2025-02 `-43.3716` とzero-cost時点で悪化したため採用しない。
 - 判断: short low-vol side EV comboは重要候補として残すが標準policyへ昇格しない。次はzero-costだけでなくmoderate costのvalidation min pnlも同時に見るcandidate selectionへ進む。
-- report: `docs/reports/00091_2026-06-29_short_lowvol_side_ev_penalty_cost_stress.md`
+- report: `methods/entry_ev/docs/reports/00091_2026-06-29_short_lowvol_side_ev_penalty_cost_stress.md`
 - 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ## 2026-06-28 JST
@@ -5137,7 +5137,7 @@ Admission:
 - `min_trade_quality` gateはvalidationで改善せず、topはgateなし `-inf` のまま。`min_trade_quality=4` は4fold eligibleだが min pnl `21.0614`, sum `214.5450` まで落ちる。
 - fixed holdoutでは `min_trade_quality=4` が2024-12を `-54.6032 -> -4.6296` へ縮める一方、2025-02を `+81.8334 -> +8.5648` へ壊す。
 - 判断: selected-trade qualityは過大評価診断として有効だが、下限gateとしては標準採用しない。次は校正EVへの置換またはsoft overestimate penalty、もしくは実行trade failure classifierへ進む。
-- report: `docs/reports/00075_2026-06-28_selected_trade_quality_hybrid_gate.md`
+- report: `methods/entry_ev/docs/reports/00075_2026-06-28_selected_trade_quality_hybrid_gate.md`
 - 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 23:11 Candidate-entry residual penalty
@@ -5146,7 +5146,7 @@ Admission:
 - `session_regime`, candidate-only, weight `10`, rank `0.5` は2024-12/2025-02 applyのrow-level selected avgを改善したが、validation OOF selected avg `19.0855 -> 17.7061`、side accuracy `0.5449 -> 0.5016` と壊れたため棄却。
 - `session_regime`, candidate-only, weight `1`, rank `0.5` はvalidation 4foldで min adjusted pnl `50.5324`, sum `412.1412`。fixed holdoutは2024-12 `-17.1780`, 2025-02 `+78.0748`。
 - 判断: 2024-12は raw hybrid baseline `-54.6032` より改善したが、validation minは既存baseline `81.5352` や `long:ny_late:15` risk top `85.7834` より弱い。標準採用せず、次はselected trade realized residual / side failureへ進む。
-- report: `docs/reports/00074_2026-06-28_candidate_entry_residual_penalty.md`
+- report: `methods/entry_ev/docs/reports/00074_2026-06-28_candidate_entry_residual_penalty.md`
 - 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 ### 23:01 Regime residual penalty
@@ -5278,7 +5278,7 @@ edge15 summary:
 ### Target 方針の見直し
 
 - 3クラスラベルだけでは情報を落としすぎるため、主ターゲットにしない方針に変更。
-- `docs/decisions/0002_multitask_targets.md` を追加。
+- `methods/entry_ev/docs/decisions/0002_multitask_targets.md` を追加。
 - dataset に連続ターゲットと量子化補助ターゲットを追加。
 - edge1/edge15 dataset を新フォーマットで再生成。
 
@@ -5336,7 +5336,7 @@ split:
 
 - command: `python3 -m trade_data.modeling train --train-start 2024-01 --train-end 2024-06 --valid-start 2024-07 --valid-end 2024-07 --test-start 2025-01 --test-end 2025-01 --min-adjusted-edge 15 --max-iter 80 --learning-rate 0.05 --entry-threshold 15`
 - artifacts: `experiments/20260627_171852_hgb_multitask_edge15/`
-- report: `docs/reports/00003_2026-06-28_hgb_multitask_initial.md`
+- report: `methods/entry_ev/docs/reports/00003_2026-06-28_hgb_multitask_initial.md`
 
 主要結果:
 
@@ -5644,7 +5644,7 @@ model:
 
 実験:
 
-- report: `docs/reports/00006_2026-06-28_mixed_regime_weighted_training.md`
+- report: `methods/entry_ev/docs/reports/00006_2026-06-28_mixed_regime_weighted_training.md`
 - model: `experiments/20260627_185200_hgb_multitask_edge15/`
 - train: 2023-01..2023-12, 2024-01..2024-06, 2024-08, 2024-10
 - valid: 2024-07, 2024-09, 2024-11, 2025-01
@@ -5770,7 +5770,7 @@ final test: new multipliers 1.0 / 1.25
 
 実験:
 
-- report: `docs/reports/00007_2026-06-28_dense_entry_quality_targets.md`
+- report: `methods/entry_ev/docs/reports/00007_2026-06-28_dense_entry_quality_targets.md`
 - model: `experiments/20260627_192112_hgb_multitask_edge15/`
 - validation quality summary: `data/reports/backtests/20260627_192904_model_sweep_summary/`
 
@@ -5906,7 +5906,7 @@ test:
 
 実験:
 
-- report: `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
+- report: `methods/entry_ev/docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 - iter80: `experiments/20260627_201301_policy_iter80_base_train/`
 - iter320: `experiments/20260627_201455_policy_iter320_base_train/`
 - train rows: 546,537
@@ -5976,7 +5976,7 @@ test:
 
 - iter80: `experiments/20260627_203932_policy_iter80_p1_l1p2/`
 - iter320: `experiments/20260627_204140_policy_iter320_p1_l1p2/`
-- report: `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
+- report: `methods/entry_ev/docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 
 結果:
 
@@ -6009,13 +6009,13 @@ test:
 - same LR: `max_iter=1280`, `learning_rate=0.03`
 - low LR: `max_iter=1280`, `learning_rate=0.01`
 - 実験中にdocsを再読し、方向性レビューを作成した。
-- report: `docs/reports/00008_2026-06-28_research_direction_review.md`
+- report: `methods/entry_ev/docs/reports/00008_2026-06-28_research_direction_review.md`
 
 Artifacts:
 
 - same LR: `experiments/20260627_205602_policy_iter1280_p1_l1p2/`
 - low LR: `experiments/20260627_210612_policy_iter1280_lr001_p1_l1p2/`
-- training report: `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
+- training report: `methods/entry_ev/docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 
 結果:
 
@@ -6050,9 +6050,9 @@ Artifacts:
 作業:
 
 - トレードMLの汎化原則を `docs/trading_ml_generalization_principles.md` に整理した。
-- 現状がその原則を守れているかを `docs/reports/00011_2026-06-28_generalization_principles_review.md` にレビューした。
+- 現状がその原則を守れているかを `methods/entry_ev/docs/reports/00011_2026-06-28_generalization_principles_review.md` にレビューした。
 - 低LR1280モデルの固定test負けを分解する `trade-backtest analyze-trades` を追加した。
-- 失敗trade分析レポートを `docs/reports/00010_2026-06-28_trade_failure_analysis.md` に作成した。
+- 失敗trade分析レポートを `methods/entry_ev/docs/reports/00010_2026-06-28_trade_failure_analysis.md` に作成した。
 
 判断:
 
@@ -6082,7 +6082,7 @@ Artifacts:
 - backtestに `spread_points`, `slippage_points`, `execution_delay_bars` を追加した。
 - 固定policyのコスト感度を見る `model-cost-sensitivity` を追加した。
 - `trade_data.modeling train` に `--purge-label-overlap` と `--embargo-hours` を追加した。デフォルトでラベル期間が後続valid/testに重なるtrain/valid行をpurgeする。
-- report: `docs/reports/00012_2026-06-28_regime_cost_purge_controls.md`
+- report: `methods/entry_ev/docs/reports/00012_2026-06-28_regime_cost_purge_controls.md`
 
 検証:
 
@@ -6139,7 +6139,7 @@ Artifact:
 - `--block-trend-regimes`, `--block-volatility-regimes`, `--block-session-regimes`, `--block-gap-regimes`, `--block-combined-regimes` を追加。
 - gate条件は `quality_ok` に合成し、新規entryだけを抑制する。保有中のexitや強制決済は変えない。
 - `model-sweep-summary` では block条件もpolicy keyに含め、gateあり/なしを別候補として集計する。
-- report: `docs/reports/00013_2026-06-28_regime_gate_experiment.md`
+- report: `methods/entry_ev/docs/reports/00013_2026-06-28_regime_gate_experiment.md`
 
 検証:
 
@@ -6178,7 +6178,7 @@ Fixed test:
 - 出力列は `pred_regime_calibrated_long_best_adjusted_pnl` / `pred_regime_calibrated_short_best_adjusted_pnl`。
 - validation内OOFでは、各validation月をholdoutし、残りvalidation月でcalibratorをfitする。
 - testにはvalidation全体でfitしたcalibratorを固定適用する。
-- report: `docs/reports/00014_2026-06-28_side_regime_ev_calibration.md`
+- report: `methods/entry_ev/docs/reports/00014_2026-06-28_side_regime_ev_calibration.md`
 
 検証:
 
@@ -6224,7 +6224,7 @@ Residual offset:
 - 指定したOOF対象月を `--fold-month-count` ごとのholdout foldに分ける。
 - 各foldでholdout月を学習から外し、必要なら `--purge-label-overlap` と `--embargo-hours` でlabel overlapを削除する。
 - 予測は `predictions_oof.parquet` に保存する。
-- report: `docs/reports/00015_2026-06-28_train_oof_predictions_infra.md`
+- report: `methods/entry_ev/docs/reports/00015_2026-06-28_train_oof_predictions_infra.md`
 
 検証:
 
@@ -6247,8 +6247,8 @@ Residual offset:
 - `oof-group-calibration` に `--base-fit-predictions` / `--base-fit-months` を追加した。
 - 各validation holdoutのcalibration fitを `train OOF + 他validation月` に変更できるようにした。
 - `trade_data.dataset` と `trade_data.backtest` のデフォルト倍率を profit 1.0 / loss 1.20 に変更した。
-- ADR `docs/decisions/0006_loss_multiplier_120_standard.md` を追加した。
-- report: `docs/reports/00017_2026-06-28_train_oof_calibration_loss120.md`
+- ADR `methods/entry_ev/docs/decisions/0006_loss_multiplier_120_standard.md` を追加した。
+- report: `methods/entry_ev/docs/reports/00017_2026-06-28_train_oof_calibration_loss120.md`
 
 実験:
 
@@ -6278,10 +6278,10 @@ Residual offset:
 
 - `analyze-trades` に `--long-column` / `--short-column` を追加し、calibrated EV列を指定してtrade failure分析できるようにした。
 - 既存レポートに日付だけでなく時刻を入れる運用へ変更した。
-- 既存 `docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
+- 既存 `methods/entry_ev/docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
 - `future_best_labels` に固定保有 60/240/720 分のlong/short adjusted pnl targetを追加した。
 - `modeling` は古いdatasetにも対応できるよう、存在しない研究用targetを自動的に落とし、missing targetsをmetricsへ記録するようにした。
-- report: `docs/reports/00016_2026-06-28_calibrated_trade_failure_exit_targets.md`
+- report: `methods/entry_ev/docs/reports/00016_2026-06-28_calibrated_trade_failure_exit_targets.md`
 
 結果:
 
@@ -6304,7 +6304,7 @@ Residual offset:
 - `trade_data.backtest` に `fixed_horizon_ev` policyを追加した。
 - `--extra-side-margin-rules` を追加し、`session_regime=asia:5,session_regime=rollover:5` のようなregime別追加side marginを指定できるようにした。
 - `target-set full` のHGB 80iterモデルを学習した。
-- report: `docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
+- report: `methods/entry_ev/docs/reports/00018_2026-06-28_fixed_horizon_exit_policy.md`
 
 Artifacts:
 
@@ -6335,7 +6335,7 @@ Artifacts:
 - `SWEEP_KEY_COLUMNS` と `model-sweep-summary` 正規化にoffset列を追加した。
 - `stateless_ev`, `stateful_ev`, `timed_ev`, `fixed_horizon_ev` のentry判定とflip判定にside別thresholdを適用した。
 - レポート時刻を `YYYY-MM-DD HH:MM JST` で記録する方針を再確認し、既存fixed horizonレポートにも更新時刻を追記した。
-- report: `docs/reports/00019_2026-06-28_side_specific_entry_offsets.md`
+- report: `methods/entry_ev/docs/reports/00019_2026-06-28_side_specific_entry_offsets.md`
 
 実験:
 
@@ -6368,7 +6368,7 @@ Artifacts:
 - `model-candidate-selection` を追加し、no-cost/cost-aware validation、cost drop、side loss、short offset plateauを同時に評価できるようにした。
 - 2025-03 の p1/l1.2 fixed horizon datasetを追加生成した。
 - 前回fixed horizon modelと同じtrain/validationで、testだけ2025-03にしたHGB 80iter full modelを学習した。
-- report: `docs/reports/00020_2026-06-28_blind_holdout_candidate_selection.md`
+- report: `methods/entry_ev/docs/reports/00020_2026-06-28_blind_holdout_candidate_selection.md`
 
 Artifacts:
 
@@ -6401,8 +6401,8 @@ Artifacts:
 - binary classifierのclass `1` probabilityを `pred_<target>_prob` として保存するようにした。
 - `model-policy` に `--profit-barrier-threshold`、`model-sweep` に `--profit-barrier-thresholds` を追加した。
 - `SWEEP_KEY_COLUMNS` とsummary正規化へ `profit_barrier_threshold` を追加し、閾値違いの候補が混ざらないようにした。
-- 既存 `docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
-- report: `docs/reports/00021_2026-06-28_profit_barrier_probability_gate.md`
+- 既存 `methods/entry_ev/docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
+- report: `methods/entry_ev/docs/reports/00021_2026-06-28_profit_barrier_probability_gate.md`
 
 Artifacts:
 
@@ -6438,8 +6438,8 @@ Artifacts:
 - `model-policy` / `model-sweep` に `--side-block-rules` と `--side-extra-margin-rules` を追加した。
 - rule形式は `short:session_regime=asia`、`short:trend_regime=range+volatility_regime=low_vol+session_regime=asia`、`short:session_regime=asia:5`。
 - `model-candidate-selection` の集計keyへ `side_extra_margin_rules` / `side_block_rules` を追加した。
-- 既存レポート `docs/reports/00021_2026-06-28_profit_barrier_probability_gate.md` は更新時刻 `2026-06-28 09:26 JST` で追記した。
-- report: `docs/reports/00022_2026-06-28_side_specific_regime_suppression.md`
+- 既存レポート `methods/entry_ev/docs/reports/00021_2026-06-28_profit_barrier_probability_gate.md` は更新時刻 `2026-06-28 09:26 JST` で追記した。
+- report: `methods/entry_ev/docs/reports/00022_2026-06-28_side_specific_regime_suppression.md`
 
 Artifacts:
 
@@ -6475,7 +6475,7 @@ Artifacts:
 - 2025-04 / 2025-05 の p1/l1.2 fixed horizon datasetを生成した。
 - 同じtrain/validation条件で、testだけ2025-04 / 2025-05にしたHGB 80iter full modelを学習した。
 - 2025-03後に事前登録した `short:session_regime=asia` 候補を固定適用した。
-- 既存レポート `docs/reports/00022_2026-06-28_side_specific_regime_suppression.md` は更新時刻 `2026-06-28 09:39 JST` で追記した。
+- 既存レポート `methods/entry_ev/docs/reports/00022_2026-06-28_side_specific_regime_suppression.md` は更新時刻 `2026-06-28 09:39 JST` で追記した。
 
 Artifacts:
 
@@ -6515,7 +6515,7 @@ Artifacts:
 - `model-sweep` metricsへ `direction_session_adjusted_pnl_min`, `worst_direction_session`, `worst_direction_session_trade_count` を追加した。
 - `model-candidate-selection` に `--max-direction-session-loss-per-fold` を追加した。
 - 古いsweep CSVは新列なしでも読めるよう、normalize時は `direction_session_adjusted_pnl_min=inf` として扱う。
-- report: `docs/reports/00023_2026-06-28_direction_session_candidate_gate.md`
+- report: `methods/entry_ev/docs/reports/00023_2026-06-28_direction_session_candidate_gate.md`
 
 Artifacts:
 
@@ -6548,9 +6548,9 @@ Artifacts:
 
 作業:
 
-- 既存 `docs/reports/*.md` の旧形式レポートに、冒頭の `日時` / `更新日時` を追加した。
+- 既存 `methods/entry_ev/docs/reports/*.md` の旧形式レポートに、冒頭の `日時` / `更新日時` を追加した。
 - 旧Summary内の `- Datetime` / `- Updated` は、重複しないよう冒頭メタデータへ移した。
-- `docs/README.md`, `docs/experiment_protocol.md`, `docs/templates/experiment_report.md` を、冒頭に `日時` と `更新日時` を置く運用へ更新した。
+- `docs/README.md`, `docs/experiment_protocol.md`, `methods/entry_ev/docs/templates/experiment_report.md` を、冒頭に `日時` と `更新日時` を置く運用へ更新した。
 
 判断:
 
@@ -6564,7 +6564,7 @@ Artifacts:
 - `model-policy` / `model-sweep` metricsへ predicted/actual profit barrier miss率を追加した。
 - `model-candidate-selection` に `--max-predicted-profit-barrier-miss-rate` と `--max-actual-profit-barrier-miss-rate` を追加した。
 - `require_profit_barrier=false` でも、prediction parquetにbarrier列が存在すれば predicted miss を測れるよう、barrier列を任意読み込みにした。
-- report: `docs/reports/00024_2026-06-28_profit_barrier_miss_candidate_gate.md`
+- report: `methods/entry_ev/docs/reports/00024_2026-06-28_profit_barrier_miss_candidate_gate.md`
 
 Artifacts:
 
@@ -6600,14 +6600,14 @@ Artifacts:
 
 作業:
 
-- `docs/reports` の既存24本を `00001_YYYY-MM-DD_slug.md` 形式へリネームした。
+- `methods/entry_ev/docs/reports` の既存24本を `00001_YYYY-MM-DD_slug.md` 形式へリネームした。
 - 通し番号はファイルシステムの更新時刻ではなく、各レポート本文冒頭の `日時: YYYY-MM-DD HH:MM JST` の昇順で決めた。
 - docs内の既存レポート参照を通し番号付きパスへ更新した。
-- `GOAL.md`, `docs/README.md`, `docs/experiment_protocol.md`, `docs/templates/experiment_report.md` に命名ルールを追加した。
+- `GOAL.md`, `docs/README.md`, `docs/experiment_protocol.md`, `methods/entry_ev/docs/templates/experiment_report.md` に命名ルールを追加した。
 
 判断:
 
-- 新規 `docs/reports` レポートは、既存最大番号の次を使う。
+- 新規 `methods/entry_ev/docs/reports` レポートは、既存最大番号の次を使う。
 - 採番順を判断するときは、必ずレポート本文の `日時` を見る。`更新日時` やファイル更新時刻は採番基準にしない。
 
 ### 2026-06-28 10:21 JST Profit Barrier Calibration Candidate Gate
@@ -6618,7 +6618,7 @@ Artifacts:
 - bucketは `0.0-0.2`, `0.2-0.4`, `0.4-0.6`, `0.6-0.8`, `0.8-1.0`。
 - `model-candidate-selection` に `--max-profit-barrier-calibration-overestimate` を追加した。
 - candidate selectionのsummaryは横に広くなりすぎないよう、bucket詳細は `model-sweep` metricsに残し、candidate selectionではsummary列だけを集計する。
-- report: `docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
+- report: `methods/entry_ev/docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
 
 Artifacts:
 
@@ -6653,7 +6653,7 @@ Artifacts:
 
 - 2025-06 の p1/l1.2 fixed horizon datasetを追加生成した。
 - 同じtrain/validation設定で、2025-06 blind modelを学習した。
-- report: `docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
+- report: `methods/entry_ev/docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
 
 Artifacts:
 
@@ -6714,7 +6714,7 @@ Validation back-check:
   - `--max-side-trade-share`
   - `--max-smoothed-actual-profit-barrier-miss-rate`
   - `--max-smoothed-profit-barrier-calibration-overestimate`
-- report: `docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
+- report: `methods/entry_ev/docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
 
 Artifacts:
 
@@ -6762,7 +6762,7 @@ Artifacts:
 
 作業:
 
-- `docs/reports` の通し番号は、ファイルシステムの更新時刻や本文の `更新日時` ではなく、本文冒頭の `日時: YYYY-MM-DD HH:MM JST` だけを基準にする運用を再確認した。
+- `methods/entry_ev/docs/reports` の通し番号は、ファイルシステムの更新時刻や本文の `更新日時` ではなく、本文冒頭の `日時: YYYY-MM-DD HH:MM JST` だけを基準にする運用を再確認した。
 - `GOAL.md`, `docs/README.md`, `docs/experiment_protocol.md`, `docs/status.md` に `更新日時` を採番基準にしないことを明記した。
 
 判断:
@@ -6779,7 +6779,7 @@ Artifacts:
 - 月10trades条件を満たせなかったため、high-turnover gridを追加した。
 - high-turnover gridでは `min_entry_rank=0/0.5`, `max_wait_regret=4/inf`, `profit_barrier_threshold=0.0/0.2` を含めた。
 - 2025-06は既知の失敗月として、暫定候補A/Bの回帰チェックだけを実施した。
-- report: `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`
+- report: `methods/entry_ev/docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`
 
 Artifacts:
 
@@ -6788,7 +6788,7 @@ Artifacts:
 - forced/direction gate comparison: `data/reports/backtests/20260628_021102_high_turnover_forced_direction_gate_comparison.csv`
 - selected validation comparison: `data/reports/backtests/20260628_021208_model_candidate_selection/`
 - 2025-06 known-month regression: `data/reports/backtests/20260628_021217_known_2025_06_regression_candidates.csv`
-- decision: `docs/decisions/0007_high_turnover_gate_selection.md`
+- decision: `methods/entry_ev/docs/decisions/0007_high_turnover_gate_selection.md`
 
 結果:
 
@@ -6809,8 +6809,8 @@ Artifacts:
 
 - 暫定hard gateは `max-short-trade-share=0.65` と `max-smoothed-actual-profit-barrier-miss-rate=0.55`。
 - smoothed calibrationはhard gateにしない。診断またはtie-breakに留める。
-- 暫定候補Aを、次の未見月 2025-07 で見る前に `docs/decisions/` へ固定する。
-- 固定記録は `docs/decisions/0007_high_turnover_gate_selection.md` に作成済み。
+- 暫定候補Aを、次の未見月 2025-07 で見る前に `methods/entry_ev/docs/decisions/` へ固定する。
+- 固定記録は `methods/entry_ev/docs/decisions/0007_high_turnover_gate_selection.md` に作成済み。
 
 ### 2026-06-28 12:27 JST Blind 2025-07 Candidate A Evaluation
 
@@ -6818,9 +6818,9 @@ Artifacts:
 
 - 2025-07の1.0/1.20 datasetを追加生成した。
 - 2025-07をtest monthにしたblind modelを、候補A固定時と同じtrain/validation設定で学習した。
-- `docs/decisions/0007_high_turnover_gate_selection.md` で固定した候補Aを、no-costとstandard cost-aware caseで評価した。
+- `methods/entry_ev/docs/decisions/0007_high_turnover_gate_selection.md` で固定した候補Aを、no-costとstandard cost-aware caseで評価した。
 - `analyze-trades` と `model-cost-sensitivity` で失敗要因を分解した。
-- report: `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`
+- report: `methods/entry_ev/docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`
 
 Artifacts:
 
@@ -6861,7 +6861,7 @@ Artifacts:
   - `--max-no-edge-rate`
   - `--max-exit-regret-mean`
   - `--max-ev-overestimate-vs-realized-mean`
-- report: `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`
+- report: `methods/entry_ev/docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md`
 
 Artifacts:
 
@@ -6912,12 +6912,12 @@ validation 4foldのhigh-turnover gridを、新しいtrade-analysis diagnostic列
 
 - 2025-07の失敗をpost-hocで落とせた厳しいgateは、validationでは候補を全滅させるため採用しない。
 - 現時点ではdiagnosticを主hard gateにせず、tie-breakと失敗分析に使う。
-- 既存 `docs/reports/*.md` 30本について、ファイル更新時刻ではなく本文内 `日時` 順で採番が一致することを確認した。
+- 既存 `methods/entry_ev/docs/reports/*.md` 30本について、ファイル更新時刻ではなく本文内 `日時` 順で採番が一致することを確認した。
 
 成果物:
 
-- `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`
-- `docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
+- `methods/entry_ev/docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`
+- `methods/entry_ev/docs/decisions/0008_trade_analysis_diagnostic_gate_policy.md`
 - `data/reports/backtests/20260628_034513_model_candidate_selection/`
 - `data/reports/backtests/20260628_124813_diagnostic_gate_threshold_comparison.csv`
 
@@ -6930,7 +6930,7 @@ validation 4foldのhigh-turnover gridを、新しいtrade-analysis diagnostic列
 - `long_profit_barrier_hit_60m/240m/720m` と `short_profit_barrier_hit_60m/240m/720m` をdataset targetに追加した。
 - `target-set policy` / `full` のclassification targetへ追加した。
 - 既存の `--long-profit-barrier-column` / `--short-profit-barrier-column` に `pred_long_profit_barrier_hit_240m_prob` のような列を差し替えられるようにした。
-- report: `docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`
+- report: `methods/entry_ev/docs/reports/00032_2026-06-28_time_limited_profit_barrier_targets.md`
 
 Smoke:
 
@@ -6960,7 +6960,7 @@ Smoke:
 - policy HGBを再学習し、`fixed_horizon_ev` と 24h/240m/720m profit barrier probabilityを同時に使える prediction frameを作成した。
 - 24h, 240m, 720m probabilityのvalidation 4fold sweepを比較した。
 - 240m / 720m はfine thresholdも追加で検証した。
-- report: `docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`
+- report: `methods/entry_ev/docs/reports/00033_2026-06-28_timebarrier_validation_sweep.md`
 
 Artifacts:
 
@@ -7002,7 +7002,7 @@ classifier診断:
 - modeは `max`, `mean`, `median`, `min`。
 - `SWEEP_KEY_COLUMNS` に `fixed_horizon_score_mode` を追加し、古いsweep metricsには `max` を補完する。
 - validation 4foldで `max/mean/median/min` を比較した。
-- report: `docs/reports/00034_2026-06-28_fixed_horizon_score_mode_validation.md`
+- report: `methods/entry_ev/docs/reports/00034_2026-06-28_fixed_horizon_score_mode_validation.md`
 
 Artifacts:
 
@@ -7033,9 +7033,9 @@ Artifacts:
 
 - fixed horizon EV target用の汎用group calibrationを追加した。
 - `oof-fixed-horizon-calibration` CLIを追加し、validation月をleave-one-month-outで校正できるようにした。
-- `docs/reports` の採番が本文 `日時` の昇順であることを確認する `tests/test_docs_reports.py` を追加した。
+- `methods/entry_ev/docs/reports` の採番が本文 `日時` の昇順であることを確認する `tests/test_docs_reports.py` を追加した。
 - regime calibration (`volatility_regime,session_regime`, shrink `0.65`) と global bias calibration (groupなし, shrink `1.0`) を比較した。
-- report: `docs/reports/00035_2026-06-28_fixed_horizon_oof_calibration.md`
+- report: `methods/entry_ev/docs/reports/00035_2026-06-28_fixed_horizon_oof_calibration.md`
 
 Artifacts:
 
@@ -7067,7 +7067,7 @@ Artifacts:
 - `fixed_horizon_ev` のentry scoreに `profit_barrier_miss_penalty * (1 - side_profit_barrier_hit_probability)` を引くsoft penaltyを追加した。
 - `model-policy --profit-barrier-miss-penalty` と `model-sweep --profit-barrier-miss-penalties` を追加した。
 - 古いsweep metricsには `profit_barrier_miss_penalty=0.0` を補完する。
-- report: `docs/reports/00036_2026-06-28_profit_barrier_miss_penalty_sweep.md`
+- report: `methods/entry_ev/docs/reports/00036_2026-06-28_profit_barrier_miss_penalty_sweep.md`
 - 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7100,7 +7100,7 @@ Artifacts:
 - `trade_data.meta_model oof-trade-quality-calibration` を追加し、validation月leave-one-month-outで `pred_trade_quality_long/short_adjusted_pnl` を生成できるようにした。
 - `model-policy --min-trade-quality` と `model-sweep --min-trade-qualities` を追加した。
 - 現行基準候補のcost-aware trades 4ヶ月分を生成し、OOF quality列を作った。
-- report: `docs/reports/00037_2026-06-28_selected_trade_quality_calibration.md`
+- report: `methods/entry_ev/docs/reports/00037_2026-06-28_selected_trade_quality_calibration.md`
 
 Artifacts:
 
@@ -7133,7 +7133,7 @@ Artifacts:
 
 - selected tradesの実現PnLを小型HGBで学習する `TradeQualityModelConfig` / `TradeQualityModelBundle` を追加した。
 - `trade_data.meta_model oof-trade-quality-model` を追加し、validation月leave-one-month-outでHGB版 `pred_trade_quality_long/short_adjusted_pnl` を生成できるようにした。
-- report: `docs/reports/00038_2026-06-28_selected_trade_quality_model.md`
+- report: `methods/entry_ev/docs/reports/00038_2026-06-28_selected_trade_quality_model.md`
 - 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7169,7 +7169,7 @@ Artifacts:
 - side別に最初のexit eventまでの `long_exit_event_minutes` / `short_exit_event_minutes` を追加した。
 - `long_exit_event_time_bin` / `short_exit_event_time_bin` を追加した。
 - `trade_data.modeling` の `policy` / `full` target setへexit event targetを追加した。
-- report: `docs/reports/00039_2026-06-28_exit_event_timing_targets.md`
+- report: `methods/entry_ev/docs/reports/00039_2026-06-28_exit_event_timing_targets.md`
 - 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7207,7 +7207,7 @@ Artifacts:
 - `policy` target setでHGB 80iterを再学習し、validation 4foldで従来holding columnとexit-event holding columnを比較した。
 - 多クラスclassifierについて `pred_<target>_prob_<class>` を出力するようにし、`pred_long_exit_event_prob_1` / `pred_short_exit_event_prob_1` をprofit-first gateとして使えるようにした。
 - `short_entry_threshold_offset=8,12,16,20` の拡張gridも試した。
-- report: `docs/reports/00040_2026-06-28_exit_event_holding_validation.md`
+- report: `methods/entry_ev/docs/reports/00040_2026-06-28_exit_event_holding_validation.md`
 - 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7249,7 +7249,7 @@ Artifacts:
 - `model-sweep` の `--min-predicted-hold-minutes` / `--max-predicted-hold-minutes` をCSV grid対応にした。
 - `min_predicted_hold_minutes` / `max_predicted_hold_minutes` をcandidate keyへ追加し、cap違いの候補がfold集計で混ざらないようにした。
 - exit-event holding + profit-first probability gateのvalidation 4foldで、`max_predicted_hold_minutes=240,480,720,960,1200,1440` を比較した。
-- report: `docs/reports/00041_2026-06-28_holding_cap_sweep.md`
+- report: `methods/entry_ev/docs/reports/00041_2026-06-28_holding_cap_sweep.md`
 - 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7292,7 +7292,7 @@ Best strict candidate:
 - `model-candidate-selection` に `--max-combined-regime-loss-per-fold` と `--max-direction-combined-regime-loss-per-fold` を追加した。
 - delay `1` のvalidation 4fold full-gridを、新しい診断列入りで再生成した。
 - combined regime gateの閾値感度を確認し、`60/65` gateのtop候補を2024-12 holdoutへ固定適用した。
-- report: `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`
+- report: `methods/entry_ev/docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`
 - 採番は引き続きファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7347,7 +7347,7 @@ Artifacts:
 - `target-set policy` / `full` で `best_side` をclassification targetに含め、`pred_best_side_prob_1` / `pred_best_side_prob_-1` を保存するようにした。
 - `model-policy` / `model-sweep` に `--side-confidence-penalty` と `--min-side-confidence` を追加した。
 - 2024-09..2024-12のsmoke datasetとHGB modelを作成し、2024-12 testでside-confidence sweepを行った。
-- report: `docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`
+- report: `methods/entry_ev/docs/reports/00043_2026-06-28_best_side_confidence_smoke.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7385,7 +7385,7 @@ Artifacts:
 - 予測済みparquetから `best_side` 確率のaccuracy、balanced accuracy、confidence、overconfidence、predicted/actual long shareを集計する。
 - `prediction_split`, `dataset_month`, `session_regime`, `volatility_regime`, `trend_regime`, `combined_regime` 別とconfidence bucket別の診断CSVを出す。
 - 直近の `best_side` smoke valid/testに適用した。
-- report: `docs/reports/00044_2026-06-28_side_confidence_calibration_report.md`
+- report: `methods/entry_ev/docs/reports/00044_2026-06-28_side_confidence_calibration_report.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7426,7 +7426,7 @@ worst groups:
 - full 7ヶ月 `policy` OOFと7ヶ月 `side_confidence` OOFは診断用途には重すぎたため中断した。
 - 代表4ヶ月 `2024-07,2024-09,2024-11,2025-01` で、`sample_frac=0.25`, `max_iter=20` のblocked OOFを完走した。
 - `side-confidence-report` をOOF予測へ適用した。
-- report: `docs/reports/00045_2026-06-28_side_confidence_oof_representative.md`
+- report: `methods/entry_ev/docs/reports/00045_2026-06-28_side_confidence_oof_representative.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7468,7 +7468,7 @@ worst groups:
 - `--side-confidence-penalty-rules` を追加した。
 - `--side-confidence-overfit-penalty-rules` を追加した。
 - 2024-12 smokeで、前回worstだった `combined_regime=range_normal_vol` と `session_regime=london` にpenaltyをかけた。
-- report: `docs/reports/00046_2026-06-28_regime_side_confidence_penalty_smoke.md`
+- report: `methods/entry_ev/docs/reports/00046_2026-06-28_regime_side_confidence_penalty_smoke.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7511,7 +7511,7 @@ Artifacts:
 - `group_loss_penalty`, `robust_total_adjusted_pnl_min_cost`, `robust_total_adjusted_pnl_min_base` をcandidate summaryへ追加した。
 - delay `1` 4fold sweepで、weight `0.0` と `1.0` を比較した。
 - weight `1.0` topを2024-12 holdoutへ固定適用した。
-- report: `docs/reports/00047_2026-06-28_group_loss_penalty_ranking.md`
+- report: `methods/entry_ev/docs/reports/00047_2026-06-28_group_loss_penalty_ranking.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifacts:
@@ -7540,7 +7540,7 @@ Artifacts:
 - `trade_data.modeling profit-barrier-report` を追加した。
 - prediction parquet全体をlong/short縦持ちにして、actual hit rate / predicted mean / overestimate / Brier scoreをsplit・月・regime・bucket別に集計できるようにした。
 - `experiments/20260628_064332_policy_exit_event_prob_p1_l1p2/` のvalid/test predictionsでsmoke診断した。
-- report: `docs/reports/00048_2026-06-28_profit_barrier_prediction_calibration.md`
+- report: `methods/entry_ev/docs/reports/00048_2026-06-28_profit_barrier_prediction_calibration.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポート本文の `日時` を基準にする。
 
 Artifact:
@@ -7570,7 +7570,7 @@ Artifact:
 - EV予測列がないtarget setでもOOF評価とreport出力が落ちないよう、selection metricsは必要列がある場合だけ計算するようにした。
 - 2024-07 / 2024-09 / 2024-11 / 2025-01 の代表4ヶ月で1ヶ月blocked OOFを実行した。
 - `profit-barrier-report` をOOF predictionへ適用した。
-- report: `docs/reports/00049_2026-06-28_profit_barrier_oof_representative.md`
+- report: `methods/entry_ev/docs/reports/00049_2026-06-28_profit_barrier_oof_representative.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7606,7 +7606,7 @@ Artifacts:
 - `min_bucket_rows` 未満のbucketはside全体へfallbackする。
 - `calibrated_prob_lower`, support, source, bucket列も保存する。
 - `--oof-column dataset_month` を追加し、月別holdoutでfitから抜いた月へ校正を当てる診断を可能にした。
-- report: `docs/reports/00050_2026-06-28_profit_barrier_bucket_calibration.md`
+- report: `methods/entry_ev/docs/reports/00050_2026-06-28_profit_barrier_bucket_calibration.md`
 - 採番はファイル更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7646,7 +7646,7 @@ threshold subset:
 - policy exit-event probabilityモデルのvalid/test予測に対し、profit-barrier raw / calibrated / conservative lower列を同一条件で比較した。
 - policy valid 4ヶ月では `--oof-column dataset_month` による月別OOF calibrationを使い、test 2024-12ではvalid全体fitのcalibrationを適用した。
 - `model-sweep` は `timed_ev`, exit-event holding minutes, `entry=5,10`, short offset `8,12`, barrier threshold `0.35,0.40,0.45,0.50`, max hold `480,720` で比較した。
-- report: `docs/reports/00051_2026-06-28_profit_barrier_policy_column_validation.md`
+- report: `methods/entry_ev/docs/reports/00051_2026-06-28_profit_barrier_policy_column_validation.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7681,7 +7681,7 @@ Artifacts:
 - profit-barrier hard gateを外し、既存の `profit_barrier_miss_penalty * (1 - probability)` を raw / calibrated / lower probability列で比較した。
 - validation 4foldは `timed_ev`, exit-event holding minutes, `entry=5,10`, short offset `8,12`, max hold `480,720`, penalty `0,0.5,1,2,4,6,8`。
 - no-penalty最良、raw strict最良、calibrated/lower strict最良を2024-12反証月へ固定適用した。
-- report: `docs/reports/00052_2026-06-28_profit_barrier_ev_penalty_validation.md`
+- report: `methods/entry_ev/docs/reports/00052_2026-06-28_profit_barrier_ev_penalty_validation.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7720,7 +7720,7 @@ Artifacts:
 - score adjustmentは `EV -= penalty * probability`。
 - validation 4foldで `time_exit_penalty=0,2,4,6`, `loss_first_penalty=0,2,4,6` を比較した。
 - validation topとno-penalty/time-only/loss-onlyを2024-12反証月へ固定適用した。
-- report: `docs/reports/00053_2026-06-28_exit_event_probability_penalties.md`
+- report: `methods/entry_ev/docs/reports/00053_2026-06-28_exit_event_probability_penalties.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7756,7 +7756,7 @@ Artifacts:
 - `timed_ev` / `fixed_horizon_ev` の予定保有時間に `1 - shrink * event_probability` をかける。entry scoreは落とさず、entry後の予定決済だけを早める。
 - validation 4foldで `time_exit_holding_shrink=0,0.25,0.5,0.75,1`, `loss_first_holding_shrink=0,0.25,0.5,0.75,1` を比較した。
 - validation top、top2、no-shrink reference、前回のentry penalty topを2024-12反証月へ固定適用した。
-- report: `docs/reports/00054_2026-06-28_holding_shrink_validation.md`
+- report: `methods/entry_ev/docs/reports/00054_2026-06-28_holding_shrink_validation.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7791,7 +7791,7 @@ Artifacts:
 - entry EV penaltyとholding shrinkを同時に使う小gridをvalidation 4foldで比較した。
 - gridは `time_exit_penalty=0,3,6`, `loss_first_penalty=0,3,6`, `time_exit_holding_shrink=0,0.25,0.5`, `loss_first_holding_shrink=0,0.5,0.75`, max hold `480,720`。
 - validation top2本、entry penalty単独、no-shrink referenceを2024-12反証月へ固定適用した。
-- report: `docs/reports/00055_2026-06-28_entry_penalty_holding_shrink_combo.md`
+- report: `methods/entry_ev/docs/reports/00055_2026-06-28_entry_penalty_holding_shrink_combo.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7827,7 +7827,7 @@ Artifacts:
 - 保有中に現在sideの `pred_*_exit_event_prob_0` / `pred_*_exit_event_prob_2` を再評価し、finite閾値以上ならflat signalを出して予定exit時刻を消すdynamic / hazard-like exitを実装した。
 - validation 4foldで `time_exit_penalty=0,6`, `loss_first_penalty=0,6`, `time_exit_holding_shrink=0,0.25`, `time_exit_exit_threshold=inf,0.75,0.90`, `loss_first_exit_threshold=inf,0.50,0.75`, max hold `480,720` を比較した。
 - validation上位、entry penalty + holding shrink reference、entry penalty reference、no-penalty referenceを2024-12反証月へ固定適用した。
-- report: `docs/reports/00056_2026-06-28_dynamic_exit_probability.md`
+- report: `methods/entry_ev/docs/reports/00056_2026-06-28_dynamic_exit_probability.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7864,7 +7864,7 @@ Artifacts:
 - side-confidence reportを実行し、overall accuracy `0.4750`, balanced accuracy `0.4856`, confidence mean `0.5404`, overconfidence `0.0654` を確認した。
 - validation 4foldで profit-barrier miss penalty、exit-event penalty、time-exit holding shrink、side-confidence penalty、min side confidenceをjoint sweepした。
 - validation代表候補を2024-12反証月へ固定適用した。
-- report: `docs/reports/00057_2026-06-28_combined_side_miss_joint.md`
+- report: `methods/entry_ev/docs/reports/00057_2026-06-28_combined_side_miss_joint.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7902,7 +7902,7 @@ Artifacts:
 - `target-set side_confidence` を同一splitで `month_label` と `month_target` の2条件で学習した。
 - policy combined予測のentry/exit列は維持し、`pred_best_side_prob_*` だけを `month_target` side modelに差し替えたparquetを作った。
 - validation 4foldと2024-12 fixedで、side confidenceだけ差し替えた影響を確認した。
-- report: `docs/reports/00058_2026-06-28_side_confidence_target_weighting.md`
+- report: `methods/entry_ev/docs/reports/00058_2026-06-28_side_confidence_target_weighting.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7944,7 +7944,7 @@ Artifacts:
 - direction error、actual profit barrier miss、EV overestimateが閾値を超えた分をpenalty化し、eligible候補のrobust scoreを下げる。
 - `combined_side_miss_joint` の4fold sweepを再利用し、base/cost同一入力でdiagnostic rankingの影響だけを切り分けた。
 - diagnostic ranking topを2024-12反証月へ固定適用した。
-- report: `docs/reports/00059_2026-06-28_diagnostic_soft_penalty_ranking.md`
+- report: `methods/entry_ev/docs/reports/00059_2026-06-28_diagnostic_soft_penalty_ranking.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -7976,7 +7976,7 @@ Artifacts:
 - 既存HGBと同じprediction parquet / metrics / report artifactを出す。
 - `xauusd_m1_p1_l1p2_policy_combined` の2024-07 train、2024-09 valid、2024-12 testで極小smokeを実行した。
 - smoke predictionを `timed_ev` backtestへ接続した。
-- report: `docs/reports/00060_2026-06-28_shared_mlp_regression_smoke.md`
+- report: `methods/entry_ev/docs/reports/00060_2026-06-28_shared_mlp_regression_smoke.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8014,7 +8014,7 @@ Artifacts:
 - holdout月ごとにfit月を分け、purge/embargoを適用した上でshared MLP regressionをfitする。
 - 2024-07/2024-09の2ヶ月で極小OOF smokeを実行した。
 - 生成した `predictions_oof.parquet` を各holdout月の `timed_ev` backtestへ接続した。
-- report: `docs/reports/00061_2026-06-28_shared_mlp_blocked_oof.md`
+- report: `methods/entry_ev/docs/reports/00061_2026-06-28_shared_mlp_blocked_oof.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8052,7 +8052,7 @@ Artifacts:
 - purge/embargoは `purge_label_overlap=true`, `embargo_hours=24`。
 - OOF予測を `timed_ev` fixed policyと4fold sweepへ接続した。
 - strict candidate selectionと、片側偏りだけを緩めたdiagnostic selectionを比較した。
-- report: `docs/reports/00062_2026-06-28_shared_mlp_4fold_pilot.md`
+- report: `methods/entry_ev/docs/reports/00062_2026-06-28_shared_mlp_4fold_pilot.md`
 - 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8096,7 +8096,7 @@ Artifacts:
 - HGB holding baseとHGB entry/side + MLP holding hybridを、同一4fold gridで比較した。
 - 同じHGB splitでfinal shared MLPをtrainし、2024-12 test用のMLP holdingを生成した。
 - validation top候補を2024-12へ固定適用し、HGB holding / MLP holdingを比較した。
-- report: `docs/reports/00063_2026-06-28_hgb_mlp_exit_hybrid.md`
+- report: `methods/entry_ev/docs/reports/00063_2026-06-28_hgb_mlp_exit_hybrid.md`
 - 採番と最新判断は、ファイルシステムの更新時刻(mtime)や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8135,7 +8135,7 @@ Artifacts:
 - `group_loss_penalty_weight=1.0`、group gate60、group gate50、diagnostic soft penaltyを比較した。
 - group gate60 topを2024-12へ固定適用し、HGB holding / MLP holdingを比較した。
 - 2024-12の失敗箇所を仮説化するため、posthoc限定で `long:ny_late` と `range_low_vol` blockを診断した。
-- report: `docs/reports/00064_2026-06-28_group_loss_gate_posthoc_failure.md`
+- report: `methods/entry_ev/docs/reports/00064_2026-06-28_group_loss_gate_posthoc_failure.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8179,7 +8179,7 @@ Artifacts:
 - preload時は欠損行を広いread configで落とさず、候補ごとの必須列で評価直前にdropするようにした。
 - `long:session_regime=ny_late` と `long:combined_regime=range_low_vol` をhard block / extra marginのvalidation local gridに入れた。
 - validation top近傍の非空rule候補を2024-12へ固定適用した。
-- report: `docs/reports/00065_2026-06-28_long_rule_validation_grid.md`
+- report: `methods/entry_ev/docs/reports/00065_2026-06-28_long_rule_validation_grid.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8224,7 +8224,7 @@ Artifacts:
 - best eligible cost min PnLからの許容劣化幅 `--near-top-cost-pnl-tolerance` と、group loss / drawdown / EV overestimate / exit regret / actual miss / side shareのrisk scoreを追加した。
 - 直近のhard block / extra margin long rule gridへ、composite riskとdrawdown-only感度を適用した。
 - drawdown-onlyで上位になるextra-margin `long:ny_late:+5/+10` を2024-12へ固定適用した。
-- report: `docs/reports/00066_2026-06-28_near_top_risk_selection.md`
+- report: `methods/entry_ev/docs/reports/00066_2026-06-28_near_top_risk_selection.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8265,7 +8265,7 @@ Artifacts:
 - `model-sweep` に `--side-ev-penalty-rule-sets` を追加し、side/regime別EV減点幅をvalidation gridへ入れられるようにした。
 - docs reportの検証コードは、ファイル更新時刻ではなく本文内の `日時` を読む意図が分かるよう `read_internal_report_time` へ整理した。
 - HGB entry/side + MLP exit hybridで `long:session_regime=ny_late:2/5/10/15` をvalidation 4fold評価した。
-- report: `docs/reports/00067_2026-06-28_side_regime_ev_penalty.md`
+- report: `methods/entry_ev/docs/reports/00067_2026-06-28_side_regime_ev_penalty.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8300,7 +8300,7 @@ Artifacts:
 
 - 2024-12のHGB entry/side + MLP exit hybrid predictionで、ruleなしbaseline、`long:session_regime=ny_late:15` PnL top、同risk topをcost/delay stressした。
 - stress gridは spread `0,0.1,0.2`, slippage `0,0.05,0.1`, execution delay bars `0,1`。
-- report: `docs/reports/00068_2026-06-28_side_ev_penalty_cost_stress.md`
+- report: `methods/entry_ev/docs/reports/00068_2026-06-28_side_ev_penalty_cost_stress.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8335,7 +8335,7 @@ Artifacts:
 - 既存hybridと同じtrain/valid splitで、testだけ2025-02にしたHGB entry/sideモデルとshared MLP exitモデルを再学習した。
 - HGB予測にMLPの `pred_*_exit_event_minutes` を `pred_mlp_*_exit_event_minutes` として結合し、hybrid predictionを作成した。
 - baseline、`long:session_regime=ny_late:15` PnL top、同risk topを2025-02へ固定適用し、同じcost stress gridを実行した。
-- report: `docs/reports/00069_2026-06-28_side_ev_penalty_2025_02_holdout.md`
+- report: `methods/entry_ev/docs/reports/00069_2026-06-28_side_ev_penalty_2025_02_holdout.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の `日時` を基準にする。
 
 Artifacts:
@@ -8371,7 +8371,7 @@ Artifacts:
 
 - 前回の selected-trade quality calibration を、`min_trade_quality` hard gate ではなく entry EV column replacement として検証した。
 - `pred_trade_quality_long_adjusted_pnl` / `pred_trade_quality_short_adjusted_pnl` を `timed_ev` の long/short EV として使い、entry threshold `-2,0,1,2,3,4,5` を代表4ヶ月でsweepした。
-- report: `docs/reports/00076_2026-06-28_selected_trade_quality_ev_replacement.md`
+- report: `methods/entry_ev/docs/reports/00076_2026-06-28_selected_trade_quality_ev_replacement.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 Artifacts:
@@ -8405,7 +8405,7 @@ Artifacts:
 - `overestimate = max(raw_ev - calibrated_quality, 0)`、`overestimate_risk = -overestimate` とし、既存 `risk_penalty` で部分的にEVから引けるようにした。
 - validation 4foldで risk penalty `0,0.1,0.25,0.5,0.75,1` をsweepした。
 - validation topとrisk別代表を2024-12 / 2025-02 fixed holdoutへ適用した。
-- report: `docs/reports/00077_2026-06-28_selected_trade_quality_overestimate_soft_penalty.md`
+- report: `methods/entry_ev/docs/reports/00077_2026-06-28_selected_trade_quality_overestimate_soft_penalty.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 Artifacts:
@@ -8444,7 +8444,7 @@ Artifacts:
 - side別に `pred_trade_failure_<target>_<side>_prob` と `pred_trade_failure_<target>_<side>_risk=-prob` を出力する。
 - `large_loss_threshold=10`, `exit_regret_threshold=10` で、hybrid top validation selected trades 106件からOOF分類した。
 - `large_loss` はfull validation sweep、他targetは同一policy骨格のrisk smoke sweepを実施した。
-- report: `docs/reports/00078_2026-06-28_trade_failure_classifier_risk.md`
+- report: `methods/entry_ev/docs/reports/00078_2026-06-28_trade_failure_classifier_risk.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 Artifacts:
@@ -8485,7 +8485,7 @@ Artifacts:
 - `large_loss_threshold=5` と `15` のOOF trade failure modelを追加生成した。
 - 既存 `threshold=10` と同じgridで、validation 4foldのrisk sweepとsummaryを作成した。
 - 各thresholdのvalidation top候補を、fixed holdout `2024-12` / `2025-02` に適用した。
-- report: `docs/reports/00079_2026-06-29_large_loss_threshold_comparison.md`
+- report: `methods/entry_ev/docs/reports/00079_2026-06-29_large_loss_threshold_comparison.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 Artifacts:
@@ -8524,7 +8524,7 @@ Artifacts:
 - `large_loss threshold=10` で `side only`, `session`, `combined`, `volatility_regime+session_regime` を比較した。
 - `combined` はfull grid、`volatility_regime+session_regime` はraw top骨格の軽量smokeを実施した。
 - `combined_upper` 以降のfull gridは実行時間が長く、`combined_calibrated` がrawを下回った時点で中断した。未完了variantは採用判断に使っていない。
-- report: `docs/reports/00080_2026-06-29_trade_failure_probability_calibration.md`
+- report: `methods/entry_ev/docs/reports/00080_2026-06-29_trade_failure_probability_calibration.md`
 
 Artifacts:
 
@@ -8567,7 +8567,7 @@ Artifacts:
 - candidate条件は直近raw top骨格に合わせて entry `12`, short offset `6`, side margin `5`, min rank `0.5`。
 - 通常risk `-prob` と、診断用の反転risk `-(1 - prob)` をvalidation 4foldで比較した。
 - fixed holdout `2024-12` / `2025-02` でも通常riskをsmokeした。
-- report: `docs/reports/00081_2026-06-29_candidate_entry_failure_model.md`
+- report: `methods/entry_ev/docs/reports/00081_2026-06-29_candidate_entry_failure_model.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8611,7 +8611,7 @@ Artifacts:
 - candidate条件は直近raw top骨格に合わせて entry `12`, short offset `6`, side margin `5`, min rank `0.5`。
 - mean/lowerの直接EV置換と、lower overestimate riskのsoft penaltyをvalidation 4foldで比較した。
 - fixed holdout `2024-12` / `2025-02` でもlower overestimate riskをsmokeした。
-- report: `docs/reports/00082_2026-06-29_candidate_entry_quality_quantile.md`
+- report: `methods/entry_ev/docs/reports/00082_2026-06-29_candidate_entry_quality_quantile.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8659,7 +8659,7 @@ Artifacts:
 - 現在のhybrid prediction parquetには `*_forced_adjusted_pnl` が無いため、time exitは `*_fixed_720m_adjusted_pnl` へfallbackした。
 - candidate examplesに `candidate_actual_exit_event`, `candidate_actual_exit_event_minutes`, `candidate_actual_time_exit_adjusted_pnl`, `candidate_actual_time_exit_source` を残すようにした。
 - mean/lower direct EV、barrier overestimate risk、fixed 2024-12 / 2025-02 smokeを確認した。
-- report: `docs/reports/00083_2026-06-29_candidate_quality_barrier_target.md`
+- report: `methods/entry_ev/docs/reports/00083_2026-06-29_candidate_quality_barrier_target.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8712,7 +8712,7 @@ Artifacts:
 - 既存hybrid OOF / 2024-12 / 2025-02 predictionをdataset target contextで補完した。
 - enriched predictionで `oof-candidate-quality-model --target-mode barrier_event_adjusted_pnl` を再実行した。
 - forced barrier overestimate riskをvalidation 4foldとfixed 2024-12 / 2025-02でsmokeした。
-- report: `docs/reports/00084_2026-06-29_forced_prediction_targets.md`
+- report: `methods/entry_ev/docs/reports/00084_2026-06-29_forced_prediction_targets.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8757,7 +8757,7 @@ Artifacts:
 - targetはtimed barrier成分、fixed horizon実現PnL、clipped best PnLを `0.7/0.2/0.1` で混合する。
 - event time decay `0.25`、fixed horizon minutes `60,240,720`、component clip `min_adjusted_edge * 1.0` でsmokeした。
 - mean/lower overestimate riskをvalidation 4foldで比較し、fixed 2024-12 / 2025-02でも確認した。
-- report: `docs/reports/00085_2026-06-29_joint_exit_candidate_quality_target.md`
+- report: `methods/entry_ev/docs/reports/00085_2026-06-29_joint_exit_candidate_quality_target.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8803,7 +8803,7 @@ Artifacts:
 - 既存 `joint_exit_adjusted_pnl` はcomponent helperを再利用する形へ整理した。
 - component targetの分離を `tests/test_meta_model.py` へ追加した。
 - validation 4foldでcomponent別のoverestimate risk penaltyを比較した。
-- report: `docs/reports/00086_2026-06-29_candidate_quality_component_targets.md`
+- report: `methods/entry_ev/docs/reports/00086_2026-06-29_candidate_quality_component_targets.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8844,7 +8844,7 @@ Artifacts:
 - prefixありでは `pred_candidate_quality_<prefix>_<side>_*` 列を出し、複数componentの予測を同じparquetへ共存できる。
 - timed / fixed / clipped best componentを順番にOOF scoringし、final combined parquetを作った。
 - component mean列を `min_trade_quality` gateとしてvalidation 4foldで比較した。
-- report: `docs/reports/00087_2026-06-29_candidate_quality_prefixed_component_gates.md`
+- report: `methods/entry_ev/docs/reports/00087_2026-06-29_candidate_quality_prefixed_component_gates.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8881,7 +8881,7 @@ Artifacts:
 - prefixed candidate quality component列を `mean`, `min`, `max`, `weighted_mean` で合成できる。
 - 出力は `pred_candidate_quality_<output_prefix>_<side>_*` なので、既存 `model-sweep` のquality columnとして使える。
 - timed / fixed / clipped best componentを `mean`, `min`, `weighted_mean(0.25,0.5,0.25)` で合成し、validation 4foldで比較した。
-- report: `docs/reports/00088_2026-06-29_candidate_quality_component_composite.md`
+- report: `methods/entry_ev/docs/reports/00088_2026-06-29_candidate_quality_component_composite.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8914,7 +8914,7 @@ Artifacts:
 - `component_fixed_weighted` のprefixed applyを2024-12 / 2025-02へ生成した。
 - timed / fixed / clipped best componentを順にapply parquetへ積み増し、`combine-candidate-quality-components` で `weighted_mean(0.25,0.5,0.25)` を作った。
 - validationで事前選択した `quality>=0` と、診断用の閾値 `-inf,0,2,5,8,10,12` を固定policyで比較した。
-- report: `docs/reports/00089_2026-06-29_candidate_quality_component_holdout_apply.md`
+- report: `methods/entry_ev/docs/reports/00089_2026-06-29_candidate_quality_component_holdout_apply.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8956,7 +8956,7 @@ Artifacts:
 - HGB predictionへMLP exit timingをmergeし、forced PnL列を付与した。
 - timed / fixed / clipped best componentをapplyへ生成し、`component_fixed_weighted = weighted_mean(0.25,0.5,0.25)` を作った。
 - 2024-12 / 2025-02で診断上改善していた `quality>=2` を、事前登録候補として2025-03追加holdoutへ固定適用した。
-- report: `docs/reports/00090_2026-06-29_candidate_quality_component_2025_03_apply.md`
+- report: `methods/entry_ev/docs/reports/00090_2026-06-29_candidate_quality_component_2025_03_apply.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -8993,7 +8993,7 @@ Artifacts:
 - `model-trade-exposure` を追加し、複数の `model-policy` runから `config.json` の予測parquetと `trades.csv` を結合できるようにした。
 - `down5,up10` のbase runを、validation 4か月と既存holdout 3か月で同じ露出軸に集計した。
 - 2024-12で悪化した `long:london` / `short:asia` をblockまたはEV penaltyにする後付け診断も実施した。
-- report: `docs/reports/00110_2026-06-29_trade_exposure_failure_profile.md`
+- report: `methods/entry_ev/docs/reports/00110_2026-06-29_trade_exposure_failure_profile.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 Artifacts:
@@ -9025,7 +9025,7 @@ Artifacts:
 - `down5,up10` 固定候補で `side_confidence_penalty=0,2,5,8,12,16` をvalidation 4か月と既存holdout 3か月で評価した。
 - `min_side_confidence=0,0.55,0.6,0.65,0.7,0.75` をvalidationで評価した。
 - `pred_calibrated_long_best_adjusted_pnl` / `pred_calibrated_short_best_adjusted_pnl` へ差し替えた固定候補をvalidationで評価した。
-- report: `docs/reports/00111_2026-06-29_side_confidence_ev_calibration_recheck.md`
+- report: `methods/entry_ev/docs/reports/00111_2026-06-29_side_confidence_ev_calibration_recheck.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9052,7 +9052,7 @@ Artifacts:
 - `oof-trade-overestimate-high-model` を追加し、selected tradeの `trade_overestimate_target_amount` がside別fit分布のq75/q90を超えるかをchronological OOFで分類した。
 - q75 high probabilityを既存stateful risk5へ追加するcombined riskを作り、2025-02..2025-04で `w=0.5/1.0/2.0` を固定policy検証した。
 - bestのw1.0について `model-trade-delta` を実行し、何を落として何を追加したかを確認した。
-- report: `docs/reports/00152_2026-06-29_trade_overestimate_high_classifier.md`
+- report: `methods/entry_ev/docs/reports/00152_2026-06-29_trade_overestimate_high_classifier.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9083,7 +9083,7 @@ Artifacts:
 - `oof-stateful-value-model` / `oof-stateful-risk-model` の `--examples` を、複数CSV/ディレクトリ入力に対応した。
 - 読み込んだexamplesへ `example_source` を付与し、metricsへ `example_source_rows` を保存するようにした。
 - 3つのdelta sourceから1093例を作り、`positive_blocking`, `blocking_cost_high`, `replacement_regret_high`, `positive_replacement_regret_high`, `stateful_nonpositive` をchronological OOFで再評価した。
-- report: `docs/reports/00153_2026-06-29_augmented_stateful_blocking_examples.md`
+- report: `methods/entry_ev/docs/reports/00153_2026-06-29_augmented_stateful_blocking_examples.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9116,7 +9116,7 @@ Artifacts:
 - `fixed_highcost_risk5` vs `fixed_highcost_risk0` の2024-11..2025-05を `model-trade-delta` で比較し、同一固定policy pair由来のstateful examplesを607件作った。
 - 2024-11..2025-04のOOF predictionと2025-05 apply predictionを結合し、2025-02..2025-05をchronological OOFで再評価した。
 - `oof-stateful-value-model` 側にも `read_stateful_examples()` を適用し、risk modelと同じ複数CSV/ディレクトリ入力に揃えた。
-- report: `docs/reports/00154_2026-06-29_fixed_policy_stateful_examples.md`
+- report: `methods/entry_ev/docs/reports/00154_2026-06-29_fixed_policy_stateful_examples.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9154,7 +9154,7 @@ Artifacts:
 - `model-trade-delta` で悪化要因を確認し、`short/range_low_vol` の勝ちtradeを早く切りすぎる問題を特定した。
 - `holding_risk_overlay.py` に `--include-combined-regimes` / `--exclude-combined-regimes` を追加し、`range_low_vol` 除外版を検証した。
 - 複数月評価では各runのpredictionを `dataset_month == month` に絞るようにし、月次独立評価へ揃えた。
-- report: `docs/reports/00158_2026-06-29_holding_overlay_2025_08_fixed.md`
+- report: `methods/entry_ev/docs/reports/00158_2026-06-29_holding_overlay_2025_08_fixed.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9183,7 +9183,7 @@ Artifacts:
 - no-context capのrisk0/risk5全月deltaを使い、`short/range_low_vol` のdirect cap targetを抽出した。
 - `holding_risk_overlay.py` に `--include-combined-session-pairs` / `--exclude-combined-session-pairs` を追加した。
 - `range_low_vol:london,range_low_vol:rollover` だけcap対象から外す候補を2025-02..2025-08月次独立評価で検証した。
-- report: `docs/reports/00159_2026-06-29_holding_cap_target_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00159_2026-06-29_holding_cap_target_diagnostics.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9216,7 +9216,7 @@ Artifacts:
 - `holding_shortening_threshold` が有限のとき、`timed_ev` / `fixed_horizon_ev` のside別予測保有時間を `holding_shortening_cap_minutes` で上限化する。
 - デフォルトは `holding_shortening_threshold=inf` として既存挙動を維持した。
 - 2025-02の既存EV/holding predictionとshortening OOF probabilityを `decision_timestamp` で結合し、接続smokeを実施した。
-- report: `docs/reports/00161_2026-06-29_holding_shortening_policy_hook.md`
+- report: `methods/entry_ev/docs/reports/00161_2026-06-29_holding_shortening_policy_hook.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9240,7 +9240,7 @@ Artifacts:
 - 2025-02..2025-04のbase EV/holding predictionに、holding-shortening OOF probabilityを `decision_timestamp` で結合した。
 - `holding_shortening_thresholds=inf,0.60,0.65,0.70,0.75`、`holding_shortening_cap_minutes=30,60,120` を月別sweepした。
 - `model-sweep-summary` 実行時に `sweep_source` が重複追加される不具合を修正し、既存sourceを保持する回帰テストを追加した。
-- report: `docs/reports/00162_2026-06-29_holding_shortening_multimonth_validation.md`
+- report: `methods/entry_ev/docs/reports/00162_2026-06-29_holding_shortening_multimonth_validation.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9267,7 +9267,7 @@ Artifacts:
 - `0.60 / 60` を2025-05へ再探索なしで固定適用した。
 - 2025-04 validでthresholdを再校正し、valid最良 `0.50 / 60` を2025-05へ固定適用した。
 - `model-trade-delta` でdisabled vs `0.50 / 60` の差分を診断した。
-- report: `docs/reports/00163_2026-06-29_holding_shortening_fixed_2025_05.md`
+- report: `methods/entry_ev/docs/reports/00163_2026-06-29_holding_shortening_fixed_2025_05.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9292,7 +9292,7 @@ Artifacts:
 - `scripts/experiments/holding_shortening_quantile_calibration.py` を追加し、holding-shortening probabilityをvalidation分布上の相対順位へ変換した。
 - 2025-04 validでquantile thresholdを選び、2025-05へ再探索なしで固定適用した。
 - q0.25のdelta診断と、validで見えるbad group blockの小診断を実施した。
-- report: `docs/reports/00164_2026-06-29_holding_shortening_quantile_calibration.md`
+- report: `methods/entry_ev/docs/reports/00164_2026-06-29_holding_shortening_quantile_calibration.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9320,7 +9320,7 @@ Artifacts:
 - 2025-02..04の各月に同じmultimonth CDFを適用し、threshold/cap gridを再評価した。
 - 3ヶ月validation最良 `0.75 / cap60` を2025-05へ再探索なしで固定適用した。
 - 2025-05のpost-hoc gridとdelta診断も確認した。
-- report: `docs/reports/00165_2026-06-29_holding_shortening_multimonth_quantile_check.md`
+- report: `methods/entry_ev/docs/reports/00165_2026-06-29_holding_shortening_multimonth_quantile_check.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9347,7 +9347,7 @@ Artifacts:
 - 60/240/720mの `pred_long/short_fixed_*m_beats_exit_event_prob_1` から、taken/opposite/gap特徴を作るようにした。
 - 60mのvalid quantileとmultimonth quantileも、同じoptional side feature経路へ追加した。
 - `prepare_analysis_predictions` / `enrich_trades_with_predictions` に `extra_prediction_columns` を追加し、selected trade enrichmentで任意特徴の元列を落とさないようにした。
-- report: `docs/reports/00166_2026-06-29_holding_shortening_quality_features.md`
+- report: `methods/entry_ev/docs/reports/00166_2026-06-29_holding_shortening_quality_features.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 検証:
@@ -9370,7 +9370,7 @@ Artifacts:
 - 2025-05 apply predictionにも同じholding-shortening列を結合した。
 - 2025-02..04 highcost risk5 selected tradesで、quality baseline vs holding-feature、overestimate baseline vs holding-featureを同条件比較した。
 - 2025-05 highcost risk5 selected trades上でも、final model predictionの診断指標を比較した。
-- report: `docs/reports/00167_2026-06-29_holding_shortening_quality_feature_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00167_2026-06-29_holding_shortening_quality_feature_diagnostics.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9403,11 +9403,11 @@ feature correlation:
 
 作業:
 
-- `docs/reports` の通し番号が、ファイル更新時刻や `更新日時` ではなく本文内 `日時` の昇順と一致しているか再監査した。
+- `methods/entry_ev/docs/reports` の通し番号が、ファイル更新時刻や `更新日時` ではなく本文内 `日時` の昇順と一致しているか再監査した。
 - `scripts/experiments/holding_cap_context_walkforward.py` を追加した。
 - no-context holding capの `trade_delta_rows.csv` から、対象月より前のpriorだけでharmful contextを選ぶwalk-forward診断を作成した。
 - `scripts/experiments/holding_risk_overlay.py` に `--exclude-combined-session-pairs-by-month` を追加し、月別prior-selected contextを実policyへ接続した。
-- report: `docs/reports/00168_2026-06-29_holding_cap_context_walkforward.md`
+- report: `methods/entry_ev/docs/reports/00168_2026-06-29_holding_cap_context_walkforward.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 結果:
@@ -9457,7 +9457,7 @@ Policy result, 2025-02..08:
 - `oracle_holding_gap_minutes <= -30 and exit_regret >= 5` を `exit_shortening_target`、`oracle_holding_gap_minutes >= 30 and exit_regret >= 5` を `hold_extension_target` として分解した。
 - `pred_minus_oracle_holding_minutes = holding_error_minutes - oracle_holding_gap_minutes` を復元し、予測保有がoracleより長すぎるかを測れるようにした。
 - fixed highcost risk0/risk5の2024-11..2025-05 deltaで診断を実行した。
-- report: `docs/reports/00169_2026-06-29_holding_error_target_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00169_2026-06-29_holding_error_target_diagnostics.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。
 
 risk5結果:
@@ -9489,7 +9489,7 @@ risk5結果:
 - `--exit-shortening-gap-minutes`、`--oof-scheme expanding`、`--min-train-months` を追加し、対象月より前の月だけでfitするchronological OOFを実行した。
 - fixed highcost risk5の2024-11..2025-05 selected tradesを使い、2024-11/12は学習月不足でskip、2025-01..05を評価した。
 - entry risk、既存stateful riskへの上乗せ、holding-time cap接続を比較した。
-- report: `docs/reports/00170_2026-06-29_exit_shortening_failure_policy.md`
+- report: `methods/entry_ev/docs/reports/00170_2026-06-29_exit_shortening_failure_policy.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 OOF結果:
@@ -9531,7 +9531,7 @@ Policy結果:
 - default shrinkage modelと、scale診断用の `--prediction-shrinkage 1.0` modelを作った。
 - baseline、固定候補、近傍候補、post-hoc低閾値診断を backtest した。
 - baseline vs fixed `0.30/60m` と baseline vs diagnostic `0.24/60m` のtrade deltaを作成した。
-- report: `docs/reports/00171_2026-06-29_exit_shortening_fixed_apply_2025_06_08.md`
+- report: `methods/entry_ev/docs/reports/00171_2026-06-29_exit_shortening_fixed_apply_2025_06_08.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 確率スケール:
@@ -9576,7 +9576,7 @@ Policy結果:
 - `00275` でtail-risk headをdiagnosticへ降格したため、exit timing / exit regret reductionへ戻した。
 - `scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` を追加し、既存quantile replayへ `time_exit_holding_shrink`, `loss_first_holding_shrink`, `time_exit_exit_threshold`, `loss_first_exit_threshold` をvariantとして差し込めるようにした。
 - HGB external 2024-03..06 / 2025-08 と hybrid 2025-09..12 の q99/q95 `sg95/rank90/floor5` で、holding shrink、高いdynamic exit threshold、低いloss-first exit thresholdを比較した。
-- report: `docs/reports/00276_2026-07-02_entry_ev_exit_timing_loss_exit_threshold.md`
+- report: `methods/entry_ev/docs/reports/00276_2026-07-02_entry_ev_exit_timing_loss_exit_threshold.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9609,7 +9609,7 @@ Policy結果:
 
 - 00276でpre-register候補にした q95/floor5/rank90 + `loss_exit30` を、threshold再探索なしで内部chronology `cal2024/fresh2024/refit2025` へ固定適用した。
 - `scripts/experiments/entry_ev_variant_trade_delta_diagnostics.py` を追加し、同一run内の `base` vs `loss_exit30` variantをtrade deltaで比較できるようにした。
-- report: `docs/reports/00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`
+- report: `methods/entry_ev/docs/reports/00277_2026-07-02_entry_ev_loss_exit30_fixed_internal_chronology.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 内部chronology結果:
@@ -9658,7 +9658,7 @@ trade delta:
 - 00283でdirect score replacementをrejectしたため、raw cd15 entry scoreを維持し、supervised shrinkage outputを補助featureとしてdownside meta headへ入れた。
 - `scripts/experiments/entry_ev_downside_meta_block_policy_inputs.py` を追加し、selected raw cd15 tradesの realized downsideを対象月より前だけで学び、prediction rowのlong/short両側へ `pred_downside_meta_*_expected_downside` と `*_block_gte_*` を付与した。
 - `scripts/experiments/entry_ev_quantile_exit_timing_sensitivity.py` に `--side-block-rules` を追加し、dynamic exit replayでもside-block列を使えるようにした。
-- report: `docs/reports/00284_2026-07-02_entry_ev_downside_meta_block_inputs.md`
+- report: `methods/entry_ev/docs/reports/00284_2026-07-02_entry_ev_downside_meta_block_inputs.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9689,7 +9689,7 @@ trade delta:
 - 00284でrejectしたhard blockの代わりに、downside metaをsoft risk marginとしてentry scoreに入れた。
 - `scripts/experiments/entry_ev_downside_meta_risk_margin_policy_inputs.py` を追加し、`raw_score - weight * pred_downside_meta_expected_downside` のlong/short score列とquantile列を生成した。
 - weight `0.1/0.25/0.5/1/2/5/10` を q95/floor5/rank90 + `loss_exit30_cd15` でreplayした。
-- report: `docs/reports/00285_2026-07-02_entry_ev_downside_meta_risk_margin.md`
+- report: `methods/entry_ev/docs/reports/00285_2026-07-02_entry_ev_downside_meta_risk_margin.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9721,7 +9721,7 @@ trade delta:
 - 00285でscore arithmeticをrejectしたため、candidate-levelで stateful month/role floor を明示評価する横断selector診断を追加した。
 - `scripts/experiments/entry_ev_stateful_floor_meta_selector.py` を追加し、複数runの `monthly_exit_timing_metrics.csv` をsource単位で結合して candidate summary / role summary / worst months / selected policy を出力する。
 - raw cd15 baseline、downside hard block、downside soft margin、supervised shrinkage replacement / quantile sweepを同じfloor-aware selectorで比較した。
-- report: `docs/reports/00286_2026-07-02_entry_ev_stateful_floor_meta_selector.md`
+- report: `methods/entry_ev/docs/reports/00286_2026-07-02_entry_ev_stateful_floor_meta_selector.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9752,7 +9752,7 @@ trade delta:
 
 - 00286の次アクションとして、raw `loss_exit30_cd15` benchmarkのtrade CSVを統合し、post-exit re-entry pathを診断した。
 - `scripts/experiments/entry_ev_post_exit_path_diagnostics.py` を追加し、前回trade結果、前回exitからの経過分、同方向再入、月別PnL、cooldown no-replacement estimateを出力するようにした。
-- report: `docs/reports/00287_2026-07-02_entry_ev_post_exit_path_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00287_2026-07-02_entry_ev_post_exit_path_diagnostics.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9783,7 +9783,7 @@ trade delta:
 
 - 00287で特定した初回/孤立大損と前回勝ち後の大損を exit-capture target として分解した。
 - `scripts/experiments/entry_ev_isolated_exit_capture_diagnostics.py` を追加し、enriched tradeに post-exit path、same-side oracle edge、exit-capture failure、oracle hold gap、fixed 60/240/720m のno-replay置換推定を付与した。
-- report: `docs/reports/00288_2026-07-02_entry_ev_isolated_exit_capture_diagnostics.md`
+- report: `methods/entry_ev/docs/reports/00288_2026-07-02_entry_ev_isolated_exit_capture_diagnostics.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9815,7 +9815,7 @@ trade delta:
 - `scripts/experiments/entry_ev_hold_extension_target_model.py` を追加し、00288の `isolated_exit_capture_trades.csv` から actual fixed 60/240/720m delta、best horizon、extend-positive targetを作成した。
 - 対象月より前の月だけでhorizon別deltaを回帰し、threshold別・月別のno-replay replacement summaryを出力した。
 - default `isolated`、`all`、`isolated min120`、`isolated_loss` 学習を比較した。
-- report: `docs/reports/00289_2026-07-02_entry_ev_hold_extension_target_model.md`
+- report: `methods/entry_ev/docs/reports/00289_2026-07-02_entry_ev_hold_extension_target_model.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9849,7 +9849,7 @@ trade delta:
 - `scripts/experiments/entry_ev_hold_extension_stateful_replay.py` を追加し、00289のscored trade tableをexit-time extension decision tableとして使った。
 - 延長中に重なる後続base tradesはskipし、extension-onlyの一玉制約pathとして再評価した。
 - stateful replay出力を00286 selectorへ渡せるよう、selector-compatible monthly metricsも出力した。
-- report: `docs/reports/00290_2026-07-02_entry_ev_hold_extension_stateful_replay.md`
+- report: `methods/entry_ev/docs/reports/00290_2026-07-02_entry_ev_hold_extension_stateful_replay.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9883,7 +9883,7 @@ trade delta:
 - 00304のuncompensated-loss headをdirect gateで押し続けず、selected-trade path上のsequence/state診断へ戻した。
 - `scripts/experiments/entry_ev_uncompensated_sequence_state_diagnostics.py` を追加し、前後trade結果、月内trade数、前回exitからのgap、同方向/同context継続、target周辺のwinner availabilityを付与した。
 - `tests/test_entry_ev_uncompensated_sequence_state_diagnostics.py` を追加し、prev/next path feature、risk threshold summary、sequence group summaryを固定した。
-- report: `docs/reports/00305_2026-07-02_entry_ev_uncompensated_sequence_state.md`
+- report: `methods/entry_ev/docs/reports/00305_2026-07-02_entry_ev_uncompensated_sequence_state.md`
 - 採番と最新判断は、ファイルシステムの更新時刻や `更新日時` ではなく、レポートファイル内の作成時刻 `日時` を基準にする。ここでいうファイル内の時刻は作成時刻の `日時` であり、編集履歴用の `更新日時` ではない。
 
 主要結果:
@@ -9923,7 +9923,7 @@ trade delta:
 - `scripts/experiments/entry_ev_support_repair_listwise_cluster_diagnostics.py` の非oracle selectorからもfuture actual PnL tie-breakerを除去した。`actual_oracle_greedy` は上限診断 / teacher設計専用として維持。
 - tie時に将来実損益へ寄らない回帰テストを追加した。
 - 00332 w0 s2条件で本体replayをleak-free再実行し、さらに新replay上でlistwise診断を再実行した。
-- report: `docs/reports/00335_2026-07-03_entry_ev_support_repair_leakfree_tiebreak.md`
+- report: `methods/entry_ev/docs/reports/00335_2026-07-03_entry_ev_support_repair_leakfree_tiebreak.md`
 - 00334には訂正注記を追加した。
 
 主要結果:
@@ -9955,7 +9955,7 @@ trade delta:
 - `scripts/experiments/entry_ev_support_repair_listwise_teacher_diagnostics.py` を追加した。
 - `actual_oracle_greedy_selected` を `oracle_teacher_selected` として扱い、quota groupをlearnable groupとsingleton groupに分けた。
 - observable feature別に同じquota/overlap制約下のgreedy selectorを作り、teacher overlap、actual PnL、oracle差、rank AUCを比較した。
-- report: `docs/reports/00336_2026-07-03_entry_ev_support_repair_listwise_teacher.md`
+- report: `methods/entry_ev/docs/reports/00336_2026-07-03_entry_ev_support_repair_listwise_teacher.md`
 
 主要結果:
 
@@ -9985,7 +9985,7 @@ trade delta:
 - 00336でrerankingでは救えないと確認したsingleton negativeを、observable abstentionとして診断した。
 - `scripts/experiments/entry_ev_support_repair_singleton_abstention_diagnostics.py` を追加し、00336 teacher examplesのcurrent selected additionsからflagged rowを除外して月次metricsを再計算した。
 - actual PnLは評価にだけ使い、abstention条件には `quota_group_is_singleton`, horizon, broad prior, predicted PnL, predicted fixed-best horizonだけを使った。
-- report: `docs/reports/00337_2026-07-03_entry_ev_support_repair_singleton_abstention.md`
+- report: `methods/entry_ev/docs/reports/00337_2026-07-03_entry_ev_support_repair_singleton_abstention.md`
 
 主要結果:
 
@@ -10018,7 +10018,7 @@ trade delta:
 - 00337のsingleton abstentionを、00335 leak-free replayの複数scenario surfaceへ広げた。
 - `scripts/experiments/entry_ev_support_repair_singleton_surface_diagnostics.py` を追加し、scenarioごとに `selected + quota_full/overlap` candidate universeを再構成した。
 - singleton groupを抽出し、scenario-weighted集計と `role/month/side/decision_timestamp/horizon` によるunique dedup集計を分けて出した。
-- report: `docs/reports/00338_2026-07-03_entry_ev_support_repair_singleton_surface.md`
+- report: `methods/entry_ev/docs/reports/00338_2026-07-03_entry_ev_support_repair_singleton_surface.md`
 
 主要結果:
 

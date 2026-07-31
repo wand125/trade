@@ -194,7 +194,7 @@ Next 2 / 3 に対応し、short exposure concentration と support-aware barrier
 
 詳細:
 
-- `docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
+- `methods/entry_ev/docs/reports/00027_2026-06-28_short_exposure_support_aware_gates.md`
 
 主な結果:
 

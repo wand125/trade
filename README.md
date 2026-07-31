@@ -12,7 +12,9 @@ src/                  共通ライブラリ(pythonpath)
 methods/              検証手法(手法ごとに scripts / docs / tests を持つ)
 ├── entry_ev/         ML によるエントリー期待値予測の研究(オフライン)
 │   ├── scripts/experiments/   実験スクリプト
-│   ├── docs/                  GOAL.md(目標・取引ルール)、研究計画、仕様
+│   ├── docs/                  GOAL.md、研究計画、仕様、研究ログ
+│   │   ├── reports/           番号付き実験レポート(00001〜)
+│   │   └── summary/ decisions/ templates/
 │   └── tests/
 └── swing_eval/       山谷評価トレード(MT5 ライブ運用)
     ├── analysis/              バックテスト・シグナル分析・監視スクリプト
@@ -21,20 +23,16 @@ methods/              検証手法(手法ごとに scripts / docs / tests を持
     ├── docs/                  WORK.md(運用手順)、ブリッジ仕様、システム仕様
     └── tests/
 
-docs/                 共通ドキュメント(全手法共有)
-├── reports/          番号付き実験レポートの共通ストリーム
-└── summary/ decisions/ templates/
-
 data/                 共通データ(生成物は git 管理外)
 runtime/              ライブ状態のスナップショット(git 管理外)
 experiments/          実験の実行記録(git 管理外)
-tests/                共通ライブラリ(trade_data / bridge)と repo 規約のテスト
+tests/                共通ライブラリ(trade_data / bridge)のテスト
 ```
 
 ## 実行規約
 
 - すべてのスクリプトは**リポジトリルートをカレントディレクトリ**として実行する(`runtime/` や `data/` を相対参照するため)。
-- 新しい検証手法を追加するときは `methods/<手法名>/` に scripts / docs / tests を作り、共通ロジックは `src/` へ、レポートは `docs/reports/` の共通番号ストリームへ追記する。
+- 新しい検証手法を追加するときは `methods/<手法名>/` に scripts / docs / tests を作り、共通ロジックは `src/` へ置く。実験レポートは手法ごとに `methods/<手法名>/docs/reports/` に番号付きで蓄積する(記録ルールは各手法の docs/README.md に定める)。
 
 ## セットアップ
 
@@ -46,6 +44,5 @@ python3 src/bridge/mt5_ai_bridge.py            # ブリッジ起動(ルートで
 
 ## 入口
 
-- 研究(entry_ev): [methods/entry_ev/docs/GOAL.md](methods/entry_ev/docs/GOAL.md)、[methods/entry_ev/docs/pipeline.md](methods/entry_ev/docs/pipeline.md)
+- 研究(entry_ev): [methods/entry_ev/docs/README.md](methods/entry_ev/docs/README.md)、[methods/entry_ev/docs/GOAL.md](methods/entry_ev/docs/GOAL.md)
 - ライブ運用(swing_eval): [methods/swing_eval/docs/WORK.md](methods/swing_eval/docs/WORK.md)、[methods/swing_eval/docs/mt5-ai-bridge.md](methods/swing_eval/docs/mt5-ai-bridge.md)
-- ドキュメント全体: [docs/README.md](docs/README.md)

@@ -112,7 +112,7 @@ Candidate selection:
 
 - `python3 -m unittest discover tests`: 73 tests OK
 - `git diff --check`: OK
-- `docs/reports` numbering check: 34 files OK, ordered by internal `日時`
+- `methods/entry_ev/docs/reports` numbering check: 34 files OK, ordered by internal `日時`
 
 ## Artifacts
 

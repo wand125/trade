@@ -129,7 +129,7 @@ smoothed actual miss / calibrationは、raw値の過反応を弱める診断と�
 
 詳細:
 
-- `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`
+- `methods/entry_ev/docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`
 
 要点:
 

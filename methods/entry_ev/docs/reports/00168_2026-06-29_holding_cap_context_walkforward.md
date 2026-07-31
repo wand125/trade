@@ -15,7 +15,7 @@ direct cap target上では、priorだけで選んだcontext除外により poole
 
 ## Numbering Audit
 
-ユーザー指示に従い、既存 `docs/reports/*.md` の採番基準を再確認した。
+ユーザー指示に従い、既存 `methods/entry_ev/docs/reports/*.md` の採番基準を再確認した。
 
 | check | result |
 |---|---:|

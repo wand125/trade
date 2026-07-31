@@ -1244,7 +1244,7 @@ python scripts/experiments/context_drawdown_guard_selection.py \
 
 Use the `worst` objective only as a pre-registered risk-control mandate, not as
 a profit-maximizing selector. Report ordering, latest-report detection, and
-renumbering in `docs/reports/` are based on the internal creation-time `日時:`
+renumbering in `methods/entry_ev/docs/reports/` are based on the internal creation-time `日時:`
 line, not filesystem mtime or the edit-history `更新日時:` line.
 
 For a two-dimensional candidate such as drawdown threshold plus post-breach

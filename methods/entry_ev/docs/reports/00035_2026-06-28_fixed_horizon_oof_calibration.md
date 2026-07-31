@@ -41,7 +41,7 @@
 - `pred_regime_calibrated_short_fixed_240m_adjusted_pnl`
 - `pred_regime_calibrated_short_fixed_720m_adjusted_pnl`
 
-`docs/reports` の通し番号について、本文内 `日時` を基準に昇順で並んでいることを単体テストで確認するようにした。ファイル更新時刻や `更新日時` は採番基準に使わない。
+`methods/entry_ev/docs/reports` の通し番号について、本文内 `日時` を基準に昇順で並んでいることを単体テストで確認するようにした。ファイル更新時刻や `更新日時` は採番基準に使わない。
 
 ## Setup
 

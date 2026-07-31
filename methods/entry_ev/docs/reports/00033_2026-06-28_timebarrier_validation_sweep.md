@@ -159,7 +159,7 @@ Fine thresholdのeligible分布:
 
 - `python3 -m unittest discover tests`: 71 tests OK
 - `git diff --check`: OK
-- `docs/reports` numbering check: 33 files OK, ordered by internal `日時`
+- `methods/entry_ev/docs/reports` numbering check: 33 files OK, ordered by internal `日時`
 
 ## Next Actions
 

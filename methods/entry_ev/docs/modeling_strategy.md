@@ -121,7 +121,7 @@ edge は validation 期間で調整し、test 月に合わせて選ばない。
 - 現行のvalidation/test評価: profit 1.0 / loss 1.20 のbacktestでpolicyを選ぶ
 - 旧倍率 0.9 / 1.3 と途中倍率 1.0 / 1.25 は過去比較として扱い、使う場合は明示する
 
-詳細判断は `docs/decisions/0005_dense_entry_quality_targets.md` に記録する。
+詳細判断は `methods/entry_ev/docs/decisions/0005_dense_entry_quality_targets.md` に記録する。
 
 推論時の基本方針:
 
@@ -135,7 +135,7 @@ short_utility > long_utility なら short
 それ以外は stay_flat
 ```
 
-詳細判断は `docs/decisions/0002_multitask_targets.md` に記録する。
+詳細判断は `methods/entry_ev/docs/decisions/0002_multitask_targets.md` に記録する。
 
 ## モデル候補
 

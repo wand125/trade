@@ -148,7 +148,7 @@ Artifacts:
 - `max-smoothed-actual-profit-barrier-miss-rate=0.55`
 - smoothed calibrationはhard gateにしない
 
-この基準は `docs/decisions/0007_high_turnover_gate_selection.md` に固定記録した。
+この基準は `methods/entry_ev/docs/decisions/0007_high_turnover_gate_selection.md` に固定記録した。
 
 暫定候補A:
 

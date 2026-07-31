@@ -9,7 +9,7 @@
 
 前回候補周辺gridは月10trades条件を満たせなかった。一方、`min_entry_rank=0/0.5`, `max_wait_regret=4/inf`, `profit_barrier_threshold=0.0/0.2` を含む high-turnover gridでは、validation 4ヶ月で候補が残った。
 
-詳細は `docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`。
+詳細は `methods/entry_ev/docs/reports/00028_2026-06-28_high_turnover_gate_validation.md`。
 
 ## 決定
 
@@ -66,7 +66,7 @@
 
 short concentrationは回避できたが、edgeが薄く、損失は long / `ny_overlap` / `low_vol` / `down_low_vol` に移った。候補Aは採用候補から外し、次の候補選定ではcost-aware評価を主目的へ寄せる。
 
-詳細は `docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`。
+詳細は `methods/entry_ev/docs/reports/00029_2026-06-28_blind_2025_07_candidate_a.md`。
 
 ## 代替案
 

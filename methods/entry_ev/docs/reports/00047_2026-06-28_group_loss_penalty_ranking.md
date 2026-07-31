@@ -31,7 +31,7 @@ robust_total_adjusted_pnl_min_cost =
 
 ## Validation Comparison
 
-Setup reused the delay `1` 4fold sweep from `docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`.
+Setup reused the delay `1` 4fold sweep from `methods/entry_ev/docs/reports/00042_2026-06-28_delay1_combined_regime_holdout.md`.
 
 Artifacts:
 

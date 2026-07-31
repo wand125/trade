@@ -114,7 +114,7 @@ predicted miss率は今回 `0.0` だった。これは barrier threshold `0.40` 
 
 Report:
 
-- `docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
+- `methods/entry_ev/docs/reports/00025_2026-06-28_profit_barrier_calibration_candidate_gate.md`
 
 主な結果:
 

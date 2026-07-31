@@ -356,7 +356,7 @@ Next Actions 1 に対応し、`model-candidate-selection` へ `direction x sessi
 
 Report:
 
-- `docs/reports/00023_2026-06-28_direction_session_candidate_gate.md`
+- `methods/entry_ev/docs/reports/00023_2026-06-28_direction_session_candidate_gate.md`
 
 主な結果:
 
@@ -371,7 +371,7 @@ Report:
 
 詳細:
 
-- `docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
+- `methods/entry_ev/docs/reports/00026_2026-06-28_blind_2025_06_asia_short_block_failure.md`
 
 主な結果:
 

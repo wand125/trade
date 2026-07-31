@@ -17,13 +17,13 @@
 - `methods/entry_ev/docs/data_strategy.md`
 - `methods/entry_ev/docs/backtest_spec.md`
 - `methods/entry_ev/docs/ideas.md`
-- `docs/decisions/0003_overfitting_and_walk_forward.md`
-- `docs/decisions/0004_relaxed_adjusted_pnl.md`
-- `docs/decisions/0005_dense_entry_quality_targets.md`
-- `docs/reports/00005_2026-06-28_multifold_policy_selection.md`
-- `docs/reports/00006_2026-06-28_mixed_regime_weighted_training.md`
-- `docs/reports/00007_2026-06-28_dense_entry_quality_targets.md`
-- `docs/reports/00009_2026-06-28_training_time_and_generalization.md`
+- `methods/entry_ev/docs/decisions/0003_overfitting_and_walk_forward.md`
+- `methods/entry_ev/docs/decisions/0004_relaxed_adjusted_pnl.md`
+- `methods/entry_ev/docs/decisions/0005_dense_entry_quality_targets.md`
+- `methods/entry_ev/docs/reports/00005_2026-06-28_multifold_policy_selection.md`
+- `methods/entry_ev/docs/reports/00006_2026-06-28_mixed_regime_weighted_training.md`
+- `methods/entry_ev/docs/reports/00007_2026-06-28_dense_entry_quality_targets.md`
+- `methods/entry_ev/docs/reports/00009_2026-06-28_training_time_and_generalization.md`
 
 ## 結論
 
@@ -48,7 +48,7 @@
   - ただし少数tradeの単月プラスはedgeとみなさない。
 - 1.0/1.2倍率datasetの診断。
   - NoTrade寄りを緩める目的には合う。
-  - ただし標準仕様へ昇格するかは、docs/decisionsで別途決める。
+  - ただし標準仕様へ昇格するかは、methods/entry_ev/docs/decisionsで別途決める。
 
 ## 袋小路になりやすいこと
 

@@ -117,4 +117,4 @@ replacementは単体PnLでも悪く、さらに一部では良いbase機会も�
   - `range_low_vol` のshort replacementをhard blockするのではなく、対象月より前だけで `replacement_risk` を作る。
   - 月別walk-forwardで、removed-loss効果とreplacement-loss効果を別々にscore化する。
 
-採番監査: 既存 `docs/reports/*.md` は本文内 `日時` 順で問題0件。最新判定は `00177` の本文 `日時: 2026-06-29 22:55 JST`。
+採番監査: 既存 `methods/entry_ev/docs/reports/*.md` は本文内 `日時` 順で問題0件。最新判定は `00177` の本文 `日時: 2026-06-29 22:55 JST`。

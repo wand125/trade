@@ -85,7 +85,7 @@ Strict gateで残る1候補:
 
 ## Report Numbering Check
 
-既存 `docs/reports/*.md` 30本について、本文冒頭の `日時` を抽出し、ファイル名の通し番号順と一致することを確認した。
+既存 `methods/entry_ev/docs/reports/*.md` 30本について、本文冒頭の `日時` を抽出し、ファイル名の通し番号順と一致することを確認した。
 
 - count: `30`
 - ordered by internal datetime: `true`

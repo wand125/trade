@@ -76,7 +76,7 @@ class DocsReportTests(unittest.TestCase):
             self.assertEqual(by_internal_time, [older_internal, newer_internal])
 
     def test_report_numbers_follow_internal_report_time(self):
-        report_paths = sorted(Path("docs/reports").glob("*.md"))
+        report_paths = sorted(Path("methods/entry_ev/docs/reports").glob("*.md"))
         self.assertGreater(len(report_paths), 0)
 
         rows = []

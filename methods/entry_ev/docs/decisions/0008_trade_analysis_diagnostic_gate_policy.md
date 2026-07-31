@@ -9,7 +9,7 @@
 
 ただし、2025-07の失敗を見た後に設定した閾値をそのまま次の候補選定に使うと、post-hoc overfittingになる。
 
-詳細は `docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md` と `docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`。
+詳細は `methods/entry_ev/docs/reports/00030_2026-06-28_trade_analysis_diagnostic_gates.md` と `methods/entry_ev/docs/reports/00031_2026-06-28_diagnostic_gate_validation.md`。
 
 ## 決定
 

@@ -20,8 +20,8 @@ XAUUSD の短期トレード予測研究は、データ取得、バックテス�
 - `methods/entry_ev/docs/modeling_strategy.md`: モデル方針。
 - `methods/entry_ev/docs/experiment_protocol.md`: 実験管理ルール。
 - `methods/entry_ev/docs/ideas.md`: 未検証アイデア。
-- `docs/reports/`: 実験レポート。
-- `docs/decisions/`: 重要判断。
+- `methods/entry_ev/docs/reports/`: 実験レポート。
+- `methods/entry_ev/docs/decisions/`: 重要判断。
 
 ## 影響
 

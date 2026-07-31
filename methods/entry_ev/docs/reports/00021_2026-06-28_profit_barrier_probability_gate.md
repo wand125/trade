@@ -14,7 +14,7 @@
 - `model-policy` に `--profit-barrier-threshold` を追加した。
 - `model-sweep` に `--profit-barrier-thresholds` を追加した。
 - `SWEEP_KEY_COLUMNS` とsummary正規化へ `profit_barrier_threshold` を追加し、閾値違いの候補が混ざらないようにした。
-- 既存 `docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
+- 既存 `methods/entry_ev/docs/reports/*.md` の冒頭メタデータを時刻付きへ整えた。通し番号や並びは本文の `日時` を基準にし、ファイル更新時刻や `更新日時` は採番に使わない。
 
 ## Model
 
@@ -160,7 +160,7 @@ profit barrier probability gateは損失を縮めたが、採用水準ではな�
 
 Report:
 
-- `docs/reports/00022_2026-06-28_side_specific_regime_suppression.md`
+- `methods/entry_ev/docs/reports/00022_2026-06-28_side_specific_regime_suppression.md`
 
 主な結果:
 
@@ -175,7 +175,7 @@ Report:
 
 Report:
 
-- `docs/reports/00024_2026-06-28_profit_barrier_miss_candidate_gate.md`
+- `methods/entry_ev/docs/reports/00024_2026-06-28_profit_barrier_miss_candidate_gate.md`
 
 主な結果:
 
