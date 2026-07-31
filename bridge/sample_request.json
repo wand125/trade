@@ -1,0 +1,23 @@
+{
+  "symbol": "XAUUSD",
+  "timeframe": "M1",
+  "server_time": "2026.07.02 23:58:00",
+  "bid": 4117.04,
+  "ask": 4117.38,
+  "spread_points": 34,
+  "digits": 2,
+  "point": 0.01,
+  "indicators": {
+    "rsi14": 58.4,
+    "ema_fast": 4119.2,
+    "ema_slow": 4115.7,
+    "atr14": 3.8
+  },
+  "bars": [
+    {"time": "2026.07.02 23:53", "open": 4118.2, "high": 4120.1, "low": 4116.4, "close": 4117.9, "tick_volume": 120},
+    {"time": "2026.07.02 23:54", "open": 4117.9, "high": 4119.3, "low": 4116.7, "close": 4118.8, "tick_volume": 98},
+    {"time": "2026.07.02 23:55", "open": 4118.8, "high": 4122.0, "low": 4118.1, "close": 4121.4, "tick_volume": 132},
+    {"time": "2026.07.02 23:56", "open": 4121.4, "high": 4121.6, "low": 4116.9, "close": 4117.2, "tick_volume": 155},
+    {"time": "2026.07.02 23:57", "open": 4117.2, "high": 4118.0, "low": 4115.6, "close": 4116.4, "tick_volume": 141}
+  ]
+}

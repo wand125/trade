@@ -12,20 +12,20 @@ XAUUSD の短期トレード予測研究は、データ取得、バックテス�
 以下の文書構造を採用する。
 
 - `GOAL.md`: 研究目的と取引ルール。
-- `docs/status.md`: 現在の状態と次の作業。
-- `docs/research_log.md`: 時系列の作業記録。
-- `docs/research_plan.md`: 体系的な研究ロードマップ。
-- `docs/backtest_spec.md`: バックテスト仕様。
-- `docs/data_strategy.md`: データと前処理方針。
-- `docs/modeling_strategy.md`: モデル方針。
-- `docs/experiment_protocol.md`: 実験管理ルール。
-- `docs/ideas.md`: 未検証アイデア。
+- `docs/research/status.md`: 現在の状態と次の作業。
+- `docs/research/research_log.md`: 時系列の作業記録。
+- `docs/research/research_plan.md`: 体系的な研究ロードマップ。
+- `docs/research/backtest_spec.md`: バックテスト仕様。
+- `docs/research/data_strategy.md`: データと前処理方針。
+- `docs/research/modeling_strategy.md`: モデル方針。
+- `docs/research/experiment_protocol.md`: 実験管理ルール。
+- `docs/research/ideas.md`: 未検証アイデア。
 - `docs/reports/`: 実験レポート。
 - `docs/decisions/`: 重要判断。
 
 ## 影響
 
-作業開始時は `GOAL.md`、`docs/status.md`、`docs/research_log.md` を読む。作業後は `docs/research_log.md` と必要な体系文書を更新する。
+作業開始時は `GOAL.md`、`docs/research/status.md`、`docs/research/research_log.md` を読む。作業後は `docs/research/research_log.md` と必要な体系文書を更新する。
 
 ## 代替案
 

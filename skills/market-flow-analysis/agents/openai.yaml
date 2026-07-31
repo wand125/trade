@@ -1,0 +1,4 @@
+interface:
+  display_name: "Market Flow Analysis"
+  short_description: "Analyze MT5 snapshots for market flow"
+  default_prompt: "Use $market-flow-analysis to read the latest MT5 snapshot and summarize XAU/USD flow."

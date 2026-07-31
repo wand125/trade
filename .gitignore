@@ -5,16 +5,20 @@ __pycache__/
 .mypy_cache/
 *.egg-info/
 .DS_Store
+.env
 
 data/raw/*
 data/processed/*
 data/reports/*
+data/mql5_product_*/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/reports/.gitkeep
 
 experiments/*
 !experiments/.gitkeep
+
+runtime/
 
 *.parquet
 *.joblib

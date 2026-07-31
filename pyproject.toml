@@ -21,4 +21,5 @@ trade-model = "trade_data.modeling:main"
 trade-meta = "trade_data.meta_model:main"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
+python_functions = ["test_*"]
