@@ -40,12 +40,12 @@ class BridgeTests(unittest.TestCase):
             validate_snapshot({"symbol": "XAUUSD", "timeframe": "M1", "bid": "bad", "ask": 1})
 
     def test_sample_request_shape(self):
-        with open("bridge/sample_request.json", encoding="utf-8") as f:
+        with open("src/bridge/sample_request.json", encoding="utf-8") as f:
             payload = json.load(f)
         validate_snapshot(payload)
 
     def test_save_snapshot_returns_local_hold_status(self):
-        with open("bridge/sample_request.json", encoding="utf-8") as f:
+        with open("src/bridge/sample_request.json", encoding="utf-8") as f:
             payload = json.load(f)
         signal = save_snapshot(payload)
         self.assertTrue(signal["ok"])
@@ -54,7 +54,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(signal["action"], "hold")
 
     def test_persist_state_writes_snapshot_based_codex_files(self):
-        with open("bridge/sample_request.json", encoding="utf-8") as f:
+        with open("src/bridge/sample_request.json", encoding="utf-8") as f:
             payload = json.load(f)
         signal = save_snapshot(payload)
         with tempfile.TemporaryDirectory() as tmpdir:

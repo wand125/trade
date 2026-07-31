@@ -5,7 +5,7 @@
 
 ## 目的
 
-トレードMLで守るべき汎化原則を、現在の研究実装がどこまで満たしているかレビューする。恒久的な原則は `docs/research/trading_ml_generalization_principles.md` に分離した。
+トレードMLで守るべき汎化原則を、現在の研究実装がどこまで満たしているかレビューする。恒久的な原則は `methods/entry_ev/docs/trading_ml_generalization_principles.md` に分離した。
 
 ## 結論
 

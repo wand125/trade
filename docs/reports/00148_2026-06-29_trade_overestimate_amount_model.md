@@ -21,7 +21,7 @@
 - OOF: validation monthを1つ抜き、残り月でfitしてholdout monthをscore
 - apply: validation全体でfitした最終modelで2025-05をscore
 
-また、`pred_trade_quality_{long,short}_adjusted_pnl` をanalysis/enrichで保持し、optional side featureとして `pred_taken_trade_quality_adjusted_pnl`, `pred_opposite_trade_quality_adjusted_pnl`, `gap` に展開できるようにした。
+また、`pred_trade_quality_{long,short}_adjusted_pnl` をmethods/swing_eval/analysis/enrichで保持し、optional side featureとして `pred_taken_trade_quality_adjusted_pnl`, `pred_opposite_trade_quality_adjusted_pnl`, `gap` に展開できるようにした。
 
 ## OOF Model Metrics
 

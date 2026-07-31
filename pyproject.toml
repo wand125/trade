@@ -21,5 +21,6 @@ trade-model = "trade_data.modeling:main"
 trade-meta = "trade_data.meta_model:main"
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "."]
+pythonpath = ["src", ".", "methods/entry_ev", "methods/swing_eval"]
 python_functions = ["test_*"]
+testpaths = ["tests", "methods/entry_ev/tests", "methods/swing_eval/tests"]

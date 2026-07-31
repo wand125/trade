@@ -10,13 +10,13 @@
 ## 読み直した主なdocs
 
 - `GOAL.md`
-- `docs/research/research_plan.md`
-- `docs/research/modeling_strategy.md`
-- `docs/research/experiment_protocol.md`
-- `docs/research/status.md`
-- `docs/research/data_strategy.md`
-- `docs/research/backtest_spec.md`
-- `docs/research/ideas.md`
+- `methods/entry_ev/docs/research_plan.md`
+- `methods/entry_ev/docs/modeling_strategy.md`
+- `methods/entry_ev/docs/experiment_protocol.md`
+- `methods/entry_ev/docs/status.md`
+- `methods/entry_ev/docs/data_strategy.md`
+- `methods/entry_ev/docs/backtest_spec.md`
+- `methods/entry_ev/docs/ideas.md`
 - `docs/decisions/0003_overfitting_and_walk_forward.md`
 - `docs/decisions/0004_relaxed_adjusted_pnl.md`
 - `docs/decisions/0005_dense_entry_quality_targets.md`
