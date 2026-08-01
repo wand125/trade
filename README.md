@@ -16,12 +16,14 @@ methods/              検証手法(手法ごとに scripts / docs / tests を持
 │   │   ├── reports/           番号付き実験レポート(00001〜)
 │   │   └── summary/ decisions/ templates/
 │   └── tests/
-└── swing_eval/       山谷評価トレード(MT5 ライブ運用)
-    ├── analysis/              バックテスト・シグナル分析・監視スクリプト
-    ├── mt5/                   EA・インジケーター・ストラテジーテスター設定
-    ├── skills/                相場分析用スキル定義
-    ├── docs/                  WORK.md(運用手順)、ブリッジ仕様、システム仕様
-    └── tests/
+├── swing_eval/       山谷評価トレード(MT5 ライブ運用)
+│   ├── analysis/              バックテスト・シグナル分析・監視スクリプト
+│   ├── mt5/                   EA・インジケーター・ストラテジーテスター設定
+│   ├── skills/                相場分析用スキル定義
+│   ├── docs/                  WORK.md(運用手順)、ブリッジ仕様、システム仕様
+│   └── tests/
+└── manual/           人(自分)による裁量トレード
+    └── docs/                  原則・プレイブック・失敗カタログ・トレード記録(journal/)
 
 data/                 共通データ(生成物は git 管理外)
 runtime/              ライブ状態のスナップショット(git 管理外)
@@ -46,3 +48,4 @@ python3 src/bridge/mt5_ai_bridge.py            # ブリッジ起動(ルートで
 
 - 研究(entry_ev): [methods/entry_ev/docs/README.md](methods/entry_ev/docs/README.md)、[methods/entry_ev/docs/GOAL.md](methods/entry_ev/docs/GOAL.md)
 - ライブ運用(swing_eval): [methods/swing_eval/docs/WORK.md](methods/swing_eval/docs/WORK.md)、[methods/swing_eval/docs/mt5-ai-bridge.md](methods/swing_eval/docs/mt5-ai-bridge.md)
+- 裁量トレード(manual): [methods/manual/docs/README.md](methods/manual/docs/README.md)
