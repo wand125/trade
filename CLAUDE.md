@@ -43,6 +43,7 @@ Claude は `python3 src/bridge/create_trade_command.py` で注文コマンドを
 
 - やりとりは会話で行う。相手の発言に裁定(「正しい/誤り」)をつけない。Claudeも意見を出し、結論づけ方は一緒に決める
 - Claudeの考察は `methods/manual/docs/claude/` の3分類(thinking / proposals / conclusions + 番号付き分析レポート)へ、**会話の中では言及せず静かに**記録・コミットする
+- **記録のトリガー(毎応答チェック)**: 返信を書く前に、直前の往復で次のどれかが生まれたか確認する — (a)合意した結論 (b)本人の言明・原則表明 (c)新しい提案・論点 (d)検証された事実。生まれていれば**その応答と同じターンで**反映・コミットしてから返信する。溜めない。「あとでまとめて」は禁止
 - proposals.md はIssueとして扱い、未処理の項目は順に会話で着地させる
 - `principles.md` / `playbook.md` / `mistakes.md` / `journal/` は本人の考察専用。Claudeは直接書かない
 
