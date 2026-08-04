@@ -29,7 +29,8 @@
 
 - Claude→ブリッジ→EAの発注経路はdry-runで一周検証済み(コマンド発行→EA受信→ライブ価格で検証→`dry_run_passed`/`rejected` 応答、所要数秒)
 - EAの安全装置を実測確認: 銘柄チェック(入力の許可銘柄かつチャート銘柄と一致が必要)、SL/TP整合チェック、期限チェック。ライブ執行は `--live --confirm LIVE`(コマンド側)+ `InpAllowCodexTrading=true`(EA側、既定false)の二段鍵
-- コマンド処理は `InpPollCodexTradeCommands=true` のチャートのみ。現在はXAUUSD-mチャートのみ有効(USDJPYコマンドは "symbol not allowed")
+- コマンド処理は `InpPollCodexTradeCommands=true` のチャートのみ
+- **銘柄ルーティング導入済み**(EA v20260804a + ブリッジ、2026-08-04): EAは自チャート銘柄をクエリに付けて取得し、ブリッジは一致するEAにだけコマンドを渡す(不一致は保留のまま)。XAUUSD-m・USDJPY-m両方のdry-runで双方向の到達を検証済み
 
 ## 議論で合意した結論
 
