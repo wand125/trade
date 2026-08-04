@@ -29,6 +29,13 @@ def default_items() -> list[dict[str, str]]:
     return [
         {
             "kind": "expert",
+            "name": "AI_Bridge_Advisor",
+            "workspace_source": "methods/swing_eval/mt5/Experts/AI_Bridge_Advisor.mq5",
+            "mt5_source": "MQL5/Experts/AI_Bridge_Advisor.mq5",
+            "mt5_binary": "MQL5/Experts/AI_Bridge_Advisor.ex5",
+        },
+        {
+            "kind": "expert",
             "name": "Swing_Evaluation_Trader",
             "workspace_source": "methods/swing_eval/mt5/Experts/Swing_Evaluation_Trader.mq5",
             "mt5_source": "MQL5/Experts/Swing_Evaluation_Trader.mq5",

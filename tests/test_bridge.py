@@ -9,6 +9,7 @@ from bridge.mt5_ai_bridge import (
     parse_signal_text,
     persist_state,
     save_snapshot,
+    serve_trade_command,
     validate_snapshot,
 )
 from analysis.dry_run_command import command_from_signal
@@ -122,6 +123,65 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(loaded["action"], "sell")
         self.assertTrue(loaded["dry_run"])
         self.assertEqual(loaded["status"], "pending")
+
+    def _settings(self, state_dir):
+        return Settings(
+            provider="mock",
+            host="127.0.0.1",
+            port=8765,
+            token="",
+            timeout_seconds=20,
+            max_model_tokens=900,
+            state_dir=state_dir,
+            openai_api_key="",
+            openai_model="gpt-5.2",
+            openai_base_url="https://api.openai.com/v1",
+            anthropic_api_key="",
+            anthropic_model="claude-sonnet-4-5",
+            anthropic_base_url="https://api.anthropic.com",
+            anthropic_version="2023-06-01",
+        )
+
+    def _write_command(self, tmpdir, symbol):
+        command = {
+            "id": "route-test",
+            "status": "pending",
+            "action": "buy",
+            "symbol": symbol,
+            "volume": 0.01,
+            "sl": 1.0,
+            "tp": 2.0,
+            "dry_run": True,
+            "expires_at": 0,
+        }
+        with open(f"{tmpdir}/trade_command.json", "w", encoding="utf-8") as f:
+            json.dump(command, f)
+
+    def test_serve_trade_command_routes_by_requester_symbol(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_command(tmpdir, "USDJPY-m")
+            settings = self._settings(tmpdir)
+
+            mismatched = serve_trade_command(settings, "XAUUSD-m")
+            self.assertEqual(mismatched, {})
+            with open(f"{tmpdir}/trade_command.json", encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["status"], "pending")
+
+            matched = serve_trade_command(settings, "USDJPY-m")
+            self.assertEqual(matched["symbol"], "USDJPY-m")
+            with open(f"{tmpdir}/trade_command.json", encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["status"], "sent")
+
+            self.assertEqual(serve_trade_command(settings, "USDJPY-m"), {})
+
+    def test_serve_trade_command_without_symbol_serves_any(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_command(tmpdir, "USDJPY-m")
+            settings = self._settings(tmpdir)
+            served = serve_trade_command(settings, None)
+            self.assertEqual(served["symbol"], "USDJPY-m")
+            with open(f"{tmpdir}/trade_command.json", encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["status"], "sent")
 
 
 if __name__ == "__main__":

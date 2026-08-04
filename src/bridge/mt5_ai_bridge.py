@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -831,6 +832,23 @@ def mark_trade_command_sent(command: dict[str, Any], settings: Settings) -> None
     write_json(path, command)
 
 
+def serve_trade_command(settings: Settings, requester_symbol: str | None = None) -> dict[str, Any]:
+    """Serve the pending command to a polling EA, routing by symbol.
+
+    A requester that reports its chart symbol only receives commands for that
+    symbol; a mismatched command stays pending for the matching EA. Requests
+    without a symbol (older EA builds) receive any pending command.
+    """
+    command = load_trade_command(settings)
+    if not command:
+        return {}
+    command_symbol = str(command.get("symbol", ""))
+    if requester_symbol and command_symbol and requester_symbol != command_symbol:
+        return {}
+    mark_trade_command_sent(command, settings)
+    return command
+
+
 def persist_trade_result(result: dict[str, Any], settings: Settings) -> dict[str, Any]:
     state_dir = Path(settings.state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -1104,15 +1122,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 }
             )
             return
-        if self.path in {"/trade-command", "/trade_command"}:
+        parsed = urlsplit(self.path)
+        if parsed.path in {"/trade-command", "/trade_command"}:
             if self.settings.token:
                 token = self.headers.get("X-Bridge-Token", "")
                 if token != self.settings.token:
                     self.send_error_json(HTTPStatus.UNAUTHORIZED, "unauthorized")
                     return
-            command = load_trade_command(self.settings)
-            if command:
-                mark_trade_command_sent(command, self.settings)
+            query = parse_qs(parsed.query)
+            requester_symbol = query.get("symbol", [""])[0] or None
+            command = serve_trade_command(self.settings, requester_symbol)
             self.send_json({"ok": True, "command": command or None})
             return
         self.send_error_json(HTTPStatus.NOT_FOUND, "not_found")

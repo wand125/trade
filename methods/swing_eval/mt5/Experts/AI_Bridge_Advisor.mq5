@@ -83,7 +83,7 @@ int OnInit()
    if(InpEnableTimerFallback)
       EventSetTimer(1);
 
-   Print("AI Bridge Advisor initialized v20260703i. Add allowed WebRequest URL: http://127.0.0.1:8765");
+   Print("AI Bridge Advisor initialized v20260804a. Add allowed WebRequest URL: http://127.0.0.1:8765");
    if(!IsBridgeSender())
       PrintFormat("AI Bridge Advisor passive on chart timeframe=%s; active sender timeframe=%s",
                   EnumToString(_Period), EnumToString(InpTimeframe));
@@ -1034,7 +1034,7 @@ string BridgeConfigUrl()
 
 string BridgeTradeCommandUrl()
 {
-   return BridgeBaseUrl() + "/trade_command";
+   return BridgeBaseUrl() + "/trade_command?symbol=" + _Symbol;
 }
 
 string BridgeTradeResultUrl()
