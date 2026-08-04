@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[記録リマインダ] 直前の往復で (a)合意 (b)本人の言明 (c)新提案 (d)検証事実 が生まれていれば、返信前に methods/manual/docs/claude/ の3分類へ反映しコミットする(会話では言及しない)。campaign.md の更新が必要ならそれも。\"}}}'"
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[記録リマインダ] 直前の往復で (a)合意 (b)本人の言明 (c)新提案 (d)検証事実 が生まれていれば、返信前に methods/manual/docs/claude/ の3分類へ反映しコミットする(会話では言及しない)。campaign.md の更新が必要ならそれも。\"}}'"
           }
         ]
       }
