@@ -62,6 +62,7 @@ python3 -u methods/manual/scripts/runtime_watch.py --interval 12 --digest-minute
 - ダイジェスト: `**定期報告(HH:MM:SS)**: USDJPY xxx.xx(建値±Xpips)/ 金 x,xxx / 特記事項`
 - 執行報告: 何を・なぜ(どのルール)・結果(チケット・価格)・次の状態
 - 時刻はウォッチャー出力のタイムスタンプをそのまま使う(推定時刻を書かない)
+- **報告はチャットと同時に `runtime/ops_digest.log` にも1行追記する**(他セッションから `tail runtime/ops_digest.log` で参照可能にするため。2026-08-05 本人決定)。書式: `YYYY-MM-DD HH:MM:SS DIGEST USDJPY-m:xxx.xxx XAUUSD-m:xxxx.xx pos:N bal:NNNNNN note:...` / 執行時は `EXEC ルール名 内容...` の行を追記
 
 ## 禁止事項(リポジトリCLAUDE.mdの心構えより)
 
