@@ -7,6 +7,7 @@
 1. `methods/manual/docs/claude/conclusions.md` — 合意済みリスクパラメータと確定事実
 2. `methods/manual/docs/campaign.md` — 現在の作戦(本人が書くシーシス・計画・無効化条件)
 3. `runtime/latest_account.md` と `runtime/latest_context.md` — ライブの口座・ポジション・相場(MT5ブリッジが更新。古い場合は鮮度を必ず指摘する)
+4. **高重要経済指標の日時**(本人指示 2026-08-05: 指標発表の日時は確認すること)— 週初または作戦開始時にTradingView経済カレンダー等で確認し、監視の指標警告(--events)とcampaign.mdの指標リスク欄を最新化する
 
 ## 合意済みリスクパラメータ(2026-08-04 本人決定)
 

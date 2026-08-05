@@ -25,6 +25,11 @@ def parse_args() -> argparse.Namespace:
         help="Comma list of SYMBOL:price entries, e.g. 'USDJPY-m:157.15,USDJPY-m:157.75'",
     )
     p.add_argument("--stale-seconds", type=int, default=300)
+    p.add_argument(
+        "--events",
+        default="",
+        help="Semicolon list of 'YYYY-MM-DDTHH:MM|label' (local time) to warn about at T-60min and T-10min",
+    )
     return p.parse_args()
 
 
@@ -73,12 +78,28 @@ def main() -> None:
             if val:
                 levels.append((sym.strip(), float(val)))
 
+    events: list[tuple[float, str]] = []
+    if args.events:
+        for entry in args.events.split(";"):
+            ts, _, label = entry.partition("|")
+            if label:
+                events.append((time.mktime(time.strptime(ts.strip(), "%Y-%m-%dT%H:%M")), label.strip()))
+    warned: set[tuple[str, int]] = set()
+
     last_price: dict[str, float] = {}
     last_balance: float | None = None
     last_positions: int | None = None
     stale_reported = False
 
     while True:
+        now = time.time()
+        for ev_ts, label in events:
+            remaining = ev_ts - now
+            for lead_min in (60, 10):
+                key = (label, lead_min)
+                if key not in warned and 0 < remaining <= lead_min * 60:
+                    emit(f"[watch] EVENT_WARN {label} まで約{int(remaining/60)}分")
+                    warned.add(key)
         snap = read_json(state_dir / "latest_snapshot.json")
         acct = read_account(state_dir / "latest_account.md")
 
