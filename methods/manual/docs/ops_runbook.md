@@ -42,6 +42,7 @@ python3 -u methods/manual/scripts/runtime_watch.py --interval 12 --digest-minute
 |---|---|
 | DIGEST(15分) | 1〜2行で報告(USDJPY・金・含み損益)。変化なしなら「変化なし」と一言 |
 | XAUUSD注文89802354(作戦03 Buy Limit 0.3 @4230 SL4220 TP4264、2026-08-06設置) | 約定したら報告のみ(SL/TPサーバー側常駐、裁量行動なし)。**POSITIONS数の増減イベントは銘柄・チケットで判定すること**(USDJPYルールをXAU玉の変化に誤適用しない) |
+| USDJPY注文89812483/89812489(作戦01 第2次 Sell Limit 20+20 @157.80 SL159.00、2026-08-06 07:41設置) | 約定したら報告。**トレーリングは建値ではなく158.15**: 含み益+30pips到達 **または** 157.31割れのいずれか早い方で、両玉のSLを158.15へ modify(`--sl 158.15`)→報告・campaign記録。TP1(157.20)約定後は残玉SLを157.50へ(従来通り) |
 | POSITIONS 2→1 | **TP1約定(157.20、+約1.2万円)の可能性大**。runtime/latest_account.md で確認 → 残玉(89704860)のSLを157.50へ: `python3 src/bridge/create_trade_command.py modify --symbol USDJPY-m --ticket 89704860 --sl 157.50 --expires-in-seconds 120 --reason "campaign01 rule4b trail after TP1" --live --confirm LIVE` → 結果確認・campaign経過記録に追記・報告 |
 | POSITIONS 1→0 / 2→0 | 決済完了(TP2 or 建値ストップ)。deal内容を確認し報告+campaign記録。**新規注文は置かない** |
 | LEVEL_UP 158.10 | 警戒モード: USDJPYのM15終値を追跡(snapshotのM15 bars)。**終値が158.10超で2本連続確定したら両玉を成行決済**: `create_trade_command.py close --symbol USDJPY-m --ticket <番号> --expires-in-seconds 120 --reason "campaign01 primary defense confirmed band break" --live --confirm LIVE` を各ticketに実行 → 報告。スパイクの一時突き抜け(M15終値が戻る)なら決済せず報告のみ |
