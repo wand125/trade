@@ -67,7 +67,8 @@ def read_account(path: Path) -> dict:
 
 
 def emit(msg: str) -> None:
-    print(msg, flush=True)
+    stamp = time.strftime("%H:%M:%S")
+    print(f"{stamp} {msg}", flush=True)
 
 
 def main() -> None:
