@@ -37,6 +37,7 @@ input double InpCodexMaxLot = 0.01;
 input int InpCodexMaxSpreadPoints = 80;
 input int InpCodexMaxPositions = 1;
 input bool InpCodexRequireSlTp = true;
+input int InpCodexMaxPendingOrders = 4;
 input string InpCodexAllowedSymbol = "";
 
 CTrade Trade;
@@ -83,7 +84,7 @@ int OnInit()
    if(InpEnableTimerFallback)
       EventSetTimer(1);
 
-   Print("AI Bridge Advisor initialized v20260804a. Add allowed WebRequest URL: http://127.0.0.1:8765");
+   Print("AI Bridge Advisor initialized v20260805a. Add allowed WebRequest URL: http://127.0.0.1:8765");
    if(!IsBridgeSender())
       PrintFormat("AI Bridge Advisor passive on chart timeframe=%s; active sender timeframe=%s",
                   EnumToString(_Period), EnumToString(InpTimeframe));
@@ -1099,8 +1100,12 @@ void CheckTradeCommand()
                       "InpAllowCodexTrading is false", 0, 0, 0);
       return;
    }
-   if((int)SymbolInfoInteger(symbol, SYMBOL_SPREAD) > maxSpread ||
-      (int)SymbolInfoInteger(symbol, SYMBOL_SPREAD) > InpCodexMaxSpreadPoints)
+   double pendingPrice = JsonGetDouble(response, "price", 0.0);
+   bool isEntry = (action == "buy" || action == "sell" ||
+                   action == "buy_limit" || action == "sell_limit");
+   if(isEntry &&
+      ((int)SymbolInfoInteger(symbol, SYMBOL_SPREAD) > maxSpread ||
+       (int)SymbolInfoInteger(symbol, SYMBOL_SPREAD) > InpCodexMaxSpreadPoints))
    {
       SendTradeResult(id, "rejected", dryRun, action, symbol, volume, 0.0, sl, tp, ticket,
                       "spread too wide", 0, 0, 0);
@@ -1109,6 +1114,12 @@ void CheckTradeCommand()
 
    if(action == "buy" || action == "sell")
       ExecuteCodexMarketCommand(id, action, symbol, volume, sl, tp, dryRun, comment);
+   else if(action == "buy_limit" || action == "sell_limit")
+      ExecuteCodexPendingCommand(id, action, symbol, volume, pendingPrice, sl, tp, dryRun, comment);
+   else if(action == "modify")
+      ExecuteCodexModifyCommand(id, symbol, ticket, sl, tp, dryRun);
+   else if(action == "cancel")
+      ExecuteCodexCancelCommand(id, symbol, ticket, dryRun);
    else if(action == "close")
       ExecuteCodexCloseCommand(id, action, symbol, ticket, dryRun, comment);
    else if(action == "close_all")
@@ -1236,6 +1247,175 @@ void ExecuteCodexCloseAllCommand(const string id, const string action, const str
    SendTradeResult(id, allSent ? "executed" : "partial_or_rejected", false, action, symbol,
                    (double)count, 0.0, 0.0, 0.0, 0,
                    allSent ? "close_all sent" : Trade.ResultComment(),
+                   (int)Trade.ResultRetcode(), (ulong)Trade.ResultOrder(), (ulong)Trade.ResultDeal());
+}
+
+int CountPendingOrdersForSymbol(const string symbol)
+{
+   int count = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(OrderGetString(ORDER_SYMBOL) == symbol)
+         count++;
+   }
+   return count;
+}
+
+void ExecuteCodexPendingCommand(const string id, const string action, const string symbol,
+                                const double volume, const double price, const double sl,
+                                const double tp, const bool dryRun, const string comment)
+{
+   if(volume <= 0.0 || volume > InpCodexMaxLot)
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "volume outside allowed range", 0, 0, 0);
+      return;
+   }
+   if(price <= 0.0)
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "price required for pending order", 0, 0, 0);
+      return;
+   }
+   if(InpCodexRequireSlTp && (sl <= 0.0 || tp <= 0.0))
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "SL/TP required", 0, 0, 0);
+      return;
+   }
+   if(CountPendingOrdersForSymbol(symbol) >= InpCodexMaxPendingOrders)
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "max pending orders reached", 0, 0, 0);
+      return;
+   }
+   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+   if(action == "buy_limit" && (price >= ask || sl >= price || (tp > 0.0 && tp <= price)))
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "invalid buy_limit price/SL/TP", 0, 0, 0);
+      return;
+   }
+   if(action == "sell_limit" && (price <= bid || (sl > 0.0 && sl <= price) || tp >= price))
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "invalid sell_limit price/SL/TP", 0, 0, 0);
+      return;
+   }
+   if(dryRun)
+   {
+      SendTradeResult(id, "dry_run_passed", true, action, symbol, volume, price, sl, tp, 0,
+                      "pending validation passed; no order sent", 0, 0, 0);
+      return;
+   }
+   bool sent = false;
+   if(action == "buy_limit")
+      sent = Trade.BuyLimit(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, comment);
+   else
+      sent = Trade.SellLimit(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, comment);
+   SendTradeResult(id, sent ? "executed" : "rejected", false, action, symbol, volume, price, sl, tp, 0,
+                   sent ? "pending order placed" : Trade.ResultComment(),
+                   (int)Trade.ResultRetcode(), (ulong)Trade.ResultOrder(), (ulong)Trade.ResultDeal());
+}
+
+void ExecuteCodexModifyCommand(const string id, const string symbol, const ulong ticket,
+                               const double sl, const double tp, const bool dryRun)
+{
+   if(ticket == 0)
+   {
+      SendTradeResult(id, "rejected", dryRun, "modify", symbol, 0.0, 0.0, sl, tp, ticket,
+                      "ticket required", 0, 0, 0);
+      return;
+   }
+   if(sl <= 0.0 && tp <= 0.0)
+   {
+      SendTradeResult(id, "rejected", dryRun, "modify", symbol, 0.0, 0.0, sl, tp, ticket,
+                      "sl or tp required", 0, 0, 0);
+      return;
+   }
+   if(PositionSelectByTicket(ticket))
+   {
+      if(PositionGetString(POSITION_SYMBOL) != symbol)
+      {
+         SendTradeResult(id, "rejected", dryRun, "modify", symbol, 0.0, 0.0, sl, tp, ticket,
+                         "position symbol mismatch", 0, 0, 0);
+         return;
+      }
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      double current = PositionGetDouble(POSITION_PRICE_CURRENT);
+      double newSl = (sl > 0.0 ? sl : PositionGetDouble(POSITION_SL));
+      double newTp = (tp > 0.0 ? tp : PositionGetDouble(POSITION_TP));
+      if(dryRun)
+      {
+         SendTradeResult(id, "dry_run_passed", true, "modify", symbol, volume, current,
+                         newSl, newTp, ticket, "position modify validation passed; no order sent", 0, 0, 0);
+         return;
+      }
+      bool sent = Trade.PositionModify(ticket, newSl, newTp);
+      SendTradeResult(id, sent ? "executed" : "rejected", false, "modify", symbol, volume, current,
+                      newSl, newTp, ticket,
+                      sent ? "position modified" : Trade.ResultComment(),
+                      (int)Trade.ResultRetcode(), (ulong)Trade.ResultOrder(), (ulong)Trade.ResultDeal());
+      return;
+   }
+   if(OrderSelect(ticket))
+   {
+      if(OrderGetString(ORDER_SYMBOL) != symbol)
+      {
+         SendTradeResult(id, "rejected", dryRun, "modify", symbol, 0.0, 0.0, sl, tp, ticket,
+                         "order symbol mismatch", 0, 0, 0);
+         return;
+      }
+      double volume = OrderGetDouble(ORDER_VOLUME_CURRENT);
+      double orderPrice = OrderGetDouble(ORDER_PRICE_OPEN);
+      double newSl = (sl > 0.0 ? sl : OrderGetDouble(ORDER_SL));
+      double newTp = (tp > 0.0 ? tp : OrderGetDouble(ORDER_TP));
+      if(dryRun)
+      {
+         SendTradeResult(id, "dry_run_passed", true, "modify", symbol, volume, orderPrice,
+                         newSl, newTp, ticket, "order modify validation passed; no order sent", 0, 0, 0);
+         return;
+      }
+      bool sent = Trade.OrderModify(ticket, orderPrice, newSl, newTp, ORDER_TIME_GTC, 0);
+      SendTradeResult(id, sent ? "executed" : "rejected", false, "modify", symbol, volume, orderPrice,
+                      newSl, newTp, ticket,
+                      sent ? "pending order modified" : Trade.ResultComment(),
+                      (int)Trade.ResultRetcode(), (ulong)Trade.ResultOrder(), (ulong)Trade.ResultDeal());
+      return;
+   }
+   SendTradeResult(id, "rejected", dryRun, "modify", symbol, 0.0, 0.0, sl, tp, ticket,
+                   "ticket not found", 0, 0, 0);
+}
+
+void ExecuteCodexCancelCommand(const string id, const string symbol, const ulong ticket, const bool dryRun)
+{
+   if(ticket == 0 || !OrderSelect(ticket))
+   {
+      SendTradeResult(id, "rejected", dryRun, "cancel", symbol, 0.0, 0.0, 0.0, 0.0, ticket,
+                      "pending order ticket not found", 0, 0, 0);
+      return;
+   }
+   if(OrderGetString(ORDER_SYMBOL) != symbol)
+   {
+      SendTradeResult(id, "rejected", dryRun, "cancel", symbol, 0.0, 0.0, 0.0, 0.0, ticket,
+                      "order symbol mismatch", 0, 0, 0);
+      return;
+   }
+   double price = OrderGetDouble(ORDER_PRICE_OPEN);
+   double volume = OrderGetDouble(ORDER_VOLUME_CURRENT);
+   if(dryRun)
+   {
+      SendTradeResult(id, "dry_run_passed", true, "cancel", symbol, volume, price, 0.0, 0.0, ticket,
+                      "cancel validation passed; no order sent", 0, 0, 0);
+      return;
+   }
+   bool sent = Trade.OrderDelete(ticket);
+   SendTradeResult(id, sent ? "executed" : "rejected", false, "cancel", symbol, volume, price, 0.0, 0.0, ticket,
+                   sent ? "pending order deleted" : Trade.ResultComment(),
                    (int)Trade.ResultRetcode(), (ulong)Trade.ResultOrder(), (ulong)Trade.ResultDeal());
 }
 

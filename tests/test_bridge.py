@@ -174,6 +174,28 @@ class BridgeTests(unittest.TestCase):
 
             self.assertEqual(serve_trade_command(settings, "USDJPY-m"), {})
 
+    def test_load_trade_command_accepts_pending_order_actions(self):
+        for action in ["buy_limit", "sell_limit", "modify", "cancel"]:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                command = {
+                    "id": f"action-{action}",
+                    "status": "pending",
+                    "action": action,
+                    "symbol": "USDJPY-m",
+                    "volume": 40.0,
+                    "price": 157.80,
+                    "sl": 159.00,
+                    "tp": 157.20,
+                    "ticket": 12345,
+                    "dry_run": True,
+                    "expires_at": 0,
+                }
+                with open(f"{tmpdir}/trade_command.json", "w", encoding="utf-8") as f:
+                    json.dump(command, f)
+                loaded = load_trade_command(self._settings(tmpdir))
+                self.assertEqual(loaded["action"], action, action)
+                self.assertEqual(loaded["price"], 157.80)
+
     def test_serve_trade_command_without_symbol_serves_any(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             self._write_command(tmpdir, "USDJPY-m")

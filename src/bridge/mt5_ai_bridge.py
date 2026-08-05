@@ -25,7 +25,16 @@ from urllib.request import Request, urlopen
 
 
 ACTION_VALUES = {"buy", "sell", "hold"}
-TRADE_COMMAND_ACTIONS = {"buy", "sell", "close", "close_all"}
+TRADE_COMMAND_ACTIONS = {
+    "buy",
+    "sell",
+    "buy_limit",
+    "sell_limit",
+    "modify",
+    "cancel",
+    "close",
+    "close_all",
+}
 
 SIGNAL_SCHEMA: dict[str, Any] = {
     "type": "object",
