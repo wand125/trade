@@ -25,6 +25,8 @@ def parse_args() -> argparse.Namespace:
         help="Comma list of SYMBOL:price entries, e.g. 'USDJPY-m:157.15,USDJPY-m:157.75'",
     )
     p.add_argument("--stale-seconds", type=int, default=300)
+    p.add_argument("--level-cooldown", type=int, default=900,
+                   help="Seconds to suppress repeat alerts for the same level (default 900)")
     p.add_argument("--digest-minutes", type=int, default=0,
                    help="Emit a compact state digest every N minutes (0=off)")
     p.add_argument(
@@ -88,6 +90,7 @@ def main() -> None:
             if label:
                 events.append((time.mktime(time.strptime(ts.strip(), "%Y-%m-%dT%H:%M")), label.strip()))
     warned: set[tuple[str, int]] = set()
+    level_last_fired: dict[tuple[str, float], float] = {}
 
     last_price: dict[str, float] = {}
     last_seen: dict[str, float] = {}
@@ -146,9 +149,17 @@ def main() -> None:
                 for lsym, level in levels:
                     if lsym != sym:
                         continue
-                    if prev < level <= bid:
+                    crossed_up = prev < level <= bid
+                    crossed_down = prev > level >= bid
+                    if not (crossed_up or crossed_down):
+                        continue
+                    key = (lsym, level)
+                    if now - level_last_fired.get(key, 0) < args.level_cooldown:
+                        continue
+                    level_last_fired[key] = now
+                    if crossed_up:
                         emit(f"[watch] LEVEL_UP {sym} が {level} を上抜け(bid {bid})")
-                    elif prev > level >= bid:
+                    else:
                         emit(f"[watch] LEVEL_DOWN {sym} が {level} を下抜け(bid {bid})")
             last_price[sym] = bid
 
