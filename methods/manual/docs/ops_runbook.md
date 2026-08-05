@@ -45,6 +45,10 @@ python3 -u methods/manual/scripts/runtime_watch.py --interval 12 --digest-minute
 | SYMBOL_STALE / DATA_STALE | 報告。5分以上続けばEAログ確認(`MT5ログ: ~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Logs/`)。チャート時間足がM1以外になっていたら本人にM1復帰を依頼 |
 | BALANCE 変化 | 決済損益 or 入出金。内容確認して報告 |
 
+## チャート運用の注意(本人へ随時案内してよい)
+
+- EA付きチャート(XAUUSD-m M1 / USDJPY-m M1)は**データ供給専用・M1固定**。時間足を変えるとEAがpassive化し監視が盲目になる(8/5に2回発生)。時間足を見たいときはEAなしの別チャートを開いてもらう
+
 ## 夜間ウォッチ
 
 本人が就寝宣言+当夜ルールを伝えた場合のみ: campaign.md 就寝時ルール欄に記入してから、防御行動(決済・削減)に限り確認なしで実行可。新規・増ロットは不可。詳細はリポジトリ CLAUDE.md「夜間ウォッチ」節。
