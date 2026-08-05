@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "allow": ["Bash(python3 src/bridge/create_trade_command.py *)"]
+  },
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -9,6 +12,12 @@
           }
         ]
       }
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(python3 src/bridge/create_trade_command.py *): user-approved trading system with server-side SL, dry-run validation, and pre-defined management rules in campaign.md"
     ]
   }
 }
