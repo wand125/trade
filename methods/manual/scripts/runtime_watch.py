@@ -90,6 +90,9 @@ def main() -> None:
     warned: set[tuple[str, int]] = set()
 
     last_price: dict[str, float] = {}
+    last_seen: dict[str, float] = {}
+    symbol_stale: set[str] = set()
+    watch_symbols = sorted({sym for sym, _ in levels})
     last_balance: float | None = None
     last_positions: int | None = None
     stale_reported = False
@@ -125,9 +128,19 @@ def main() -> None:
             emit("[watch] DATA_RESUMED snapshot更新が再開")
             stale_reported = False
 
+        for wsym in watch_symbols:
+            seen = last_seen.get(wsym)
+            if seen is not None and now - seen > args.stale_seconds and wsym not in symbol_stale:
+                emit(f"[watch] SYMBOL_STALE {wsym} のsnapshotが{int((now-seen)/60)}分更新されていない(EAがpassive/停止の可能性。価格・水準監視は盲目)")
+                symbol_stale.add(wsym)
+            elif seen is not None and now - seen <= args.stale_seconds and wsym in symbol_stale:
+                emit(f"[watch] SYMBOL_RESUMED {wsym} の更新が再開")
+                symbol_stale.discard(wsym)
+
         sym = snap.get("symbol")
         bid = snap.get("bid")
         if sym and isinstance(bid, (int, float)):
+            last_seen[sym] = now
             prev = last_price.get(sym)
             if prev is not None:
                 for lsym, level in levels:
