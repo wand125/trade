@@ -25,6 +25,8 @@ def parse_args() -> argparse.Namespace:
         help="Comma list of SYMBOL:price entries, e.g. 'USDJPY-m:157.15,USDJPY-m:157.75'",
     )
     p.add_argument("--stale-seconds", type=int, default=300)
+    p.add_argument("--digest-minutes", type=int, default=0,
+                   help="Emit a compact state digest every N minutes (0=off)")
     p.add_argument(
         "--events",
         default="",
@@ -90,9 +92,19 @@ def main() -> None:
     last_balance: float | None = None
     last_positions: int | None = None
     stale_reported = False
+    last_digest = time.time()
 
     while True:
         now = time.time()
+        if args.digest_minutes and now - last_digest >= args.digest_minutes * 60:
+            parts = [f"{s_}:{p_:g}" for s_, p_ in sorted(last_price.items())]
+            line = "[watch] DIGEST " + (" | ".join(parts) if parts else "no data")
+            if last_positions is not None:
+                line += f" | pos {last_positions}"
+            if last_balance is not None:
+                line += f" | bal {last_balance:,.0f}"
+            emit(line)
+            last_digest = now
         for ev_ts, label in events:
             remaining = ev_ts - now
             for lead_min in (60, 10):
