@@ -127,11 +127,25 @@ def main() -> None:
     last_tickets: dict | None = None
     stale_reported = False
     last_digest = time.time()
+    # ダイジェスト区間ごとの値動き。現在値だけでは動いているか止まっているかが分からない。
+    digest_range: dict[str, list[float]] = {}
 
     while True:
         now = time.time()
         if args.digest_minutes and now - last_digest >= args.digest_minutes * 60:
-            parts = [f"{s_}:{p_:g}" for s_, p_ in sorted(last_price.items())]
+            parts = []
+            for s_, p_ in sorted(last_price.items()):
+                rng = digest_range.get(s_)
+                if rng:
+                    lo, hi, first = rng
+                    width = hi - lo
+                    change = p_ - first
+                    unit = 100 if p_ < 1000 else 1  # USDJPYはpips、金はドル
+                    parts.append(
+                        f"{s_}:{p_:g}({change * unit:+.1f}/幅{width * unit:.1f})"
+                    )
+                else:
+                    parts.append(f"{s_}:{p_:g}")
             line = "[watch] DIGEST " + (" | ".join(parts) if parts else "no data")
             if last_positions is not None:
                 line += f" | pos {last_positions}"
@@ -139,6 +153,7 @@ def main() -> None:
                 line += f" | bal {last_balance:,.0f}"
             emit(line)
             last_digest = now
+            digest_range = {}
         for ev_ts, label in events:
             remaining = ev_ts - now
             for lead_min in (60, 10):
@@ -213,6 +228,12 @@ def main() -> None:
                     else:
                         emit(f"[watch] LEVEL_DOWN {osym} が {level} を下抜け(価格 {price})")
             last_price[osym] = price
+            rng = digest_range.get(osym)
+            if rng is None:
+                digest_range[osym] = [price, price, price]  # lo, hi, 区間開始値
+            else:
+                rng[0] = min(rng[0], price)
+                rng[1] = max(rng[1], price)
 
         bal = acct.get("balance")
         if bal is not None:

@@ -81,12 +81,14 @@ python3 -u methods/manual/scripts/runtime_watch.py --interval 12 --digest-minute
 
 ## 報告様式
 
-- ダイジェスト: `**定期報告(HH:MM)**: USDJPY xxx.xx 含み損益±x,xxx円 / 金 x,xxx / 玉N SL:建値157.81 / 特記事項`
+- ダイジェスト: `**定期報告(HH:MM)**: USDJPY xxx.xx(±X.Xpips/幅X.X) 含み損益±x,xxx円 / 金 x,xxx(±X.X/幅X.X) / 玉N SL:xxx.xx / 特記事項`
+  - **変動の表記(2026-08-07 追加、本人要望)**: watcherのDIGEST行が `銘柄:現在値(区間の増減/幅N)` を出すようになった。**その数字をそのまま転記する**(自分で計算しない)。単位はUSDJPYがpips、金がドル。増減は前回ダイジェストからの変化、幅はその15分間の高安差
+  - 幅が小さい(USDJPY 10pips未満など)なら「膠着」、大きいなら「変動中」と一言添えてよい
   - **含み損益は `runtime/latest_account.md` の Open Positions 各行の P/L を合計してそのまま転記する。pips を自分で計算しない**(2026-08-05 フォーマット改定: 軽量モデルの pips 計算で符号が反転した事故への対策。ショートは価格が建値より下=利益であり、価格差の符号と損益の符号は逆になる)
   - 玉N = ポジション数、SL: は現在のSL水準(建値なら「建値157.81」)。特記事項がなければ「特記なし」
 - 執行報告: 何を・なぜ(どのルール)・結果(チケット・価格)・次の状態
 - 時刻はウォッチャー出力のタイムスタンプをそのまま使う(推定時刻を書かない)
-- **報告はチャットと同時に `runtime/ops_digest.log` にも1行追記する**(他セッションから `tail runtime/ops_digest.log` で参照可能にするため。2026-08-05 本人決定)。書式: `YYYY-MM-DD HH:MM:SS DIGEST USDJPY-m:xxx.xxx XAUUSD-m:xxxx.xx pos:N pl:±NNNN bal:NNNNNN note:...`(pl は Open Positions の P/L 合計、円) / 執行時は `EXEC ルール名 内容...` の行を追記
+- **報告はチャットと同時に `runtime/ops_digest.log` にも1行追記する**(他セッションから `tail runtime/ops_digest.log` で参照可能にするため。2026-08-05 本人決定)。書式: `YYYY-MM-DD HH:MM:SS DIGEST USDJPY-m:xxx.xxx(±X.X/幅X.X) XAUUSD-m:xxxx.xx(±X.X/幅X.X) pos:N pl:±NNNN bal:NNNNNN note:...`(pl は Open Positions の P/L 合計、円) / 執行時は `EXEC ルール名 内容...` の行を追記
 
 ## 禁止事項(リポジトリCLAUDE.mdの心構えより)
 
