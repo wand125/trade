@@ -149,6 +149,18 @@ def main() -> None:
         snap = read_json(state_dir / "latest_snapshot.json")
         acct = read_account(state_dir / "latest_account.md")
 
+        # 銘柄別スナップショットがあれば、そちらを各銘柄の一次情報にする
+        # (共有ファイルは各EAが交互に上書きするため片方が失われる)。
+        per_symbol: dict[str, tuple[float, float]] = {}
+        for wsym in watch_symbols:
+            path = state_dir / f"latest_snapshot_{wsym.replace('/', '')}.json"
+            if not path.exists():
+                continue
+            d = read_json(path)
+            bid = d.get("bid")
+            if isinstance(bid, (int, float)):
+                per_symbol[wsym] = (bid, path.stat().st_mtime)
+
         mtime = (state_dir / "latest_snapshot.json").stat().st_mtime if (state_dir / "latest_snapshot.json").exists() else 0
         age = time.time() - mtime
         if age > args.stale_seconds and not stale_reported:
@@ -159,6 +171,9 @@ def main() -> None:
             stale_reported = False
 
         for wsym in watch_symbols:
+            # 銘柄別ファイルがあれば、その更新時刻が正確な鮮度になる
+            if wsym in per_symbol:
+                last_seen[wsym] = per_symbol[wsym][1]
             seen = last_seen.get(wsym)
             if seen is not None and now - seen > args.stale_seconds and wsym not in symbol_stale:
                 emit(f"[watch] SYMBOL_STALE {wsym} のsnapshotが{int((now-seen)/60)}分更新されていない(EAがpassive/停止の可能性。価格・水準監視は盲目)")
@@ -174,6 +189,9 @@ def main() -> None:
         bid = snap.get("bid")
         if sym and isinstance(bid, (int, float)):
             observed[sym] = bid
+        # 銘柄別ファイルが最優先(共有ファイルの上書き合戦の影響を受けない)
+        for psym, (pbid, _) in per_symbol.items():
+            observed[psym] = pbid
 
         for osym, price in observed.items():
             last_seen[osym] = now

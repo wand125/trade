@@ -40,6 +40,8 @@ python3 -u methods/manual/scripts/runtime_watch.py --interval 12 --digest-minute
 
 **watcher更新(2026-08-06)**: 保有玉の current 価格も水準監視の価格源に使うようになった(スナップショットが銘柄交互更新で片方盲目になる穴を塞ぐ)。約定・決済・SL/TP変更は FILLED / CLOSED / SLTP_CHANGED としてチケット単位で通知される
 
+**銘柄別ファイル(2026-08-07 追加)**: ブリッジが `runtime/latest_snapshot_<銘柄>.json` / `latest_context_<銘柄>.md` / `latest_account_<銘柄>.md` を書き出すようになった。**価格や1分足を見るときは銘柄別ファイルを使うこと**(共有の `latest_snapshot.json` は2つのEAが交互に上書きするため、片方の銘柄のバーが失われる)。watcher も銘柄別ファイルを優先して読む。**この変更を反映するには watcher の再起動が必要**
+
 3. 起動したら本人に「運用セッション稼働開始」を報告。**相談セッション側のMonitor停止を本人経由で確認**(二重執行防止 — 両セッションが同時にルール執行すると決済・修正が二重になる)
 
 ## 日次の経済指標確認(2026-08-06 追加、本人指示)
@@ -65,7 +67,7 @@ python3 -u methods/manual/scripts/runtime_watch.py --interval 12 --digest-minute
 | LEVEL_UP 158.10 | **報告のみ。決済判断はしない**(2026-08-06 変更)。一次防衛はサーバー側SL 158.15 に移管済みで、超えれば自動決済される。M15終値の追跡・成行決済コマンドは廃止 |
 | LEVEL_DOWN 157.15 | 円高再開の確認。報告のみ(ポジションはTPに向かって順行中のため行動不要) |
 | EVENT_WARN(指標60分前/10分前) | 本人に通知。ISM(8/5 23:00)は跨ぐ方針決定済み。**NFP(8/7 21:30)の扱いは未決 — 木曜までに相談セッションで決まる予定。金曜21:00までに指示がなければ本人へ確認** |
-| FILLED ticket / CLOSED ticket / SLTP_CHANGED | **チケット単位の変化検知**(2026-08-06 追加)。約定・決済・SL/TP変更を個別に報告する。ポジション数の増減より確実なので、**こちらを一次情報として扱う**。内容確認して報告+campaign経過記録 |
+| FILLED ticket / CLOSED ticket / SLTP_CHANGED | **チケット単位の変化検知**(2026-08-06 追加)。約定・決済・SL/TP変更を個別に報告する。ポジション数の増減より確実なので、**こちらを一次情報として扱う**。内容確認して報告+campaign経過記録。**短時間に連続発火する場合**(2026-08-07 追記): 本人がMT5で手動調整している可能性が高い(8/7 01:23〜01:33に10分で複数回発生した実例あり)。個別報告は抑制してよいが、**報告を完全に止めず5分ごとに集約サマリを1回出す**(最終的なSL/TP値と変更回数)。完全停止は本物の異常を見落とす |
 | SYMBOL_STALE / DATA_STALE | 報告。5分以上続けばEAログ確認(`MT5ログ: ~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Logs/`)。チャート時間足がM1以外になっていたら本人にM1復帰を依頼 |
 | BALANCE 変化 | 決済損益 or 入出金。内容確認して報告 |
 

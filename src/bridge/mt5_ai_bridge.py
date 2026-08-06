@@ -516,6 +516,12 @@ def save_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def sanitize_symbol(symbol: Any) -> str:
+    if not isinstance(symbol, str):
+        return ""
+    return "".join(c for c in symbol if c.isalnum() or c in "-_")
+
+
 def persist_state(snapshot: dict[str, Any], signal: dict[str, Any], settings: Settings) -> None:
     if not settings.state_dir:
         return
@@ -526,6 +532,13 @@ def persist_state(snapshot: dict[str, Any], signal: dict[str, Any], settings: Se
     write_json(state_dir / "latest_snapshot.json", snapshot)
     write_json(state_dir / "latest_signal.json", signal)
     write_text(state_dir / "latest_context.md", format_context(snapshot, signal))
+
+    # 銘柄ごとにも保存する。共有ファイルは各EAが交互に上書きするため、
+    # 片方の銘柄のバー・指標が常に失われていた。
+    symbol_slug = sanitize_symbol(snapshot.get("symbol"))
+    if symbol_slug:
+        write_json(state_dir / f"latest_snapshot_{symbol_slug}.json", snapshot)
+        write_text(state_dir / f"latest_context_{symbol_slug}.md", format_context(snapshot, signal))
     account = snapshot.get("account")
     if isinstance(account, dict):
         account_snapshot = {
@@ -537,6 +550,11 @@ def persist_state(snapshot: dict[str, Any], signal: dict[str, Any], settings: Se
         }
         write_json(state_dir / "latest_account.json", account_snapshot)
         write_text(state_dir / "latest_account.md", format_account_context(account_snapshot))
+        if symbol_slug:
+            write_text(
+                state_dir / f"latest_account_{symbol_slug}.md",
+                format_account_context(account_snapshot),
+            )
 
     trade_result = snapshot.get("trade_result")
     if isinstance(trade_result, dict):
