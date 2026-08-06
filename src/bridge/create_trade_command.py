@@ -13,6 +13,15 @@ import uuid
 from pathlib import Path
 
 
+# 銘柄ごとのロット設計(campaign.md のサイズ計画に対応)。
+# 同じ「ロット」でも単価が銘柄で67倍違うため、取り違えると致命的になる。
+# default: --volume 省略時の値 / cap: これを超える指定はエラーにする
+SYMBOL_LOTS = {
+    "XAUUSD-m": {"default": 0.3, "floor": 0.05, "cap": 1.0},   # 1ドル≈1,570円/ロット
+    "USDJPY-m": {"default": 20.0, "floor": 5.0, "cap": 40.0},  # 1pip=10円/ロット
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create a pending MT5 trade command.")
     parser.add_argument(
@@ -31,7 +40,16 @@ def parse_args() -> argparse.Namespace:
         ],
     )
     parser.add_argument("--symbol", default="XAUUSD-m")
-    parser.add_argument("--volume", type=float, default=0.1)
+    parser.add_argument(
+        "--volume",
+        type=float,
+        help="Lot size. Defaults per symbol (see SYMBOL_LOTS); 0.1 for unlisted symbols.",
+    )
+    parser.add_argument(
+        "--allow-oversize",
+        action="store_true",
+        help="Bypass the per-symbol lot cap. Requires an explicit reason for the record.",
+    )
     parser.add_argument("--price", type=float, help="Entry price for pending orders (limit/stop).")
     parser.add_argument("--sl", type=float)
     parser.add_argument("--tp", type=float)
@@ -46,10 +64,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_volume(args: argparse.Namespace) -> float:
+    """Fill in the per-symbol default lot and reject sizes above the symbol's cap."""
+    lots = SYMBOL_LOTS.get(args.symbol)
+    volume = args.volume
+    if volume is None:
+        volume = lots["default"] if lots else 0.1
+    if lots and not args.allow_oversize:
+        if volume > lots["cap"]:
+            raise SystemExit(
+                f"{args.symbol}: --volume {volume} exceeds the cap {lots['cap']} "
+                f"(default {lots['default']}). Pass --allow-oversize to override."
+            )
+        # 下限も見る。他銘柄のロットを取り違えて渡すと、ここに引っかかる。
+        if volume < lots["floor"]:
+            raise SystemExit(
+                f"{args.symbol}: --volume {volume} is below the floor {lots['floor']} "
+                f"(default {lots['default']}). Wrong symbol's lot size? "
+                f"Pass --allow-oversize to override."
+            )
+    return volume
+
+
 def main() -> None:
     args = parse_args()
     if args.live and args.confirm != "LIVE":
         raise SystemExit("--live requires --confirm LIVE")
+    args.volume = resolve_volume(args)
     if args.action in {"buy", "sell"}:
         if args.sl is None or args.tp is None:
             raise SystemExit("buy/sell require --sl and --tp")
