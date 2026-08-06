@@ -46,7 +46,7 @@ def read_json(path: Path) -> dict:
 
 
 def read_account(path: Path) -> dict:
-    out = {"balance": None, "equity": None, "positions": None}
+    out = {"balance": None, "equity": None, "positions": None, "tickets": {}, "prices": {}}
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -64,8 +64,34 @@ def read_account(path: Path) -> dict:
             in_positions = False
         elif in_positions and line.startswith("- ") and "None" not in line:
             positions += 1
+            fields = line[2:].split()
+            info = {}
+            for i, token in enumerate(fields):
+                if token in ("ticket", "current", "SL", "TP") and i + 1 < len(fields):
+                    info[token] = fields[i + 1]
+            ticket = info.get("ticket")
+            if ticket:
+                out["tickets"][ticket] = {
+                    "symbol": fields[2] if len(fields) > 2 else "",
+                    "current": _to_float(info.get("current")),
+                    "sl": _to_float(info.get("SL")),
+                    "tp": _to_float(info.get("TP")),
+                }
     out["positions"] = positions
+    # 保有玉の current 価格は銘柄別に取れるため、単一銘柄しか載らない
+    # latest_snapshot.json の穴(交互更新で片方が盲目になる)を埋める。
+    for info in out["tickets"].values():
+        symbol, price = info.get("symbol"), info.get("current")
+        if symbol and price is not None:
+            out["prices"][symbol] = price
     return out
+
+
+def _to_float(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def emit(msg: str) -> None:
@@ -98,6 +124,7 @@ def main() -> None:
     watch_symbols = sorted({sym for sym, _ in levels})
     last_balance: float | None = None
     last_positions: int | None = None
+    last_tickets: dict | None = None
     stale_reported = False
     last_digest = time.time()
 
@@ -140,17 +167,23 @@ def main() -> None:
                 emit(f"[watch] SYMBOL_RESUMED {wsym} の更新が再開")
                 symbol_stale.discard(wsym)
 
+        # スナップショットは1銘柄ずつしか載らないので、保有玉の current 価格も
+        # 価格源として併用する(保有中の銘柄が交互更新で盲目にならないように)。
+        observed = dict(acct.get("prices") or {})
         sym = snap.get("symbol")
         bid = snap.get("bid")
         if sym and isinstance(bid, (int, float)):
-            last_seen[sym] = now
-            prev = last_price.get(sym)
+            observed[sym] = bid
+
+        for osym, price in observed.items():
+            last_seen[osym] = now
+            prev = last_price.get(osym)
             if prev is not None:
                 for lsym, level in levels:
-                    if lsym != sym:
+                    if lsym != osym:
                         continue
-                    crossed_up = prev < level <= bid
-                    crossed_down = prev > level >= bid
+                    crossed_up = prev < level <= price
+                    crossed_down = prev > level >= price
                     if not (crossed_up or crossed_down):
                         continue
                     key = (lsym, level)
@@ -158,10 +191,10 @@ def main() -> None:
                         continue
                     level_last_fired[key] = now
                     if crossed_up:
-                        emit(f"[watch] LEVEL_UP {sym} が {level} を上抜け(bid {bid})")
+                        emit(f"[watch] LEVEL_UP {osym} が {level} を上抜け(価格 {price})")
                     else:
-                        emit(f"[watch] LEVEL_DOWN {sym} が {level} を下抜け(bid {bid})")
-            last_price[sym] = bid
+                        emit(f"[watch] LEVEL_DOWN {osym} が {level} を下抜け(価格 {price})")
+            last_price[osym] = price
 
         bal = acct.get("balance")
         if bal is not None:
@@ -174,6 +207,20 @@ def main() -> None:
             if last_positions is not None and pos != last_positions:
                 emit(f"[watch] POSITIONS ポジション数が {last_positions} -> {pos} に変化")
             last_positions = pos
+
+        tickets = acct.get("tickets") or {}
+        if last_tickets is not None:
+            for t, info in tickets.items():
+                if t not in last_tickets:
+                    emit(f"[watch] FILLED ticket {t} {info['symbol']} 約定を検知"
+                         f"(current {info['current']} SL {info['sl']} TP {info['tp']})")
+            for t, info in last_tickets.items():
+                if t not in tickets:
+                    emit(f"[watch] CLOSED ticket {t} {info['symbol']} が消滅(決済)")
+                elif tickets[t]["sl"] != info["sl"] or tickets[t]["tp"] != info["tp"]:
+                    emit(f"[watch] SLTP_CHANGED ticket {t} {info['symbol']} "
+                         f"SL {info['sl']}->{tickets[t]['sl']} TP {info['tp']}->{tickets[t]['tp']}")
+        last_tickets = tickets
 
         time.sleep(args.interval)
 
