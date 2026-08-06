@@ -30,6 +30,8 @@ TRADE_COMMAND_ACTIONS = {
     "sell",
     "buy_limit",
     "sell_limit",
+    "buy_stop",
+    "sell_stop",
     "modify",
     "cancel",
     "close",

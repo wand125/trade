@@ -37,6 +37,7 @@ input double InpCodexMaxLot = 0.01;
 input int InpCodexMaxSpreadPoints = 80;
 input int InpCodexMaxPositions = 1;
 input bool InpCodexRequireSlTp = true;
+input bool InpCodexEnableOco = true;
 input int InpCodexMaxPendingOrders = 4;
 input string InpCodexAllowedSymbol = "";
 
@@ -147,6 +148,8 @@ void OnTick()
 
    if(InpPollCodexTradeCommands)
       CheckTradeCommand();
+   if(InpCodexEnableOco)
+      EnforceOcoPairs();
 
    string payload = BuildSnapshotJson();
    if(payload == "")
@@ -1102,7 +1105,8 @@ void CheckTradeCommand()
    }
    double pendingPrice = JsonGetDouble(response, "price", 0.0);
    bool isEntry = (action == "buy" || action == "sell" ||
-                   action == "buy_limit" || action == "sell_limit");
+                   action == "buy_limit" || action == "sell_limit" ||
+                   action == "buy_stop" || action == "sell_stop");
    if(isEntry &&
       ((int)SymbolInfoInteger(symbol, SYMBOL_SPREAD) > maxSpread ||
        (int)SymbolInfoInteger(symbol, SYMBOL_SPREAD) > InpCodexMaxSpreadPoints))
@@ -1114,7 +1118,8 @@ void CheckTradeCommand()
 
    if(action == "buy" || action == "sell")
       ExecuteCodexMarketCommand(id, action, symbol, volume, sl, tp, dryRun, comment);
-   else if(action == "buy_limit" || action == "sell_limit")
+   else if(action == "buy_limit" || action == "sell_limit" ||
+           action == "buy_stop" || action == "sell_stop")
       ExecuteCodexPendingCommand(id, action, symbol, volume, pendingPrice, sl, tp, dryRun, comment);
    else if(action == "modify")
       ExecuteCodexModifyCommand(id, symbol, ticket, sl, tp, dryRun);
@@ -1264,6 +1269,44 @@ int CountPendingOrdersForSymbol(const string symbol)
    return count;
 }
 
+// OCOタグは注文コメントの "oco:<group>" で表す。同じgroupの注文は、
+// 片方が約定してポジションになった時点で残りをキャンセルする。
+string ExtractOcoGroup(const string text)
+{
+   int pos = StringFind(text, "oco:");
+   if(pos < 0)
+      return "";
+   string tail = StringSubstr(text, pos + 4);
+   int space = StringFind(tail, " ");
+   if(space >= 0)
+      tail = StringSubstr(tail, 0, space);
+   return tail;
+}
+
+void EnforceOcoPairs()
+{
+   for(int p = PositionsTotal() - 1; p >= 0; p--)
+   {
+      ulong posTicket = PositionGetTicket(p);
+      if(posTicket == 0)
+         continue;
+      string group = ExtractOcoGroup(PositionGetString(POSITION_COMMENT));
+      if(group == "")
+         continue;
+      for(int o = OrdersTotal() - 1; o >= 0; o--)
+      {
+         ulong orderTicket = OrderGetTicket(o);
+         if(orderTicket == 0)
+            continue;
+         if(ExtractOcoGroup(OrderGetString(ORDER_COMMENT)) != group)
+            continue;
+         if(Trade.OrderDelete(orderTicket))
+            PrintFormat("OCO: cancelled order %I64u (group %s) after position %I64u filled",
+                        orderTicket, group, posTicket);
+      }
+   }
+}
+
 void ExecuteCodexPendingCommand(const string id, const string action, const string symbol,
                                 const double volume, const double price, const double sl,
                                 const double tp, const bool dryRun, const string comment)
@@ -1306,6 +1349,18 @@ void ExecuteCodexPendingCommand(const string id, const string action, const stri
                       "invalid sell_limit price/SL/TP", 0, 0, 0);
       return;
    }
+   if(action == "buy_stop" && (price <= ask || sl >= price || (tp > 0.0 && tp <= price)))
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "invalid buy_stop price/SL/TP", 0, 0, 0);
+      return;
+   }
+   if(action == "sell_stop" && (price >= bid || (sl > 0.0 && sl <= price) || tp >= price))
+   {
+      SendTradeResult(id, "rejected", dryRun, action, symbol, volume, price, sl, tp, 0,
+                      "invalid sell_stop price/SL/TP", 0, 0, 0);
+      return;
+   }
    if(dryRun)
    {
       SendTradeResult(id, "dry_run_passed", true, action, symbol, volume, price, sl, tp, 0,
@@ -1315,8 +1370,12 @@ void ExecuteCodexPendingCommand(const string id, const string action, const stri
    bool sent = false;
    if(action == "buy_limit")
       sent = Trade.BuyLimit(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, comment);
-   else
+   else if(action == "sell_limit")
       sent = Trade.SellLimit(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, comment);
+   else if(action == "buy_stop")
+      sent = Trade.BuyStop(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, comment);
+   else
+      sent = Trade.SellStop(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, comment);
    SendTradeResult(id, sent ? "executed" : "rejected", false, action, symbol, volume, price, sl, tp, 0,
                    sent ? "pending order placed" : Trade.ResultComment(),
                    (int)Trade.ResultRetcode(), (ulong)Trade.ResultOrder(), (ulong)Trade.ResultDeal());

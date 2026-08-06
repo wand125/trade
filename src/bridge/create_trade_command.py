@@ -17,11 +17,22 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create a pending MT5 trade command.")
     parser.add_argument(
         "action",
-        choices=["buy", "sell", "buy_limit", "sell_limit", "modify", "cancel", "close", "close_all"],
+        choices=[
+            "buy",
+            "sell",
+            "buy_limit",
+            "sell_limit",
+            "buy_stop",
+            "sell_stop",
+            "modify",
+            "cancel",
+            "close",
+            "close_all",
+        ],
     )
     parser.add_argument("--symbol", default="XAUUSD-m")
     parser.add_argument("--volume", type=float, default=0.1)
-    parser.add_argument("--price", type=float, help="Entry price for buy_limit/sell_limit.")
+    parser.add_argument("--price", type=float, help="Entry price for pending orders (limit/stop).")
     parser.add_argument("--sl", type=float)
     parser.add_argument("--tp", type=float)
     parser.add_argument("--ticket", type=int)
@@ -44,17 +55,17 @@ def main() -> None:
             raise SystemExit("buy/sell require --sl and --tp")
         if args.volume <= 0:
             raise SystemExit("--volume must be positive")
-    if args.action in {"buy_limit", "sell_limit"}:
+    if args.action in {"buy_limit", "sell_limit", "buy_stop", "sell_stop"}:
         if args.price is None:
-            raise SystemExit("buy_limit/sell_limit require --price")
+            raise SystemExit(f"{args.action} requires --price")
         if args.sl is None or args.tp is None:
-            raise SystemExit("buy_limit/sell_limit require --sl and --tp")
+            raise SystemExit(f"{args.action} requires --sl and --tp")
         if args.volume <= 0:
             raise SystemExit("--volume must be positive")
-        if args.action == "sell_limit" and not (args.tp < args.price < args.sl):
-            raise SystemExit("sell_limit requires tp < price < sl")
-        if args.action == "buy_limit" and not (args.sl < args.price < args.tp):
-            raise SystemExit("buy_limit requires sl < price < tp")
+        if args.action in {"sell_limit", "sell_stop"} and not (args.tp < args.price < args.sl):
+            raise SystemExit(f"{args.action} requires tp < price < sl")
+        if args.action in {"buy_limit", "buy_stop"} and not (args.sl < args.price < args.tp):
+            raise SystemExit(f"{args.action} requires sl < price < tp")
     if args.action == "modify":
         if not args.ticket:
             raise SystemExit("modify requires --ticket")
