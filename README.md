@@ -22,6 +22,10 @@ methods/              検証手法(手法ごとに scripts / docs / tests を持
 │   ├── skills/                相場分析用スキル定義
 │   ├── docs/                  WORK.md(運用手順)、ブリッジ仕様、システム仕様
 │   └── tests/
+├── next_bar/        M1/M5/M15/M30 の次足方向と校正済み信頼度の研究
+│   └── docs/                  目的、評価仕様、実行手順
+├── next_bar_ev/     次足方向オッズを値幅・tail risk・売買候補へ変換する独立層
+│   └── docs/                  EV/overlayの評価仕様と採用判断
 └── manual/           人(自分)による裁量トレード
     └── docs/                  原則・プレイブック・失敗カタログ・トレード記録(journal/)
 
@@ -47,5 +51,7 @@ python3 src/bridge/mt5_ai_bridge.py            # ブリッジ起動(ルートで
 ## 入口
 
 - 研究(entry_ev): [methods/entry_ev/docs/README.md](methods/entry_ev/docs/README.md)、[methods/entry_ev/docs/GOAL.md](methods/entry_ev/docs/GOAL.md)
+- 次足予測(next_bar): [methods/next_bar/docs/README.md](methods/next_bar/docs/README.md)、[methods/next_bar/docs/GOAL.md](methods/next_bar/docs/GOAL.md)
+- 次足EV(next_bar_ev): [methods/next_bar_ev/docs/README.md](methods/next_bar_ev/docs/README.md)、[methods/next_bar_ev/docs/GOAL.md](methods/next_bar_ev/docs/GOAL.md)
 - ライブ運用(swing_eval): [methods/swing_eval/docs/WORK.md](methods/swing_eval/docs/WORK.md)、[methods/swing_eval/docs/mt5-ai-bridge.md](methods/swing_eval/docs/mt5-ai-bridge.md)
 - 裁量トレード(manual): [methods/manual/docs/README.md](methods/manual/docs/README.md)

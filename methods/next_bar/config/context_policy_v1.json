@@ -1,0 +1,26 @@
+{
+  "M1": {
+    "volatility_regimes": ["high"],
+    "reference_accuracy": 0.511487,
+    "worst_fold_accuracy": 0.505582,
+    "evaluated_folds": 7
+  },
+  "M5": {
+    "utc_hours": [21],
+    "reference_accuracy": 0.523507,
+    "worst_fold_accuracy": 0.495224,
+    "evaluated_folds": 7
+  },
+  "M15": {
+    "volatility_regimes": ["high"],
+    "reference_accuracy": 0.520771,
+    "worst_fold_accuracy": 0.507440,
+    "evaluated_folds": 7
+  },
+  "M30": {
+    "utc_hours": [21],
+    "reference_accuracy": 0.552941,
+    "worst_fold_accuracy": 0.513274,
+    "evaluated_folds": 7
+  }
+}

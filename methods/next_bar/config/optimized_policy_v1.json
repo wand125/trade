@@ -1,0 +1,732 @@
+{
+  "_meta": {
+    "format_version": 2,
+    "created_at": "2026-08-07T09:42:54.751629+00:00",
+    "source": "experiments/next_bar/walk_forward_001",
+    "optimization_config": {
+      "min_rows": 500,
+      "min_coverage": 0.01,
+      "coverage_power": 0.5,
+      "break_even_accuracy": 0.5,
+      "wilson_z": 1.96,
+      "confidence_thresholds": [
+        0.5,
+        0.505,
+        0.51,
+        0.515,
+        0.52,
+        0.525,
+        0.53,
+        0.54,
+        0.55,
+        0.575,
+        0.6
+      ]
+    },
+    "objective": "coverage^coverage_power * (wilson_accuracy_lower_bound - break_even_accuracy)",
+    "validation": "nested chronological: prior OOS folds select, next fold evaluates"
+  },
+  "M1": {
+    "min_confidence": 0.5105964921599978,
+    "volatility_regimes": [
+      "normal",
+      "high"
+    ],
+    "enabled": true,
+    "reference_accuracy": 0.5175632486036023,
+    "accuracy_lower_bound": 0.5158703889444148,
+    "reference_coverage": 0.22421951129670123,
+    "quality_score": 3.1740777888829674,
+    "selection_score": 0.007514918434683931,
+    "worst_fold_accuracy": 0.5140446339938969,
+    "evaluated_folds": 5,
+    "nested_validation": {
+      "summary": {
+        "rows": 325131,
+        "total_rows": 325131,
+        "coverage": 0.28401351184907403,
+        "accuracy": 0.5129563160695227,
+        "balanced_accuracy": 0.5118275738475075,
+        "accuracy_lower_bound": 0.5112380628732348,
+        "accuracy_lift": 0.012956316069522744,
+        "selection_score": 0.005989091641875937,
+        "quality_score": 2.247612574646962,
+        "evaluation_total_rows": 1144773,
+        "worst_fold_accuracy": 0.5073207731169834
+      },
+      "folds": [
+        {
+          "selection_folds": [
+            "test2022"
+          ],
+          "evaluation_fold": "test2023",
+          "rule": {
+            "min_confidence": 0.5124314432097318,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 87091,
+            "total_rows": 348362,
+            "coverage": 0.2500014352885791,
+            "accuracy": 0.5203752396918166,
+            "balanced_accuracy": 0.5201160303346339,
+            "accuracy_lower_bound": 0.5170563975239922,
+            "accuracy_lift": 0.02037523969181665,
+            "selection_score": 0.00852822324281355,
+            "quality_score": 3.411279504798448,
+            "worst_fold_accuracy": 0.5203752396918166,
+            "candidates_evaluated": 1245
+          },
+          "evaluation_metrics": {
+            "rows": 53244,
+            "total_rows": 300528,
+            "coverage": 0.17716818399616674,
+            "accuracy": 0.5135038689805425,
+            "balanced_accuracy": 0.5132028281271813,
+            "accuracy_lower_bound": 0.5092575141050764,
+            "accuracy_lift": 0.013503868980542455,
+            "selection_score": 0.0038966127678909503,
+            "quality_score": 1.8515028210152717,
+            "worst_fold_accuracy": 0.5135038689805425
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023"
+          ],
+          "evaluation_fold": "test2024",
+          "rule": {
+            "min_confidence": 0.5063933278283353,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 324445,
+            "total_rows": 648890,
+            "coverage": 0.5,
+            "accuracy": 0.5119357672332753,
+            "balanced_accuracy": 0.5117214803431653,
+            "accuracy_lower_bound": 0.5102156229798729,
+            "accuracy_lift": 0.011935767233275274,
+            "selection_score": 0.007223536283113243,
+            "quality_score": 2.043124595974577,
+            "worst_fold_accuracy": 0.5116663134741719,
+            "candidates_evaluated": 1197
+          },
+          "evaluation_metrics": {
+            "rows": 147662,
+            "total_rows": 350025,
+            "coverage": 0.4218612956217413,
+            "accuracy": 0.5073207731169834,
+            "balanced_accuracy": 0.5074384597328215,
+            "accuracy_lower_bound": 0.5047705866672934,
+            "accuracy_lift": 0.007320773116983426,
+            "selection_score": 0.0030985366052652956,
+            "quality_score": 0.9541173334586706,
+            "worst_fold_accuracy": 0.5073207731169834
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024"
+          ],
+          "evaluation_fold": "test2025",
+          "rule": {
+            "min_confidence": 0.5106133877858801,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 249729,
+            "total_rows": 998915,
+            "coverage": 0.2500002502715446,
+            "accuracy": 0.5152265055319967,
+            "balanced_accuracy": 0.5151827191782515,
+            "accuracy_lower_bound": 0.5132661327251787,
+            "accuracy_lift": 0.01522650553199667,
+            "selection_score": 0.006633069682724066,
+            "quality_score": 2.6532265450357473,
+            "worst_fold_accuracy": 0.5138323150033944,
+            "candidates_evaluated": 1151
+          },
+          "evaluation_metrics": {
+            "rows": 72149,
+            "total_rows": 350430,
+            "coverage": 0.2058870530491111,
+            "accuracy": 0.5158907261361904,
+            "balanced_accuracy": 0.5082570028308683,
+            "accuracy_lower_bound": 0.5122433489487258,
+            "accuracy_lift": 0.01589072613619036,
+            "selection_score": 0.005555392475326255,
+            "quality_score": 2.4486697897451615,
+            "worst_fold_accuracy": 0.5158907261361904
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024",
+            "test2025"
+          ],
+          "evaluation_fold": "test2026_partial",
+          "rule": {
+            "min_confidence": 0.510332608519639,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 337337,
+            "total_rows": 1349345,
+            "coverage": 0.25000055582523373,
+            "accuracy": 0.5148886721587018,
+            "balanced_accuracy": 0.5147561150081327,
+            "accuracy_lower_bound": 0.5132019535124184,
+            "accuracy_lift": 0.014888672158701821,
+            "selection_score": 0.006600984094184005,
+            "quality_score": 2.640390702483675,
+            "worst_fold_accuracy": 0.5131978411199191,
+            "candidates_evaluated": 1119
+          },
+          "evaluation_metrics": {
+            "rows": 52076,
+            "total_rows": 143790,
+            "coverage": 0.3621670491689269,
+            "accuracy": 0.5243106229357094,
+            "balanced_accuracy": 0.5103595508937805,
+            "accuracy_lower_bound": 0.5200196194273004,
+            "accuracy_lift": 0.024310622935709403,
+            "selection_score": 0.012047870329534575,
+            "quality_score": 4.00392388546007,
+            "worst_fold_accuracy": 0.5243106229357094
+          }
+        }
+      ]
+    }
+  },
+  "M5": {
+    "min_confidence": 0.515,
+    "enabled": true,
+    "reference_accuracy": 0.5217217452663766,
+    "accuracy_lower_bound": 0.5189796581931244,
+    "reference_coverage": 0.42535984418980033,
+    "quality_score": 3.795931638624883,
+    "selection_score": 0.012378460381859644,
+    "worst_fold_accuracy": 0.5189924601003735,
+    "evaluated_folds": 5,
+    "nested_validation": {
+      "summary": {
+        "rows": 49218,
+        "total_rows": 49218,
+        "coverage": 0.2143109071354237,
+        "accuracy": 0.52724612946483,
+        "balanced_accuracy": 0.5143698305151806,
+        "accuracy_lower_bound": 0.5228333647470045,
+        "accuracy_lift": 0.02724612946482996,
+        "selection_score": 0.010570415323388066,
+        "quality_score": 4.566672949400896,
+        "evaluation_total_rows": 229657,
+        "worst_fold_accuracy": 0.5237132638780905
+      },
+      "folds": [
+        {
+          "selection_folds": [
+            "test2022"
+          ],
+          "evaluation_fold": "test2023",
+          "rule": {
+            "min_confidence": 0.53,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 19296,
+            "total_rows": 70195,
+            "coverage": 0.27489137402948927,
+            "accuracy": 0.5338412106135987,
+            "balanced_accuracy": 0.533791668515845,
+            "accuracy_lower_bound": 0.5267964239784555,
+            "accuracy_lift": 0.03384121061359868,
+            "selection_score": 0.014049387682796797,
+            "quality_score": 5.359284795691099,
+            "worst_fold_accuracy": 0.5338412106135987,
+            "candidates_evaluated": 2166
+          },
+          "evaluation_metrics": {
+            "rows": 4387,
+            "total_rows": 60226,
+            "coverage": 0.07284229402583602,
+            "accuracy": 0.5381809892865284,
+            "balanced_accuracy": 0.5384942113030284,
+            "accuracy_lower_bound": 0.5234012735763859,
+            "accuracy_lift": 0.038180989286528355,
+            "selection_score": 0.0063158426422365195,
+            "quality_score": 4.680254715277177,
+            "worst_fold_accuracy": 0.5381809892865284
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023"
+          ],
+          "evaluation_fold": "test2024",
+          "rule": {
+            "min_confidence": 0.53,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 23683,
+            "total_rows": 130421,
+            "coverage": 0.18158885455563137,
+            "accuracy": 0.5346451040830976,
+            "balanced_accuracy": 0.5346355711703901,
+            "accuracy_lower_bound": 0.5282872349152431,
+            "accuracy_lift": 0.03464510408309762,
+            "selection_score": 0.01205410837339437,
+            "quality_score": 5.65744698304862,
+            "worst_fold_accuracy": 0.5338412106135987,
+            "candidates_evaluated": 1898
+          },
+          "evaluation_metrics": {
+            "rows": 6510,
+            "total_rows": 70450,
+            "coverage": 0.09240596167494677,
+            "accuracy": 0.5321044546850998,
+            "balanced_accuracy": 0.5282574476393621,
+            "accuracy_lower_bound": 0.5199680799562632,
+            "accuracy_lift": 0.032104454685099815,
+            "selection_score": 0.0060699666167027605,
+            "quality_score": 3.9936159912526303,
+            "worst_fold_accuracy": 0.5321044546850998
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024"
+          ],
+          "evaluation_fold": "test2025",
+          "rule": {
+            "min_confidence": 0.5136787338144504,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 100436,
+            "total_rows": 200871,
+            "coverage": 0.5000024891597095,
+            "accuracy": 0.5191465211677088,
+            "balanced_accuracy": 0.5191644264839455,
+            "accuracy_lower_bound": 0.5160558176728246,
+            "accuracy_lift": 0.019146521167708763,
+            "selection_score": 0.011353205813786058,
+            "quality_score": 3.2111635345649203,
+            "worst_fold_accuracy": 0.5172896132201295,
+            "candidates_evaluated": 1814
+          },
+          "evaluation_metrics": {
+            "rows": 25724,
+            "total_rows": 70287,
+            "coverage": 0.36598517506793576,
+            "accuracy": 0.5237132638780905,
+            "balanced_accuracy": 0.50641800920547,
+            "accuracy_lower_bound": 0.5176068337085584,
+            "accuracy_lift": 0.023713263878090474,
+            "selection_score": 0.010651554881256013,
+            "quality_score": 3.5213667417116845,
+            "worst_fold_accuracy": 0.5237132638780905
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024",
+            "test2025"
+          ],
+          "evaluation_fold": "test2026_partial",
+          "rule": {
+            "min_confidence": 0.515,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 114948,
+            "total_rows": 271158,
+            "coverage": 0.42391520810745026,
+            "accuracy": 0.5210181995337022,
+            "balanced_accuracy": 0.5200238615840287,
+            "accuracy_lower_bound": 0.5181295843562927,
+            "accuracy_lift": 0.02101819953370221,
+            "selection_score": 0.011803949589557662,
+            "quality_score": 3.62591687125855,
+            "worst_fold_accuracy": 0.5189924601003735,
+            "candidates_evaluated": 1724
+          },
+          "evaluation_metrics": {
+            "rows": 12597,
+            "total_rows": 28694,
+            "coverage": 0.4390116400641249,
+            "accuracy": 0.528141621020878,
+            "balanced_accuracy": 0.5085796338262922,
+            "accuracy_lower_bound": 0.5194166337728006,
+            "accuracy_lift": 0.028141621020878027,
+            "selection_score": 0.01286506417444465,
+            "quality_score": 3.8833267545601124,
+            "worst_fold_accuracy": 0.528141621020878
+          }
+        }
+      ]
+    }
+  },
+  "M15": {
+    "min_confidence": 0.5272261689670256,
+    "enabled": true,
+    "reference_accuracy": 0.5379318724938231,
+    "accuracy_lower_bound": 0.5317074463409273,
+    "reference_coverage": 0.2500050630860522,
+    "quality_score": 6.341489268185452,
+    "selection_score": 0.01585388370718014,
+    "worst_fold_accuracy": 0.5266126551122962,
+    "evaluated_folds": 5,
+    "nested_validation": {
+      "summary": {
+        "rows": 19273,
+        "total_rows": 19273,
+        "coverage": 0.2551971610921321,
+        "accuracy": 0.5301717428526955,
+        "balanced_accuracy": 0.5269872111421482,
+        "accuracy_lower_bound": 0.5231201598736229,
+        "accuracy_lift": 0.030171742852695527,
+        "selection_score": 0.011679621053441589,
+        "quality_score": 4.624031974724585,
+        "evaluation_total_rows": 75522,
+        "worst_fold_accuracy": 0.5
+      },
+      "folds": [
+        {
+          "selection_folds": [
+            "test2022"
+          ],
+          "evaluation_fold": "test2023",
+          "rule": {
+            "min_confidence": 0.55,
+            "predicted_directions": [
+              "up"
+            ],
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 2039,
+            "total_rows": 23232,
+            "coverage": 0.08776687327823691,
+            "accuracy": 0.5610593428151054,
+            "balanced_accuracy": 0.5,
+            "accuracy_lower_bound": 0.5394240269018049,
+            "accuracy_lift": 0.06105934281510539,
+            "selection_score": 0.011679554992967061,
+            "quality_score": 7.884805380360982,
+            "worst_fold_accuracy": 0.5610593428151054,
+            "candidates_evaluated": 1097
+          },
+          "evaluation_metrics": {
+            "rows": 58,
+            "total_rows": 19465,
+            "coverage": 0.0029797071667094785,
+            "accuracy": 0.5,
+            "balanced_accuracy": 0.5,
+            "accuracy_lower_bound": 0.3753805824767928,
+            "accuracy_lift": 0.0,
+            "selection_score": -0.006802562016344971,
+            "quality_score": 0.0,
+            "worst_fold_accuracy": 0.5
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023"
+          ],
+          "evaluation_fold": "test2024",
+          "rule": {
+            "min_confidence": 0.515,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 22544,
+            "total_rows": 42697,
+            "coverage": 0.5279996252664122,
+            "accuracy": 0.5232877927608233,
+            "balanced_accuracy": 0.5228687831410507,
+            "accuracy_lower_bound": 0.5167645080378485,
+            "accuracy_lift": 0.023287792760823267,
+            "selection_score": 0.012181692164480859,
+            "quality_score": 3.3529016075696916,
+            "worst_fold_accuracy": 0.5199176736157217,
+            "candidates_evaluated": 1746
+          },
+          "evaluation_metrics": {
+            "rows": 11082,
+            "total_rows": 23318,
+            "coverage": 0.47525516768161935,
+            "accuracy": 0.5172351561090056,
+            "balanced_accuracy": 0.5181310572259992,
+            "accuracy_lower_bound": 0.5079270266318564,
+            "accuracy_lift": 0.01723515610900561,
+            "selection_score": 0.005464793316661103,
+            "quality_score": 1.5854053263712808,
+            "worst_fold_accuracy": 0.5172351561090056
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024"
+          ],
+          "evaluation_fold": "test2025",
+          "rule": {
+            "min_confidence": 0.5273111170890812,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 16504,
+            "total_rows": 66015,
+            "coverage": 0.25000378701810194,
+            "accuracy": 0.5334464372273389,
+            "balanced_accuracy": 0.5336028514251634,
+            "accuracy_lower_bound": 0.5258282567145086,
+            "accuracy_lift": 0.033446437227338865,
+            "selection_score": 0.012914226168959613,
+            "quality_score": 5.165651342901723,
+            "worst_fold_accuracy": 0.5267434684221354,
+            "candidates_evaluated": 1950
+          },
+          "evaluation_metrics": {
+            "rows": 5201,
+            "total_rows": 23253,
+            "coverage": 0.22367006407775342,
+            "accuracy": 0.5491251682368775,
+            "balanced_accuracy": 0.520501873921893,
+            "accuracy_lower_bound": 0.5355707509568617,
+            "accuracy_lift": 0.049125168236877514,
+            "selection_score": 0.016822748994253286,
+            "quality_score": 7.114150191372337,
+            "worst_fold_accuracy": 0.5491251682368775
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024",
+            "test2025"
+          ],
+          "evaluation_fold": "test2026_partial",
+          "rule": {
+            "min_confidence": 0.5268479735705514,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 22317,
+            "total_rows": 89268,
+            "coverage": 0.25,
+            "accuracy": 0.5360039431823274,
+            "balanced_accuracy": 0.5345289033033467,
+            "accuracy_lower_bound": 0.5294552708727229,
+            "accuracy_lift": 0.03600394318232736,
+            "selection_score": 0.014727635436361464,
+            "quality_score": 5.8910541745445855,
+            "worst_fold_accuracy": 0.5264593011512826,
+            "candidates_evaluated": 1911
+          },
+          "evaluation_metrics": {
+            "rows": 2932,
+            "total_rows": 9486,
+            "coverage": 0.30908707569049126,
+            "accuracy": 0.546043656207367,
+            "balanced_accuracy": 0.506599388525407,
+            "accuracy_lower_bound": 0.5279734401898241,
+            "accuracy_lift": 0.046043656207366945,
+            "selection_score": 0.015552001958313251,
+            "quality_score": 5.594688037964812,
+            "worst_fold_accuracy": 0.546043656207367
+          }
+        }
+      ]
+    }
+  },
+  "M30": {
+    "min_confidence": 0.515,
+    "enabled": true,
+    "reference_accuracy": 0.526010270149587,
+    "accuracy_lower_bound": 0.5194666038803605,
+    "reference_coverage": 0.462859623015873,
+    "quality_score": 3.8933207760720956,
+    "selection_score": 0.013243867901069599,
+    "worst_fold_accuracy": 0.5137174211248285,
+    "evaluated_folds": 5,
+    "nested_validation": {
+      "summary": {
+        "rows": 35315,
+        "total_rows": 35315,
+        "coverage": 0.9565535361196132,
+        "accuracy": 0.5156449100948606,
+        "balanced_accuracy": 0.5148668929905598,
+        "accuracy_lower_bound": 0.510431139242367,
+        "accuracy_lift": 0.015644910094860576,
+        "selection_score": 0.010202025000999962,
+        "quality_score": 2.08622784847341,
+        "evaluation_total_rows": 36919,
+        "worst_fold_accuracy": 0.5134336144683072
+      },
+      "folds": [
+        {
+          "selection_folds": [
+            "test2022"
+          ],
+          "evaluation_fold": "test2023",
+          "rule": {
+            "min_confidence": 0.5,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 11465,
+            "total_rows": 11465,
+            "coverage": 1.0,
+            "accuracy": 0.5184474487570868,
+            "balanced_accuracy": 0.5179781333455069,
+            "accuracy_lower_bound": 0.5092965454855289,
+            "accuracy_lift": 0.018447448757086815,
+            "selection_score": 0.00929654548552894,
+            "quality_score": 1.859309097105788,
+            "worst_fold_accuracy": 0.5184474487570868,
+            "candidates_evaluated": 532
+          },
+          "evaluation_metrics": {
+            "rows": 9258,
+            "total_rows": 9258,
+            "coverage": 1.0,
+            "accuracy": 0.5160941888096782,
+            "balanced_accuracy": 0.515584111387345,
+            "accuracy_lower_bound": 0.5059097489076942,
+            "accuracy_lift": 0.016094188809678167,
+            "selection_score": 0.0059097489076942455,
+            "quality_score": 1.181949781538849,
+            "worst_fold_accuracy": 0.5160941888096782
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023"
+          ],
+          "evaluation_fold": "test2024",
+          "rule": {
+            "min_confidence": 0.5,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 20723,
+            "total_rows": 20723,
+            "coverage": 1.0,
+            "accuracy": 0.5173961299039714,
+            "balanced_accuracy": 0.5166328427070748,
+            "accuracy_lower_bound": 0.5105899671454808,
+            "accuracy_lift": 0.017396129903971436,
+            "selection_score": 0.010589967145480772,
+            "quality_score": 2.1179934290961544,
+            "worst_fold_accuracy": 0.5160941888096782,
+            "candidates_evaluated": 819
+          },
+          "evaluation_metrics": {
+            "rows": 11501,
+            "total_rows": 11501,
+            "coverage": 1.0,
+            "accuracy": 0.5134336144683072,
+            "balanced_accuracy": 0.5156017841850274,
+            "accuracy_lower_bound": 0.5042958019252661,
+            "accuracy_lift": 0.013433614468307153,
+            "selection_score": 0.0042958019252661295,
+            "quality_score": 0.8591603850532259,
+            "worst_fold_accuracy": 0.5134336144683072
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024"
+          ],
+          "evaluation_fold": "test2025",
+          "rule": {
+            "min_confidence": 0.5,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 32224,
+            "total_rows": 32224,
+            "coverage": 1.0,
+            "accuracy": 0.5159818768619663,
+            "balanced_accuracy": 0.5164930761007629,
+            "accuracy_lower_bound": 0.5105237938884553,
+            "accuracy_lift": 0.015981876861966282,
+            "selection_score": 0.010523793888455257,
+            "quality_score": 2.1047587776910515,
+            "worst_fold_accuracy": 0.5134336144683072,
+            "candidates_evaluated": 1173
+          },
+          "evaluation_metrics": {
+            "rows": 11483,
+            "total_rows": 11483,
+            "coverage": 1.0,
+            "accuracy": 0.5161543150744579,
+            "balanced_accuracy": 0.5076923726626583,
+            "accuracy_lower_bound": 0.5070099046999353,
+            "accuracy_lift": 0.01615431507445786,
+            "selection_score": 0.007009904699935343,
+            "quality_score": 1.4019809399870686,
+            "worst_fold_accuracy": 0.5161543150744579
+          }
+        },
+        {
+          "selection_folds": [
+            "test2022",
+            "test2023",
+            "test2024",
+            "test2025"
+          ],
+          "evaluation_fold": "test2026_partial",
+          "rule": {
+            "min_confidence": 0.515,
+            "enabled": true
+          },
+          "selection_metrics": {
+            "rows": 19322,
+            "total_rows": 43707,
+            "coverage": 0.4420802159837097,
+            "accuracy": 0.5268605734396026,
+            "balanced_accuracy": 0.5267298972207419,
+            "accuracy_lower_bound": 0.5198159351537726,
+            "accuracy_lift": 0.026860573439602575,
+            "selection_score": 0.013175439534742966,
+            "quality_score": 3.9631870307545114,
+            "worst_fold_accuracy": 0.5137174211248285,
+            "candidates_evaluated": 1598
+          },
+          "evaluation_metrics": {
+            "rows": 3073,
+            "total_rows": 4677,
+            "coverage": 0.6570451143895659,
+            "accuracy": 0.5206638464041653,
+            "balanced_accuracy": 0.5015590222179228,
+            "accuracy_lower_bound": 0.5029856867182045,
+            "accuracy_lift": 0.020663846404165298,
+            "selection_score": 0.00242014747631516,
+            "quality_score": 0.5971373436409078,
+            "worst_fold_accuracy": 0.5206638464041653
+          }
+        }
+      ]
+    }
+  }
+}
