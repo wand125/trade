@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "status": "shadow_only",
+  "target_timeframe_minutes": 15,
+  "rule": {
+    "minimum_class_confidence": 0.54,
+    "require_exact_decision_timestamp": true,
+    "require_direction_agreement_timeframes_minutes": [15, 5, 1]
+  },
+  "confidence_definition": "max(probability_up, 1 - probability_up)",
+  "selection_objective": {
+    "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
+    "wilson_z": 1.96
+  },
+  "evidence": {
+    "source_predictions": [
+      "experiments/next_bar/context_confirmation_001",
+      "experiments/next_bar/walk_forward_001"
+    ],
+    "all_2020_2026_partial": {
+      "joined_rows": 142642,
+      "confidence_054_rows": 20587,
+      "confidence_054_accuracy": 0.5491815223199106,
+      "confidence_054_coverage": 0.14432635549137,
+      "confidence_054_selection_score": 0.016098757092614664,
+      "agreement_rows": 18703,
+      "agreement_accuracy": 0.5505533871571405,
+      "agreement_coverage": 0.13111846440739755,
+      "agreement_selection_score": 0.01572053395292422
+    },
+    "confirmation_2024_2026_partial": {
+      "joined_rows": 55454,
+      "confidence_054_rows": 4677,
+      "confidence_054_accuracy": 0.5535599743425272,
+      "confidence_054_selection_score": 0.011405820422984724,
+      "agreement_rows": 4476,
+      "agreement_accuracy": 0.5574173369079535,
+      "agreement_selection_score": 0.012166240063230638
+    },
+    "standard_pnl_exact_join_2021_2026_partial": {
+      "loss_multiplier": 1.0,
+      "confidence_054_rows": 17117,
+      "confidence_054_gross_mean_per_oz": 0.09959408774902069,
+      "confidence_054_all_fold_cost_ceiling_per_oz": 0.055002594995365243,
+      "agreement_rows": 15616,
+      "agreement_gross_mean_per_oz": 0.1265657658811467,
+      "agreement_all_fold_cost_ceiling_per_oz": 0.05051872542933914,
+      "agreement_cost_005_positive_folds": 6,
+      "evaluated_folds": 6
+    }
+  },
+  "promotion": {
+    "replace_direction_policy": false,
+    "replace_paper_trading_policy": false,
+    "reason": "All-period selection score is lower and the worst-fold cost headroom at cost 0.05 is only 0.000519 per ounce; collect fresh forward evidence."
+  }
+}

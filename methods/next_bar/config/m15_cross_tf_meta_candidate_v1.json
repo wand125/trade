@@ -28,6 +28,10 @@
     "candidate_ece": 0.004057661535256423,
     "improved_folds": 5,
     "evaluated_folds": 6,
+    "paired_corrected_errors": 1740,
+    "paired_new_errors": 1652,
+    "paired_net_correct": 88,
+    "mcnemar_two_sided_p_approx": 0.1352289125989188,
     "confidence_054_baseline_accuracy": 0.544078985803587,
     "confidence_054_candidate_accuracy": 0.5447949148476853,
     "confidence_054_baseline_coverage": 0.14261433225298484,
@@ -36,6 +40,7 @@
   "promotion": {
     "require_next_unseen_period_accuracy_not_below_baseline": true,
     "require_next_unseen_period_brier_not_above_baseline": true,
+    "require_additional_paired_evidence": true,
     "replace_current_model": false
   }
 }

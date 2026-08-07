@@ -56,6 +56,48 @@ class NextBarMetaTests(unittest.TestCase):
         self.assertEqual(result["predicted_direction"].tolist(), ["up", "down"])
         self.assertTrue(result["correct"].all())
 
+    def test_asof_context_uses_only_latest_non_future_prediction(self):
+        target = predictions(15, [0.60, 0.40])
+        target["decision_timestamp"] = pd.to_datetime(
+            ["2025-01-01 00:15:00Z", "2025-01-01 00:30:00Z"]
+        )
+        m30 = predictions(30, [0.70, 0.30])
+        m30["decision_timestamp"] = pd.to_datetime(
+            ["2025-01-01 00:00:00Z", "2025-01-01 00:30:00Z"]
+        )
+        frame, features = build_cross_timeframe_frame(
+            target,
+            {30: m30},
+            CrossTimeframeMetaConfig(
+                context_timeframes=(),
+                asof_context_timeframes=(30,),
+                asof_max_age_minutes=15,
+            ),
+        )
+
+        self.assertEqual(features, ["logit_m15", "logit_m30"])
+        self.assertEqual(frame["m30_probability_up"].tolist(), [0.70, 0.30])
+        self.assertEqual(frame["m30_prediction_age_minutes"].tolist(), [15.0, 0.0])
+
+    def test_asof_context_drops_predictions_older_than_maximum_age(self):
+        target = predictions(15, [0.60, 0.40])
+        target["decision_timestamp"] = pd.to_datetime(
+            ["2025-01-01 00:16:00Z", "2025-01-01 00:30:00Z"]
+        )
+        m30 = predictions(30, [0.70])
+        m30["decision_timestamp"] = pd.to_datetime(["2025-01-01 00:00:00Z"])
+        frame, _ = build_cross_timeframe_frame(
+            target,
+            {30: m30},
+            CrossTimeframeMetaConfig(
+                context_timeframes=(),
+                asof_context_timeframes=(30,),
+                asof_max_age_minutes=15,
+            ),
+        )
+
+        self.assertEqual(len(frame), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

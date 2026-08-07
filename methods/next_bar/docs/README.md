@@ -95,6 +95,8 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 
 加工特徴candidateを比較する場合は、同じfoldへ `--feature-set enhanced_manual` を追加する。追加されるのは方向系列、実体/ATR、rolling up比率、trend/volatility比、volatility/ATR比、return autocorrelation/skew、EMA差/ATRであり、生価格水準は含まれない。
 
+直近8本の順序を保持したATR正規化特徴は `--feature-set sequence_manual` で再現できる。ただしM15の7fold比較でaccuracy、Brier、log loss、ECEがすべて悪化したため、現在は研究再現専用で採用候補ではない。
+
 同じ加工特徴を2層MLPで比較する場合は `--model-type mlp --max-iter 50` を使う。MLPにもOHLC価格水準は渡さず、HGBと同じ加工済みfeature matrixを標準化して入力する。
 
 2つの同一target予測を固定weightでブレンドする:
@@ -120,6 +122,24 @@ uv run python methods/next_bar/scripts/cross_timeframe_meta.py \
 ```
 
 各test foldのmeta modelは、それ以前のdirection-model OOS予測だけで学習する。M15/M5/M1のjoinは同じ `decision_timestamp` に限定し、時刻の新しい短期足を混ぜない。現在の固定候補は `config/m15_cross_tf_meta_candidate_v1.json` で、次の完全未使用期間までは現行モデルを置換しない。
+
+発行済みの最新M30予測を最大15分だけ保持して追加する場合:
+
+```bash
+uv run python methods/next_bar/scripts/cross_timeframe_meta.py \
+  --predictions-dir experiments/next_bar/context_confirmation_001 \
+  --predictions-dir experiments/next_bar/context_confirmation_m30_001 \
+  --predictions-dir experiments/next_bar/walk_forward_001 \
+  --output-dir experiments/next_bar/cross_timeframe_meta_m30_asof_001 \
+  --regularization-c 0.10 \
+  --meta-weight 0.25 \
+  --asof-context-timeframes 30 \
+  --asof-max-age-minutes 15
+```
+
+as-of contextはtarget判定時刻以前だけを検索し、最大ageを超えた値を欠損にする。M30追加は全体方向には不採用で、`config/m15_cross_tf_m30_high_conf_candidate_v1.json` のconfidence 0.54以上forward laneだけに使う。fresh M30が無い場合はM15/M5/M1 metaへfallbackする。
+
+M15 class confidence 0.54以上かつM15/M5/M1の方向が同時刻で一致する条件は、`config/m15_cross_tf_agreement_shadow_v1.json` に固定した。確認期間の高信頼accuracyとselection scoreは改善したが、全期間のselection scoreと売買cost余力が十分でないためshadow専用である。
 
 ## 主評価指標
 

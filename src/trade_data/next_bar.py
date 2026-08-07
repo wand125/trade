@@ -25,7 +25,7 @@ CONFIDENCE_THRESHOLDS = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80)
 LAG_PERIODS = (1, 2, 3, 5, 8, 13, 21)
 ROLLING_WINDOWS = (5, 10, 20, 50)
 RAW_PRICE_COLUMNS = {"open", "high", "low", "close"}
-FEATURE_SETS = ("baseline", "enhanced_manual")
+FEATURE_SETS = ("baseline", "enhanced_manual", "sequence_manual")
 CONFIDENCE_MODELS = ("class_probability", "side_platt", "context_hgb")
 MODEL_TYPES = ("hgb", "mlp")
 CONFIDENCE_CONTEXT_FEATURES = (
@@ -317,6 +317,25 @@ def build_feature_frame(
         ema_26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
         add("ema_spread_atr_20", (ema_12 - ema_26) / atr_20)
         add("ema_12_slope_atr_20", ema_12.diff(3) / atr_20)
+
+    if feature_set == "sequence_manual":
+        atr_20 = rolling_atr[20].replace(0, np.nan)
+        sequence_values = {
+            "return_atr": close.diff() / atr_20,
+            "body_atr": (close - open_) / atr_20,
+            "range_atr": (high - low) / atr_20,
+            "close_location_centered": (
+                (close - low) / (high - low).replace(0, np.nan) - 0.5
+            ),
+            "wick_balance_atr": (
+                (pd.concat([open_, close], axis=1).min(axis=1) - low)
+                - (high - pd.concat([open_, close], axis=1).max(axis=1))
+            )
+            / atr_20,
+        }
+        for lag in range(8):
+            for sequence_name, values in sequence_values.items():
+                add(f"sequence_{sequence_name}_lag_{lag}", values.shift(lag))
 
     gap_units = result["timestamp"].diff() / pd.Timedelta(minutes=timeframe_minutes)
     add("gap_bars", gap_units.clip(upper=100))

@@ -173,6 +173,19 @@ class NextBarTests(unittest.TestCase):
         self.assertIn("ema_spread_atr_20", feature_columns)
         self.assertFalse({"open", "high", "low", "close"}.intersection(feature_columns))
 
+    def test_sequence_manual_features_preserve_recent_order_without_price_levels(self):
+        bars = resample_complete_bars(m1_frame(400), 1)
+        _, feature_columns = build_feature_frame(bars, 1, "sequence_manual")
+
+        self.assertIn("sequence_return_atr_lag_0", feature_columns)
+        self.assertIn("sequence_body_atr_lag_7", feature_columns)
+        self.assertIn("sequence_close_location_centered_lag_3", feature_columns)
+        self.assertEqual(
+            len([name for name in feature_columns if name.startswith("sequence_")]),
+            40,
+        )
+        self.assertFalse({"open", "high", "low", "close"}.intersection(feature_columns))
+
     def test_walk_forward_fold_parser_validates_order(self):
         fold = parse_walk_forward_fold("wf1,2022-01-01,2023-01-01,2024-01-01")
         self.assertEqual(fold.name, "wf1")

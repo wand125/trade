@@ -20,6 +20,8 @@ from trade_data.next_bar_overlay import read_prediction_sets
 class CrossTimeframeMetaConfig:
     target_timeframe: int = 15
     context_timeframes: tuple[int, ...] = (5, 1)
+    asof_context_timeframes: tuple[int, ...] = ()
+    asof_max_age_minutes: int = 15
     regularization_c: float = 0.10
     meta_weight: float = 0.25
     random_seed: int = 42
@@ -50,6 +52,12 @@ def build_cross_timeframe_frame(
     frame = frame.rename(columns={"probability_up": "target_probability_up"})
     feature_columns = [f"logit_m{config.target_timeframe}"]
     frame[feature_columns[0]] = _logit(frame["target_probability_up"])
+    overlap = set(config.context_timeframes) & set(config.asof_context_timeframes)
+    if overlap:
+        joined = ", ".join(f"M{value}" for value in sorted(overlap))
+        raise ValueError(f"context timeframes cannot be both exact and as-of: {joined}")
+    if config.asof_max_age_minutes < 0:
+        raise ValueError("asof_max_age_minutes must not be negative")
     for timeframe in config.context_timeframes:
         if timeframe not in contexts:
             raise ValueError(f"missing M{timeframe} context predictions")
@@ -68,6 +76,41 @@ def build_cross_timeframe_frame(
             how="inner",
             validate="one_to_one",
         )
+        feature = f"logit_m{timeframe}"
+        frame[feature] = _logit(frame[probability_column])
+        feature_columns.append(feature)
+    for timeframe in config.asof_context_timeframes:
+        if timeframe not in contexts:
+            raise ValueError(f"missing M{timeframe} as-of context predictions")
+        context = contexts[timeframe].copy()
+        context["decision_timestamp"] = pd.to_datetime(
+            context["decision_timestamp"], utc=True
+        )
+        if context["decision_timestamp"].duplicated().any():
+            raise ValueError(f"M{timeframe} context contains duplicate decision timestamps")
+        probability_column = f"m{timeframe}_probability_up"
+        timestamp_column = f"m{timeframe}_decision_timestamp"
+        right = context[["decision_timestamp", "probability_up"]].rename(
+            columns={
+                "decision_timestamp": timestamp_column,
+                "probability_up": probability_column,
+            }
+        )
+        frame = pd.merge_asof(
+            frame.sort_values("decision_timestamp"),
+            right.sort_values(timestamp_column),
+            left_on="decision_timestamp",
+            right_on=timestamp_column,
+            direction="backward",
+            tolerance=pd.Timedelta(minutes=config.asof_max_age_minutes),
+        )
+        frame = frame.dropna(subset=[probability_column, timestamp_column]).copy()
+        age_minutes = (
+            frame["decision_timestamp"] - frame[timestamp_column]
+        ) / pd.Timedelta(minutes=1)
+        if age_minutes.lt(0).any():
+            raise ValueError(f"M{timeframe} as-of context contains a future prediction")
+        frame[f"m{timeframe}_prediction_age_minutes"] = age_minutes.astype("float64")
         feature = f"logit_m{timeframe}"
         frame[feature] = _logit(frame[probability_column])
         feature_columns.append(feature)
@@ -113,9 +156,13 @@ def run_cross_timeframe_meta(
     config: CrossTimeframeMetaConfig,
 ) -> dict[str, object]:
     target = read_prediction_sets(prediction_dirs, config.target_timeframe)
+    all_context_timeframes = (
+        *config.context_timeframes,
+        *config.asof_context_timeframes,
+    )
     contexts = {
         timeframe: read_prediction_sets(prediction_dirs, timeframe)
-        for timeframe in config.context_timeframes
+        for timeframe in all_context_timeframes
     }
     frame, feature_columns = build_cross_timeframe_frame(target, contexts, config)
     fold_order = [
@@ -253,13 +300,30 @@ def run_cross_timeframe_meta(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Train a chronological M15 direction meta model from M15/M5/M1 OOS probabilities."
+        description="Train a chronological M15 direction meta model from multi-timeframe OOS probabilities."
     )
     parser.add_argument("--predictions-dir", type=Path, action="append", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--regularization-c", type=float, default=0.10)
     parser.add_argument("--meta-weight", type=float, default=0.25)
+    parser.add_argument(
+        "--asof-context-timeframes",
+        default="",
+        help="Comma-separated context timeframes joined from the latest prediction at or before the target decision.",
+    )
+    parser.add_argument("--asof-max-age-minutes", type=int, default=15)
     return parser
+
+
+def _parse_timeframes(value: str) -> tuple[int, ...]:
+    if not value.strip():
+        return ()
+    values = tuple(int(item.strip()) for item in value.split(",") if item.strip())
+    if any(item <= 0 for item in values):
+        raise ValueError("timeframes must be positive integers")
+    if len(set(values)) != len(values):
+        raise ValueError("timeframes must not contain duplicates")
+    return values
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -268,6 +332,10 @@ def main(argv: Iterable[str] | None = None) -> int:
         args.predictions_dir,
         args.output_dir,
         CrossTimeframeMetaConfig(
+            asof_context_timeframes=_parse_timeframes(
+                args.asof_context_timeframes
+            ),
+            asof_max_age_minutes=args.asof_max_age_minutes,
             regularization_c=args.regularization_c,
             meta_weight=args.meta_weight,
         ),

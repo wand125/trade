@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-08 00:20 JST
+更新日時: 2026-08-08 01:16 JST
 
 ## 現在の状態
 
@@ -27,6 +27,16 @@
 - M15/M5/M1の同時刻OOS確率を使うcross-timeframe logistic meta modelを実装した。M15 75% + meta 25%は完全chronological 6foldでaccuracyを51.645%から51.718%へ+0.073pt、balanced accuracy +0.057pt、5/6 fold改善。Brier、log loss、ECEも改善した。
 - confidence 0.54以上はaccuracy 54.408%から54.479%へ改善、coverageは14.261%から13.894%へ低下した。
 - `m15_cross_tf_meta_candidate_v1.json` と全OOS fold学習済みfinal meta modelを生成した。hyperparameterを今回比較後に固定したcandidateなので、次の完全未使用期間までは現行モデルを置換しない。
+- paired比較はbaseline誤り修正1,740件、新規誤り1,652件、純改善88件。McNemar近似p=0.135で、現時点では統計的に十分強い差ではない。
+- ATR正規化した直近8本×5値の `sequence_manual` を7foldで試したが、accuracyは51.816%から51.708%、Brier/log loss/ECEも悪化したため棄却した。
+- M15 class confidence 0.54以上をM15/M5/M1の同時刻方向一致で絞ると、全7foldでaccuracy 54.918%から55.055%、2024〜2026途中のconfirmationで55.356%から55.742%へ改善した。
+- 方向一致は全期間のselection scoreを0.01610から0.01572へ下げる一方、confirmationでは0.01141から0.01217へ上げた。主policyは変えず `m15_cross_tf_agreement_shadow_v1.json` として次の未使用期間を測る。
+- cross-timeframe meta candidateと方向一致を重ねても、confirmation accuracyは55.664%から55.956%へ改善したが全期間selection scoreは低下した。探索後candidate同士のため昇格には使わない。
+- 通常損益では方向一致によりgross meanが0.09959から0.12657/ozへ上がったが、all-fold cost ceilingは0.05500から0.05052へ下がった。cost 0.05余力が薄いためpaper policyは置換しない。
+- M30予測を未来参照なし・最大age 15分でM15 metaへas-of結合できるようにした。M30の2020〜2021 OOS foldも同じbaseline設定で補完した。
+- M30を全行へ使うと全体accuracyは51.684%から51.666%、ECEも0.441%から0.465%へ悪化したため、全体モデルへの追加は棄却した。Brier/log lossはわずかに改善した。
+- fresh M30があれば4時間足meta、無ければ3時間足metaへfallbackする高信頼専用laneは、confidence 0.54以上でaccuracy 54.479%から54.637%、coverage 13.894%から13.951%、selection score 0.01388から0.01450へ改善した。developmentとconfirmationの両方でselection scoreが改善したため `m15_cross_tf_m30_high_conf_candidate_v1.json` として固定した。
+- M30高信頼laneの通常損益はgross mean 0.11357から0.11663/oz、cost 0.05 positive fold 5/6から6/6へ改善したが、最悪fold余力は0.00140/ozのためpaper policyは維持する。
 
 ## ベースライン評価
 
@@ -41,4 +51,6 @@
 3. `next_bar_ev` は新しい完全未使用期間で方向edge、cost headroom、EV biasを監視する。
 4. M1/M5 entry delayは実装済みだがadmission fail。現条件を変更せず追加期間で確認する。
 5. `m15_cross_tf_meta_candidate_v1` を次の完全未使用期間へ固定適用し、accuracyとBrierの両方がbaseline以上か確認する。
-6. 固定meta candidate確認後、正規化系列を直接扱うsequence architectureを別candidateとして設計する。
+6. 3TF方向一致shadowとM30 high-confidence candidateを固定運用し、次の完全未使用期間でselection scoreを比較する。
+7. M30 candidateは高信頼lane以外へ適用しない。全体accuracyとECEの悪化が解消するまで全体モデルには昇格しない。
+8. treeへlagを追加する方式は棄却済み。次のsequence案は、十分な計算予算を確保してTCN/小型Transformerを独立candidateとして事前固定する。

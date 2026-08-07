@@ -41,6 +41,8 @@ P_final = 0.75 * P_M15 + 0.25 * P_meta
 
 fold accuracyは2021、2022、2023、2024、2026途中で改善し、2025だけ `-0.117pt`。5/6 fold改善。
 
+paired比較ではbaseline誤りを修正した行が1,740件、candidateで新たに誤った行が1,652件、純改善88件。連続性補正McNemar近似の両側p値は0.135であり、現データだけでは統計的に十分強い改善とは判定しない。
+
 ## 高信頼帯
 
 | threshold | baseline rows / accuracy | candidate rows / accuracy |
@@ -61,4 +63,5 @@ fold accuracyは2021、2022、2023、2024、2026途中で改善し、2025だけ 
 - 現行M15方向モデルとpaper売買policyはまだ置換しない。
 - Cとmeta weightはここで固定し、追加探索しない。
 - 次の完全未使用期間でaccuracyとBrierが両方baseline以上なら昇格を検討する。
+- paired evidenceも追加し、偶然変動の範囲を超えたか再判定する。
 - 固定設定: `methods/next_bar/config/m15_cross_tf_meta_candidate_v1.json`

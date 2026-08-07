@@ -1,0 +1,83 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_high_confidence_only",
+  "target_timeframe_minutes": 15,
+  "base_meta_candidate": "methods/next_bar/config/m15_cross_tf_meta_candidate_v1.json",
+  "high_confidence_lane": {
+    "minimum_class_confidence": 0.54,
+    "fresh_m30_max_age_minutes": 15,
+    "when_fresh_m30_exists": "use M15/M5/M1 exact-time logits plus the latest non-future M30 logit",
+    "when_fresh_m30_is_missing": "fall back to the M15/M5/M1 meta probability",
+    "outside_high_confidence_lane": "keep the M15/M5/M1 meta output authoritative"
+  },
+  "m30_augmented_meta_model": {
+    "type": "logistic_regression",
+    "regularization_c": 0.1,
+    "features": ["logit_m15", "logit_m5", "logit_m1", "logit_m30"],
+    "baseline_m15_weight": 0.75,
+    "meta_weight": 0.25,
+    "experiment": "experiments/next_bar/cross_timeframe_meta_m30_asof_001",
+    "final_model": "experiments/next_bar/cross_timeframe_meta_m30_asof_001/m15_cross_tf_meta_final.joblib"
+  },
+  "selection_objective": {
+    "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
+    "wilson_z": 1.96,
+    "coverage_denominator": "all M15 opportunities, including rows without a fresh M30 prediction"
+  },
+  "evidence": {
+    "evaluation_rows": 120023,
+    "fresh_m30_rows": 117599,
+    "fresh_m30_availability": 0.9798038709247394,
+    "base_high_confidence": {
+      "rows": 16676,
+      "coverage": 0.13894003649300551,
+      "accuracy": 0.5447949148476853,
+      "wilson_lower": 0.5372270555944731,
+      "selection_score": 0.013876258834368748
+    },
+    "candidate_high_confidence": {
+      "rows": 16745,
+      "coverage": 0.1395149263057914,
+      "accuracy": 0.5463720513586146,
+      "wilson_lower": 0.5388216424877446,
+      "selection_score": 0.014500542242710232,
+      "improved_selection_score_folds": 4,
+      "evaluated_folds": 6
+    },
+    "development_2021_2023": {
+      "base_selection_score": 0.01421010564489182,
+      "candidate_selection_score": 0.01497858597279529
+    },
+    "confirmation_2024_2026_partial": {
+      "base_accuracy": 0.5566382460414129,
+      "candidate_accuracy": 0.5584192439862543,
+      "base_selection_score": 0.01126259756410032,
+      "candidate_selection_score": 0.011688254525532385
+    },
+    "probability_quality_if_m30_is_used_on_all_fresh_rows": {
+      "base_brier": 0.24953976476611214,
+      "candidate_brier": 0.24953538162634342,
+      "base_log_loss": 0.6922268018828992,
+      "candidate_log_loss": 0.6922180836953827,
+      "base_ece": 0.004057661535256423,
+      "candidate_ece": 0.004288314954309407,
+      "base_accuracy": 0.5171842063604476,
+      "candidate_accuracy": 0.5170092398956867
+    },
+    "standard_pnl_diagnostic_loss_multiplier_1": {
+      "base_gross_mean_per_oz": 0.11356596306068512,
+      "candidate_gross_mean_per_oz": 0.11663171095849366,
+      "base_all_fold_cost_ceiling_per_oz": 0.0496226787830888,
+      "candidate_all_fold_cost_ceiling_per_oz": 0.0513978622327782,
+      "candidate_cost_005_positive_folds": 6,
+      "evaluated_folds": 6
+    }
+  },
+  "promotion": {
+    "replace_overall_direction_model": false,
+    "replace_paper_trading_policy": false,
+    "require_fresh_forward_high_confidence_selection_score_not_below_base": true,
+    "require_fresh_forward_ece_not_materially_worse": true,
+    "reason": "The high-confidence objective improved in development and confirmation, but overall accuracy and ECE worsened slightly when M30 was applied universally, and cost headroom remains thin."
+  }
+}
