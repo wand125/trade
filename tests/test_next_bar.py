@@ -356,6 +356,23 @@ class NextBarTests(unittest.TestCase):
             self.assertEqual(report["config"]["model_type"], "mlp")
             self.assertTrue((output_dir / "m1_model.joblib").exists())
 
+    def test_logistic_uses_the_same_processed_feature_pipeline(self):
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            model_type="logistic",
+            max_train_rows=1_000,
+            max_iter=20,
+            logistic_c=0.10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+
+            self.assertEqual(report["config"]["model_type"], "logistic")
+            self.assertEqual(report["config"]["logistic_c"], 0.10)
+            self.assertTrue((output_dir / "m1_model.joblib").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

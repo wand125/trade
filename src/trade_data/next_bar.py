@@ -27,7 +27,7 @@ ROLLING_WINDOWS = (5, 10, 20, 50)
 RAW_PRICE_COLUMNS = {"open", "high", "low", "close"}
 FEATURE_SETS = ("baseline", "enhanced_manual", "sequence_manual")
 CONFIDENCE_MODELS = ("class_probability", "side_platt", "context_hgb")
-MODEL_TYPES = ("hgb", "mlp")
+MODEL_TYPES = ("hgb", "mlp", "logistic")
 CONFIDENCE_CONTEXT_FEATURES = (
     "body_ratio",
     "range_ratio",
@@ -66,6 +66,7 @@ class TrainConfig:
     mlp_learning_rate: float = 0.001
     mlp_alpha: float = 0.001
     mlp_batch_size: int = 1024
+    logistic_c: float = 0.10
 
 
 @dataclass(frozen=True)
@@ -1180,6 +1181,18 @@ def train_timeframe(
                 random_state=config.random_seed,
             ),
         )
+    elif config.model_type == "logistic":
+        if config.logistic_c <= 0:
+            raise ValueError("logistic_c must be positive")
+        model = make_pipeline(
+            StandardScaler(),
+            LogisticRegression(
+                C=config.logistic_c,
+                solver="lbfgs",
+                max_iter=max(config.max_iter, 500),
+                random_state=config.random_seed,
+            ),
+        )
     else:
         model = HistGradientBoostingClassifier(
             max_iter=config.max_iter,
@@ -1886,6 +1899,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--mlp-learning-rate", type=float, default=0.001)
     train.add_argument("--mlp-alpha", type=float, default=0.001)
     train.add_argument("--mlp-batch-size", type=int, default=1024)
+    train.add_argument("--logistic-c", type=float, default=0.10)
 
     walk_forward = subparsers.add_parser(
         "walk-forward", help="run multiple expanding chronological folds"
@@ -1918,6 +1932,7 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument("--mlp-learning-rate", type=float, default=0.001)
     walk_forward.add_argument("--mlp-alpha", type=float, default=0.001)
     walk_forward.add_argument("--mlp-batch-size", type=int, default=1024)
+    walk_forward.add_argument("--logistic-c", type=float, default=0.10)
 
     optimize = subparsers.add_parser(
         "optimize-policy",
@@ -1977,6 +1992,7 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         mlp_learning_rate=args.mlp_learning_rate,
         mlp_alpha=args.mlp_alpha,
         mlp_batch_size=args.mlp_batch_size,
+        logistic_c=args.logistic_c,
     )
 
 
