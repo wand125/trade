@@ -12,6 +12,7 @@ input ENUM_TIMEFRAMES InpTimeframe = PERIOD_M1;
 input int InpBarsToSend = 60;
 input bool InpSendMultiTimeframes = true;
 input int InpHigherTimeframeBars = 40;
+input int InpSwingTimeframeBars = 120;   // H1/H4/D1 用。120本で H1=5日 / H4=20日 / D1=半年
 input int InpMaxHistoryHours = 168;
 input bool InpSendAccountInfo = true;
 input bool InpSendDealHistory = true;
@@ -273,6 +274,10 @@ string BuildSnapshotJson()
       json += ",\"M5\":" + BuildTimeframeJson(PERIOD_M5, InpHigherTimeframeBars, digits);
       json += ",\"M15\":" + BuildTimeframeJson(PERIOD_M15, InpHigherTimeframeBars, digits);
       json += ",\"M30\":" + BuildTimeframeJson(PERIOD_M30, InpHigherTimeframeBars, digits);
+      // スイング判断には日単位の地図が要る。M30までだと20時間しか見えない。
+      json += ",\"H1\":" + BuildTimeframeJson(PERIOD_H1, InpSwingTimeframeBars, digits);
+      json += ",\"H4\":" + BuildTimeframeJson(PERIOD_H4, InpSwingTimeframeBars, digits);
+      json += ",\"D1\":" + BuildTimeframeJson(PERIOD_D1, InpSwingTimeframeBars, digits);
       json += "}";
    }
    if(InpSendAccountInfo)

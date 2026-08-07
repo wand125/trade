@@ -91,24 +91,23 @@ def aggregate(bars: list[dict], minutes: int) -> list[dict]:
     return out
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("symbol", help="e.g. XAUUSD-m")
-    parser.add_argument("--tf", default="M1", choices=["M1", "M5", "M15"])
-    parser.add_argument("--state-dir", default="runtime")
-    args = parser.parse_args()
+def load_bars(data: dict, tf: str) -> list[dict]:
+    """Prefer the EA's own bars for a timeframe; fold M1 only as a fallback.
 
-    path = Path(args.state_dir) / f"latest_snapshot_{args.symbol}.json"
-    if not path.exists():
-        raise SystemExit(f"{path} not found")
-    data = json.loads(path.read_text(encoding="utf-8"))
+    The EA sends M1/M5/M15/M30/H1/H4/D1 under "timeframes". Folding M1 can
+    only ever reach one hour back, which is far too short to judge a swing.
+    """
+    frames = data.get("timeframes") or {}
+    native = frames.get(tf)
+    if isinstance(native, dict) and native.get("bars"):
+        return native["bars"]
+    minutes = {"M1": 1, "M5": 5, "M15": 15, "M30": 30}.get(tf)
+    if minutes is None:
+        return []
+    return aggregate(data.get("bars") or [], minutes)
 
-    minutes = {"M1": 1, "M5": 5, "M15": 15}[args.tf]
-    bars = aggregate(data.get("bars") or [], minutes)
-    # RSI14 は 15 本必要。M5/M15 は M1 60 本からしか畳めないので本数が減る。
-    if len(bars) < 3:
-        raise SystemExit(f"not enough {args.tf} bars ({len(bars)})")
 
+def report(symbol: str, tf: str, bars: list[dict], data: dict) -> None:
     closes = [b["close"] for b in bars]
     lows = [b["low"] for b in bars]
     highs = [b["high"] for b in bars]
@@ -116,8 +115,10 @@ def main() -> None:
     unit = 100 if price and price < 1000 else 1
     unit_name = "pips" if unit == 100 else "ドル"
 
-    print(f"{args.symbol} {args.tf}  bid {price}  ({data.get('server_time')})")
-    print(f"  bars {len(bars)}  レンジ {min(lows):.3f}-{max(highs):.3f} "
+    span = f"{bars[0]['time']} 〜 {bars[-1]['time']}"
+    print(f"{symbol} {tf}  bid {price}  ({data.get('server_time')})")
+    print(f"  bars {len(bars)}  {span}")
+    print(f"  レンジ {min(lows):.3f}-{max(highs):.3f} "
           f"(幅 {(max(highs) - min(lows)) * unit:.1f}{unit_name})")
 
     r = rsi(closes)
@@ -133,6 +134,36 @@ def main() -> None:
     a = atr(bars)
     if a is not None:
         print(f"  ATR14      {a * unit:.1f}{unit_name}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("symbol", help="e.g. XAUUSD-m")
+    parser.add_argument("--tf", default="M1",
+                        choices=["M1", "M5", "M15", "M30", "H1", "H4", "D1"])
+    parser.add_argument("--all", action="store_true",
+                        help="every timeframe at once — the swing view")
+    parser.add_argument("--state-dir", default="runtime")
+    args = parser.parse_args()
+
+    path = Path(args.state_dir) / f"latest_snapshot_{args.symbol}.json"
+    if not path.exists():
+        raise SystemExit(f"{path} not found")
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    if args.all:
+        for tf in ("M1", "M5", "M15", "M30", "H1", "H4", "D1"):
+            bars = load_bars(data, tf)
+            if bars:
+                report(args.symbol, tf, bars, data)
+                print()
+        return
+
+    bars = load_bars(data, args.tf)
+    if len(bars) < 3:
+        raise SystemExit(f"not enough {args.tf} bars ({len(bars)})")
+
+    report(args.symbol, args.tf, bars, data)
 
 
 if __name__ == "__main__":
