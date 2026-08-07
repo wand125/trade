@@ -97,6 +97,30 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 
 同じ加工特徴を2層MLPで比較する場合は `--model-type mlp --max-iter 50` を使う。MLPにもOHLC価格水準は渡さず、HGBと同じ加工済みfeature matrixを標準化して入力する。
 
+2つの同一target予測を固定weightでブレンドする:
+
+```bash
+uv run python methods/next_bar/scripts/ensemble.py \
+  --baseline-dir experiments/next_bar/walk_forward_001 \
+  --candidate-dir experiments/next_bar/walk_forward_enhanced_manual_001 \
+  --output-dir experiments/next_bar/ensemble_walk_forward_001 \
+  --timeframes 15 \
+  --candidate-weight 0.25
+```
+
+M15予測へ同時刻のM5/M1 OOS確率を追加するchronological meta model:
+
+```bash
+uv run python methods/next_bar/scripts/cross_timeframe_meta.py \
+  --predictions-dir experiments/next_bar/context_confirmation_001 \
+  --predictions-dir experiments/next_bar/walk_forward_001 \
+  --output-dir experiments/next_bar/cross_timeframe_meta_001 \
+  --regularization-c 0.10 \
+  --meta-weight 0.25
+```
+
+各test foldのmeta modelは、それ以前のdirection-model OOS予測だけで学習する。M15/M5/M1のjoinは同じ `decision_timestamp` に限定し、時刻の新しい短期足を混ぜない。現在の固定候補は `config/m15_cross_tf_meta_candidate_v1.json` で、次の完全未使用期間までは現行モデルを置換しない。
+
 ## 主評価指標
 
 - accuracy と balanced accuracy

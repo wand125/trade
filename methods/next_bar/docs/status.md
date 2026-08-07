@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-07 19:40 JST
+更新日時: 2026-08-08 00:20 JST
 
 ## 現在の状態
 
@@ -23,6 +23,10 @@
 - 最新出力へconfidence interval、fair decimal odds、odds ratio、support、odds validity、strict eligibilityを追加した。
 - 方向オッズを売買へ変換する独立層 `next_bar_ev` を追加した。値幅、tail risk、損失重み付きEV、損益分岐確率、Kelly参考値を方向モデルとは別に学習する。
 - M15の次足単独売買、ATR stop、既存Entry EVへの単純方向overlayをchronological OOSで検証した。損失1.2倍は標準条件から廃止。通常損益ではM15 confidence 0.54以上が6/6 fold positive、cost 0.05後も6/6 positiveだがcost ceilingが0.05415と薄いためpaper candidateに留めた。
+- baseline 75% + enhanced-manual 25%の固定M15 ensembleは7fold合算accuracyを51.816%から51.866%へ改善し、6/7 foldで改善した。ただし過去foldからweightを選ぶadaptive nested方式はbaselineを0.031pt下回ったため、現行置換はしない。
+- M15/M5/M1の同時刻OOS確率を使うcross-timeframe logistic meta modelを実装した。M15 75% + meta 25%は完全chronological 6foldでaccuracyを51.645%から51.718%へ+0.073pt、balanced accuracy +0.057pt、5/6 fold改善。Brier、log loss、ECEも改善した。
+- confidence 0.54以上はaccuracy 54.408%から54.479%へ改善、coverageは14.261%から13.894%へ低下した。
+- `m15_cross_tf_meta_candidate_v1.json` と全OOS fold学習済みfinal meta modelを生成した。hyperparameterを今回比較後に固定したcandidateなので、次の完全未使用期間までは現行モデルを置換しない。
 
 ## ベースライン評価
 
@@ -36,4 +40,5 @@
 2. `coverage_power` は0、0.5、1の事前固定候補だけを比較し、目的に合うquality/coverage比を決める。
 3. `next_bar_ev` は新しい完全未使用期間で方向edge、cost headroom、EV biasを監視する。
 4. M1/M5 entry delayは実装済みだがadmission fail。現条件を変更せず追加期間で確認する。
-5. 次の方向モデル候補は、平坦化MLPではなく正規化系列を直接扱うsequence architectureとして別計画にする。
+5. `m15_cross_tf_meta_candidate_v1` を次の完全未使用期間へ固定適用し、accuracyとBrierの両方がbaseline以上か確認する。
+6. 固定meta candidate確認後、正規化系列を直接扱うsequence architectureを別candidateとして設計する。
