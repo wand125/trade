@@ -206,6 +206,23 @@ def run_cross_timeframe_meta(
     }
     prediction_name = f"m{config.target_timeframe}_cross_tf_meta_predictions.parquet"
     combined.to_parquet(output_dir / prediction_name, index=False)
+    final_model = LogisticRegression(
+        C=config.regularization_c,
+        max_iter=1_000,
+        random_state=config.random_seed,
+    )
+    final_model.fit(frame[feature_columns], frame["target_up"].astype("int8"))
+    final_model_name = f"m{config.target_timeframe}_cross_tf_meta_final.joblib"
+    joblib.dump(
+        {
+            "model": final_model,
+            "config": asdict(config),
+            "feature_columns": feature_columns,
+            "train_folds": fold_order,
+            "deployment_status": "forward_candidate",
+        },
+        output_dir / final_model_name,
+    )
     first_manifest = json.loads(
         (prediction_dirs[0] / "manifest.json").read_text(encoding="utf-8")
     )
@@ -220,6 +237,7 @@ def run_cross_timeframe_meta(
                 "features": list(base_entry["features"]),
                 "meta_features": feature_columns,
                 "models": model_entries,
+                "deployment_model": final_model_name,
                 "predictions": prediction_name,
             }
         },

@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate",
+  "target_timeframe_minutes": 15,
+  "context_timeframes_minutes": [5, 1],
+  "meta_model": {
+    "type": "logistic_regression",
+    "regularization_c": 0.1,
+    "features": ["logit_m15", "logit_m5", "logit_m1"]
+  },
+  "probability_blend": {
+    "baseline_m15_weight": 0.75,
+    "cross_timeframe_meta_weight": 0.25
+  },
+  "evidence": {
+    "experiment": "experiments/next_bar/cross_timeframe_meta_001",
+    "chronological_test_rows": 120023,
+    "baseline_accuracy": 0.5164510135557352,
+    "candidate_accuracy": 0.5171842063604476,
+    "accuracy_delta": 0.0007331928047124014,
+    "baseline_balanced_accuracy": 0.5159110511939629,
+    "candidate_balanced_accuracy": 0.5164799576569935,
+    "baseline_brier_score": 0.2495633899959642,
+    "candidate_brier_score": 0.24953976476611214,
+    "baseline_log_loss": 0.692274311927778,
+    "candidate_log_loss": 0.6922268018828992,
+    "baseline_ece": 0.00504067506229072,
+    "candidate_ece": 0.004057661535256423,
+    "improved_folds": 5,
+    "evaluated_folds": 6,
+    "confidence_054_baseline_accuracy": 0.544078985803587,
+    "confidence_054_candidate_accuracy": 0.5447949148476853,
+    "confidence_054_baseline_coverage": 0.14261433225298484,
+    "confidence_054_candidate_coverage": 0.13894003649300551
+  },
+  "promotion": {
+    "require_next_unseen_period_accuracy_not_below_baseline": true,
+    "require_next_unseen_period_brier_not_above_baseline": true,
+    "replace_current_model": false
+  }
+}
