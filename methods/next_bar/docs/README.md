@@ -121,7 +121,7 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 
 完成足間の変動状態遷移を使う場合は `--feature-set volatility_state` を指定する。vol-of-vol、volatility加速度、range clustering/中央値乖離/圧縮継続、bipower jump、Parkinson/Garman–Klass対close分散balanceの11列を追加する。単体・通常方向blendはconfirmationで悪化し、方向維持0.525もscore 4/7、既存Signed-body Quantile/Clear-bodyを下回ったため再現専用とする。
 
-直近経路の継続性を定常加工する場合は `--feature-set path_persistence` を使う。符号付きefficiency、variance ratio、return autocorrelation、方向転換率、方向別transition persistence、符号付きstreakの14列を追加する。方向維持型25% blendのconfidence 0.525はconfirmationでもaccuracy、coverage、selection score、Brier、log lossを改善したが、既存clear-bodyとsigned-body quantileの評価関数を超えず、fold改善も5/7のためforward configは発行しない。
+直近経路の継続性を定常加工する場合は `--feature-set path_persistence` を使う。符号付きefficiency、variance ratio、return autocorrelation、方向転換率、方向別transition persistence、符号付きstreakの14列を追加する。完全無変動・片方向窓の0/0は「持続性の証拠なし」の0へ定義し、flat系列の全列有限0とbaselineとの行整合をテストする。M15の方向維持型25% confidence 0.525は既存clear-body/signed-body quantileを超えず再現専用である。一方、定義を変えずM1へ移植した通常25%方向blendはaccuracyを7/7fold、開発・確認、UTC日bootstrapで改善したため `config/m1_path_persistence_direction_candidate_v1.json` のparallel forward候補に固定した。M1の0.51 confidence laneは確認3/3foldで反転したため使わない。
 
 経路の加速・減速をマルチスケール加工する場合は `--feature-set haar_multiscale` を使う。4/8/16/32本窓の前半対後半について、標準化return差、absolute-return構成差、方向比率差の12特徴を追加する。方向維持型0.525はdevelopmentで改善したがconfirmationのaccuracyとselection scoreが悪化したため再現専用とし、forward configは発行しない。
 

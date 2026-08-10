@@ -1,0 +1,111 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_path_persistence",
+  "target_timeframe_minutes": 1,
+  "feature_candidate": {
+    "feature_set": "path_persistence",
+    "parent_feature_set": "baseline",
+    "additional_feature_count": 14,
+    "features": [
+      "signed_efficiency_5",
+      "signed_efficiency_10",
+      "signed_efficiency_20",
+      "signed_efficiency_50",
+      "return_autocorrelation_10",
+      "return_autocorrelation_20",
+      "direction_change_fraction_10",
+      "direction_change_fraction_20",
+      "variance_ratio_2_50",
+      "variance_ratio_5_50",
+      "variance_ratio_10_50",
+      "up_persistence_20",
+      "down_persistence_20",
+      "signed_return_streak_20"
+    ],
+    "source": "completed M1 OHLC rows at or before the current completed M1 bar",
+    "normalization": "signed efficiency, return correlation, transition fractions, variance ratios, and clipped signed streak",
+    "degenerate_window_value": 0.0,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "direction_candidate": {
+    "baseline_model": "baseline HGB",
+    "candidate_model": "HGB with baseline plus 14 path-persistence features",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_path_persistence_m1_finite_001",
+    "direction_blend": "experiments/next_bar/path_persistence_m1_blend_current_001",
+    "rejected_confidence_blend": "experiments/next_bar/path_persistence_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/path_persistence_m1_candidate_analysis.json",
+    "direction_bootstrap": "experiments/next_bar/path_persistence_m1_direction_bootstrap.json"
+  },
+  "evidence": {
+    "rows": 2183717,
+    "direction_blend": {
+      "development": {
+        "baseline_accuracy": 0.5093738008388342,
+        "candidate_accuracy": 0.5097888879100665,
+        "net_improvement": 556,
+        "mcnemar_exact_p": 0.0039184458303874875
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5060000781769144,
+        "candidate_accuracy": 0.5064572946760337,
+        "net_improvement": 386,
+        "mcnemar_exact_p": 0.007855711582766302
+      },
+      "all": {
+        "baseline_accuracy": 0.5080694980164554,
+        "candidate_accuracy": 0.5085008725947547,
+        "baseline_brier": 0.24986887966799923,
+        "candidate_brier": 0.24986478964662953,
+        "baseline_log_loss": 0.69288487311603,
+        "candidate_log_loss": 0.6928766668735142,
+        "baseline_ece": 0.0020289380971560927,
+        "candidate_ece": 0.0015076794062482371,
+        "fixes": 29469,
+        "harms": 28527,
+        "net_improvement": 942,
+        "mcnemar_exact_p": 0.00009325423447535009
+      },
+      "accuracy_improved_folds": 7,
+      "brier_improved_folds": 6,
+      "log_loss_improved_folds": 6,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "paired_utc_day_bootstrap_20000": {
+      "development_accuracy_delta_ci95": [0.00013545122821811696, 0.0006936816372211885],
+      "confirmation_accuracy_delta_ci95": [0.00011390071581933447, 0.0008060737610739775],
+      "all_accuracy_delta_ci95": [0.00021606646780409077, 0.0006478368364984851],
+      "all_brier_delta_ci95": [-0.000005923993711232783, -0.0000022654038698527465],
+      "all_log_loss_delta_ci95": [-0.000011886948448072698, -0.000004541995422582831]
+    },
+    "confidence_not_adopted": {
+      "development_selected_threshold": 0.51,
+      "development_baseline_score": 0.009629480660047105,
+      "development_candidate_score": 0.010077486205741424,
+      "confirmation_baseline_score": 0.007791178437376946,
+      "confirmation_candidate_score": 0.007290319284273611,
+      "confirmation_accuracy_improved_folds": 0,
+      "confirmation_evaluated_folds": 3
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_direction_candidate": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "The fixed M15-defined Path Persistence features transferred to M1 and the fixed 25% direction blend improved accuracy in development, confirmation, all 7 folds, and paired UTC-day bootstrap. Confidence selection reversed in all three confirmation folds, so the candidate is direction-only and remains parallel until a fresh untouched period confirms the edge."
+  }
+}

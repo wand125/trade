@@ -153,8 +153,8 @@ def paired_daily_block_bootstrap(
     random_seed: int = 42,
     development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
 ) -> dict[str, object]:
-    if not 0.5 < threshold < 1:
-        raise ValueError("threshold must be between 0.5 and 1")
+    if not 0.5 <= threshold < 1:
+        raise ValueError("threshold must be between 0.5 inclusive and 1")
     if iterations < 100:
         raise ValueError("iterations must be at least 100")
     assert_aligned(first, second, "second")

@@ -267,6 +267,10 @@
 - cross-timeframe metaを任意target/context時間足へ一般化し、target自身のcontext再利用、duplicate、exact/as-of重複を停止した。M1 targetへ確定済みM5/M15を最大14分のbackward as-ofで結合し、評価元の97.979%、1,801,567行を未来不参照で保持した。
 - 固定25% metaはM1方向accuracyを50.6443%から50.6322%へ下げ、純-218件、p=0.3095。方向は1/6 fold、Brier/log lossは各3/6しか改善せず、M15係数も正負に揺れた。
 - development選択0.51はconfirmation accuracyを+0.088pt上げたがcoverageを2.070pt下げ、developmentと全期間のselection scoreは悪化した。accuracy/score改善は各2/6 foldのため再現専用とし、config/registry/latestは発行しない。
+- M1へPath Persistence 14特徴を固定移植した。完全無変動・片方向窓の0/0を意味的ゼロへ直し、flat有限0テストを追加。旧artifactとのintersection比較を避け、現コードでbaselineも再学習してusable 5,737,928行、OOS 2,183,717行を完全一致させた。
+- Path単体は全体+289件、p=0.548、accuracy 4/7foldで不採用。一方baseline 75% + Path 25%の通常方向blendはaccuracyを50.80695%から50.85009%へ上げ、開発+556件、確認+386件、全体+942件、accuracy 7/7fold、Brier/log loss各6/7fold改善した。
+- UTC日paired bootstrap 20,000回のaccuracy差95%区間は開発+0.0135〜+0.0694pt、確認+0.0114〜+0.0806pt、全体+0.0216〜+0.0648pt。M1方向専用parallel forward候補へ固定した。
+- development選択0.51 confidenceは確認3/3foldでaccuracy・scoreが反転したため不採用。authoritative方向/confidence/odds/policyは置換せず、完全未使用期間まで特徴窓・subset・25% weight・閾値を再探索しない。
 
 ## ベースライン評価
 
@@ -345,3 +349,4 @@
 67. Volatility Stateは再現専用とする。rolling window、jump/variance定義、特徴subset、blend weight、0.525以外の閾値を同じ履歴で再探索せず、既存方向候補と0.525 confidence候補を維持する。
 68. Full Path temporal uncertaintyは再現専用とする。training window、window数、uncertainty penalty、モデルweight、0.515以外の閾値を同じ履歴で再探索せず、expanding Full Path 0.53と既存異種disagreement shadowを維持する。
 69. M1 × M5/M15 as-of metaは再現専用とする。context subset、最大age、regularization、blend weight、0.51以外の閾値を同じ履歴で再探索せず、次のM1候補は確定済みmicrostructure/regime特徴を独立に加工して評価する。
+70. M1 Path Persistence 25%を方向専用parallel forward候補とする。14特徴、degenerate窓=0、HGB/Platt、25% weightを固定し、完全未使用期間でbaseline以上のaccuracy、Brier、log lossを同時に確認するまでauthoritative方向・confidence・odds・paper/live policyを変更しない。

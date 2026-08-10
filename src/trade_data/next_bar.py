@@ -1923,6 +1923,12 @@ def build_feature_frame(
         add(f"efficiency_{window}", net_move / path_length.replace(0, np.nan))
 
     if feature_set == "trend_structure":
+        def zero_safe_ratio(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            return output.mask(denominator.eq(0), 0.0).fillna(0.0)
+
         period = 14
         up_move = high.diff()
         down_move = -low.diff()
@@ -1937,43 +1943,48 @@ def build_feature_frame(
             adjust=False,
             min_periods=period,
         ).mean()
-        plus_di = plus_directional_movement.ewm(
+        plus_di = zero_safe_ratio(plus_directional_movement.ewm(
             alpha=1 / period,
             adjust=False,
             min_periods=period,
-        ).mean() / atr_14.replace(0, np.nan)
-        minus_di = minus_directional_movement.ewm(
+        ).mean(), atr_14)
+        minus_di = zero_safe_ratio(minus_directional_movement.ewm(
             alpha=1 / period,
             adjust=False,
             min_periods=period,
-        ).mean() / atr_14.replace(0, np.nan)
-        directional_sum = (plus_di + minus_di).replace(0, np.nan)
-        directional_index = (plus_di - minus_di).abs() / directional_sum
+        ).mean(), atr_14)
+        directional_sum = plus_di + minus_di
+        directional_index = zero_safe_ratio(
+            (plus_di - minus_di).abs(), directional_sum
+        )
         adx = directional_index.ewm(
             alpha=1 / period,
             adjust=False,
             min_periods=period,
-        ).mean()
+        ).mean().fillna(0.0)
         add("plus_di_14", plus_di)
         add("minus_di_14", minus_di)
         add("adx_14", adx)
-        add("di_balance_14", (plus_di - minus_di) / directional_sum)
-        add("adx_change_3", adx.diff(3))
+        add("di_balance_14", zero_safe_ratio(plus_di - minus_di, directional_sum))
+        add("adx_change_3", adx.diff(3).fillna(0.0))
 
         atr_20 = rolling_atr[20].replace(0, np.nan)
         ema_12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
         ema_26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
         macd = ema_12 - ema_26
         macd_signal = macd.ewm(span=9, adjust=False, min_periods=9).mean()
-        add("macd_atr_20", macd / atr_20)
-        add("macd_signal_gap_atr_20", (macd - macd_signal) / atr_20)
+        add("macd_atr_20", zero_safe_ratio(macd, atr_20))
+        add(
+            "macd_signal_gap_atr_20",
+            zero_safe_ratio(macd - macd_signal, atr_20),
+        )
         add(
             "atr_compression_5_20",
-            rolling_atr[5] / rolling_atr[20].replace(0, np.nan),
+            zero_safe_ratio(rolling_atr[5], rolling_atr[20]),
         )
         add(
             "volatility_ratio_5_20",
-            rolling_volatility[5] / rolling_volatility[20].replace(0, np.nan),
+            zero_safe_ratio(rolling_volatility[5], rolling_volatility[20]),
         )
 
         positive_realized = (
@@ -1985,19 +1996,27 @@ def build_feature_frame(
         realized_sum = (positive_realized + negative_realized).replace(0, np.nan)
         add(
             "realized_volatility_balance_20",
-            (positive_realized - negative_realized) / realized_sum,
+            zero_safe_ratio(
+                positive_realized - negative_realized,
+                positive_realized + negative_realized,
+            ),
         )
         up_fraction = (
             log_return_1.gt(0).astype("float64").rolling(20, min_periods=20).mean()
         )
         bounded_up_fraction = up_fraction.clip(1e-6, 1 - 1e-6)
-        add(
-            "direction_entropy_20",
-            -(
+        direction_entropy = -(
                 bounded_up_fraction * np.log(bounded_up_fraction)
                 + (1 - bounded_up_fraction) * np.log1p(-bounded_up_fraction)
             )
-            / np.log(2.0),
+        direction_activity = log_return_1.abs().rolling(
+            20, min_periods=20
+        ).sum()
+        add(
+            "direction_entropy_20",
+            (direction_entropy / np.log(2.0))
+            .mask(direction_activity.eq(0), 0.0)
+            .fillna(0.0),
         )
 
     if feature_set == "volatility_state":

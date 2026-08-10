@@ -49,6 +49,12 @@ class NextBarBootstrapTests(unittest.TestCase):
         self.assertLess(brier["delta_first_minus_second"], 0)
         self.assertTrue(brier["interval_supports_first_better"])
 
+        all_rows = paired_daily_block_bootstrap(
+            first, second, 0.5, iterations=100, random_seed=7
+        )
+        coverage = all_rows["periods"]["all"]["metrics"]["lane_coverage"]
+        self.assertEqual(coverage["delta_first_minus_second"], 0.0)
+
     def test_daily_bootstrap_rejects_misaligned_predictions(self):
         first, second = prediction_frames()
         second.loc[0, "timestamp"] += pd.Timedelta(minutes=1)
