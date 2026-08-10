@@ -59,7 +59,7 @@ Profileに対してdevelopment/confirmation/allのaccuracy・scoreがすべて�
 
 baselineと同じsplit・HGB・Platt設定でlatest artifactを生成し、parity検査を通した。最新2026-06-01 04:45 UTCはbaseline up 0.577254、Full Path up 0.551126、方向維持blend up 0.570722で固定0.53 laneを通る。odds校正・運用認可は接続していないため `odds_valid=false` のままである。
 
-方向単体と通常方向blendは棄却する。方向維持0.53は、事前規定のdevelopment objective、confirmation gate、親incremental比較、baseline日次bootstrapを通ったためselective confidence forward candidateとして採用する。candidate registryでは15候補中のselective履歴championになった。Distribution ShapeとExtra Treesは比較対象として残すが、authoritative confidence、現行adoption policy、paper/live売買policyは変更しない。完全未使用期間でFull Pathのaccuracy・selection score・Brier、down-normal局所整合を同じ固定条件で再確認する。
+方向単体と通常方向blendは棄却する。方向維持0.53は、事前規定のdevelopment objective、confirmation gate、親incremental比較、baseline日次bootstrapを通ったためselective confidence forward candidateとして採用する。candidate registryでは16候補中のselective履歴championになった。Distribution ShapeとExtra Treesは比較対象として残すが、authoritative confidence、現行adoption policy、paper/live売買policyは変更しない。完全未使用期間でFull Pathのaccuracy・selection score・Brier、down-normal局所整合を同じ固定条件で再確認する。
 
 損失倍率は標準1.0のみであり、1.2倍の特別規則は使用していない。
 

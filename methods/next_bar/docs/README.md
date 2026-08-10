@@ -270,7 +270,7 @@ uv run python methods/next_bar/scripts/build_candidate_registry.py \
   --output methods/next_bar/config/m15_candidate_registry_v1.json
 ```
 
-台帳は15候補の145,140 OOS行を再読込してkey整列を検証し、development/confirmation/allのcoverage、accuracy、Wilson下限、selection score、Brier/log loss/ECE、fold安定性を同一定義で再計算する。championはdevelopment目的関数だけでbroad・balanced・selective・precisionの各役割から選び、confirmationは監査にしか使わない。目的関数首位とは別にaccuracy leaderとPareto challengerも保持する。固定閾値がconfigに明示されていない候補はエラーにし、実行時の閾値再探索は行わない。
+台帳は16候補の145,140 OOS行を再読込してkey整列を検証し、development/confirmation/allのcoverage、accuracy、Wilson下限、selection score、Brier/log loss/ECE、fold安定性を同一定義で再計算する。championはdevelopment目的関数だけでbroad・balanced・selective・precisionの各役割から選び、confirmationは監査にしか使わない。目的関数首位とは別にaccuracy leaderとPareto challengerも保持する。固定閾値がconfigに明示されていない候補はエラーにし、実行時の閾値再探索は行わない。
 
 派生candidateが親モデルへ本当に増分edgeを持つか、同一閾値で直接比較する:
 

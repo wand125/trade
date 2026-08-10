@@ -244,7 +244,7 @@
 - baseline方向固定25% confidenceはBrier/log loss 7/7、ECE 6/7 fold改善した。固定0.53でdevelopment accuracy/coverage/score 54.580%/29.801%/0.02173、confirmation 54.905%/17.311%/0.01628、全体54.667%/24.977%/0.02076となった。
 - Full Path 0.53は親Profileへaccuracy 6/7、Distribution Shapeへaccuracy/score各5/7、Extra Treesへ各4/7勝った。Distribution比の全期間Brier/log lossとconfirmation accuracy改善は日次bootstrap 20,000回の95%区間でも支持されたが、全期間selection score差は0を跨いだ。
 - 正式baseline比の日次bootstrapは全期間accuracy差+0.311pt、selection score差+0.001347、Brier/log loss差の95%区間がすべて改善側だった。Distributionで局所不整合だったconfirmation down-normalもaccuracy 51.256%、mean confidence 53.779%で局所整合を回復した。
-- Full Path 0.53をselective confidence forward candidateとして採用し、15候補registryのselective履歴championへ更新した。Distribution/Extra Treesは比較用に残すが、authoritative confidence、odds、adoption/paper/live policyは完全未使用期間まで変更しない。
+- Full Path 0.53をselective confidence forward candidateとして採用し、16候補registryのselective履歴championへ更新した。Distribution/Extra Treesは比較用に残すが、authoritative confidence、odds、adoption/paper/live policyは完全未使用期間まで変更しない。
 
 ## ベースライン評価
 
