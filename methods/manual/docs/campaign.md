@@ -147,3 +147,7 @@
 
 **執行手順**: ①**発行直前に価格を再取得**する([[C1]])②設置後ただちに entry/SL/TP/RR を報告 ③campaign.md へ追記
 
+### 執行記録
+
+**2026-08-11 02:18:44 JST: buy_stop設置完了**。発行直前の再取得価格は159.254/159.266(159.40未満、ポジション・注文ゼロを確認)。`create_trade_command.py buy_stop --symbol USDJPY-m --volume 40 --price 159.40 --sl 159.14 --tp 159.75 --expires-in-seconds 150` を実行し、`order 90204917`(retcode 10009 pending order placed)で設置成功。**まだ未約定(pending)**。運用セッションのwatcherを作戦13の水準(159.40/159.14/159.75/159.80)に更新済み。
+
