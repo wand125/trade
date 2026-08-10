@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-10 17:10 JST
+更新日時: 2026-08-10 19:06 JST
 
 ## 現在の状態
 
@@ -121,8 +121,8 @@
 - baseline方向固定multiclass confidenceのdevelopment選択0.525はconfirmation accuracyを53.777%から54.115%、scoreを0.01527から0.01609へ改善し、accuracy・scoreとも7/7 fold改善した。Brier/log loss/ECEは各5/7 fold改善した。
 - clear-body 0.525との直接比較ではmulticlassのaccuracy改善1/7、score3/7、Brier/log loss各3/7で、3期間の目的関数もclear-bodyが上回った。`m15_body_multiclass_confidence_shadow_v1.json` に固定するがforward candidateへは昇格しない。
 - M15方向維持型confidence候補14件・145,140 OOS行を設定JSONと予測parquetから再計算するcandidate registryを実装した。暗黙閾値を禁止し、全候補のkey整列、coverage、accuracy、Wilson下限、selection score、Brier/log loss/ECE、7fold安定性を検証する。
-- developmentだけで選ぶ役割別objective championは、broad=intrabar profile 0.515、balanced=signed-body quantile 0.525、selective=Extra Trees 0.53、precision=intrabar structure 0.55となった。4件ともhistorical gateを通過した。
-- balancedのaccuracy leaderはclear-body 0.525、selectiveはbody/ATR weighted 0.54であり、coverageとのPareto challengerとして保持する。logistic 0.54と既存intrabar 0.55はdevelopmentでdominated、各shadowはchampion選択対象外とした。
+- developmentだけで選ぶ役割別objective championは、broad=intrabar profile 0.515、balanced=signed-body quantile 0.525、selective=Intrabar Distribution Shape 0.53、precision=intrabar structure 0.55となった。4件ともhistorical gateを通過した。
+- balancedのaccuracy leaderはclear-body 0.525、selectiveのaccuracy leaderはbody/ATR weighted 0.54、coverage leaderはExtra Trees 0.53であり、Pareto challengerとして保持する。logistic 0.54と既存intrabar 0.55はdevelopmentでdominated、各shadowはchampion選択対象外とした。
 - `m15_candidate_registry_v1.json` を機械可読な正本とする。confirmationは監査だけに使い、authoritative confidence、fair odds、paper policyは新しい完全未使用期間まで置換しない。
 - baseline、clear-body、Extra Trees、signed-body、intrabar structureのlogit確率を入力し、各test foldより前のOOSだけでL2 logistic weightを学ぶchronological stackingを実装した。test2020は過去OOSがないためbaselineへfallbackする。
 - stack単体はconfirmation accuracy 51.501%から51.251%、Brier/log loss/ECEも悪化した。通常25% blendもconfirmation accuracyを51.358%へ下げ、paired純改善-16件、p=0.805だったため方向用途として棄却した。
@@ -194,6 +194,51 @@
 - 各roleの候補を過去OOSのselection scoreだけで年次選択するchronological routerを追加した。confirmationでbalanced/selective/precisionは固定championと同一、broadだけ切り替わったがscoreは0.01513から0.01399へ悪化した。全nestedでも4 role中3 role悪化・1 role同一のため不採用。
 - broadの年別scoreはProfileが5/7年、Signed-bodyが2/7年勝ち、前年勝者を追う切替は平均回帰で失敗した。候補交代は履歴winner chasingではなく、固定並行運用したfresh期間のgateで行う。
 - Shape confidenceへ過去OOSだけで学ぶcorrectness isotonic/Platt再校正を実施した。121,950件の元confidence Brier/log loss/ECE 0.2495824/0.6923127/0.420%に対し、isotonicは0.2499363/0.6964012/0.742%、Plattは0.2497004/0.6925555/0.668%へ全て悪化したため棄却した。
+- 完成M15内M1 returnのq10/q25/q50/q75/q90、Bowley/tail skew、IQR対tail幅、MADをRMS等で正規化した `intrabar_distribution_shape` 9特徴を追加した。価格scale不変、未来改変不影響、flat有限0、artifact/latest parityをテストした。
+- Distribution単体は正式baseline accuracyを全体51.816%から51.852%へ上げたが、親Volatility Shape 52.008%にpaired p=0.049で負けた。通常25%方向blendも全体-48件、confirmation-49件で方向用途は棄却した。
+- baseline方向固定25% confidenceはBrier/log lossを7/7、ECEを5/7 fold改善した。固定0.53ではdevelopment accuracy/coverage/score 54.575%/29.111%/0.02141、confirmation 54.551%/17.894%/0.01512で、baseline gateを全項目通過した。
+- Distribution 0.53はExtra Trees 0.53にdevelopment score 0.02141対0.02094、全体0.02018対0.02006、年別5/7で勝った。一方confirmationは0.01512対0.01574でExtra Trees優位。registry規定どおりDistributionをselective履歴championにし、両者をfresh期間まで並行維持する。
+- UTC日paired block bootstrap 5,000回では、Distribution−Extra Treesの全体accuracy差+0.046ptの95%区間は-0.158〜+0.254pt、selection score差+0.000112は-0.000910〜+0.001150で、優位を確定できなかった。点推定championと統計的置換根拠を区別する。
+- Distribution−baselineは全体accuracy差+0.212ptの95%区間+0.017〜+0.411pt、Brier差も全区間負で改善を支持したが、selection score区間は0を跨いだ。forward候補維持は妥当だがauthoritative昇格には不足する。
+- Distribution 0.53 confirmationの固定side×volatility監査ではup全regimeとdown-highがWilson edgeを通った一方、down-lowは未達、down-normal 859件はaccuracy 49.942%、mean confidence 53.817%で局所不整合だった。後付けfilterにはせずfresh必須gateへ追加した。
+- Intrabar Pressure 11列とVolatility Shape 14列を固定unionにした `intrabar_flow_shape` を追加した。共通Profile等を含む52 intrabar列についてscale不変、未来改変不影響、flat有限0、artifact/latest経路をテストした。
+- Flow Shape単体はbaseline方向accuracyをdevelopment/confirmationで上回ったが、親Volatility Shapeにdevelopment 52.072%対52.275%、all 51.877%対52.008%で敗れ、paired純改善-189件、p=0.105だった。通常25%方向blendもconfirmationを悪化させたため方向用途は棄却した。
+- 方向維持Flow 0.53はdevelopment selection scoreをbaseline 0.02027、Distribution 0.02141に対し0.02181へ上げたが、confirmationは0.01397でbaseline 0.01511、Distribution 0.01512を下回った。Distributionとのlane accuracyは2/7 foldしか勝てず、confidence用途も棄却した。
+- 日次bootstrapのFlow−Distribution confirmation差はaccuracy -0.275pt、95%区間-0.602〜+0.076pt、selection score -0.001153、区間-0.002534〜+0.000334だった。feature setは再現用に残すがconfig/registry/latest artifactは発行しない。
+- 完成M15内で直前M1高安値に対する終値breakout、更新後のrejection、inside/outside、range expansion、方向continuation/reversal、最長run差を12比率へ加工する `intrabar_breakout_state` を追加した。手作りOHLCの厳密値、scale不変、未来改変不影響、flat有限0、artifact/latest経路をテストした。
+- Breakout State単体は親Profileより全体+66件だったがp=0.567で、Volatility Shape方向候補にはdevelopment/confirmation/allで負け、全体-229件、p=0.059だった。通常25%方向blendもbaseline比全体+4件、p=0.966のため方向用途は棄却した。
+- 方向維持Breakout 0.515はbaseline比accuracy/score 6/7、Brier/log loss 6/7 fold改善し、confirmation scoreを0.01395から0.01538へ上げた。しかし親Profileとの直接比較ではaccuracy 3/7、score 2/7で、development/all objectiveはProfileが上だった。
+- 日次bootstrapではBreakout−Profileの全期間Brier/log loss差が95%区間を含め正、すなわちBreakoutの悪化を支持した。breakout feature setは再現用に残すがconfig/registry/latest artifactは発行せず、Profile 0.515 broad championを維持する。
+- CatBoost 1.2.10を依存へ追加し、baseline加工特徴を固定Ordered boosting・symmetric depth 6・300 iterationで学ぶ `model_type=catboost` を実装した。artifact保存とlatest推論をround-tripテストした。
+- CatBoost単体はconfirmation方向accuracyを51.501%から51.367%へ下げた。通常25% blendもdevelopmentは改善したがconfirmationを51.453%へ下げ、全期間純改善38件、p=0.559のため方向用途は棄却した。
+- 方向維持CatBoostのdevelopment選択0.525はconfirmation accuracyを53.777%から54.005%、scoreを0.01527から0.01640へ上げ、accuracy/score 5/7、Brier/log loss 6/7 fold改善した。
+- ただしSigned-body Quantile 0.525にdevelopment/confirmation/allのaccuracy・scoreがすべて負け、直接比較も3/7だった。Clear-body 0.525にもaccuracy 2/7、score 3/7で敗れたためregistryへ追加しない。
+- CatBoost−Signed-bodyの日次bootstrap全期間score差は-0.000457、95%区間-0.001284〜+0.000381、CatBoost優位確率15.5%だった。学習器は再現用に残すがparameterや閾値を履歴内再探索しない。
+- 生確率の方向を維持する `sigmoid(logit(p) / T)` temperature scalingを実装した。各foldのcalibration期間だけで正の温度を学習し、artifact/latest経路と方向維持をテストした。7foldの温度は1.217〜2.655で、すべてconfidenceを0.5側へ縮めた。
+- Temperatureはdevelopment Brier/log lossを改善したが、confirmationではPlattより方向accuracyが51.501%から51.376%、Brier 0.2495525から0.2496663、log loss 0.6922506から0.6924789へ悪化した。全期間方向も-182件、p=0.232だった。
+- development選択0.52はconfirmation accuracy/coverage/scoreを52.918%/36.650%/0.01353から52.521%/30.107%/0.00970へ下げた。固定0.55はaccuracy 57.664%でもcoverage 1.466%で、Structureの56.437%/3.104%よりscoreが低かった。
+- Temperature−Structureの日次bootstrapは全期間coverage差-1.114ptの95%区間が全て負で、score差-0.000557の区間は0を跨いだ。confirmation Brier/log loss差の区間は全て正で悪化を支持したため、Temperatureは再現専用、Plattを標準として維持する。
+- 完成M15内の連続3本M1 returnを6順序pattern比率と正規化permutation entropyへ加工する `intrabar_ordinal_shape` 7特徴を追加した。scale不変、未来不参照、pattern和1、flat有限0、artifact/latest経路をテストした。
+- Ordinal単体はbaseline方向accuracyをdevelopment 52.014%から52.141%、confirmation 51.501%から51.548%へ上げたが、親Volatility Shapeには全期間-139件、p=0.194、accuracy/Brier/log loss各2/7 foldで負けた。通常25%方向blendもconfirmationを51.385%へ下げたため方向用途は棄却した。
+- 方向維持Ordinal 0.53はBrier/log loss 6/7、ECE 5/7 fold改善したが、development score 0.02113の改善がconfirmation 0.01419へ反転した。Distribution 0.53にも全期間区分・年別で負けたためselective候補へ追加しない。
+- Ordinal自身の0.55は親Shapeにaccuracy 5/7、score 6/7勝ち、confirmation accuracy 57.347%、coverage 2.877%だった。しかしStructure 0.55よりdevelopment scoreが低く、年別scoreは3/7、日次bootstrap全期間score差+0.000162の95%区間-0.002049〜+0.002441で優位未確定のためprecision候補へ追加しない。
+- LightGBM 4.7.0を依存へ追加し、baseline加工特徴を固定leaf-wise GBDT、31 leaves、300 trees、row/column sample 0.8で学ぶ `model_type=lightgbm` を実装した。OpenMP runtime混在を避けるsubprocess隔離でartifact/latest推論をround-tripテストした。
+- LightGBM単体はbaseline方向accuracyをdevelopment 52.014%から51.976%、confirmation 51.501%から51.458%へ下げた。通常25% blendもconfirmation 51.455%、全期間-20件、p=0.746のため方向用途は棄却した。
+- 方向維持LightGBM 0.525はbaseline比accuracy/score 5/7、Brier/log loss 6/7 fold改善し、confirmation scoreを0.01527から0.01563へ上げた。しかしSigned-body Quantileにはaccuracy 1/7・score 2/7、Clear-bodyにもaccuracy 2/7・score 3/7で負けた。
+- LightGBM−Signed-bodyの日次bootstrap全期間差はaccuracy -0.125pt、score -0.000694、LightGBM優位確率4.5%/5.2%だった。学習器と依存は再現用に残すがregistryへ追加せず、parameterや閾値を履歴内再探索しない。
+- 次足の実体/range比率を教師品質とする `body_range_upper_half` を追加した。各foldのtrain内中央値（約0.456）以上の約半数だけでHGBを学習し、calibration/testは全件、教師品質列はfeature外とした。
+- Directional Clarity単体はbaseline方向accuracyをdevelopment 52.014%から51.902%、confirmation 51.501%から51.312%へ下げた。通常25% blendも全期間-10件、p=0.897のため方向用途は棄却した。
+- 方向維持Directional ClarityはBrier/log loss 7/7、ECE 6/7 fold改善したが、development選択0.53のscore改善0.02027→0.02178がconfirmationで0.01511→0.01427へ反転した。
+- Distribution Shape 0.53との全期間差はaccuracy -0.038pt、score -0.000032で、日次bootstrap 95%区間はいずれも0を跨いだ。confirmationと年別安定性で負けるためregistryへ追加せず、Selective champion/challengerを維持する。
+- 全教師を残し、次足実体/rangeを−1〜+1の符号付き連続教師へ加工する `model_type=signed_clarity_hgb` を追加した。教師rangeは特徴・校正・test入力へ渡さず、回帰scoreを後続期間でPlatt校正する。
+- Signed Clarity単体はbaselineと全期間−2件、p=0.994。通常25%方向blendはdevelopment +40件、confirmation +20件、全期間+60件、p=0.349、Brier/log loss 6/7 fold改善した。
+- ただしSigned Clarity方向blendはPressure blendとVolatility Shapeにaccuracy各2/7対5/7で負け、development/confirmation/allも下回るため方向候補へ追加しない。
+- 方向維持Signed Clarity 0.525はbaseline比accuracy/score 6/7、Brier/log loss 6/7 fold改善し、confirmation scoreを0.01527から0.01570へ上げた。
+- Signed-body Quantile 0.525には全期間accuracy 54.039%対54.080%、score 0.02052対0.02100、coverage 32.666%対33.366%で同時に負け、Clear-bodyにもaccuracy/score各1/7対6/7だった。registryへ追加しない。
+- 方向0/1教師と全行を維持し、次足実体/rangeから0.5〜1.5、平均1、最大比3倍のsample weightを作る `train_weighting=directional_clarity` を追加した。未来rangeは重みにだけ使い特徴へ渡さない。
+- Clarity Weighted単体はbaseline比development -22件、confirmation +33件、全期間+11件、p=0.932。通常25% blendもdevelopment -10件、confirmation +26件、全期間+16件、p=0.798で方向候補には採用しない。
+- 方向維持Clarity Weighted 0.525はdevelopment/confirmationのscoreを0.02048→0.02135、0.01527→0.01591へ改善したが、accuracy 5/7、score 4/7に留まった。
+- Signed-body Quantile 0.525には全期間accuracy 53.987%対54.080%、score 0.02040対0.02100、coverage 33.179%対33.366%で負け、日次bootstrapのscore優位確率7.5%。Clear-bodyにも2/7対5/7で、registryへ追加しない。
 
 ## ベースライン評価
 
@@ -254,3 +299,14 @@
 49. Intrabar Frequency Shapeは再現専用とする。DCT frequency数、autocorrelation lag、feature subset、blend weight、confidence閾値を同じ履歴で再探索せず、親Shape方向候補とStructure 0.55 precision championを維持する。
 50. chronological role routerは再現・安定性監査専用とする。過去foldの一時的winnerへ切り替えず、registryの固定champion/challengerをfresh期間まで並行維持する。
 51. Shape correctness isotonic/Plattは棄却済みとする。元Shape model confidenceを非認可odds shadowとして維持し、別の写像や平滑化parameterを同じ履歴で再探索しない。
+52. Intrabar Distribution Shapeは方向用途には使わず、方向維持0.53をselective confidence forward candidateとして固定する。Extra Trees 0.53とのfresh比較でaccuracy・selection score・Brierが同時に下回らない場合だけauthoritative confidenceへの昇格を検討し、分位点・blend weight・閾値を履歴内再探索しない。
+53. candidate差が小さい場合はM15行単位の点推定だけで昇格せず、固定UTC日paired bootstrapとside×volatilityセルを併記する。Distributionはfresh down-normal局所整合も必須とし、現在の履歴からsubgroup除外ruleを作らない。
+54. Intrabar Flow Shape unionは棄却済みとする。Pressure/Shape subset、union weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape方向候補とDistribution/Extra Trees 0.53 selective候補を維持する。
+55. Intrabar Breakout Stateは棄却済みとする。breakout/rejection定義、特徴subset、blend weight、0.515以外の閾値を同じ履歴で再探索せず、Profile 0.515 broad championとsigned-body 0.52 challengerを維持する。
+56. CatBoostは再現専用学習器とする。Ordered/Plain、depth、iterations、learning rate、regularization、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。
+57. Temperature scalingは再現専用校正とする。温度範囲、期間平滑化、confidence閾値を同じ履歴で再探索せず、Platt標準校正とIntrabar Structure 0.55 precision championを維持する。
+58. Intrabar Ordinal Shapeは再現専用とする。pattern長、tie処理、pattern subset、blend weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape方向候補、Distribution/Extra Trees 0.53、Structure 0.55を維持する。
+59. LightGBMは再現専用学習器とする。leaves、trees、learning rate、sampling、regularization、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。
+60. Directional Clarity教師filterは再現専用とする。clarity cutoff、保持率、body/ATRとの合成、blend weight、confidence閾値を同じ履歴で再探索せず、Distribution Shape/Extra Trees 0.53を維持する。
+61. Signed Clarity連続教師は再現専用とする。target非線形化、loss、blend weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape/Pressure方向候補とSigned-body Quantile/Clear-body 0.525を維持する。
+62. Directional Clarity sample weightingは再現専用とする。weight offset、非線形化、上限、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。

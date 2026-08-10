@@ -1,0 +1,192 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_selective_confidence",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "confidence_candidate": {
+    "candidate_model": "HGB with intrabar_full_path features",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.53,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "formula": "raw_blend = 0.75 * P_baseline_HGB + 0.25 * P_full_path_HGB; retain the baseline HGB side and use only the aligned edge magnitude"
+  },
+  "feature_definition": {
+    "feature_set": "intrabar_full_path",
+    "parent_feature_set": "intrabar_profile",
+    "parent_intrabar_feature_count": 27,
+    "added_feature_count": 11,
+    "model_feature_count": 76,
+    "raw_ohlc_levels_used": false,
+    "fixed_features": [
+      "M1 close path levels at grid points 1/15 and 2/15",
+      "M1 close path levels at grid points 4/15, 5/15, 7/15, 8/15, 10/15, 11/15, 13/15, 14/15, and 15/15",
+      "the parent profile supplies the remaining 3/15, 6/15, 9/15, and 12/15 levels"
+    ],
+    "normalization": "(M1 close - completed M15 open) / completed M15 high-low range",
+    "causality": "completed M1 bars inside the completed M15 bar only",
+    "flat_policy": "all path levels become zero when the completed M15 range is zero"
+  },
+  "adoption_lane": {
+    "minimum_candidate_confidence": 0.53,
+    "threshold_selection": "maximum predeclared-grid selection score on development_2020_2023; checked unchanged on confirmation_2024_2026_partial",
+    "outside_lane": "keep the baseline HGB direction and current authoritative confidence/policy"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_full_path_m15_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_intrabar_full_path_m15_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_full_path_m15_confidence_blend_001",
+    "candidate_analysis": "experiments/next_bar/intrabar_full_path_m15_candidate_analysis.json",
+    "parent_direction_comparison": "experiments/next_bar/intrabar_full_path_vs_profile_m15_direction_analysis.json",
+    "parent_confidence_comparison": "experiments/next_bar/intrabar_full_path_vs_profile_m15_053_analysis.json",
+    "distribution_shape_comparison": "experiments/next_bar/intrabar_full_path_vs_distribution_shape_m15_053_analysis.json",
+    "extra_trees_comparison": "experiments/next_bar/intrabar_full_path_vs_extra_trees_m15_053_analysis.json",
+    "parent_daily_bootstrap": "experiments/next_bar/intrabar_full_path_vs_profile_m15_053_daily_bootstrap.json",
+    "distribution_shape_daily_bootstrap": "experiments/next_bar/intrabar_full_path_vs_distribution_shape_m15_053_daily_bootstrap.json",
+    "extra_trees_daily_bootstrap": "experiments/next_bar/intrabar_full_path_vs_extra_trees_m15_053_daily_bootstrap.json",
+    "baseline_daily_bootstrap": "experiments/next_bar/intrabar_full_path_vs_baseline_m15_053_daily_bootstrap.json",
+    "subgroup_reliability": "experiments/next_bar/intrabar_full_path_m15_053_subgroup_reliability.json",
+    "latest_artifact": "experiments/next_bar/intrabar_full_path_m15_latest_artifact_001",
+    "latest_ensemble": "experiments/next_bar/intrabar_full_path_m15_latest_ensemble_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "direction_model": {
+      "baseline_accuracy": 0.5181617748380873,
+      "full_path_accuracy": 0.5196499931101006,
+      "parent_profile_accuracy": 0.5180446465481604,
+      "unrestricted_blend_accuracy": 0.5178517293647513,
+      "single_vs_baseline_mcnemar_exact_p": 0.12295057763189685,
+      "unrestricted_blend_mcnemar_exact_p": 0.5255064561490764,
+      "adopted_for_direction": false
+    },
+    "probability_quality_all": {
+      "baseline_brier": 0.24942610034671497,
+      "candidate_brier": 0.24937227905310738,
+      "baseline_log_loss": 0.6919984520992793,
+      "candidate_log_loss": 0.6918900642629983,
+      "baseline_ece": 0.0034669502731555883,
+      "candidate_ece": 0.0031120485382682777,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 6
+    },
+    "confidence_053_development_2020_2023": {
+      "rows": 26548,
+      "coverage": 0.2980142114657118,
+      "accuracy": 0.5458038270302847,
+      "wilson_lower": 0.5398082727599496,
+      "selection_score": 0.021731605963859115
+    },
+    "confidence_053_confirmation_2024_2026_partial": {
+      "rows": 9704,
+      "coverage": 0.17310951353087037,
+      "accuracy": 0.5490519373454246,
+      "wilson_lower": 0.5391341140794897,
+      "selection_score": 0.01628230833537413,
+      "locally_consistent": true,
+      "edge_confirmed": true
+    },
+    "confidence_053_all": {
+      "rows": 36252,
+      "coverage": 0.24977263331955354,
+      "accuracy": 0.5466732869910625,
+      "wilson_lower": 0.5415440142886981,
+      "selection_score": 0.020762559271107615
+    },
+    "head_to_head_distribution_shape_053": {
+      "development_score_delta": 0.0003190689657883404,
+      "confirmation_score_delta": 0.0011598451686622106,
+      "all_score_delta": 0.0005854334613739839,
+      "all_accuracy_delta": 0.000988713528711327,
+      "full_path_accuracy_wins": 5,
+      "full_path_selection_score_wins": 5,
+      "selection_jaccard_all": 0.8845019701991076
+    },
+    "paired_daily_block_bootstrap": {
+      "iterations": 20000,
+      "block": "UTC day",
+      "baseline_all_accuracy_delta_95": [
+        0.001207015515122148,
+        0.005020462252692231
+      ],
+      "baseline_all_selection_score_delta_95": [
+        0.00039474540775727223,
+        0.0023107446765980354
+      ],
+      "baseline_all_brier_delta_95": [
+        -0.00007134512346905348,
+        -0.00003643973721417782
+      ],
+      "distribution_all_accuracy_delta_95": [
+        -0.0007926486451541481,
+        0.002784706610469454
+      ],
+      "distribution_all_selection_score_delta_95": [
+        -0.0003022693561608502,
+        0.0014798160606431573
+      ],
+      "distribution_all_brier_delta_95": [
+        -0.00002940945457686958,
+        -0.00000027745240482671773
+      ],
+      "distribution_confirmation_accuracy_delta_95": [
+        0.00017505503512173782,
+        0.006876189294489038
+      ],
+      "distribution_selection_score_superiority_confirmed": false,
+      "distribution_brier_superiority_confirmed": true,
+      "baseline_accuracy_selection_score_and_brier_supported": true
+    },
+    "confirmation_subgroups_at_053": {
+      "edge_confirmed": [
+        "up_high",
+        "up_normal",
+        "up_low",
+        "down_high"
+      ],
+      "down_low": {
+        "rows": 380,
+        "accuracy": 0.5263157894736842,
+        "mean_confidence": 0.5387023249359273,
+        "wilson_lower": 0.47610031436391903,
+        "locally_consistent": true,
+        "edge_confirmed": false
+      },
+      "down_normal": {
+        "rows": 796,
+        "accuracy": 0.5125628140703518,
+        "mean_confidence": 0.5377945080296488,
+        "wilson_lower": 0.4778616994530314,
+        "locally_consistent": true,
+        "edge_confirmed": false
+      },
+      "subgroup_filter_adopted": false
+    }
+  },
+  "runtime_validation": {
+    "artifact_parity_passed": true,
+    "latest_decision_timestamp": "2026-06-01T04:45:00Z",
+    "latest_direction": "up",
+    "baseline_probability_up": 0.5772537283,
+    "candidate_probability_up": 0.5511264746,
+    "direction_preserving_blend_probability_up": 0.5707219149,
+    "fixed_lane_threshold_passed": true,
+    "authoritative_confidence_replaced": false,
+    "runtime_odds_authorized": false
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_selective_confidence_candidate": true,
+    "require_fresh_forward_confidence_053_selection_score_not_below_distribution_shape": true,
+    "require_fresh_forward_confidence_053_accuracy_not_below_distribution_shape": true,
+    "require_fresh_forward_brier_not_above_distribution_shape": true,
+    "require_fresh_forward_down_normal_local_consistency": true,
+    "require_fresh_forward_down_low_and_normal_no_material_underperformance": true,
+    "reason": "The fixed 0.53 lane maximized the development objective, beat the previous Distribution Shape champion in five of seven folds, improved confirmation accuracy with daily-block support, and repaired the previous down-normal local inconsistency. Daily bootstrap did not establish selection-score superiority over Distribution Shape, so both remain parallel until a fresh untouched period resolves the remaining uncertainty."
+  }
+}

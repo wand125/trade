@@ -43,23 +43,31 @@ FEATURE_SETS = (
     "intrabar_manual",
     "intrabar_structure",
     "intrabar_profile",
+    "intrabar_full_path",
     "intrabar_pressure",
     "intrabar_volatility_shape",
     "intrabar_frequency_shape",
+    "intrabar_ordinal_shape",
     "intrabar_signed_variation",
+    "intrabar_distribution_shape",
+    "intrabar_flow_shape",
+    "intrabar_breakout_state",
 )
 CONFIDENCE_MODELS = ("class_probability", "side_platt", "context_hgb")
-PROBABILITY_CALIBRATIONS = ("platt", "isotonic", "beta")
+PROBABILITY_CALIBRATIONS = ("platt", "isotonic", "beta", "temperature")
 MODEL_TYPES = (
     "hgb",
     "mlp",
     "logistic",
     "extra_trees",
     "xgboost",
+    "catboost",
+    "lightgbm",
     "regime_hgb",
     "body_atr_soft_hgb",
     "body_multiclass_hgb",
     "signed_body_hgb",
+    "signed_clarity_hgb",
     "signed_body_quantile_hgb",
     "tcn",
     "causal_transformer",
@@ -72,8 +80,13 @@ TCN_SEQUENCE_CHANNELS = (
     "close_location_centered",
     "wick_balance_atr",
 )
-TRAIN_WEIGHTING_MODES = ("uniform", "body_atr")
-TRAIN_TARGET_FILTERS = ("all", "body_atr_upper_half")
+INTRABAR_FULL_PATH_GRID_POINTS = (1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 15)
+TRAIN_WEIGHTING_MODES = ("uniform", "body_atr", "directional_clarity")
+TRAIN_TARGET_FILTERS = (
+    "all",
+    "body_atr_upper_half",
+    "body_range_upper_half",
+)
 CONFIDENCE_CONTEXT_FEATURES = (
     "body_ratio",
     "range_ratio",
@@ -128,6 +141,19 @@ class TrainConfig:
     xgboost_subsample: float = 0.80
     xgboost_column_sample: float = 0.80
     xgboost_l2: float = 5.0
+    catboost_iterations: int = 300
+    catboost_depth: int = 6
+    catboost_learning_rate: float = 0.03
+    catboost_l2: float = 5.0
+    catboost_random_strength: float = 1.0
+    catboost_bagging_temperature: float = 1.0
+    lightgbm_estimators: int = 300
+    lightgbm_num_leaves: int = 31
+    lightgbm_learning_rate: float = 0.03
+    lightgbm_min_child_samples: int = 100
+    lightgbm_subsample: float = 0.80
+    lightgbm_column_sample: float = 0.80
+    lightgbm_l2: float = 5.0
     tcn_epochs: int = 8
     tcn_batch_size: int = 2048
     tcn_learning_rate: float = 0.001
@@ -224,6 +250,20 @@ class BetaCalibrator:
             + self.intercept
         )
         calibrated = 1.0 / (1.0 + np.exp(-np.clip(linear, -40, 40)))
+        return np.clip(calibrated, 1e-6, 1 - 1e-6)
+
+
+@dataclass(frozen=True)
+class TemperatureCalibrator:
+    temperature: float
+
+    def predict(self, probability_up: np.ndarray) -> np.ndarray:
+        probability = np.clip(
+            np.asarray(probability_up, dtype="float64"), 1e-6, 1 - 1e-6
+        )
+        logits = np.log(probability / (1 - probability))
+        scaled_logits = logits / self.temperature
+        calibrated = 1.0 / (1.0 + np.exp(-np.clip(scaled_logits, -40, 40)))
         return np.clip(calibrated, 1e-6, 1 - 1e-6)
 
 
@@ -464,6 +504,9 @@ class SignedBodyHGBClassifier:
     min_samples_leaf: int
     l2_regularization: float
     random_state: int
+    target_transform: str = (
+        "sign(next_bar_body) * asinh(abs(next_bar_body) / decision_atr20)"
+    )
     model_: HistGradientBoostingRegressor | None = field(default=None, init=False)
     target_summary_: dict[str, float] = field(default_factory=dict, init=False)
     classes_: np.ndarray = field(
@@ -510,7 +553,7 @@ class SignedBodyHGBClassifier:
 
     def diagnostics(self) -> dict[str, object]:
         return {
-            "target_transform": "sign(next_bar_body) * asinh(abs(next_bar_body) / decision_atr20)",
+            "target_transform": self.target_transform,
             "regression_loss": "squared_error",
             "transformed_target": self.target_summary_,
         }
@@ -723,8 +766,71 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
     source["_intrabar_direction_change"] = (
         position.gt(0) & body_direction.ne(previous_body_direction)
     ).astype("float64")
+    previous_high = source["high"].groupby(bucket, sort=False).shift(1)
+    previous_low = source["low"].groupby(bucket, sort=False).shift(1)
+    previous_range = m1_range.groupby(bucket, sort=False).shift(1)
+    has_previous = position.gt(0)
+    source["_intrabar_close_breakout_up"] = (
+        has_previous & source["close"].gt(previous_high)
+    ).astype("float64")
+    source["_intrabar_close_breakout_down"] = (
+        has_previous & source["close"].lt(previous_low)
+    ).astype("float64")
+    source["_intrabar_high_rejection"] = (
+        has_previous
+        & source["high"].gt(previous_high)
+        & source["close"].le(previous_high)
+    ).astype("float64")
+    source["_intrabar_low_rejection"] = (
+        has_previous
+        & source["low"].lt(previous_low)
+        & source["close"].ge(previous_low)
+    ).astype("float64")
+    source["_intrabar_inside_bar"] = (
+        has_previous
+        & source["high"].le(previous_high)
+        & source["low"].ge(previous_low)
+    ).astype("float64")
+    source["_intrabar_outside_bar"] = (
+        has_previous
+        & source["high"].gt(previous_high)
+        & source["low"].lt(previous_low)
+    ).astype("float64")
+    range_expansion = has_previous & m1_range.gt(previous_range)
+    source["_intrabar_range_expansion"] = range_expansion.astype("float64")
+    source["_intrabar_upward_range_expansion"] = (
+        range_expansion & body_direction.gt(0)
+    ).astype("float64")
+    source["_intrabar_downward_range_expansion"] = (
+        range_expansion & body_direction.lt(0)
+    ).astype("float64")
+    valid_direction_transition = (
+        has_previous & body_direction.ne(0) & previous_body_direction.ne(0)
+    )
+    source["_intrabar_direction_continuation"] = (
+        valid_direction_transition & body_direction.eq(previous_body_direction)
+    ).astype("float64")
+    source["_intrabar_direction_reversal"] = (
+        valid_direction_transition & body_direction.ne(previous_body_direction)
+    ).astype("float64")
+    run_boundary = position.eq(0) | body_direction.ne(previous_body_direction)
+    run_id = run_boundary.cumsum()
+    run_length = source.groupby(run_id, sort=False).cumcount().add(1)
+    source["_intrabar_up_run_length"] = run_length.where(
+        body_direction.gt(0), 0
+    )
+    source["_intrabar_down_run_length"] = run_length.where(
+        body_direction.lt(0), 0
+    )
     source["_intrabar_abs_return"] = source["_intrabar_return"].abs()
     source["_intrabar_return_square"] = source["_intrabar_return"].pow(2)
+    for percentile, quantile in ((10, 0.10), (25, 0.25), (50, 0.50), (75, 0.75), (90, 0.90)):
+        source[f"_intrabar_return_quantile_{percentile}"] = source[
+            "_intrabar_return"
+        ].groupby(bucket, sort=False).transform("quantile", q=quantile)
+    source["_intrabar_return_abs_median_deviation"] = (
+        source["_intrabar_return"] - source["_intrabar_return_quantile_50"]
+    ).abs()
     for frequency in range(1, 5):
         basis = (
             np.sqrt(2.0 / timeframe_minutes)
@@ -763,6 +869,43 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         source[f"_intrabar_return_lag_product_{lag}"] = (
             source["_intrabar_return"] * lagged_return
         ).fillna(0.0)
+    ordinal_return_0 = source["_intrabar_return"].groupby(
+        bucket, sort=False
+    ).shift(2)
+    ordinal_return_1 = source["_intrabar_return"].groupby(
+        bucket, sort=False
+    ).shift(1)
+    ordinal_return_2 = source["_intrabar_return"]
+    ordinal_valid = position.ge(2) & ordinal_return_0.notna()
+    source["_intrabar_ordinal_pattern_valid"] = ordinal_valid.astype("float64")
+    # Rank each three-return window lexicographically by (return, position).
+    # The position tie-break keeps all six patterns mutually exclusive without
+    # injecting a price-scale-dependent epsilon.
+    ordinal_rank_0 = (
+        ordinal_return_1.lt(ordinal_return_0).astype("int8")
+        + ordinal_return_2.lt(ordinal_return_0).astype("int8")
+    )
+    ordinal_rank_1 = (
+        ordinal_return_0.le(ordinal_return_1).astype("int8")
+        + ordinal_return_2.lt(ordinal_return_1).astype("int8")
+    )
+    ordinal_rank_2 = (
+        ordinal_return_0.le(ordinal_return_2).astype("int8")
+        + ordinal_return_1.le(ordinal_return_2).astype("int8")
+    )
+    ordinal_code = ordinal_rank_0 * 9 + ordinal_rank_1 * 3 + ordinal_rank_2
+    ordinal_patterns = {
+        "012": 5,
+        "021": 7,
+        "102": 11,
+        "120": 15,
+        "201": 19,
+        "210": 21,
+    }
+    for pattern, code in ordinal_patterns.items():
+        source[f"_intrabar_ordinal_pattern_{pattern}"] = (
+            ordinal_valid & ordinal_code.eq(code)
+        ).astype("float64")
     source["_intrabar_upside_variance"] = source[
         "_intrabar_return_square"
     ].where(source["_intrabar_return"].gt(0), 0.0)
@@ -880,6 +1023,9 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         "_intrabar_downside_variance"
     ].where(position >= timeframe_minutes - segment_rows, 0.0)
     grouped = source.resample(rule, origin="epoch", label="left", closed="left")
+    full_profile_levels = source["_intrabar_profile_level"].groupby(
+        [bucket, position], sort=False
+    ).first().unstack()
     bars = grouped.agg(
         open=("open", "first"),
         high=("high", "max"),
@@ -896,9 +1042,40 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         intrabar_high_position=("_intrabar_high_position", "min"),
         intrabar_low_position=("_intrabar_low_position", "min"),
         intrabar_direction_change_fraction=("_intrabar_direction_change", "mean"),
+        _intrabar_close_breakout_up_sum=("_intrabar_close_breakout_up", "sum"),
+        _intrabar_close_breakout_down_sum=(
+            "_intrabar_close_breakout_down",
+            "sum",
+        ),
+        _intrabar_high_rejection_sum=("_intrabar_high_rejection", "sum"),
+        _intrabar_low_rejection_sum=("_intrabar_low_rejection", "sum"),
+        _intrabar_inside_bar_sum=("_intrabar_inside_bar", "sum"),
+        _intrabar_outside_bar_sum=("_intrabar_outside_bar", "sum"),
+        _intrabar_range_expansion_sum=("_intrabar_range_expansion", "sum"),
+        _intrabar_upward_range_expansion_sum=(
+            "_intrabar_upward_range_expansion",
+            "sum",
+        ),
+        _intrabar_downward_range_expansion_sum=(
+            "_intrabar_downward_range_expansion",
+            "sum",
+        ),
+        _intrabar_direction_continuation_sum=(
+            "_intrabar_direction_continuation",
+            "sum",
+        ),
+        _intrabar_direction_reversal_sum=("_intrabar_direction_reversal", "sum"),
+        _intrabar_max_up_run_length=("_intrabar_up_run_length", "max"),
+        _intrabar_max_down_run_length=("_intrabar_down_run_length", "max"),
         _intrabar_return_sum=("_intrabar_return", "sum"),
         _intrabar_abs_return_sum=("_intrabar_abs_return", "sum"),
         _intrabar_return_square_sum=("_intrabar_return_square", "sum"),
+        _intrabar_return_quantile_10=("_intrabar_return_quantile_10", "first"),
+        _intrabar_return_quantile_25=("_intrabar_return_quantile_25", "first"),
+        _intrabar_return_quantile_50=("_intrabar_return_quantile_50", "first"),
+        _intrabar_return_quantile_75=("_intrabar_return_quantile_75", "first"),
+        _intrabar_return_quantile_90=("_intrabar_return_quantile_90", "first"),
+        _intrabar_return_mad=("_intrabar_return_abs_median_deviation", "median"),
         _intrabar_return_dct_1_sum=("_intrabar_return_dct_1", "sum"),
         _intrabar_return_dct_2_sum=("_intrabar_return_dct_2", "sum"),
         _intrabar_return_dct_3_sum=("_intrabar_return_dct_3", "sum"),
@@ -913,6 +1090,34 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         ),
         _intrabar_return_lag_product_3_sum=(
             "_intrabar_return_lag_product_3",
+            "sum",
+        ),
+        _intrabar_ordinal_pattern_012_sum=(
+            "_intrabar_ordinal_pattern_012",
+            "sum",
+        ),
+        _intrabar_ordinal_pattern_021_sum=(
+            "_intrabar_ordinal_pattern_021",
+            "sum",
+        ),
+        _intrabar_ordinal_pattern_102_sum=(
+            "_intrabar_ordinal_pattern_102",
+            "sum",
+        ),
+        _intrabar_ordinal_pattern_120_sum=(
+            "_intrabar_ordinal_pattern_120",
+            "sum",
+        ),
+        _intrabar_ordinal_pattern_201_sum=(
+            "_intrabar_ordinal_pattern_201",
+            "sum",
+        ),
+        _intrabar_ordinal_pattern_210_sum=(
+            "_intrabar_ordinal_pattern_210",
+            "sum",
+        ),
+        _intrabar_ordinal_pattern_valid_sum=(
+            "_intrabar_ordinal_pattern_valid",
             "sum",
         ),
         intrabar_max_drawdown=("_intrabar_drawdown", "max"),
@@ -1027,6 +1232,17 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         intrabar_clv_body_agreement=("_intrabar_clv_body_agreement", "mean"),
     )
     bars = bars.loc[bars["source_rows"] == timeframe_minutes].reset_index()
+    for grid_point in INTRABAR_FULL_PATH_GRID_POINTS:
+        sample_position = max(
+            0,
+            min(
+                timeframe_minutes - 1,
+                int(np.ceil(timeframe_minutes * grid_point / 15)) - 1,
+            ),
+        )
+        bars[f"intrabar_full_path_level_{grid_point:02d}"] = bars[
+            "timestamp"
+        ].map(full_profile_levels[sample_position])
     intrabar_denominator = bars["_intrabar_abs_body_return_sum"].replace(0, np.nan)
     bars["intrabar_body_directional_efficiency"] = (
         bars["_intrabar_body_return_sum"] / intrabar_denominator
@@ -1158,6 +1374,102 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         bars["intrabar_range_concentration"]
         - bars["intrabar_variance_concentration"]
     )
+    return_rms = np.sqrt(
+        bars["_intrabar_return_square_sum"] / timeframe_minutes
+    ).replace(0, np.nan)
+    distribution_shape_columns = []
+    for percentile in (10, 25, 50, 75, 90):
+        name = f"intrabar_return_quantile_{percentile}_rms"
+        bars[name] = bars[f"_intrabar_return_quantile_{percentile}"] / return_rms
+        distribution_shape_columns.append(name)
+    interquartile_range = (
+        bars["_intrabar_return_quantile_75"]
+        - bars["_intrabar_return_quantile_25"]
+    )
+    interdecile_range = (
+        bars["_intrabar_return_quantile_90"]
+        - bars["_intrabar_return_quantile_10"]
+    )
+    bars["intrabar_return_bowley_skew"] = (
+        bars["_intrabar_return_quantile_75"]
+        + bars["_intrabar_return_quantile_25"]
+        - 2 * bars["_intrabar_return_quantile_50"]
+    ) / interquartile_range.replace(0, np.nan)
+    bars["intrabar_return_tail_skew"] = (
+        bars["_intrabar_return_quantile_90"]
+        + bars["_intrabar_return_quantile_10"]
+        - 2 * bars["_intrabar_return_quantile_50"]
+    ) / interdecile_range.replace(0, np.nan)
+    bars["intrabar_return_central_spread_fraction"] = (
+        interquartile_range / interdecile_range.replace(0, np.nan)
+    )
+    bars["intrabar_return_mad_rms"] = bars["_intrabar_return_mad"] / return_rms
+    distribution_shape_columns.extend(
+        [
+            "intrabar_return_bowley_skew",
+            "intrabar_return_tail_skew",
+            "intrabar_return_central_spread_fraction",
+            "intrabar_return_mad_rms",
+        ]
+    )
+    bars.loc[
+        bars["_intrabar_return_square_sum"].eq(0), distribution_shape_columns
+    ] = 0.0
+    bars[distribution_shape_columns] = bars[distribution_shape_columns].fillna(0.0)
+    ordinal_patterns = ("012", "021", "102", "120", "201", "210")
+    ordinal_denominator = bars["_intrabar_ordinal_pattern_valid_sum"].replace(
+        0, np.nan
+    )
+    ordinal_columns = []
+    for pattern in ordinal_patterns:
+        name = f"intrabar_ordinal_pattern_{pattern}_fraction"
+        bars[name] = (
+            bars[f"_intrabar_ordinal_pattern_{pattern}_sum"]
+            / ordinal_denominator
+        )
+        ordinal_columns.append(name)
+    ordinal_probabilities = bars[ordinal_columns]
+    entropy_terms = ordinal_probabilities * np.log(
+        ordinal_probabilities.where(ordinal_probabilities.gt(0), 1.0)
+    )
+    bars["intrabar_ordinal_pattern_entropy"] = (
+        -entropy_terms.sum(axis=1) / np.log(len(ordinal_patterns))
+    )
+    ordinal_output_columns = [
+        *ordinal_columns,
+        "intrabar_ordinal_pattern_entropy",
+    ]
+    no_ordinal_dynamics = ordinal_denominator.isna() | bars[
+        "_intrabar_return_square_sum"
+    ].eq(0)
+    bars.loc[no_ordinal_dynamics, ordinal_output_columns] = 0.0
+    transition_denominator = float(max(timeframe_minutes - 1, 1))
+    breakout_state_columns = {
+        "intrabar_close_breakout_up_fraction": "_intrabar_close_breakout_up_sum",
+        "intrabar_close_breakout_down_fraction": "_intrabar_close_breakout_down_sum",
+        "intrabar_high_rejection_fraction": "_intrabar_high_rejection_sum",
+        "intrabar_low_rejection_fraction": "_intrabar_low_rejection_sum",
+        "intrabar_inside_bar_fraction": "_intrabar_inside_bar_sum",
+        "intrabar_outside_bar_fraction": "_intrabar_outside_bar_sum",
+        "intrabar_range_expansion_fraction": "_intrabar_range_expansion_sum",
+        "intrabar_upward_range_expansion_fraction": "_intrabar_upward_range_expansion_sum",
+        "intrabar_downward_range_expansion_fraction": "_intrabar_downward_range_expansion_sum",
+        "intrabar_direction_continuation_fraction": "_intrabar_direction_continuation_sum",
+        "intrabar_direction_reversal_fraction": "_intrabar_direction_reversal_sum",
+    }
+    for output_column, aggregate_column in breakout_state_columns.items():
+        bars[output_column] = bars[aggregate_column] / transition_denominator
+    bars["intrabar_signed_run_length_imbalance"] = (
+        bars["_intrabar_max_up_run_length"]
+        - bars["_intrabar_max_down_run_length"]
+    ) / float(timeframe_minutes)
+    breakout_output_columns = [
+        *breakout_state_columns,
+        "intrabar_signed_run_length_imbalance",
+    ]
+    bars.loc[
+        bars["high"].eq(bars["low"]), breakout_output_columns
+    ] = 0.0
     centered_return_energy = (
         bars["_intrabar_return_square_sum"]
         - bars["_intrabar_return_sum"].pow(2) / timeframe_minutes
@@ -1377,6 +1689,12 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
             "_intrabar_return_sum",
             "_intrabar_abs_return_sum",
             "_intrabar_return_square_sum",
+            "_intrabar_return_quantile_10",
+            "_intrabar_return_quantile_25",
+            "_intrabar_return_quantile_50",
+            "_intrabar_return_quantile_75",
+            "_intrabar_return_quantile_90",
+            "_intrabar_return_mad",
             "_intrabar_return_dct_1_sum",
             "_intrabar_return_dct_2_sum",
             "_intrabar_return_dct_3_sum",
@@ -1384,6 +1702,26 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
             "_intrabar_return_lag_product_1_sum",
             "_intrabar_return_lag_product_2_sum",
             "_intrabar_return_lag_product_3_sum",
+            "_intrabar_ordinal_pattern_012_sum",
+            "_intrabar_ordinal_pattern_021_sum",
+            "_intrabar_ordinal_pattern_102_sum",
+            "_intrabar_ordinal_pattern_120_sum",
+            "_intrabar_ordinal_pattern_201_sum",
+            "_intrabar_ordinal_pattern_210_sum",
+            "_intrabar_ordinal_pattern_valid_sum",
+            "_intrabar_close_breakout_up_sum",
+            "_intrabar_close_breakout_down_sum",
+            "_intrabar_high_rejection_sum",
+            "_intrabar_low_rejection_sum",
+            "_intrabar_inside_bar_sum",
+            "_intrabar_outside_bar_sum",
+            "_intrabar_range_expansion_sum",
+            "_intrabar_upward_range_expansion_sum",
+            "_intrabar_downward_range_expansion_sum",
+            "_intrabar_direction_continuation_sum",
+            "_intrabar_direction_reversal_sum",
+            "_intrabar_max_up_run_length",
+            "_intrabar_max_down_run_length",
             "_intrabar_profile_mean_square_deviation",
             "_intrabar_range_sum",
             "_intrabar_range_square_sum",
@@ -1798,10 +2136,15 @@ def build_feature_frame(
         "intrabar_manual",
         "intrabar_structure",
         "intrabar_profile",
+        "intrabar_full_path",
         "intrabar_pressure",
         "intrabar_volatility_shape",
         "intrabar_frequency_shape",
+        "intrabar_ordinal_shape",
         "intrabar_signed_variation",
+        "intrabar_distribution_shape",
+        "intrabar_flow_shape",
+        "intrabar_breakout_state",
     ):
         intrabar_columns = (
             "intrabar_return_std",
@@ -1823,10 +2166,15 @@ def build_feature_frame(
     if feature_set in (
         "intrabar_structure",
         "intrabar_profile",
+        "intrabar_full_path",
         "intrabar_pressure",
         "intrabar_volatility_shape",
         "intrabar_frequency_shape",
+        "intrabar_ordinal_shape",
         "intrabar_signed_variation",
+        "intrabar_distribution_shape",
+        "intrabar_flow_shape",
+        "intrabar_breakout_state",
     ):
         structure_columns = (
             "intrabar_high_position",
@@ -1860,10 +2208,15 @@ def build_feature_frame(
 
     if feature_set in (
         "intrabar_profile",
+        "intrabar_full_path",
         "intrabar_pressure",
         "intrabar_volatility_shape",
         "intrabar_frequency_shape",
+        "intrabar_ordinal_shape",
         "intrabar_signed_variation",
+        "intrabar_distribution_shape",
+        "intrabar_flow_shape",
+        "intrabar_breakout_state",
     ):
         profile_columns = (
             "intrabar_profile_level_20",
@@ -1888,7 +2241,21 @@ def build_feature_frame(
         for column in profile_columns:
             add(column, bars[column].to_numpy(dtype="float64"))
 
-    if feature_set == "intrabar_pressure":
+    if feature_set == "intrabar_full_path":
+        full_path_columns = tuple(
+            f"intrabar_full_path_level_{grid_point:02d}"
+            for grid_point in INTRABAR_FULL_PATH_GRID_POINTS
+        )
+        missing_full_path = sorted(set(full_path_columns) - set(bars.columns))
+        if missing_full_path:
+            raise ValueError(
+                "bar frame is missing intrabar full-path columns: "
+                + ", ".join(missing_full_path)
+            )
+        for column in full_path_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set in ("intrabar_pressure", "intrabar_flow_shape"):
         pressure_columns = (
             "intrabar_clv_mean",
             "intrabar_clv_std",
@@ -1911,10 +2278,39 @@ def build_feature_frame(
         for column in pressure_columns:
             add(column, bars[column].to_numpy(dtype="float64"))
 
+    if feature_set == "intrabar_breakout_state":
+        breakout_state_columns = (
+            "intrabar_close_breakout_up_fraction",
+            "intrabar_close_breakout_down_fraction",
+            "intrabar_high_rejection_fraction",
+            "intrabar_low_rejection_fraction",
+            "intrabar_inside_bar_fraction",
+            "intrabar_outside_bar_fraction",
+            "intrabar_range_expansion_fraction",
+            "intrabar_upward_range_expansion_fraction",
+            "intrabar_downward_range_expansion_fraction",
+            "intrabar_direction_continuation_fraction",
+            "intrabar_direction_reversal_fraction",
+            "intrabar_signed_run_length_imbalance",
+        )
+        missing_breakout_state = sorted(
+            set(breakout_state_columns) - set(bars.columns)
+        )
+        if missing_breakout_state:
+            raise ValueError(
+                "bar frame is missing intrabar breakout state columns: "
+                + ", ".join(missing_breakout_state)
+            )
+        for column in breakout_state_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
     if feature_set in (
         "intrabar_volatility_shape",
         "intrabar_frequency_shape",
+        "intrabar_ordinal_shape",
         "intrabar_signed_variation",
+        "intrabar_distribution_shape",
+        "intrabar_flow_shape",
     ):
         volatility_shape_columns = (
             "intrabar_range_concentration",
@@ -1969,6 +2365,27 @@ def build_feature_frame(
         for column in frequency_shape_columns:
             add(column, bars[column].to_numpy(dtype="float64"))
 
+    if feature_set == "intrabar_ordinal_shape":
+        ordinal_shape_columns = (
+            "intrabar_ordinal_pattern_012_fraction",
+            "intrabar_ordinal_pattern_021_fraction",
+            "intrabar_ordinal_pattern_102_fraction",
+            "intrabar_ordinal_pattern_120_fraction",
+            "intrabar_ordinal_pattern_201_fraction",
+            "intrabar_ordinal_pattern_210_fraction",
+            "intrabar_ordinal_pattern_entropy",
+        )
+        missing_ordinal_shape = sorted(
+            set(ordinal_shape_columns) - set(bars.columns)
+        )
+        if missing_ordinal_shape:
+            raise ValueError(
+                "bar frame is missing intrabar ordinal shape columns: "
+                + ", ".join(missing_ordinal_shape)
+            )
+        for column in ordinal_shape_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
     if feature_set == "intrabar_signed_variation":
         signed_variation_columns = (
             "intrabar_upside_semivariance_fraction",
@@ -1997,6 +2414,29 @@ def build_feature_frame(
         for column in signed_variation_columns:
             add(column, bars[column].to_numpy(dtype="float64"))
 
+    if feature_set == "intrabar_distribution_shape":
+        distribution_shape_columns = (
+            "intrabar_return_quantile_10_rms",
+            "intrabar_return_quantile_25_rms",
+            "intrabar_return_quantile_50_rms",
+            "intrabar_return_quantile_75_rms",
+            "intrabar_return_quantile_90_rms",
+            "intrabar_return_bowley_skew",
+            "intrabar_return_tail_skew",
+            "intrabar_return_central_spread_fraction",
+            "intrabar_return_mad_rms",
+        )
+        missing_distribution_shape = sorted(
+            set(distribution_shape_columns) - set(bars.columns)
+        )
+        if missing_distribution_shape:
+            raise ValueError(
+                "bar frame is missing intrabar distribution shape columns: "
+                + ", ".join(missing_distribution_shape)
+            )
+        for column in distribution_shape_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
     gap_units = result["timestamp"].diff() / pd.Timedelta(minutes=timeframe_minutes)
     add("gap_bars", gap_units.clip(upper=100))
     minute_of_day = result["timestamp"].dt.hour * 60 + result["timestamp"].dt.minute
@@ -2021,6 +2461,7 @@ def build_labeled_dataset(
     next_start = frame["timestamp"].shift(-1)
     expected_next_start = frame["timestamp"] + pd.Timedelta(minutes=timeframe_minutes)
     next_body = frame["close"].shift(-1) - frame["open"].shift(-1)
+    next_range = frame["high"].shift(-1) - frame["low"].shift(-1)
     consecutive = next_start.eq(expected_next_start)
     flat = next_body.abs() <= flat_tolerance
 
@@ -2030,6 +2471,9 @@ def build_labeled_dataset(
         next_body.abs()
         / (frame["close"].abs() * frame["atr_ratio_20"]).replace(0, np.nan)
     )
+    frame["next_bar_directional_clarity"] = (
+        next_body.abs() / next_range.replace(0, np.nan)
+    ).clip(lower=0.0, upper=1.0)
     frame["target_up"] = np.where(consecutive & ~flat, (next_body > 0).astype("float64"), np.nan)
     non_finite_features = ~np.isfinite(frame[feature_columns].to_numpy(dtype="float64")).all(axis=1)
     diagnostics = {
@@ -2247,17 +2691,52 @@ def fit_beta_calibrator(
     )
 
 
+def fit_temperature_calibrator(
+    y_true: np.ndarray, raw_probability_up: np.ndarray
+) -> TemperatureCalibrator:
+    labels = np.asarray(y_true, dtype="float64")
+    if len(np.unique(labels)) != 2:
+        raise ValueError("calibration partition must contain both up and down classes")
+    probability = np.clip(
+        np.asarray(raw_probability_up, dtype="float64"), 1e-6, 1 - 1e-6
+    )
+    logits = np.log(probability / (1 - probability))
+
+    def objective(log_temperature: np.ndarray) -> tuple[float, np.ndarray]:
+        scaled_logits = logits * np.exp(-log_temperature[0])
+        loss = np.mean(np.logaddexp(0.0, scaled_logits) - labels * scaled_logits)
+        fitted_probability = 1.0 / (
+            1.0 + np.exp(-np.clip(scaled_logits, -40, 40))
+        )
+        gradient = -np.mean((fitted_probability - labels) * scaled_logits)
+        return float(loss), np.array([gradient], dtype="float64")
+
+    fitted = minimize(
+        objective,
+        np.zeros(1, dtype="float64"),
+        method="L-BFGS-B",
+        jac=True,
+        bounds=((np.log(0.05), np.log(20.0)),),
+        options={"maxiter": 200, "ftol": 1e-12},
+    )
+    if not fitted.success or not np.isfinite(fitted.x).all():
+        raise ValueError(f"temperature calibration failed: {fitted.message}")
+    return TemperatureCalibrator(temperature=float(np.exp(fitted.x[0])))
+
+
 def fit_probability_calibrator(
     y_true: np.ndarray,
     raw_probability_up: np.ndarray,
     method: str,
-) -> PlattCalibrator | IsotonicCalibrator | BetaCalibrator:
+) -> PlattCalibrator | IsotonicCalibrator | BetaCalibrator | TemperatureCalibrator:
     if method == "platt":
         return fit_platt_calibrator(y_true, raw_probability_up)
     if method == "isotonic":
         return fit_isotonic_calibrator(y_true, raw_probability_up)
     if method == "beta":
         return fit_beta_calibrator(y_true, raw_probability_up)
+    if method == "temperature":
+        return fit_temperature_calibrator(y_true, raw_probability_up)
     raise ValueError(f"unknown probability_calibration: {method}")
 
 
@@ -2903,8 +3382,19 @@ def training_sample_weights(
 ) -> np.ndarray | None:
     if mode == "uniform":
         return None
-    if mode != "body_atr":
+    if mode not in {"body_atr", "directional_clarity"}:
         raise ValueError(f"unknown train_weighting: {mode}")
+    if mode == "directional_clarity":
+        column = "next_bar_directional_clarity"
+        if column not in train:
+            raise ValueError(f"training data is missing {column}")
+        clarity = train[column].to_numpy(dtype="float64")
+        if not np.isfinite(clarity).all() or np.any((clarity < 0) | (clarity > 1)):
+            raise ValueError(
+                "next_bar_directional_clarity must be finite and within [0, 1]"
+            )
+        raw_weight = 0.5 + clarity
+        return raw_weight / raw_weight.mean()
     if "next_bar_body_atr" not in train:
         raise ValueError("training data is missing next_bar_body_atr")
     strength = train["next_bar_body_atr"].to_numpy(dtype="float64")
@@ -2920,15 +3410,26 @@ def model_training_target(train: pd.DataFrame, model_type: str) -> np.ndarray:
         "body_atr_soft_hgb",
         "body_multiclass_hgb",
         "signed_body_hgb",
+        "signed_clarity_hgb",
         "signed_body_quantile_hgb",
     }:
         return direction
+    sign = np.where(direction == 1, 1.0, -1.0)
+    if model_type == "signed_clarity_hgb":
+        column = "next_bar_directional_clarity"
+        if column not in train:
+            raise ValueError(f"signed clarity target model requires {column}")
+        clarity = train[column].to_numpy(dtype="float64")
+        if not np.isfinite(clarity).all() or np.any((clarity < 0) | (clarity > 1)):
+            raise ValueError(
+                "next_bar_directional_clarity must be finite and within [0, 1]"
+            )
+        return sign * clarity
     if "next_bar_body_atr" not in train:
         raise ValueError("body/ATR target model requires next_bar_body_atr")
     magnitude = train["next_bar_body_atr"].to_numpy(dtype="float64")
     if not np.isfinite(magnitude).all() or np.any(magnitude < 0):
         raise ValueError("next_bar_body_atr must be finite and non-negative")
-    sign = np.where(direction == 1, 1.0, -1.0)
     if model_type == "body_atr_soft_hgb":
         return 0.5 + sign * 0.5 * np.tanh(magnitude)
     if model_type == "body_multiclass_hgb":
@@ -2951,23 +3452,38 @@ def filter_training_targets(
             "input_rows": len(train),
             "output_rows": len(train),
             "body_atr_threshold": None,
+            "directional_clarity_threshold": None,
         }
-    if mode != "body_atr_upper_half":
+    if mode not in {"body_atr_upper_half", "body_range_upper_half"}:
         raise ValueError(f"unknown train_target_filter: {mode}")
-    if "next_bar_body_atr" not in train:
-        raise ValueError("target filtering requires next_bar_body_atr")
-    magnitude = train["next_bar_body_atr"].to_numpy(dtype="float64")
-    if not np.isfinite(magnitude).all():
-        raise ValueError("next_bar_body_atr must be finite for target filtering")
-    threshold = float(np.median(magnitude))
-    filtered = train.loc[train["next_bar_body_atr"].ge(threshold)].copy()
+    column = (
+        "next_bar_body_atr"
+        if mode == "body_atr_upper_half"
+        else "next_bar_directional_clarity"
+    )
+    if column not in train:
+        raise ValueError(f"target filtering requires {column}")
+    quality = train[column].to_numpy(dtype="float64")
+    if not np.isfinite(quality).all():
+        raise ValueError(f"{column} must be finite for target filtering")
+    if column == "next_bar_directional_clarity" and (
+        (quality < 0).any() or (quality > 1).any()
+    ):
+        raise ValueError("next_bar_directional_clarity must be between zero and one")
+    threshold = float(np.median(quality))
+    filtered = train.loc[train[column].ge(threshold)].copy()
     if filtered.empty or filtered["target_up"].nunique() != 2:
         raise ValueError("target filtering must retain both direction classes")
     return filtered, {
         "mode": mode,
         "input_rows": len(train),
         "output_rows": len(filtered),
-        "body_atr_threshold": threshold,
+        "body_atr_threshold": (
+            threshold if mode == "body_atr_upper_half" else None
+        ),
+        "directional_clarity_threshold": (
+            threshold if mode == "body_range_upper_half" else None
+        ),
     }
 
 
@@ -3100,6 +3616,71 @@ def train_timeframe(
             random_state=config.random_seed,
             verbosity=0,
         )
+    elif config.model_type == "catboost":
+        from catboost import CatBoostClassifier
+
+        if config.catboost_iterations <= 0:
+            raise ValueError("catboost_iterations must be positive")
+        if config.catboost_depth <= 0:
+            raise ValueError("catboost_depth must be positive")
+        if config.catboost_learning_rate <= 0:
+            raise ValueError("catboost_learning_rate must be positive")
+        if config.catboost_l2 < 0:
+            raise ValueError("catboost_l2 must not be negative")
+        if config.catboost_random_strength < 0:
+            raise ValueError("catboost_random_strength must not be negative")
+        if config.catboost_bagging_temperature < 0:
+            raise ValueError("catboost_bagging_temperature must not be negative")
+        model = CatBoostClassifier(
+            iterations=config.catboost_iterations,
+            depth=config.catboost_depth,
+            learning_rate=config.catboost_learning_rate,
+            l2_leaf_reg=config.catboost_l2,
+            random_strength=config.catboost_random_strength,
+            bootstrap_type="Bayesian",
+            bagging_temperature=config.catboost_bagging_temperature,
+            boosting_type="Ordered",
+            loss_function="Logloss",
+            eval_metric="Logloss",
+            random_seed=config.random_seed,
+            thread_count=-1,
+            verbose=False,
+            allow_writing_files=False,
+        )
+    elif config.model_type == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        if config.lightgbm_estimators <= 0:
+            raise ValueError("lightgbm_estimators must be positive")
+        if config.lightgbm_num_leaves <= 1:
+            raise ValueError("lightgbm_num_leaves must be greater than one")
+        if config.lightgbm_learning_rate <= 0:
+            raise ValueError("lightgbm_learning_rate must be positive")
+        if config.lightgbm_min_child_samples <= 0:
+            raise ValueError("lightgbm_min_child_samples must be positive")
+        if not 0 < config.lightgbm_subsample <= 1:
+            raise ValueError("lightgbm_subsample must be in (0, 1]")
+        if not 0 < config.lightgbm_column_sample <= 1:
+            raise ValueError("lightgbm_column_sample must be in (0, 1]")
+        if config.lightgbm_l2 < 0:
+            raise ValueError("lightgbm_l2 must not be negative")
+        model = LGBMClassifier(
+            boosting_type="gbdt",
+            objective="binary",
+            n_estimators=config.lightgbm_estimators,
+            num_leaves=config.lightgbm_num_leaves,
+            learning_rate=config.lightgbm_learning_rate,
+            min_child_samples=config.lightgbm_min_child_samples,
+            subsample=config.lightgbm_subsample,
+            subsample_freq=1,
+            colsample_bytree=config.lightgbm_column_sample,
+            reg_lambda=config.lightgbm_l2,
+            random_state=config.random_seed,
+            n_jobs=-1,
+            deterministic=True,
+            force_col_wise=True,
+            verbosity=-1,
+        )
     elif config.model_type == "regime_hgb":
         model = VolatilityRegimeHGBClassifier(
             max_iter=config.max_iter,
@@ -3135,6 +3716,18 @@ def train_timeframe(
             min_samples_leaf=config.min_samples_leaf,
             l2_regularization=config.l2_regularization,
             random_state=config.random_seed,
+        )
+    elif config.model_type == "signed_clarity_hgb":
+        model = SignedBodyHGBClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            random_state=config.random_seed,
+            target_transform=(
+                "sign(next_bar_body) * abs(next_bar_body) / next_bar_range"
+            ),
         )
     elif config.model_type == "signed_body_quantile_hgb":
         model = SignedBodyQuantileHGBClassifier(
@@ -3979,6 +4572,19 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--xgboost-subsample", type=float, default=0.80)
     train.add_argument("--xgboost-column-sample", type=float, default=0.80)
     train.add_argument("--xgboost-l2", type=float, default=5.0)
+    train.add_argument("--catboost-iterations", type=int, default=300)
+    train.add_argument("--catboost-depth", type=int, default=6)
+    train.add_argument("--catboost-learning-rate", type=float, default=0.03)
+    train.add_argument("--catboost-l2", type=float, default=5.0)
+    train.add_argument("--catboost-random-strength", type=float, default=1.0)
+    train.add_argument("--catboost-bagging-temperature", type=float, default=1.0)
+    train.add_argument("--lightgbm-estimators", type=int, default=300)
+    train.add_argument("--lightgbm-num-leaves", type=int, default=31)
+    train.add_argument("--lightgbm-learning-rate", type=float, default=0.03)
+    train.add_argument("--lightgbm-min-child-samples", type=int, default=100)
+    train.add_argument("--lightgbm-subsample", type=float, default=0.80)
+    train.add_argument("--lightgbm-column-sample", type=float, default=0.80)
+    train.add_argument("--lightgbm-l2", type=float, default=5.0)
     train.add_argument("--tcn-epochs", type=int, default=8)
     train.add_argument("--tcn-batch-size", type=int, default=2048)
     train.add_argument("--tcn-learning-rate", type=float, default=0.001)
@@ -4055,6 +4661,21 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument("--xgboost-subsample", type=float, default=0.80)
     walk_forward.add_argument("--xgboost-column-sample", type=float, default=0.80)
     walk_forward.add_argument("--xgboost-l2", type=float, default=5.0)
+    walk_forward.add_argument("--catboost-iterations", type=int, default=300)
+    walk_forward.add_argument("--catboost-depth", type=int, default=6)
+    walk_forward.add_argument("--catboost-learning-rate", type=float, default=0.03)
+    walk_forward.add_argument("--catboost-l2", type=float, default=5.0)
+    walk_forward.add_argument("--catboost-random-strength", type=float, default=1.0)
+    walk_forward.add_argument(
+        "--catboost-bagging-temperature", type=float, default=1.0
+    )
+    walk_forward.add_argument("--lightgbm-estimators", type=int, default=300)
+    walk_forward.add_argument("--lightgbm-num-leaves", type=int, default=31)
+    walk_forward.add_argument("--lightgbm-learning-rate", type=float, default=0.03)
+    walk_forward.add_argument("--lightgbm-min-child-samples", type=int, default=100)
+    walk_forward.add_argument("--lightgbm-subsample", type=float, default=0.80)
+    walk_forward.add_argument("--lightgbm-column-sample", type=float, default=0.80)
+    walk_forward.add_argument("--lightgbm-l2", type=float, default=5.0)
     walk_forward.add_argument("--tcn-epochs", type=int, default=8)
     walk_forward.add_argument("--tcn-batch-size", type=int, default=2048)
     walk_forward.add_argument("--tcn-learning-rate", type=float, default=0.001)
@@ -4153,6 +4774,19 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         xgboost_subsample=args.xgboost_subsample,
         xgboost_column_sample=args.xgboost_column_sample,
         xgboost_l2=args.xgboost_l2,
+        catboost_iterations=args.catboost_iterations,
+        catboost_depth=args.catboost_depth,
+        catboost_learning_rate=args.catboost_learning_rate,
+        catboost_l2=args.catboost_l2,
+        catboost_random_strength=args.catboost_random_strength,
+        catboost_bagging_temperature=args.catboost_bagging_temperature,
+        lightgbm_estimators=args.lightgbm_estimators,
+        lightgbm_num_leaves=args.lightgbm_num_leaves,
+        lightgbm_learning_rate=args.lightgbm_learning_rate,
+        lightgbm_min_child_samples=args.lightgbm_min_child_samples,
+        lightgbm_subsample=args.lightgbm_subsample,
+        lightgbm_column_sample=args.lightgbm_column_sample,
+        lightgbm_l2=args.lightgbm_l2,
         tcn_epochs=args.tcn_epochs,
         tcn_batch_size=args.tcn_batch_size,
         tcn_learning_rate=args.tcn_learning_rate,

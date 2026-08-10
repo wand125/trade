@@ -99,9 +99,15 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 
 単調制約付きbeta calibrationは `--probability-calibration beta` で再現できる。`log(p)` と `-log(1-p)` の非負係数を各foldのcalibration期間だけで学習する。M15の同一7foldではBrier/log lossがdevelopment・confirmationの両方で悪化し、confidence 0.55のconfirmation selection scoreも低下したため棄却した。実験再現用に限り、標準はPlattのままとする。
 
+方向境界を維持するtemperature scalingは `--probability-calibration temperature` で再現できる。各foldのcalibration期間だけで `sigmoid(logit(p) / T)` の正の温度を学習する。M15の同一7foldではdevelopmentのBrier/log lossだけ改善したがconfirmationで悪化した。development選択0.52はconfirmationのaccuracy・coverage・selection scoreがすべて低下し、固定0.55もIntrabar Structure precision championよりcoverage-aware scoreが低いため棄却した。標準はPlattのままとする。
+
 次足実体を判定時ATRで正規化してtrain sample weightへ使う方式は `--train-weighting body_atr` で再現できる。未来の次足実体は教師重みにだけ使用し、入力特徴・calibration・test推論には使用しない。weighted HGB単体は方向精度が悪化したため不採用だが、HGB方向を維持した25% confidence blendは `config/m15_body_atr_weighted_confidence_candidate_v1.json` のconfidence 0.54精度重視候補として固定した。標準学習は `--train-weighting uniform` のままである。
 
+方向0/1教師と全行を維持しつつ次足の方向明瞭度をsample weightへ使う場合は `--train-weighting directional_clarity` を指定する。重みは平均1へ正規化した `0.5 + abs(next body) / next range` で、未来rangeは特徴へ入れない。M15方向維持0.525はdevelopment/confirmationを改善したが、Signed-body Quantile/Clear-bodyよりaccuracy・selection score・fold安定性が低いため再現専用とする。
+
 明確な次足だけを教師に残す方式は `--train-target-filter body_atr_upper_half` で再現できる。各foldのtrain内 `next_bar_body_atr` 中央値以上だけで方向HGBを学習し、calibration/testは全件を保つ。単体方向モデルは不採用だが、方向維持型25% blendのconfidence 0.525はaccuracy・selection scoreを7/7 foldで改善したため、`config/m15_body_atr_upper_half_confidence_candidate_v1.json` の中coverage候補に固定した。標準は `--train-target-filter all` のままである。
+
+次足の実体がhigh-low rangeを占める比率で方向の明瞭さを選ぶ場合は `--train-target-filter body_range_upper_half` を使う。各foldのtrain内 `abs(next close - next open) / (next high - next low)` 中央値以上だけで学習し、値は教師選択専用で特徴へ入れない。M15方向維持0.53はBrier/log lossを7/7 fold改善したが、developmentのselection score改善がconfirmationで反転し、Distribution Shape/Extra Trees 0.53を上回らないため再現専用とする。
 
 全教師を残し、次足実体/ATRが小さいほど教師確率を0.5へ近づけるbounded soft labelは `--model-type body_atr_soft_hgb` で再現できる。固定式 `0.5 + sign * 0.5 * tanh(body/ATR)` をHGB回帰する。方向維持型0.525はaccuracyを7/7 foldで改善したが、coverage-aware scoreと確率品質のfold安定性がclear-body 0.525より低いため採用せず、softening関数の履歴内再探索も行わない。
 
@@ -152,6 +158,8 @@ Volatility Shapeを固定Extra Treesで学ぶ実験では、加工なしExtra Tr
 XGBoostを比較する場合は `--model-type xgboost` を使う。300 trees、depth 4、learning rate 0.03、min child weight 20、row/column subsample 0.8、L2 5を固定し、hist tree methodで学習する。通常教師はconfirmationで悪化したため不採用。`--train-target-filter body_atr_upper_half` との方向維持型0.525は6/7 foldでaccuracy・selection scoreを改善したが、既存clear-body HGBがconfirmation、全体、確率品質で上回るためforward configは発行しない。
 
 次足の方向だけでなく実体値幅も教師にする場合は `--model-type signed_body_hgb` を使う。次足実体を判定時ATRで正規化し、符号付き `asinh` 連続値をHGB回帰する。未来値幅は教師だけに使用し、特徴には入れない。単体方向モデルは不採用だが、方向維持型25% blendは `config/m15_signed_body_confidence_candidate_v1.json` のconfidence 0.52広coverage候補である。
+
+次足方向と足自体の方向明瞭度を全教師から同時に学ぶ場合は `--model-type signed_clarity_hgb` を使う。教師は−1〜+1の `next_bar_body / next_bar_range` で、未来rangeは特徴へ入れない。M15の通常25%方向blendと方向維持0.525 confidenceはdevelopment/confirmationをともに改善したが、方向はPressure/Volatility Shape、confidenceはSigned-body Quantile/Clear-bodyを下回るため再現専用とする。
 
 同じ連続教師の不確実性幅まで使う場合は `--model-type signed_body_quantile_hgb` を使う。25/50/75%分位HGBから `q50 / abs(q75 - q25)` を作り、後続期間で方向確率へ校正する。単体方向モデルは不採用。方向維持型25% blendのconfidence 0.525は `config/m15_signed_body_quantile_confidence_candidate_v1.json` の中coverage選別候補だが、confirmation ECEが僅かに悪化したためfair oddsには使わない。
 
@@ -383,6 +391,35 @@ Shape confirmationでは0.535以上のupは全volatilityでWilson edgeを通っ�
 Shapeへpredicted up/down別correctness Plattを適用する実験も行った。方向は完全に同じだが、nested 121,950件のBrier/log loss/ECEがすべて元class confidenceより悪化し、confidence 0.535以上のaccuracy改善もcoverage低下でdevelopment/confirmationのselection scoreをともに下げたため棄却した。correctness confidenceは0.5未満も有効な確率値なので、reliability出力は `[0, 1]` を受け入れ、0.5未満を `below_first_edge` に分離する。今回side Plattが0.5未満としたconfirmation 2,857件は実際には52.048%正解しており、安定したabstention laneではなかった。
 
 完成上位足内のM1 returnを固定DCT k1〜k4 energy比、low/mid/high周波数構成、lag 1〜3自己相関、M1 range低周波比へ加工する場合は `--feature-set intrabar_frequency_shape` を使う。親Volatility Shapeへ12列を追加するが、M15方向accuracyは親に6/7 fold敗れた。単体0.55 laneは親Shapeをdevelopment/confirmationと5/7 foldで改善した一方、現行Intrabar Structure 0.55 precision championがdevelopmentのaccuracy・coverage・selection scoreをすべて上回るため、Frequency Shapeは再現専用とする。
+
+完成M15内の連続3本のM1 returnを6種類の順序patternと正規化permutation entropyへ加工する場合は `--feature-set intrabar_ordinal_shape` を使う。親Volatility Shapeへ振幅非依存の固定7列を追加する。単体方向はbaselineを上回ったが親Shapeに負け、方向維持0.53 confidenceもconfirmationで反転した。自身の0.55 laneは親Shapeにaccuracy 5/7・selection score 6/7 fold勝ったが、Intrabar Structure 0.55よりdevelopment objectiveが低く、日次bootstrapでも優位未確定のため再現専用とする。
+
+完成M15内のM1 return分布を価格水準非依存で使う場合は `--feature-set intrabar_distribution_shape` を使う。親Volatility ShapeへRMS正規化q10/q25/q50/q75/q90、Bowley/tail skew、IQR/interdecile range、MAD/RMSの固定9列を追加する。単体方向と通常25%方向blendは親Shape・baselineを置換できなかった。一方baseline方向を固定した25% confidenceの0.53 laneはdevelopment/confirmationの採用gateを通り、Extra Treesにdevelopment objectiveと5/7 foldで勝ったため `config/m15_intrabar_distribution_shape_confidence_candidate_v1.json` に固定した。registryのselective履歴championだが、confirmationではExtra Treesが上なのでfresh期間まで両者を並行比較する。
+
+候補差が小さい場合は連続M15足を独立と仮定せず、固定UTC日paired bootstrapも使う:
+
+```bash
+env PYTHONPATH=src .venv/bin/python methods/next_bar/scripts/bootstrap_fixed_candidates.py \
+  --first-dir experiments/next_bar/intrabar_distribution_shape_m15_confidence_blend_001 \
+  --first-name distribution_shape \
+  --second-dir experiments/next_bar/extra_trees_confidence_blend_001 \
+  --second-name extra_trees \
+  --threshold 0.53 \
+  --timeframe 15 \
+  --iterations 5000 \
+  --random-seed 42 \
+  --output experiments/next_bar/intrabar_distribution_shape_vs_extra_trees_m15_053_daily_bootstrap.json
+```
+
+DistributionとExtra Treesのaccuracy・selection score差は95%区間が0を跨いだため、registryのpoint championを統計的な置換確定とは解釈しない。fixed subgroup監査で見つかったdown-normalの不整合もfresh gateとし、履歴後付けfilterにはしない。
+
+PressureのCLV・wick・body圧力11列とVolatility Shapeの集中度・時間重心14列を同時に使う固定unionは `--feature-set intrabar_flow_shape` で再現できる。52 intrabar列・全90特徴になる。M15単体方向はbaselineを上回ったが親Volatility Shapeを上積みできず、方向維持0.53 confidenceもdevelopmentの改善がconfirmationで反転した。単純unionは棄却し、subset・weight・閾値を同じ履歴で再探索しない。
+
+直前M1高安値に対するclose breakout、更新後のrejection、inside/outside、range expansion、方向continuation/reversal、最長run差を使う場合は `--feature-set intrabar_breakout_state` を指定する。親Profileへ固定12列を加える。M15方向は既存Volatility Shapeに負け、方向維持0.515 confidenceもbaselineには勝ったが親Profileとの年別scoreは2/7、全期間proper scoreも有意に悪化したため再現専用とする。
+
+CatBoostの再現には `--model-type catboost` を使う。Ordered boosting、symmetric depth 6、300 iteration、learning rate 0.03、L2 5を標準固定値とし、後続calibration期間のPlattは他学習器と共通である。M15方向はconfirmationで悪化した。方向維持0.525 confidenceはbaseline gateを通ったが、Signed-body Quantile/Clear-body 0.525のaccuracy・selection scoreを超えないため再現専用とする。
+
+LightGBMの再現には `--model-type lightgbm` を使う。leaf-wise GBDT、31 leaves、300 trees、learning rate 0.03、min child 100、row/column sample 0.8、L2 5を固定し、後続Platt校正を共通にする。M15方向はconfirmationで悪化した。方向維持0.525 confidenceはbaselineを改善したが、Signed-body Quantileにaccuracy 1/7・score 2/7、Clear-bodyにもaccuracy 2/7・score 3/7しか勝てないため再現専用とする。
 
 registry候補を各評価年より前のOOS scoreだけで選ぶ安定性監査は次で再現できる:
 

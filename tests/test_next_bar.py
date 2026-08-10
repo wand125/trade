@@ -13,6 +13,7 @@ from trade_data.next_bar import (
     AdoptionOptimizationConfig,
     BetaCalibrator,
     OddsCalibrationConfig,
+    TemperatureCalibrator,
     TrainConfig,
     VolatilityRegimeHGBClassifier,
     WalkForwardFold,
@@ -30,6 +31,7 @@ from trade_data.next_bar import (
     fit_beta_calibrator,
     fit_empirical_odds_calibrator,
     fit_isotonic_calibrator,
+    fit_temperature_calibrator,
     model_training_target,
     optimize_adoption_rule,
     optimize_walk_forward_policy,
@@ -101,6 +103,41 @@ class NextBarTests(unittest.TestCase):
         self.assertAlmostEqual(float(weights[-1]), float(weights[-2]))
         self.assertAlmostEqual(float(weights[-1] / weights[0]), 4.0)
 
+    def test_directional_clarity_weights_are_bounded_and_run_training_pipeline(self):
+        frame = pd.DataFrame(
+            {"next_bar_directional_clarity": [0.0, 0.25, 0.5, 1.0]}
+        )
+        weights = training_sample_weights(frame, "directional_clarity")
+
+        assert weights is not None
+        self.assertAlmostEqual(float(weights.mean()), 1.0)
+        self.assertAlmostEqual(float(weights[-1] / weights[0]), 3.0)
+
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            train_weighting="directional_clarity",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+            manifest = json.loads(
+                (output_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+
+        metrics = report["timeframes"]["M1"]
+        self.assertEqual(metrics["train_weighting"], "directional_clarity")
+        self.assertAlmostEqual(metrics["train_sample_weight"]["mean"], 1.0)
+        self.assertNotIn(
+            "next_bar_directional_clarity",
+            manifest["timeframes"]["M1"]["features"],
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_body_atr_upper_half_filter_uses_train_median_only(self):
         frame = pd.DataFrame(
             {
@@ -116,6 +153,52 @@ class NextBarTests(unittest.TestCase):
         self.assertAlmostEqual(diagnostics["body_atr_threshold"], 0.25)
         self.assertEqual(diagnostics["input_rows"], 4)
         self.assertEqual(diagnostics["output_rows"], 2)
+
+    def test_body_range_upper_half_filter_uses_train_median_only(self):
+        frame = pd.DataFrame(
+            {
+                "target_up": [0, 1, 0, 1],
+                "next_bar_directional_clarity": [0.1, 0.2, 0.3, 0.4],
+            }
+        )
+
+        filtered, diagnostics = filter_training_targets(
+            frame, "body_range_upper_half"
+        )
+
+        self.assertEqual(filtered.index.tolist(), [2, 3])
+        self.assertAlmostEqual(diagnostics["directional_clarity_threshold"], 0.25)
+        self.assertIsNone(diagnostics["body_atr_threshold"])
+        self.assertEqual(diagnostics["input_rows"], 4)
+        self.assertEqual(diagnostics["output_rows"], 2)
+
+    def test_body_range_upper_half_filter_runs_training_and_latest_prediction(self):
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            train_target_filter="body_range_upper_half",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+            manifest = json.loads(
+                (output_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+
+        diagnostics = report["timeframes"]["M1"]["train_target_filter"]
+        self.assertEqual(diagnostics["mode"], "body_range_upper_half")
+        self.assertLess(diagnostics["output_rows"], diagnostics["input_rows"])
+        self.assertGreaterEqual(diagnostics["directional_clarity_threshold"], 0)
+        self.assertLessEqual(diagnostics["directional_clarity_threshold"], 1)
+        self.assertNotIn(
+            "next_bar_directional_clarity",
+            manifest["timeframes"]["M1"]["features"],
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
 
     def test_body_atr_upper_half_filter_runs_training_and_latest_prediction(self):
         source = m1_frame(1800)
@@ -225,6 +308,36 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(
             report["timeframes"]["M1"]["probability_calibrator"]["method"],
             "beta",
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_temperature_calibrator_preserves_direction_and_runs_pipeline(self):
+        raw = np.linspace(0.02, 0.98, 400)
+        labels = (np.sin(np.arange(400) / 9.0) + raw * 2 > 1).astype("int8")
+        calibrator = fit_temperature_calibrator(labels, raw)
+        self.assertIsInstance(calibrator, TemperatureCalibrator)
+        self.assertGreater(calibrator.temperature, 0)
+        calibrated = calibrator.predict(raw)
+        self.assertTrue(np.all(np.diff(calibrated) >= 0))
+        np.testing.assert_array_equal(calibrated >= 0.5, raw >= 0.5)
+
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            probability_calibration="temperature",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["probability_calibration"], "temperature")
+        self.assertEqual(
+            report["timeframes"]["M1"]["probability_calibrator"]["method"],
+            "temperature",
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
@@ -758,6 +871,91 @@ class NextBarTests(unittest.TestCase):
             self.assertTrue(np.isfinite(flat_bars[column]).all())
             self.assertTrue(flat_bars[column].eq(0).all())
 
+    def test_intrabar_full_path_is_stationary_causal_finite_and_runs_latest(self):
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 15)
+        features, feature_columns = build_feature_frame(
+            bars, 15, "intrabar_full_path"
+        )
+        full_path_columns = [
+            f"intrabar_full_path_level_{point:02d}"
+            for point in (1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 15)
+        ]
+
+        self.assertTrue(set(full_path_columns).issubset(feature_columns))
+        self.assertEqual(
+            len([name for name in feature_columns if name.startswith("intrabar_")]),
+            38,
+        )
+        self.assertTrue(np.isfinite(features[full_path_columns]).all().all())
+        first_m15 = source.iloc[:15]
+        first_scale = float(first_m15["high"].max() - first_m15["low"].min())
+        expected_first_path = np.array(
+            [
+                (
+                    float(first_m15.iloc[point - 1]["close"])
+                    - float(first_m15.iloc[0]["open"])
+                )
+                / first_scale
+                for point in (1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 15)
+            ]
+        )
+        np.testing.assert_allclose(
+            bars.loc[0, full_path_columns].to_numpy(dtype="float64"),
+            expected_first_path,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        validate_stationary_feature_set(feature_columns)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 15), 15, "intrabar_full_path"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            features[full_path_columns],
+            scaled_features[full_path_columns],
+            rtol=1e-10,
+            atol=1e-10,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 15), 15, "intrabar_full_path"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            features.loc[:3, feature_columns],
+            changed_features.loc[:3, feature_columns],
+        )
+
+        flat_source = m1_frame(30)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_bars = resample_complete_bars(flat_source, 15)
+        self.assertTrue(np.isfinite(flat_bars[full_path_columns]).all().all())
+        self.assertTrue(flat_bars[full_path_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(15,),
+            feature_set="intrabar_full_path",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "intrabar_full_path")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_intrabar_pressure_features_are_stationary_causal_and_finite(self):
         source = m1_frame(5000)
         bars = resample_complete_bars(source, 15)
@@ -1123,6 +1321,398 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "intrabar_frequency_shape")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_intrabar_ordinal_shape_is_exact_stationary_causal_and_finite(self):
+        timestamps = pd.date_range(
+            "2024-01-01 00:00:00+00:00", periods=30, freq="min"
+        )
+        returns = np.r_[
+            np.full(15, 0.0001),
+            np.linspace(0.0001, 0.0015, 15),
+        ]
+        close = 100.0 * np.exp(np.cumsum(returns))
+        open_ = np.r_[100.0, close[:-1]]
+        ordered_source = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "open": open_,
+                "high": np.maximum(open_, close) + 0.001,
+                "low": np.minimum(open_, close) - 0.001,
+                "close": close,
+            }
+        )
+        ordered_bars = resample_complete_bars(ordered_source, 15)
+        ordered = ordered_bars.iloc[-1]
+        self.assertAlmostEqual(
+            ordered["intrabar_ordinal_pattern_012_fraction"], 1.0
+        )
+        for pattern in ("021", "102", "120", "201", "210"):
+            self.assertAlmostEqual(
+                ordered[f"intrabar_ordinal_pattern_{pattern}_fraction"], 0.0
+            )
+        self.assertAlmostEqual(ordered["intrabar_ordinal_pattern_entropy"], 0.0)
+
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 15)
+        features, feature_columns = build_feature_frame(
+            bars, 15, "intrabar_ordinal_shape"
+        )
+        ordinal_columns = [
+            "intrabar_ordinal_pattern_012_fraction",
+            "intrabar_ordinal_pattern_021_fraction",
+            "intrabar_ordinal_pattern_102_fraction",
+            "intrabar_ordinal_pattern_120_fraction",
+            "intrabar_ordinal_pattern_201_fraction",
+            "intrabar_ordinal_pattern_210_fraction",
+            "intrabar_ordinal_pattern_entropy",
+        ]
+        pattern_columns = ordinal_columns[:-1]
+        self.assertTrue(set(ordinal_columns).issubset(feature_columns))
+        self.assertEqual(
+            len([name for name in feature_columns if name.startswith("intrabar_")]),
+            48,
+        )
+        self.assertTrue(np.isfinite(features[ordinal_columns]).all().all())
+        self.assertTrue(features[ordinal_columns].ge(0).all().all())
+        self.assertTrue(features[ordinal_columns].le(1).all().all())
+        np.testing.assert_allclose(
+            features[pattern_columns].sum(axis=1),
+            1.0,
+            rtol=1e-10,
+            atol=1e-10,
+        )
+        validate_stationary_feature_set(feature_columns)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 15), 15, "intrabar_ordinal_shape"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            features[ordinal_columns],
+            scaled_features[ordinal_columns],
+            rtol=1e-10,
+            atol=1e-10,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 15), 15, "intrabar_ordinal_shape"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            features.loc[:3, feature_columns],
+            changed_features.loc[:3, feature_columns],
+        )
+
+        flat_source = m1_frame(30)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_bars = resample_complete_bars(flat_source, 15)
+        self.assertTrue(np.isfinite(flat_bars[ordinal_columns]).all().all())
+        self.assertTrue(flat_bars[ordinal_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(15,),
+            feature_set="intrabar_ordinal_shape",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "intrabar_ordinal_shape")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_intrabar_distribution_shape_is_stationary_causal_and_finite(self):
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 15)
+        features, feature_columns = build_feature_frame(
+            bars, 15, "intrabar_distribution_shape"
+        )
+        distribution_columns = [
+            "intrabar_return_quantile_10_rms",
+            "intrabar_return_quantile_25_rms",
+            "intrabar_return_quantile_50_rms",
+            "intrabar_return_quantile_75_rms",
+            "intrabar_return_quantile_90_rms",
+            "intrabar_return_bowley_skew",
+            "intrabar_return_tail_skew",
+            "intrabar_return_central_spread_fraction",
+            "intrabar_return_mad_rms",
+        ]
+        self.assertTrue(set(distribution_columns).issubset(feature_columns))
+        self.assertEqual(
+            len([name for name in feature_columns if name.startswith("intrabar_")]),
+            50,
+        )
+        self.assertTrue(np.isfinite(features[distribution_columns]).all().all())
+        validate_stationary_feature_set(feature_columns)
+        self.assertTrue(
+            features["intrabar_return_central_spread_fraction"].between(0, 1).all()
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 15), 15, "intrabar_distribution_shape"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            features[distribution_columns],
+            scaled_features[distribution_columns],
+            rtol=1e-8,
+            atol=1e-8,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 15), 15, "intrabar_distribution_shape"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            features.loc[:3, feature_columns],
+            changed_features.loc[:3, feature_columns],
+        )
+
+        flat_source = m1_frame(30)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_bars = resample_complete_bars(flat_source, 15)
+        self.assertTrue(np.isfinite(flat_bars[distribution_columns]).all().all())
+        self.assertTrue((flat_bars[distribution_columns] == 0).all().all())
+
+        config = TrainConfig(
+            timeframes=(15,),
+            feature_set="intrabar_distribution_shape",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(
+            report["config"]["feature_set"], "intrabar_distribution_shape"
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_intrabar_flow_shape_is_stationary_causal_and_finite(self):
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 15)
+        features, feature_columns = build_feature_frame(
+            bars, 15, "intrabar_flow_shape"
+        )
+        flow_columns = [
+            "intrabar_clv_mean",
+            "intrabar_clv_std",
+            "intrabar_early_clv_mean",
+            "intrabar_late_clv_mean",
+            "intrabar_clv_late_minus_early",
+            "intrabar_range_weighted_clv",
+            "intrabar_signed_range_pressure",
+            "intrabar_wick_pressure",
+            "intrabar_body_range_pressure",
+            "intrabar_clv_body_divergence",
+            "intrabar_clv_body_agreement",
+            "intrabar_range_concentration",
+            "intrabar_range_top3_fraction",
+            "intrabar_range_dispersion",
+            "intrabar_range_center_of_mass",
+            "intrabar_early_range_fraction",
+            "intrabar_late_range_fraction",
+            "intrabar_range_late_minus_early",
+            "intrabar_variance_concentration",
+            "intrabar_variance_top3_fraction",
+            "intrabar_variance_center_of_mass",
+            "intrabar_early_variance_fraction",
+            "intrabar_late_variance_fraction",
+            "intrabar_variance_late_minus_early",
+            "intrabar_range_variance_concentration_gap",
+        ]
+        self.assertTrue(set(flow_columns).issubset(feature_columns))
+        self.assertEqual(
+            len([name for name in feature_columns if name.startswith("intrabar_")]),
+            52,
+        )
+        self.assertTrue(np.isfinite(features[flow_columns]).all().all())
+        validate_stationary_feature_set(feature_columns)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 15), 15, "intrabar_flow_shape"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            features[flow_columns],
+            scaled_features[flow_columns],
+            rtol=1e-8,
+            atol=1e-8,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 15), 15, "intrabar_flow_shape"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            features.loc[:3, feature_columns],
+            changed_features.loc[:3, feature_columns],
+        )
+
+        flat_source = m1_frame(30)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_bars = resample_complete_bars(flat_source, 15)
+        self.assertTrue(np.isfinite(flat_bars[flow_columns]).all().all())
+        self.assertTrue((flat_bars[flow_columns] == 0).all().all())
+
+        config = TrainConfig(
+            timeframes=(15,),
+            feature_set="intrabar_flow_shape",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "intrabar_flow_shape")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_intrabar_breakout_state_is_exact_stationary_causal_and_finite(self):
+        breakout_columns = [
+            "intrabar_close_breakout_up_fraction",
+            "intrabar_close_breakout_down_fraction",
+            "intrabar_high_rejection_fraction",
+            "intrabar_low_rejection_fraction",
+            "intrabar_inside_bar_fraction",
+            "intrabar_outside_bar_fraction",
+            "intrabar_range_expansion_fraction",
+            "intrabar_upward_range_expansion_fraction",
+            "intrabar_downward_range_expansion_fraction",
+            "intrabar_direction_continuation_fraction",
+            "intrabar_direction_reversal_fraction",
+            "intrabar_signed_run_length_imbalance",
+        ]
+        event_source = pd.DataFrame(
+            {
+                "timestamp": pd.date_range(
+                    "2024-01-01", periods=6, freq="min", tz="UTC"
+                ),
+                "open": [100.0, 100.5, 101.2, 100.8, 100.9, 101.0],
+                "high": [101.0, 101.5, 102.0, 101.5, 102.0, 101.2],
+                "low": [99.5, 100.2, 100.5, 100.6, 100.0, 99.8],
+                "close": [100.5, 101.2, 100.8, 100.9, 101.0, 99.9],
+            }
+        )
+        event_bar = resample_complete_bars(event_source, 6).iloc[0]
+        expected = {
+            "intrabar_close_breakout_up_fraction": 1 / 5,
+            "intrabar_close_breakout_down_fraction": 1 / 5,
+            "intrabar_high_rejection_fraction": 2 / 5,
+            "intrabar_low_rejection_fraction": 1 / 5,
+            "intrabar_inside_bar_fraction": 1 / 5,
+            "intrabar_outside_bar_fraction": 1 / 5,
+            "intrabar_range_expansion_fraction": 2 / 5,
+            "intrabar_upward_range_expansion_fraction": 1 / 5,
+            "intrabar_downward_range_expansion_fraction": 1 / 5,
+            "intrabar_direction_continuation_fraction": 2 / 5,
+            "intrabar_direction_reversal_fraction": 3 / 5,
+            "intrabar_signed_run_length_imbalance": 1 / 6,
+        }
+        for column, value in expected.items():
+            self.assertAlmostEqual(event_bar[column], value)
+
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 15)
+        features, feature_columns = build_feature_frame(
+            bars, 15, "intrabar_breakout_state"
+        )
+        self.assertTrue(set(breakout_columns).issubset(feature_columns))
+        self.assertEqual(
+            len([name for name in feature_columns if name.startswith("intrabar_")]),
+            39,
+        )
+        self.assertTrue(np.isfinite(features[breakout_columns]).all().all())
+        self.assertTrue(
+            features[breakout_columns[:-1]].ge(0).all().all()
+        )
+        self.assertTrue(
+            features[breakout_columns[:-1]].le(1).all().all()
+        )
+        self.assertTrue(
+            features["intrabar_signed_run_length_imbalance"].between(-1, 1).all()
+        )
+        validate_stationary_feature_set(feature_columns)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 15), 15, "intrabar_breakout_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            features[breakout_columns],
+            scaled_features[breakout_columns],
+            rtol=0,
+            atol=0,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 15), 15, "intrabar_breakout_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            features.loc[:3, feature_columns],
+            changed_features.loc[:3, feature_columns],
+        )
+
+        flat_source = m1_frame(30)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_bars = resample_complete_bars(flat_source, 15)
+        self.assertTrue(np.isfinite(flat_bars[breakout_columns]).all().all())
+        self.assertTrue((flat_bars[breakout_columns] == 0).all().all())
+
+        config = TrainConfig(
+            timeframes=(15,),
+            feature_set="intrabar_breakout_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(
+            report["config"]["feature_set"], "intrabar_breakout_state"
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_walk_forward_fold_parser_validates_order(self):
         fold = parse_walk_forward_fold("wf1,2022-01-01,2023-01-01,2024-01-01")
         self.assertEqual(fold.name, "wf1")
@@ -1150,6 +1740,11 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(row["decision_timestamp"], row["timestamp"] + pd.Timedelta(minutes=5))
         self.assertEqual(row["target_timestamp"], following["timestamp"] + pd.Timedelta(minutes=5))
         self.assertEqual(row["target_up"], int(following["close"] > following["open"]))
+        self.assertAlmostEqual(
+            row["next_bar_directional_clarity"],
+            abs(following["close"] - following["open"])
+            / (following["high"] - following["low"]),
+        )
         self.assertGreater(diagnostics["excluded_feature_warmup_or_nonfinite"], 0)
 
     def test_split_purges_label_that_crosses_boundary(self):
@@ -1533,6 +2128,113 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(all(0 <= row["probability_up"] <= 1 for row in latest))
 
+    def test_catboost_round_trips_through_processed_latest_prediction(self):
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            model_type="catboost",
+            max_train_rows=1_000,
+            catboost_iterations=5,
+            catboost_depth=2,
+            catboost_learning_rate=0.05,
+            catboost_l2=5.0,
+            catboost_random_strength=1.0,
+            catboost_bagging_temperature=1.0,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+            manifest = json.loads(
+                (output_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(report["config"]["model_type"], "catboost")
+        self.assertEqual(report["config"]["catboost_iterations"], 5)
+        self.assertEqual(report["config"]["catboost_depth"], 2)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(
+                manifest["timeframes"]["M1"]["features"]
+            )
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_lightgbm_round_trips_through_processed_latest_prediction(self):
+        source = m1_frame(1800)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(__file__).resolve().parents[1]
+            input_path = Path(temp_dir) / "m1.parquet"
+            output_dir = Path(temp_dir) / "model"
+            latest_path = Path(temp_dir) / "latest.json"
+            source.to_parquet(input_path, index=False)
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(root / "src")
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(root / "methods/next_bar/scripts/run.py"),
+                    "train-evaluate",
+                    "--input",
+                    str(input_path),
+                    "--output-dir",
+                    str(output_dir),
+                    "--timeframes",
+                    "1",
+                    "--model-type",
+                    "lightgbm",
+                    "--max-train-rows",
+                    "1000",
+                    "--lightgbm-estimators",
+                    "5",
+                    "--lightgbm-num-leaves",
+                    "7",
+                    "--lightgbm-learning-rate",
+                    "0.05",
+                    "--lightgbm-min-child-samples",
+                    "10",
+                ],
+                cwd=root,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(root / "methods/next_bar/scripts/run.py"),
+                    "predict-latest",
+                    "--input",
+                    str(input_path),
+                    "--model-dir",
+                    str(output_dir),
+                    "--output",
+                    str(latest_path),
+                ],
+                cwd=root,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            report = json.loads(
+                (output_dir / "metrics.json").read_text(encoding="utf-8")
+            )
+            latest = json.loads(latest_path.read_text(encoding="utf-8"))
+            manifest = json.loads(
+                (output_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(report["config"]["model_type"], "lightgbm")
+        self.assertEqual(report["config"]["lightgbm_estimators"], 5)
+        self.assertEqual(report["config"]["lightgbm_num_leaves"], 7)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(
+                manifest["timeframes"]["M1"]["features"]
+            )
+        )
+        self.assertTrue(all(0 <= row["probability_up"] <= 1 for row in latest))
+
     def test_regime_hgb_round_trips_through_latest_prediction(self):
         source = m1_frame(1800)
         config = TrainConfig(
@@ -1667,6 +2369,43 @@ class NextBarTests(unittest.TestCase):
         self.assertNotIn(
             "next_bar_body_atr",
             signed_manifest["timeframes"]["M1"]["features"],
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_signed_clarity_hgb_uses_bounded_target_and_latest_prediction(self):
+        target_frame = pd.DataFrame(
+            {
+                "target_up": [0, 1, 0, 1],
+                "next_bar_directional_clarity": [0.0, 0.25, 0.5, 1.0],
+            }
+        )
+        target = model_training_target(target_frame, "signed_clarity_hgb")
+        np.testing.assert_allclose(target, [0.0, 0.25, -0.5, 1.0])
+
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            model_type="signed_clarity_hgb",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+            manifest = json.loads(
+                (output_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+
+        diagnostics = report["timeframes"]["M1"]["model_diagnostics"]
+        self.assertEqual(report["config"]["model_type"], "signed_clarity_hgb")
+        self.assertIn("next_bar_range", diagnostics["target_transform"])
+        self.assertGreaterEqual(diagnostics["transformed_target"]["minimum"], -1)
+        self.assertLessEqual(diagnostics["transformed_target"]["maximum"], 1)
+        self.assertNotIn(
+            "next_bar_directional_clarity",
+            manifest["timeframes"]["M1"]["features"],
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 

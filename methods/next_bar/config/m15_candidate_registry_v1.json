@@ -32,7 +32,7 @@
     "experiments/next_bar/walk_forward_001"
   ],
   "rows": 145140,
-  "candidate_count": 14,
+  "candidate_count": 16,
   "roles": {
     "broad": {
       "champion": "intrabar_profile_confidence_candidate_v1",
@@ -65,15 +65,17 @@
       ]
     },
     "selective": {
-      "champion": "extra_trees_confidence_blend_candidate_v1",
+      "champion": "intrabar_full_path_confidence_candidate_v1",
       "champion_historical_gate_passed": true,
       "development_accuracy_leader": "body_atr_weighted_confidence_candidate_v1",
-      "development_coverage_leader": "extra_trees_confidence_blend_candidate_v1",
+      "development_coverage_leader": "intrabar_full_path_confidence_candidate_v1",
       "confirmation_accuracy_leader_audit_only": "body_atr_weighted_confidence_candidate_v1",
       "challengers": [
         "body_atr_weighted_confidence_candidate_v1"
       ],
       "dominated": [
+        "extra_trees_confidence_blend_candidate_v1",
+        "intrabar_distribution_shape_confidence_candidate_v1",
         "logistic_confidence_blend_candidate_v1"
       ],
       "shadows": []
@@ -732,7 +734,7 @@
         },
         "meaning": "historical robustness only; a fresh untouched forward period remains required for promotion"
       },
-      "registry_class": "champion"
+      "registry_class": "dominated"
     },
     {
       "candidate_id": "intrabar_confidence_candidate_v1",
@@ -861,6 +863,262 @@
         "meaning": "historical robustness only; a fresh untouched forward period remains required for promotion"
       },
       "registry_class": "dominated"
+    },
+    {
+      "candidate_id": "intrabar_distribution_shape_confidence_candidate_v1",
+      "config": "methods/next_bar/config/m15_intrabar_distribution_shape_confidence_candidate_v1.json",
+      "prediction_dir": "experiments/next_bar/intrabar_distribution_shape_m15_confidence_blend_001",
+      "status": "forward_candidate_selective_confidence",
+      "eligible": true,
+      "role": "selective",
+      "fixed_confidence_threshold": 0.53,
+      "periods": {
+        "development": {
+          "baseline_probability": {
+            "rows": 89083,
+            "accuracy": 0.5201441352446595,
+            "brier_score": 0.2493465877907924,
+            "log_loss": 0.6918397771958668,
+            "expected_calibration_error": 0.003771680309932883
+          },
+          "candidate_probability": {
+            "rows": 89083,
+            "accuracy": 0.5201441352446595,
+            "brier_score": 0.24929544611668647,
+            "log_loss": 0.6917365029102442,
+            "expected_calibration_error": 0.0031858530304795405
+          },
+          "baseline_lane": {
+            "rows": 26607,
+            "coverage": 0.2986765151600193,
+            "accuracy": 0.5430901642424926,
+            "wilson_lower": 0.5370987497698727,
+            "selection_score": 0.02027495093339169
+          },
+          "candidate_lane": {
+            "rows": 25933,
+            "coverage": 0.2911105373640313,
+            "accuracy": 0.5457525160991786,
+            "wilson_lower": 0.5396861677167344,
+            "selection_score": 0.021412536998070775
+          }
+        },
+        "confirmation": {
+          "baseline_probability": {
+            "rows": 56057,
+            "accuracy": 0.5150115061455305,
+            "brier_score": 0.24955245775112914,
+            "log_loss": 0.6922506103742625,
+            "expected_calibration_error": 0.0029826884349150092
+          },
+          "candidate_probability": {
+            "rows": 56057,
+            "accuracy": 0.5150115061455305,
+            "brier_score": 0.2495328135998733,
+            "log_loss": 0.6922112247174276,
+            "expected_calibration_error": 0.0026479975472130947
+          },
+          "baseline_lane": {
+            "rows": 10336,
+            "coverage": 0.1843837522521719,
+            "accuracy": 0.5447948916408669,
+            "wilson_lower": 0.5351793843916326,
+            "selection_score": 0.015106002762317485
+          },
+          "candidate_lane": {
+            "rows": 10031,
+            "coverage": 0.1789428617300248,
+            "accuracy": 0.5455089223407437,
+            "wilson_lower": 0.5357491192148737,
+            "selection_score": 0.01512246316671192
+          }
+        },
+        "all": {
+          "baseline_probability": {
+            "rows": 145140,
+            "accuracy": 0.5181617748380873,
+            "brier_score": 0.24942610034671497,
+            "log_loss": 0.6919984520992793,
+            "expected_calibration_error": 0.0034669502731555883
+          },
+          "candidate_probability": {
+            "rows": 145140,
+            "accuracy": 0.5181617748380873,
+            "brier_score": 0.24938712386923578,
+            "log_loss": 0.691919853332907,
+            "expected_calibration_error": 0.002978118671753827
+          },
+          "baseline_lane": {
+            "rows": 36943,
+            "coverage": 0.2545335538101144,
+            "accuracy": 0.5435671169098341,
+            "wilson_lower": 0.5384835352361049,
+            "selection_score": 0.019415450930931288
+          },
+          "candidate_lane": {
+            "rows": 35964,
+            "coverage": 0.24778834229020255,
+            "accuracy": 0.5456845734623512,
+            "wilson_lower": 0.5405339443421523,
+            "selection_score": 0.02017712580973363
+          }
+        }
+      },
+      "fold_stability": {
+        "evaluated_folds": 7,
+        "lane_accuracy_improved_folds": 5,
+        "lane_selection_score_improved_folds": 5,
+        "proper_score_improved_folds": {
+          "brier_score": 7,
+          "log_loss": 7,
+          "expected_calibration_error": 5
+        }
+      },
+      "historical_gate": {
+        "passed": true,
+        "checks": {
+          "development_lane_accuracy_above_baseline": true,
+          "development_selection_score_above_baseline": true,
+          "confirmation_lane_accuracy_above_baseline": true,
+          "confirmation_selection_score_above_baseline": true,
+          "confirmation_brier_not_above_baseline": true,
+          "confirmation_log_loss_not_above_baseline": true,
+          "lane_accuracy_improved_at_least_5_of_7_folds": true,
+          "lane_score_improved_at_least_5_of_7_folds": true,
+          "brier_improved_at_least_4_of_7_folds": true,
+          "log_loss_improved_at_least_4_of_7_folds": true
+        },
+        "meaning": "historical robustness only; a fresh untouched forward period remains required for promotion"
+      },
+      "registry_class": "dominated"
+    },
+    {
+      "candidate_id": "intrabar_full_path_confidence_candidate_v1",
+      "config": "methods/next_bar/config/m15_intrabar_full_path_confidence_candidate_v1.json",
+      "prediction_dir": "experiments/next_bar/intrabar_full_path_m15_confidence_blend_001",
+      "status": "forward_candidate_selective_confidence",
+      "eligible": true,
+      "role": "selective",
+      "fixed_confidence_threshold": 0.53,
+      "periods": {
+        "development": {
+          "baseline_probability": {
+            "rows": 89083,
+            "accuracy": 0.5201441352446595,
+            "brier_score": 0.2493465877907924,
+            "log_loss": 0.6918397771958668,
+            "expected_calibration_error": 0.003771680309932883
+          },
+          "candidate_probability": {
+            "rows": 89083,
+            "accuracy": 0.5201441352446595,
+            "brier_score": 0.24927473562743035,
+            "log_loss": 0.6916949284813323,
+            "expected_calibration_error": 0.003524937345651808
+          },
+          "baseline_lane": {
+            "rows": 26607,
+            "coverage": 0.2986765151600193,
+            "accuracy": 0.5430901642424926,
+            "wilson_lower": 0.5370987497698727,
+            "selection_score": 0.02027495093339169
+          },
+          "candidate_lane": {
+            "rows": 26548,
+            "coverage": 0.2980142114657118,
+            "accuracy": 0.5458038270302847,
+            "wilson_lower": 0.5398082727599496,
+            "selection_score": 0.021731605963859115
+          }
+        },
+        "confirmation": {
+          "baseline_probability": {
+            "rows": 56057,
+            "accuracy": 0.5150115061455305,
+            "brier_score": 0.24955245775112914,
+            "log_loss": 0.6922506103742625,
+            "expected_calibration_error": 0.0029826884349150092
+          },
+          "candidate_probability": {
+            "rows": 56057,
+            "accuracy": 0.5150115061455305,
+            "brier_score": 0.24952729022012657,
+            "log_loss": 0.6922001643546574,
+            "expected_calibration_error": 0.0024559061541207555
+          },
+          "baseline_lane": {
+            "rows": 10336,
+            "coverage": 0.1843837522521719,
+            "accuracy": 0.5447948916408669,
+            "wilson_lower": 0.5351793843916326,
+            "selection_score": 0.015106002762317485
+          },
+          "candidate_lane": {
+            "rows": 9704,
+            "coverage": 0.17310951353087037,
+            "accuracy": 0.5490519373454246,
+            "wilson_lower": 0.5391341140794897,
+            "selection_score": 0.01628230833537413
+          }
+        },
+        "all": {
+          "baseline_probability": {
+            "rows": 145140,
+            "accuracy": 0.5181617748380873,
+            "brier_score": 0.24942610034671497,
+            "log_loss": 0.6919984520992793,
+            "expected_calibration_error": 0.0034669502731555883
+          },
+          "candidate_probability": {
+            "rows": 145140,
+            "accuracy": 0.5181617748380873,
+            "brier_score": 0.24937227905310738,
+            "log_loss": 0.6918900642629983,
+            "expected_calibration_error": 0.0031120485382682777
+          },
+          "baseline_lane": {
+            "rows": 36943,
+            "coverage": 0.2545335538101144,
+            "accuracy": 0.5435671169098341,
+            "wilson_lower": 0.5384835352361049,
+            "selection_score": 0.019415450930931288
+          },
+          "candidate_lane": {
+            "rows": 36252,
+            "coverage": 0.24977263331955354,
+            "accuracy": 0.5466732869910625,
+            "wilson_lower": 0.5415440142886981,
+            "selection_score": 0.020762559271107615
+          }
+        }
+      },
+      "fold_stability": {
+        "evaluated_folds": 7,
+        "lane_accuracy_improved_folds": 7,
+        "lane_selection_score_improved_folds": 5,
+        "proper_score_improved_folds": {
+          "brier_score": 7,
+          "log_loss": 7,
+          "expected_calibration_error": 6
+        }
+      },
+      "historical_gate": {
+        "passed": true,
+        "checks": {
+          "development_lane_accuracy_above_baseline": true,
+          "development_selection_score_above_baseline": true,
+          "confirmation_lane_accuracy_above_baseline": true,
+          "confirmation_selection_score_above_baseline": true,
+          "confirmation_brier_not_above_baseline": true,
+          "confirmation_log_loss_not_above_baseline": true,
+          "lane_accuracy_improved_at_least_5_of_7_folds": true,
+          "lane_score_improved_at_least_5_of_7_folds": true,
+          "brier_improved_at_least_4_of_7_folds": true,
+          "log_loss_improved_at_least_4_of_7_folds": true
+        },
+        "meaning": "historical robustness only; a fresh untouched forward period remains required for promotion"
+      },
+      "registry_class": "champion"
     },
     {
       "candidate_id": "intrabar_profile_confidence_candidate_v1",

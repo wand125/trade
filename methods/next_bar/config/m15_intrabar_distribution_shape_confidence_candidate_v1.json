@@ -1,0 +1,187 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_selective_confidence",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "confidence_candidate": {
+    "candidate_model": "HGB with intrabar_distribution_shape features",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.53,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "formula": "raw_blend = 0.75 * P_baseline_HGB + 0.25 * P_distribution_shape_HGB; retain the baseline HGB side and use only the aligned edge magnitude"
+  },
+  "feature_definition": {
+    "feature_set": "intrabar_distribution_shape",
+    "parent_feature_set": "intrabar_volatility_shape",
+    "parent_intrabar_feature_count": 41,
+    "added_feature_count": 9,
+    "model_feature_count": 88,
+    "raw_ohlc_levels_used": false,
+    "fixed_features": [
+      "M1 return q10/q25/q50/q75/q90 divided by intrabar return RMS",
+      "Bowley quartile skew",
+      "interdecile tail skew",
+      "IQR divided by interdecile range",
+      "median absolute deviation divided by return RMS"
+    ],
+    "causality": "completed M1 bars inside the completed M15 bar only",
+    "flat_policy": "zero return energy or undefined spread ratios become zero"
+  },
+  "adoption_lane": {
+    "minimum_candidate_confidence": 0.53,
+    "threshold_selection": "maximum predeclared-grid selection score on development_2020_2023; checked unchanged on confirmation_2024_2026_partial",
+    "outside_lane": "keep the baseline HGB direction and current authoritative confidence/policy"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_distribution_shape_m15_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_intrabar_distribution_shape_m15_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_distribution_shape_m15_confidence_blend_001",
+    "candidate_analysis": "experiments/next_bar/intrabar_distribution_shape_m15_candidate_analysis.json",
+    "extra_trees_comparison": "experiments/next_bar/intrabar_distribution_shape_vs_extra_trees_m15_053_analysis.json",
+    "reliability_analysis": "experiments/next_bar/intrabar_distribution_shape_vs_extra_trees_m15_reliability_analysis.json",
+    "extra_trees_daily_bootstrap": "experiments/next_bar/intrabar_distribution_shape_vs_extra_trees_m15_053_daily_bootstrap.json",
+    "baseline_daily_bootstrap": "experiments/next_bar/intrabar_distribution_shape_vs_baseline_m15_053_daily_bootstrap.json",
+    "subgroup_reliability": "experiments/next_bar/intrabar_distribution_shape_m15_053_subgroup_reliability.json",
+    "latest_artifact": "experiments/next_bar/intrabar_distribution_shape_m15_latest_artifact_001",
+    "latest_ensemble": "experiments/next_bar/intrabar_distribution_shape_m15_latest_ensemble_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "direction_model": {
+      "baseline_accuracy": 0.5181617748380873,
+      "distribution_shape_accuracy": 0.5185200496072757,
+      "parent_volatility_shape_accuracy": 0.5200771668733637,
+      "unrestricted_blend_accuracy": 0.5178310596665289,
+      "unrestricted_blend_mcnemar_exact_p": 0.503428543084995,
+      "adopted_for_direction": false
+    },
+    "probability_quality_all": {
+      "baseline_brier": 0.24942610034671497,
+      "candidate_brier": 0.24938712386923578,
+      "baseline_log_loss": 0.6919984520992793,
+      "candidate_log_loss": 0.691919853332907,
+      "baseline_ece": 0.0034669502731555883,
+      "candidate_ece": 0.002978118671753827,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 5
+    },
+    "confidence_053_development_2020_2023": {
+      "rows": 25933,
+      "coverage": 0.2911105373640313,
+      "accuracy": 0.5457525160991786,
+      "mean_confidence": 0.5483612532408896,
+      "wilson_lower": 0.5396861677167344,
+      "selection_score": 0.021412536998070775
+    },
+    "confidence_053_confirmation_2024_2026_partial": {
+      "rows": 10031,
+      "coverage": 0.1789428617300248,
+      "accuracy": 0.5455089223407437,
+      "mean_confidence": 0.5410542411263598,
+      "wilson_lower": 0.5357491192148737,
+      "selection_score": 0.01512246316671192,
+      "locally_consistent": true,
+      "edge_confirmed": true
+    },
+    "confidence_053_all": {
+      "rows": 35964,
+      "coverage": 0.24778834229020255,
+      "accuracy": 0.5456845734623512,
+      "mean_confidence": 0.5463231974484068,
+      "wilson_lower": 0.5405339443421523,
+      "selection_score": 0.02017712580973363
+    },
+    "head_to_head_extra_trees_053": {
+      "development_distribution_score": 0.021412536998070775,
+      "development_extra_trees_score": 0.02093751695485027,
+      "confirmation_distribution_score": 0.01512246316671192,
+      "confirmation_extra_trees_score": 0.015742119787553046,
+      "all_distribution_score": 0.02017712580973363,
+      "all_extra_trees_score": 0.02006494149778122,
+      "distribution_accuracy_wins": 5,
+      "distribution_selection_score_wins": 5,
+      "selection_jaccard_all": 0.8551196859686482
+    },
+    "paired_daily_block_bootstrap": {
+      "iterations": 5000,
+      "block": "UTC day",
+      "extra_trees_all_selection_score_delta_95": [
+        -0.0009103551086984349,
+        0.0011495546958048485
+      ],
+      "extra_trees_all_accuracy_delta_95": [
+        -0.0015828624923432955,
+        0.0025358152423693
+      ],
+      "extra_trees_all_brier_delta_95": [
+        -0.000025921817297689526,
+        0.000008847727980949802
+      ],
+      "extra_trees_superiority_confirmed": false,
+      "baseline_all_accuracy_delta_95": [
+        0.0001678130539751244,
+        0.004109906365217802
+      ],
+      "baseline_all_selection_score_delta_95": [
+        -0.0002186359112997553,
+        0.0017539537064597353
+      ],
+      "baseline_all_brier_delta_95": [
+        -0.00005707085448110605,
+        -0.00002170007460841062
+      ],
+      "baseline_accuracy_and_brier_supported": true,
+      "baseline_selection_score_supported": false
+    },
+    "confirmation_subgroups_at_053": {
+      "edge_confirmed": [
+        "up_high",
+        "up_normal",
+        "up_low",
+        "down_high"
+      ],
+      "down_low": {
+        "rows": 419,
+        "accuracy": 0.522673031026253,
+        "wilson_lower": 0.47485746591071587,
+        "edge_confirmed": false
+      },
+      "down_normal": {
+        "rows": 859,
+        "accuracy": 0.49941792782305006,
+        "mean_confidence": 0.538172639899708,
+        "wilson_lower": 0.46605789198135095,
+        "locally_consistent": false,
+        "edge_confirmed": false
+      },
+      "subgroup_filter_adopted": false
+    }
+  },
+  "runtime_validation": {
+    "artifact_parity_passed": true,
+    "latest_decision_timestamp": "2026-06-01T04:45:00Z",
+    "latest_direction": "up",
+    "baseline_probability_up": 0.5772537283,
+    "candidate_probability_up": 0.5622199609,
+    "direction_preserving_blend_probability_up": 0.5734952865,
+    "fixed_lane_threshold_passed": true,
+    "authoritative_confidence_replaced": false,
+    "runtime_odds_authorized": false
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_selective_confidence_candidate": true,
+    "require_fresh_forward_confidence_053_selection_score_not_below_extra_trees": true,
+    "require_fresh_forward_confidence_053_accuracy_not_below_extra_trees": true,
+    "require_fresh_forward_brier_not_above_extra_trees": true,
+    "require_fresh_forward_down_normal_local_consistency": true,
+    "require_fresh_forward_down_low_and_normal_no_material_underperformance": true,
+    "reason": "The fixed 0.53 lane maximized the development objective, beat Extra Trees in five of seven folds, and passed aggregate baseline confirmation gates. Daily bootstrap could not establish superiority over Extra Trees, and confirmation down-normal was overconfident without edge, so both remain parallel until a fresh untouched period resolves aggregate and subgroup uncertainty."
+  }
+}
