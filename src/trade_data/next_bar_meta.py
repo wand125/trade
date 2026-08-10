@@ -16,6 +16,19 @@ from trade_data.next_bar import context_diagnostics, evaluate_probabilities
 from trade_data.next_bar_overlay import read_prediction_sets
 
 
+META_CONFIDENCE_THRESHOLDS = (
+    0.50,
+    0.505,
+    0.51,
+    0.515,
+    0.52,
+    0.53,
+    0.54,
+    0.55,
+    0.60,
+)
+
+
 @dataclass(frozen=True)
 class CrossTimeframeMetaConfig:
     target_timeframe: int = 15
@@ -56,6 +69,14 @@ def build_cross_timeframe_frame(
     if overlap:
         joined = ", ".join(f"M{value}" for value in sorted(overlap))
         raise ValueError(f"context timeframes cannot be both exact and as-of: {joined}")
+    all_context_timeframes = (
+        *config.context_timeframes,
+        *config.asof_context_timeframes,
+    )
+    if len(set(all_context_timeframes)) != len(all_context_timeframes):
+        raise ValueError("context timeframes must not contain duplicates")
+    if config.target_timeframe in all_context_timeframes:
+        raise ValueError("target timeframe cannot also be a context timeframe")
     if config.asof_max_age_minutes < 0:
         raise ValueError("asof_max_age_minutes must not be negative")
     for timeframe in config.context_timeframes:
@@ -146,22 +167,53 @@ def _metric_set(frame: pd.DataFrame, probability_column: str) -> dict[str, objec
     return evaluate_probabilities(
         frame["target_up"].to_numpy(dtype="int8"),
         frame[probability_column].to_numpy(dtype="float64"),
-        thresholds=(0.50, 0.53, 0.54, 0.55, 0.60),
+        thresholds=META_CONFIDENCE_THRESHOLDS,
     )
+
+
+def resolve_prediction_sources(
+    prediction_dirs: Sequence[Path],
+    target_prediction_dirs: Sequence[Path],
+    context_prediction_dirs: Sequence[Path],
+) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
+    """Resolve legacy shared sources or explicit target/context sources."""
+    legacy = tuple(prediction_dirs)
+    target = tuple(target_prediction_dirs)
+    context = tuple(context_prediction_dirs)
+    if legacy and (target or context):
+        raise ValueError(
+            "--predictions-dir cannot be combined with explicit target/context sources"
+        )
+    if legacy:
+        return legacy, legacy
+    if not target or not context:
+        raise ValueError(
+            "provide --predictions-dir, or both --target-predictions-dir and "
+            "--context-predictions-dir"
+        )
+    return target, context
 
 
 def run_cross_timeframe_meta(
     prediction_dirs: Sequence[Path],
     output_dir: Path,
     config: CrossTimeframeMetaConfig,
+    *,
+    target_prediction_dirs: Sequence[Path] = (),
+    context_prediction_dirs: Sequence[Path] = (),
 ) -> dict[str, object]:
-    target = read_prediction_sets(prediction_dirs, config.target_timeframe)
+    target_dirs, context_dirs = resolve_prediction_sources(
+        prediction_dirs,
+        target_prediction_dirs,
+        context_prediction_dirs,
+    )
+    target = read_prediction_sets(target_dirs, config.target_timeframe)
     all_context_timeframes = (
         *config.context_timeframes,
         *config.asof_context_timeframes,
     )
     contexts = {
-        timeframe: read_prediction_sets(prediction_dirs, timeframe)
+        timeframe: read_prediction_sets(context_dirs, timeframe)
         for timeframe in all_context_timeframes
     }
     frame, feature_columns = build_cross_timeframe_frame(target, contexts, config)
@@ -229,10 +281,13 @@ def run_cross_timeframe_meta(
     meta_metrics = _metric_set(combined, "meta_probability_up")
     blend_metrics = _metric_set(combined, "probability_up")
     name = f"M{config.target_timeframe}"
+    resolved_sources = tuple(dict.fromkeys((*target_dirs, *context_dirs)))
     report = {
         "created_at": datetime.now(UTC).isoformat(),
         "config": asdict(config),
-        "source_predictions": [str(path) for path in prediction_dirs],
+        "source_predictions": [str(path) for path in resolved_sources],
+        "target_source_predictions": [str(path) for path in target_dirs],
+        "context_source_predictions": [str(path) for path in context_dirs],
         "timeframes": {
             name: {
                 "rows": len(combined),
@@ -271,7 +326,7 @@ def run_cross_timeframe_meta(
         output_dir / final_model_name,
     )
     first_manifest = json.loads(
-        (prediction_dirs[0] / "manifest.json").read_text(encoding="utf-8")
+        (target_dirs[0] / "manifest.json").read_text(encoding="utf-8")
     )
     base_entry = first_manifest["timeframes"][name]
     manifest = {
@@ -300,9 +355,29 @@ def run_cross_timeframe_meta(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Train a chronological M15 direction meta model from multi-timeframe OOS probabilities."
+        description="Train a chronological target direction meta model from multi-timeframe OOS probabilities."
     )
-    parser.add_argument("--predictions-dir", type=Path, action="append", required=True)
+    parser.add_argument("--predictions-dir", type=Path, action="append", default=[])
+    parser.add_argument(
+        "--target-predictions-dir",
+        type=Path,
+        action="append",
+        default=[],
+        help="M15 target-model OOS directories when target and context are stored separately.",
+    )
+    parser.add_argument(
+        "--context-predictions-dir",
+        type=Path,
+        action="append",
+        default=[],
+        help="M1/M5/M30 context-model OOS directories when stored separately.",
+    )
+    parser.add_argument("--target-timeframe", type=int, default=15)
+    parser.add_argument(
+        "--context-timeframes",
+        default="5,1",
+        help="Comma-separated context timeframes joined at the exact target decision timestamp.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--regularization-c", type=float, default=0.10)
     parser.add_argument("--meta-weight", type=float, default=0.25)
@@ -332,6 +407,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         args.predictions_dir,
         args.output_dir,
         CrossTimeframeMetaConfig(
+            target_timeframe=args.target_timeframe,
+            context_timeframes=_parse_timeframes(args.context_timeframes),
             asof_context_timeframes=_parse_timeframes(
                 args.asof_context_timeframes
             ),
@@ -339,6 +416,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             regularization_c=args.regularization_c,
             meta_weight=args.meta_weight,
         ),
+        target_prediction_dirs=args.target_predictions_dir,
+        context_prediction_dirs=args.context_predictions_dir,
     )
     print(json.dumps(report["timeframes"], ensure_ascii=False, indent=2))
     return 0

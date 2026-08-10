@@ -35,6 +35,7 @@ FEATURE_SETS = (
     "baseline",
     "enhanced_manual",
     "trend_structure",
+    "volatility_state",
     "path_persistence",
     "haar_multiscale",
     "session_relative",
@@ -44,6 +45,7 @@ FEATURE_SETS = (
     "intrabar_structure",
     "intrabar_profile",
     "intrabar_full_path",
+    "intrabar_path_signature",
     "intrabar_full_path_volatility_shape",
     "intrabar_pressure",
     "intrabar_volatility_shape",
@@ -82,6 +84,11 @@ TCN_SEQUENCE_CHANNELS = (
     "wick_balance_atr",
 )
 INTRABAR_FULL_PATH_GRID_POINTS = (1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 15)
+INTRABAR_PATH_SIGNATURE_COLUMNS = (
+    "intrabar_path_signed_area",
+    "intrabar_path_time_time_price_bracket",
+    "intrabar_path_price_time_price_bracket",
+)
 TRAIN_WEIGHTING_MODES = ("uniform", "body_atr", "directional_clarity")
 TRAIN_TARGET_FILTERS = (
     "all",
@@ -712,6 +719,63 @@ def validate_m1_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return output
 
 
+def intrabar_path_signature(levels: np.ndarray) -> np.ndarray:
+    """Return order-sensitive level-2/3 coefficients of time x close paths.
+
+    ``levels`` contains range-normalized closes after each equally spaced M1
+    step, with the path implicitly starting at time/price ``(0, 0)``.  Chen's
+    identity composes the exact piecewise-linear signature.  Symmetric
+    endpoint terms are removed by Lie-bracket projections, leaving three
+    compact path-shape summaries rather than another copy of the endpoint.
+    """
+
+    values = np.asarray(levels, dtype="float64")
+    if values.ndim != 2 or values.shape[1] == 0:
+        raise ValueError("levels must be a non-empty two-dimensional array")
+    if not np.isfinite(values).all():
+        raise ValueError("levels must contain only finite values")
+
+    rows, steps = values.shape
+    previous = np.column_stack(
+        [np.zeros(rows, dtype="float64"), values[:, :-1]]
+    )
+    price_increment = values - previous
+    time_increment = np.full(rows, 1.0 / steps, dtype="float64")
+    level_1 = np.zeros((rows, 2), dtype="float64")
+    level_2 = np.zeros((rows, 2, 2), dtype="float64")
+    level_3 = np.zeros((rows, 2, 2, 2), dtype="float64")
+
+    for step in range(steps):
+        increment = np.column_stack(
+            [time_increment, price_increment[:, step]]
+        )
+        segment_2 = np.einsum("bi,bj->bij", increment, increment) / 2.0
+        segment_3 = (
+            np.einsum("bi,bj,bk->bijk", increment, increment, increment)
+            / 6.0
+        )
+        level_3 += (
+            np.einsum("bij,bk->bijk", level_2, increment)
+            + np.einsum("bi,bjk->bijk", level_1, segment_2)
+            + segment_3
+        )
+        level_2 += np.einsum("bi,bj->bij", level_1, increment) + segment_2
+        level_1 += increment
+
+    signed_area = level_2[:, 0, 1] - level_2[:, 1, 0]
+    time_time_price = (
+        level_3[:, 0, 0, 1]
+        - 2.0 * level_3[:, 0, 1, 0]
+        + level_3[:, 1, 0, 0]
+    )
+    price_time_price = (
+        2.0 * level_3[:, 1, 0, 1]
+        - level_3[:, 1, 1, 0]
+        - level_3[:, 0, 1, 1]
+    )
+    return np.column_stack([signed_area, time_time_price, price_time_price])
+
+
 def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataFrame:
     """Aggregate UTC M1 bars and keep only fully observed timeframe bars."""
 
@@ -1233,6 +1297,35 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         intrabar_clv_body_agreement=("_intrabar_clv_body_agreement", "mean"),
     )
     bars = bars.loc[bars["source_rows"] == timeframe_minutes].reset_index()
+    complete_profile_levels = full_profile_levels.reindex(
+        index=pd.DatetimeIndex(bars["timestamp"]),
+        columns=range(timeframe_minutes),
+    )
+    complete_profile_array = complete_profile_levels.to_numpy(dtype="float64")
+    signature_values = np.empty(
+        (len(complete_profile_array), len(INTRABAR_PATH_SIGNATURE_COLUMNS)),
+        dtype="float64",
+    )
+    if timeframe_minutes == 1:
+        # A one-segment path has no order interaction, so all bracket
+        # projections are identically zero.  Avoid large temporary tensors on
+        # multi-million-row M1 datasets.
+        signature_values.fill(0.0)
+    else:
+        # M1 inputs can contain millions of rows.  Chunking caps the temporary
+        # level-3 tensor while leaving the exact path calculation unchanged.
+        signature_chunk_rows = 100_000
+        for chunk_start in range(
+            0, len(complete_profile_array), signature_chunk_rows
+        ):
+            chunk_end = min(
+                chunk_start + signature_chunk_rows, len(complete_profile_array)
+            )
+            signature_values[chunk_start:chunk_end] = intrabar_path_signature(
+                complete_profile_array[chunk_start:chunk_end]
+            )
+    for column_index, column in enumerate(INTRABAR_PATH_SIGNATURE_COLUMNS):
+        bars[column] = signature_values[:, column_index]
     for grid_point in INTRABAR_FULL_PATH_GRID_POINTS:
         sample_position = max(
             0,
@@ -1907,6 +2000,110 @@ def build_feature_frame(
             / np.log(2.0),
         )
 
+    if feature_set == "volatility_state":
+        def zero_safe_ratio(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            return output.mask(denominator.eq(0), 0.0)
+
+        def symmetric_change(current: pd.Series, previous: pd.Series) -> pd.Series:
+            denominator = current.abs() + previous.abs()
+            return zero_safe_ratio(current - previous, denominator)
+
+        volatility_5 = rolling_volatility[5]
+        volatility_20 = rolling_volatility[20]
+        for state_window in (20, 50):
+            volatility_mean = volatility_5.rolling(
+                state_window, min_periods=state_window
+            ).mean()
+            volatility_std = volatility_5.rolling(
+                state_window, min_periods=state_window
+            ).std()
+            add(
+                f"volatility_of_volatility_5_{state_window}",
+                zero_safe_ratio(volatility_std, volatility_mean),
+            )
+        add(
+            "volatility_acceleration_5_3",
+            symmetric_change(volatility_5, volatility_5.shift(3)),
+        )
+        add(
+            "volatility_acceleration_20_5",
+            symmetric_change(volatility_20, volatility_20.shift(5)),
+        )
+
+        log_range = np.log(high / low.replace(0, np.nan)).clip(lower=0)
+        range_mean_20 = log_range.rolling(20, min_periods=20).mean()
+        range_std_20 = log_range.rolling(20, min_periods=20).std()
+        add("range_coefficient_of_variation_20", zero_safe_ratio(
+            range_std_20, range_mean_20
+        ))
+        range_autocorrelation_20 = log_range.rolling(
+            20, min_periods=20
+        ).corr(log_range.shift(1))
+        constant_range = range_std_20.eq(0)
+        add(
+            "range_autocorrelation_20",
+            range_autocorrelation_20.mask(constant_range, 0.0),
+        )
+        range_median_20 = log_range.rolling(20, min_periods=20).median()
+        add(
+            "range_median_deviation_20",
+            symmetric_change(log_range, range_median_20),
+        )
+        prior_range_median_50 = log_range.rolling(
+            50, min_periods=50
+        ).median().shift(1)
+        range_is_compressed = log_range.lt(prior_range_median_50).where(
+            prior_range_median_50.notna()
+        )
+        add(
+            "range_compression_fraction_5_50",
+            range_is_compressed.astype("float64").rolling(
+                5, min_periods=5
+            ).mean(),
+        )
+
+        squared_return = log_return_1.pow(2)
+        realized_variance_20 = squared_return.rolling(
+            20, min_periods=20
+        ).mean()
+        bipower_variance_20 = (
+            np.pi
+            / 2.0
+            * (
+                log_return_1.abs() * log_return_1.abs().shift(1)
+            ).rolling(20, min_periods=20).mean()
+        )
+        add(
+            "jump_variation_fraction_20",
+            zero_safe_ratio(
+                (realized_variance_20 - bipower_variance_20).clip(lower=0),
+                realized_variance_20,
+            ).clip(0, 1),
+        )
+        parkinson_variance_20 = (
+            log_range.pow(2).rolling(20, min_periods=20).mean()
+            / (4.0 * np.log(2.0))
+        )
+        log_open_close = np.log(close / open_.replace(0, np.nan))
+        garman_klass_variance = (
+            0.5 * log_range.pow(2)
+            - (2.0 * np.log(2.0) - 1.0) * log_open_close.pow(2)
+        ).clip(lower=0)
+        garman_klass_variance_20 = garman_klass_variance.rolling(
+            20, min_periods=20
+        ).mean()
+        add(
+            "parkinson_close_variance_balance_20",
+            symmetric_change(parkinson_variance_20, realized_variance_20),
+        )
+        add(
+            "garman_klass_close_variance_balance_20",
+            symmetric_change(garman_klass_variance_20, realized_variance_20),
+        )
+
     if feature_set == "path_persistence":
         absolute_path = log_return_1.abs()
         for window in (5, 10, 20, 50):
@@ -2138,6 +2335,7 @@ def build_feature_frame(
         "intrabar_structure",
         "intrabar_profile",
         "intrabar_full_path",
+        "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
         "intrabar_pressure",
         "intrabar_volatility_shape",
@@ -2169,6 +2367,7 @@ def build_feature_frame(
         "intrabar_structure",
         "intrabar_profile",
         "intrabar_full_path",
+        "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
         "intrabar_pressure",
         "intrabar_volatility_shape",
@@ -2212,6 +2411,7 @@ def build_feature_frame(
     if feature_set in (
         "intrabar_profile",
         "intrabar_full_path",
+        "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
         "intrabar_pressure",
         "intrabar_volatility_shape",
@@ -2247,6 +2447,7 @@ def build_feature_frame(
 
     if feature_set in (
         "intrabar_full_path",
+        "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
     ):
         full_path_columns = tuple(
@@ -2260,6 +2461,18 @@ def build_feature_frame(
                 + ", ".join(missing_full_path)
             )
         for column in full_path_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set == "intrabar_path_signature":
+        missing_path_signature = sorted(
+            set(INTRABAR_PATH_SIGNATURE_COLUMNS) - set(bars.columns)
+        )
+        if missing_path_signature:
+            raise ValueError(
+                "bar frame is missing intrabar path-signature columns: "
+                + ", ".join(missing_path_signature)
+            )
+        for column in INTRABAR_PATH_SIGNATURE_COLUMNS:
             add(column, bars[column].to_numpy(dtype="float64"))
 
     if feature_set in ("intrabar_pressure", "intrabar_flow_shape"):

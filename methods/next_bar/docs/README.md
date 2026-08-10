@@ -95,6 +95,8 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 
 固定長training windowの再現には `--train-window-days` を使う。0は全履歴のexpanding training。M15で1095日の固定3年windowを試した結果、全体・confirmation・高信頼selection scoreが悪化したため標準設定は0のままとする。
 
+同じFull Pathのexpanding/固定3年モデル間disagreementを1σ下側edgeへ変換するtemporal uncertaintyも検証した。0.515 accuracyは上がったがcoverageがほぼ半減し、selection scoreとBrier/log loss/ECEが悪化した。固定3年モデルの情報不足を測る結果になったため再現専用とし、window・penalty・weightを履歴内再探索しない。
+
 非線形なisotonic確率校正は `--probability-calibration isotonic` で再現できる。M15の同一7foldではBrier、log loss、ECEとconfirmation accuracyが悪化し、高confidenceを大幅に過大評価したため、標準は `--probability-calibration platt` のままとする。
 
 単調制約付きbeta calibrationは `--probability-calibration beta` で再現できる。`log(p)` と `-log(1-p)` の非負係数を各foldのcalibration期間だけで学習する。M15の同一7foldではBrier/log lossがdevelopment・confirmationの両方で悪化し、confidence 0.55のconfirmation selection scoreも低下したため棄却した。実験再現用に限り、標準はPlattのままとする。
@@ -117,6 +119,8 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 
 トレンド強度と相場構造を定常加工する場合は `--feature-set trend_structure` を使う。DI/ADX、ATR正規化MACD、ATR/volatility compression、短長実現volatility balance、方向entropyの11列を追加し、raw価格水準は含めない。M15単体と通常方向blendは不採用。方向維持型25% blendのconfidence 0.525はdevelopment/confirmationの両方でselection scoreを改善したが、既存clear-body 0.525よりaccuracyと評価関数が低く、confirmation Brier/log lossも改善しないためforward configは発行しない。
 
+完成足間の変動状態遷移を使う場合は `--feature-set volatility_state` を指定する。vol-of-vol、volatility加速度、range clustering/中央値乖離/圧縮継続、bipower jump、Parkinson/Garman–Klass対close分散balanceの11列を追加する。単体・通常方向blendはconfirmationで悪化し、方向維持0.525もscore 4/7、既存Signed-body Quantile/Clear-bodyを下回ったため再現専用とする。
+
 直近経路の継続性を定常加工する場合は `--feature-set path_persistence` を使う。符号付きefficiency、variance ratio、return autocorrelation、方向転換率、方向別transition persistence、符号付きstreakの14列を追加する。方向維持型25% blendのconfidence 0.525はconfirmationでもaccuracy、coverage、selection score、Brier、log lossを改善したが、既存clear-bodyとsigned-body quantileの評価関数を超えず、fold改善も5/7のためforward configは発行しない。
 
 経路の加速・減速をマルチスケール加工する場合は `--feature-set haar_multiscale` を使う。4/8/16/32本窓の前半対後半について、標準化return差、absolute-return構成差、方向比率差の12特徴を追加する。方向維持型0.525はdevelopmentで改善したがconfirmationのaccuracyとselection scoreが悪化したため再現専用とし、forward configは発行しない。
@@ -136,6 +140,10 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 完成した上位足内の途中trajectoryまで使う場合は `--feature-set intrabar_profile` を使う。既存intrabar structureへ、上位足rangeで正規化した20/40/60/80%地点のM1 close level、始値から最終終値までの直線pathとの差、足内全地点の平均/RMS/上下最大偏差の12特徴を追加する。M15の方向維持型25% blend 0.515は `config/m15_intrabar_profile_confidence_candidate_v1.json` のbroad coverage候補で、candidate registryのdevelopment目的関数championである。定義を変更しないM5移植も0.515でaccuracy・selection scoreを6/7 fold、Brier/log loss/ECEを7/7 fold改善したため `config/m5_intrabar_profile_confidence_candidate_v1.json` に固定した。M30はproper scoreだけ改善し高信頼laneが悪化したため `config/m30_intrabar_profile_calibration_shadow_v1.json` の校正診断shadowに限定する。M1は独立した下位足経路がないため対象外である。
 
 M15内15本のM1 close経路を順序ごと保持する場合は `--feature-set intrabar_full_path` を使う。Profileが持つ3/15、6/15、9/15、12/15地点に、欠けている11地点をM15 rangeで正規化して追加する。単体は親Profileにaccuracy 6/7 fold勝ったが正式baselineのconfirmationを上積みできず、通常方向blendも悪化したため方向用途には使わない。baseline方向を維持する25% blendの固定0.53 laneはdevelopment/confirmation score、baseline比accuracy 7/7、Brier/log loss 7/7 foldを改善し、Distribution Shapeにもaccuracy/score各5/7勝ったため `config/m15_intrabar_full_path_confidence_candidate_v1.json` に固定した。candidate registryのselective履歴championだが、完全未使用期間まではauthoritative confidence・odds・売買policyを置換しない。
+
+Full Pathの15地点を時間×正規化close経路としてまとめる場合は `--feature-set intrabar_path_signature` を使う。Chen積でlevel 2 signed areaとlevel 3の2 bracket、計3列をFull Pathへ追加する。baseline方向と0.53 confidenceは改善したが、親Full Path 0.53との全期間scoreは実質同値、confirmation scoreは悪化し、直接年別scoreも3/7だった。再現専用とし、signature level・subset・weight・閾値を同じ履歴で再探索しない。
+
+Full Pathの順序とVolatility Shapeの変動集中を同時に使う固定unionは `--feature-set intrabar_full_path_volatility_shape` で再現できる。52 intrabar・全90特徴になる。単体方向はVolatility Shapeに0/7、方向維持0.525 confidenceも親2候補に各3/7、Signed-body Quantileに1/7、Clear-bodyに2/7しか勝てなかった。Brier/log lossは改善したが高信頼帯の主評価関数を上積みできないため再現専用とし、forward configは発行しない。
 
 完成上位足内のM1買い／売り圧力proxyを使う場合は `--feature-set intrabar_pressure` を使う。Intrabar Profileへ、M1 close-locationの平均/分散/序盤/終盤、range-weighted close-location、signed range、wick/body pressure、両者の乖離、方向一致率の11定常特徴を追加する。M15単体とconfidence用途は不採用。baseline 75% + Pressure 25%の通常方向blendはdevelopment/confirmationの両方、accuracy 5/7、Brier/log loss 7/7 foldを改善したため `config/m15_intrabar_pressure_direction_candidate_v1.json` のparallel forward候補に固定した。paired p=0.224なので現行方向モデルは置換しない。
 
@@ -329,6 +337,8 @@ uv run python methods/next_bar/scripts/cross_timeframe_meta.py \
 ```
 
 各test foldのmeta modelは、それ以前のdirection-model OOS予測だけで学習する。M15/M5/M1のjoinは同じ `decision_timestamp` に限定し、時刻の新しい短期足を混ぜない。現在の固定候補は `config/m15_cross_tf_meta_candidate_v1.json` で、次の完全未使用期間までは現行モデルを置換しない。
+
+M15 targetとM5/M1 contextが別artifactにある場合は `--target-predictions-dir` と `--context-predictions-dir` を使う。Full Path M15へ既存M5/M1を追加した検証では、固定25% metaは方向accuracyを6/6 fold悪化させ、0.53〜0.55のaccuracy/coverageも同時改善しなかった。小weight感度の点推定最大は時系列weight選択で再現しなかったため、split-source経路は再現専用とし、Full Path 0.53 confidenceを維持する。
 
 発行済みの最新M30予測を最大15分だけ保持して追加する場合:
 

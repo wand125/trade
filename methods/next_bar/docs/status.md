@@ -245,6 +245,25 @@
 - Full Path 0.53は親Profileへaccuracy 6/7、Distribution Shapeへaccuracy/score各5/7、Extra Treesへ各4/7勝った。Distribution比の全期間Brier/log lossとconfirmation accuracy改善は日次bootstrap 20,000回の95%区間でも支持されたが、全期間selection score差は0を跨いだ。
 - 正式baseline比の日次bootstrapは全期間accuracy差+0.311pt、selection score差+0.001347、Brier/log loss差の95%区間がすべて改善側だった。Distributionで局所不整合だったconfirmation down-normalもaccuracy 51.256%、mean confidence 53.779%で局所整合を回復した。
 - Full Path 0.53をselective confidence forward candidateとして採用し、16候補registryのselective履歴championへ更新した。Distribution/Extra Treesは比較用に残すが、authoritative confidence、odds、adoption/paper/live policyは完全未使用期間まで変更しない。
+- Full Pathの11追加列とVolatility Shapeの14列を固定unionにした `intrabar_full_path_volatility_shape` を追加した。52 intrabar・全90特徴についてscale不変、未来不参照、flat有限0、stationary validator、artifact/latest経路をテストした。
+- union単体はbaseline比全体+75件、p=0.603、通常25% blendは+31件、p=0.673で、confirmation blendは-63件だった。単体はFull Pathにaccuracy 2/7、Volatility Shapeに0/7のため方向用途を棄却した。
+- 方向維持unionはdevelopmentで0.525を選択し、baseline比accuracy 6/7、score 4/7、Brier/log loss 7/7 fold改善した。confirmation scoreも0.01527から0.01563へ上げたが、scoreの採用gate 5/7には届かなかった。
+- 同じ0.525で親Full Path/Volatility Shapeにaccuracy・score各3/7、Signed-body Quantileに各1/7、Clear-bodyに各2/7だった。Signed-body Quantile比の日次bootstrapはunion score優位確率9.31%で、proper score改善だけでは主目的の劣化を補えない。
+- unionは再現専用としconfig/registry/latest artifactを発行しない。Full Path 0.53 selective champion、Volatility Shape方向候補、Signed-body Quantile/Clear-body 0.525を維持する。
+- cross-timeframe metaへtarget/context別OOS sourceを渡す経路を追加し、Full Path M15と既存M5/M1を同一decision timestampで時系列学習した。固定25%は方向を全6foldで悪化させ、全体-90件、p=0.0969。Brier/log lossは僅かに改善したがECEと0.53〜0.55のaccuracy/coverageは改善しなかった。
+- 25%失敗後のweight感度では10%が全体+36件だったが、development +58件からconfirmation -22件へ反転した。0.53 scoreの全期間日次bootstrap区間は0を跨ぎ、development scoreはFull Pathより低かった。
+- 各foldより前のOOS 0.53 scoreだけでweightを選ぶchronological監査はFull Path比方向-11件、0.53 accuracy/coverage/scoreも全て悪化した。M30追加、config/registry/latest発行は行わず、既存cross-TF候補とFull Path 0.53 championを維持する。
+- 時間×正規化closeの区分線形経路をChen積で合成し、level 2 signed areaとlevel 3 bracket 2列へ加工する `intrabar_path_signature` を追加した。Full Pathへ3列、全79特徴とし、直線ゼロ、順序感応、scale不変、未来不参照、flat有限0、artifact/latest経路をテストした。
+- Path Signature単体はbaseline方向をdevelopment/confirmationで改善し全体+141件、p=0.316だったが、親Full Pathには全体-75件、accuracy 3/7だった。通常25% blendも全体-28件のため方向用途には採用しない。
+- 方向維持0.53はbaseline比accuracy 6/7、score 5/7、Brier/log loss 7/7 fold改善した。しかし親Full Path比はaccuracy 4/7、score 3/7で、confirmation scoreが0.01628から0.01571へ低下。全期間score差は+0.0000035、日次bootstrap優位確率50.2%だった。
+- Distribution Shape/Extra Treesには年別で勝つが直接の親championへ増分edgeがないため再現専用とし、config/registry/latestは発行しない。Full Path 0.53 selective championを維持する。
+- 完成M15間のvol-of-vol、volatility加速度、range clustering/圧縮、bipower jump、Parkinson/Garman–Klass balanceを11定常列へ加工する `volatility_state` を追加した。scale不変、未来不参照、flat有限0、範囲、artifact/latest経路をテストした。
+- Volatility State単体はbaseline方向比-122件、通常25% blendは-74件。confirmation blendは純-74件、p=0.0477で悪化が支持されたため方向用途を棄却した。
+- 方向維持0.525はdevelopment scoreを0.02048から0.02159へ上げたが、confirmationは0.015268から0.015271の実質横ばいでaccuracyも低下。accuracy/score各4/7に留まった。
+- Signed-body Quantile 0.525にはaccuracy/score各3/7、Clear-bodyには0/7・2/7で負けた。再現専用としconfig/registry/latestは発行しない。
+- Full Pathをexpanding履歴と固定1095日履歴で別学習し、両edgeの1σ下限をtemporal uncertainty confidenceとする実験を行った。recent Full Path単体はaccuracy 51.291%でexpandingに7/7 fold負けた。
+- temporal overlayはFull Path方向を維持し、0.515 accuracyを全7foldで上げたがcoverageを全体55.658%から29.091%へ半減させ、scoreを0.01924から0.01801へ下げた。Brier/log loss/ECEも各2/7しか改善しなかった。
+- 既存異種disagreement 0.515にもdevelopment/confirmation/all scoreが全て負けた。window/penalty/weightを再探索せず再現専用とし、Full Path 0.53 championと異種disagreement shadowを維持する。
 
 ## ベースライン評価
 
@@ -317,3 +336,8 @@
 61. Signed Clarity連続教師は再現専用とする。target非線形化、loss、blend weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape/Pressure方向候補とSigned-body Quantile/Clear-body 0.525を維持する。
 62. Directional Clarity sample weightingは再現専用とする。weight offset、非線形化、上限、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。
 63. Intrabar Full Path方向維持0.53をselective confidenceの固定forward championとする。15地点、正規化、25% weight、閾値を履歴内再探索せず、完全未使用期間でDistribution Shape/Extra Trees以上のaccuracy・selection score・Brierとdown-normal局所整合を同時に確認するまでauthoritative confidence・odds・売買policyへ昇格しない。
+64. Intrabar Full Path × Volatility Shape unionは再現専用とする。特徴subset、別weight、0.525以外の閾値、tree capacityを同じ履歴で再探索せず、Full Path 0.53、Volatility Shape方向、Signed-body Quantile/Clear-body 0.525を維持する。
+65. Intrabar Full Path × cross-timeframe metaは再現専用とする。M1/M5/M30 subset、regularization、weight、閾値を同じ履歴で再探索せず、既存cross-TF候補とFull Path 0.53 selective championを独立に維持する。
+66. Intrabar Path Signatureは再現専用とする。signature level、時間/価格path定義、特徴subset、blend weight、0.53以外の閾値を同じ履歴で再探索せず、Full Path 0.53 selective championを維持する。
+67. Volatility Stateは再現専用とする。rolling window、jump/variance定義、特徴subset、blend weight、0.525以外の閾値を同じ履歴で再探索せず、既存方向候補と0.525 confidence候補を維持する。
+68. Full Path temporal uncertaintyは再現専用とする。training window、window数、uncertainty penalty、モデルweight、0.515以外の閾値を同じ履歴で再探索せず、expanding Full Path 0.53と既存異種disagreement shadowを維持する。
