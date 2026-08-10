@@ -285,7 +285,7 @@
 29. causal online expert weightingは再現専用とする。history rows、学習率、expert subsetを同じ履歴で再探索せず、固定等重みおよびsigned-body候補を置換しない。
 30. session-relative confidenceは0.525研究shadowとして完全未使用期間を測る。同じ履歴でwindow、時間group粒度、clip、blend weight、閾値を変えず、clear-body 0.525と並行比較する。
 31. four-class body confidenceは0.525教師表現shadowとして固定する。class境界・class数・HGB parameter・blend weightを履歴内再探索せず、clear-bodyを置換しない。
-32. candidate registryの4 role championと2 accuracy challengerだけを固定forward比較する。fresh期間では同じgateを再計算し、championの閾値・weight・role境界を履歴へ合わせて変更しない。
+32. candidate registryの4 role championと各roleの非劣位challengerだけを固定forward比較する。fresh期間では同じgateを再計算し、championの閾値・weight・role境界を履歴へ合わせて変更しない。
 33. chronological stackingは再現専用とする。同じ履歴でregularization、expert subset、stack weight、閾値を再探索せず、固定候補の単純confidence blendを維持する。
 34. intrabar profile 0.515とsigned-body 0.52をbroad roleのobjective/accuracy pairとして固定forward比較する。profile地点、特徴subset、blend weight、閾値を同じ履歴へ合わせて再探索しない。
 35. 派生特徴candidateは親モデルと同じ固定閾値で `compare_fixed_candidates.py` を実行し、incremental edgeがない候補をregistryへ追加しない。
