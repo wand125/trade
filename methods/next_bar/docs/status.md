@@ -239,6 +239,12 @@
 - Clarity Weighted単体はbaseline比development -22件、confirmation +33件、全期間+11件、p=0.932。通常25% blendもdevelopment -10件、confirmation +26件、全期間+16件、p=0.798で方向候補には採用しない。
 - 方向維持Clarity Weighted 0.525はdevelopment/confirmationのscoreを0.02048→0.02135、0.01527→0.01591へ改善したが、accuracy 5/7、score 4/7に留まった。
 - Signed-body Quantile 0.525には全期間accuracy 53.987%対54.080%、score 0.02040対0.02100、coverage 33.179%対33.366%で負け、日次bootstrapのscore優位確率7.5%。Clear-bodyにも2/7対5/7で、registryへ追加しない。
+- 完成M15内15本のM1 close経路について、親Profileが持つ3/6/9/12番目以外の11地点をM15 rangeで正規化した `intrabar_full_path` を追加した。15点の元M1との厳密対応、価格scale不変、未来不参照、flat有限0、artifact/latest parityをテストした。
+- Full Path単体は親Profileにaccuracy 6/7 fold、全期間proper scoreとECEで勝った。正式baseline比はdevelopment +227件、p=0.0423だがconfirmation -11件、通常25%方向blendも全期間-45件のため方向用途には採用しない。
+- baseline方向固定25% confidenceはBrier/log loss 7/7、ECE 6/7 fold改善した。固定0.53でdevelopment accuracy/coverage/score 54.580%/29.801%/0.02173、confirmation 54.905%/17.311%/0.01628、全体54.667%/24.977%/0.02076となった。
+- Full Path 0.53は親Profileへaccuracy 6/7、Distribution Shapeへaccuracy/score各5/7、Extra Treesへ各4/7勝った。Distribution比の全期間Brier/log lossとconfirmation accuracy改善は日次bootstrap 20,000回の95%区間でも支持されたが、全期間selection score差は0を跨いだ。
+- 正式baseline比の日次bootstrapは全期間accuracy差+0.311pt、selection score差+0.001347、Brier/log loss差の95%区間がすべて改善側だった。Distributionで局所不整合だったconfirmation down-normalもaccuracy 51.256%、mean confidence 53.779%で局所整合を回復した。
+- Full Path 0.53をselective confidence forward candidateとして採用し、15候補registryのselective履歴championへ更新した。Distribution/Extra Treesは比較用に残すが、authoritative confidence、odds、adoption/paper/live policyは完全未使用期間まで変更しない。
 
 ## ベースライン評価
 
@@ -310,3 +316,4 @@
 60. Directional Clarity教師filterは再現専用とする。clarity cutoff、保持率、body/ATRとの合成、blend weight、confidence閾値を同じ履歴で再探索せず、Distribution Shape/Extra Trees 0.53を維持する。
 61. Signed Clarity連続教師は再現専用とする。target非線形化、loss、blend weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape/Pressure方向候補とSigned-body Quantile/Clear-body 0.525を維持する。
 62. Directional Clarity sample weightingは再現専用とする。weight offset、非線形化、上限、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。
+63. Intrabar Full Path方向維持0.53をselective confidenceの固定forward championとする。15地点、正規化、25% weight、閾値を履歴内再探索せず、完全未使用期間でDistribution Shape/Extra Trees以上のaccuracy・selection score・Brierとdown-normal局所整合を同時に確認するまでauthoritative confidence・odds・売買policyへ昇格しない。

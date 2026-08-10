@@ -135,6 +135,8 @@ uv run python methods/next_bar/scripts/run.py walk-forward \
 
 完成した上位足内の途中trajectoryまで使う場合は `--feature-set intrabar_profile` を使う。既存intrabar structureへ、上位足rangeで正規化した20/40/60/80%地点のM1 close level、始値から最終終値までの直線pathとの差、足内全地点の平均/RMS/上下最大偏差の12特徴を追加する。M15の方向維持型25% blend 0.515は `config/m15_intrabar_profile_confidence_candidate_v1.json` のbroad coverage候補で、candidate registryのdevelopment目的関数championである。定義を変更しないM5移植も0.515でaccuracy・selection scoreを6/7 fold、Brier/log loss/ECEを7/7 fold改善したため `config/m5_intrabar_profile_confidence_candidate_v1.json` に固定した。M30はproper scoreだけ改善し高信頼laneが悪化したため `config/m30_intrabar_profile_calibration_shadow_v1.json` の校正診断shadowに限定する。M1は独立した下位足経路がないため対象外である。
 
+M15内15本のM1 close経路を順序ごと保持する場合は `--feature-set intrabar_full_path` を使う。Profileが持つ3/15、6/15、9/15、12/15地点に、欠けている11地点をM15 rangeで正規化して追加する。単体は親Profileにaccuracy 6/7 fold勝ったが正式baselineのconfirmationを上積みできず、通常方向blendも悪化したため方向用途には使わない。baseline方向を維持する25% blendの固定0.53 laneはdevelopment/confirmation score、baseline比accuracy 7/7、Brier/log loss 7/7 foldを改善し、Distribution Shapeにもaccuracy/score各5/7勝ったため `config/m15_intrabar_full_path_confidence_candidate_v1.json` に固定した。candidate registryのselective履歴championだが、完全未使用期間まではauthoritative confidence・odds・売買policyを置換しない。
+
 完成上位足内のM1買い／売り圧力proxyを使う場合は `--feature-set intrabar_pressure` を使う。Intrabar Profileへ、M1 close-locationの平均/分散/序盤/終盤、range-weighted close-location、signed range、wick/body pressure、両者の乖離、方向一致率の11定常特徴を追加する。M15単体とconfidence用途は不採用。baseline 75% + Pressure 25%の通常方向blendはdevelopment/confirmationの両方、accuracy 5/7、Brier/log loss 7/7 foldを改善したため `config/m15_intrabar_pressure_direction_candidate_v1.json` のparallel forward候補に固定した。paired p=0.224なので現行方向モデルは置換しない。
 
 同じPressure定義と25% weightのM5移植もdevelopment/confirmationの方向accuracy、accuracy 5/7、Brier/log loss 7/7 foldを改善し、親Profile方向blendに6/7 fold勝ったため `config/m5_intrabar_pressure_direction_candidate_v1.json` のparallel forward候補に固定した。paired p=0.180なので現行方向は置換しない。Pressure 0.515 confidenceは既存Profileと95%重複してfold比較3/7、両者の固定平均もconfirmation scoreが悪化したため採用しない。
@@ -268,7 +270,7 @@ uv run python methods/next_bar/scripts/build_candidate_registry.py \
   --output methods/next_bar/config/m15_candidate_registry_v1.json
 ```
 
-台帳は14候補の145,140 OOS行を再読込してkey整列を検証し、development/confirmation/allのcoverage、accuracy、Wilson下限、selection score、Brier/log loss/ECE、fold安定性を同一定義で再計算する。championはdevelopment目的関数だけでbroad・balanced・selective・precisionの各役割から選び、confirmationは監査にしか使わない。目的関数首位とは別にaccuracy leaderとPareto challengerも保持する。固定閾値がconfigに明示されていない候補はエラーにし、実行時の閾値再探索は行わない。
+台帳は15候補の145,140 OOS行を再読込してkey整列を検証し、development/confirmation/allのcoverage、accuracy、Wilson下限、selection score、Brier/log loss/ECE、fold安定性を同一定義で再計算する。championはdevelopment目的関数だけでbroad・balanced・selective・precisionの各役割から選び、confirmationは監査にしか使わない。目的関数首位とは別にaccuracy leaderとPareto challengerも保持する。固定閾値がconfigに明示されていない候補はエラーにし、実行時の閾値再探索は行わない。
 
 派生candidateが親モデルへ本当に増分edgeを持つか、同一閾値で直接比較する:
 
@@ -394,7 +396,7 @@ Shapeへpredicted up/down別correctness Plattを適用する実験も行った�
 
 完成M15内の連続3本のM1 returnを6種類の順序patternと正規化permutation entropyへ加工する場合は `--feature-set intrabar_ordinal_shape` を使う。親Volatility Shapeへ振幅非依存の固定7列を追加する。単体方向はbaselineを上回ったが親Shapeに負け、方向維持0.53 confidenceもconfirmationで反転した。自身の0.55 laneは親Shapeにaccuracy 5/7・selection score 6/7 fold勝ったが、Intrabar Structure 0.55よりdevelopment objectiveが低く、日次bootstrapでも優位未確定のため再現専用とする。
 
-完成M15内のM1 return分布を価格水準非依存で使う場合は `--feature-set intrabar_distribution_shape` を使う。親Volatility ShapeへRMS正規化q10/q25/q50/q75/q90、Bowley/tail skew、IQR/interdecile range、MAD/RMSの固定9列を追加する。単体方向と通常25%方向blendは親Shape・baselineを置換できなかった。一方baseline方向を固定した25% confidenceの0.53 laneはdevelopment/confirmationの採用gateを通り、Extra Treesにdevelopment objectiveと5/7 foldで勝ったため `config/m15_intrabar_distribution_shape_confidence_candidate_v1.json` に固定した。registryのselective履歴championだが、confirmationではExtra Treesが上なのでfresh期間まで両者を並行比較する。
+完成M15内のM1 return分布を価格水準非依存で使う場合は `--feature-set intrabar_distribution_shape` を使う。親Volatility ShapeへRMS正規化q10/q25/q50/q75/q90、Bowley/tail skew、IQR/interdecile range、MAD/RMSの固定9列を追加する。単体方向と通常25%方向blendは親Shape・baselineを置換できなかった。一方baseline方向を固定した25% confidenceの0.53 laneはdevelopment/confirmationの採用gateを通り、Extra Treesにdevelopment objectiveと5/7 foldで勝ったため `config/m15_intrabar_distribution_shape_confidence_candidate_v1.json` に固定した。後続Full Path 0.53がdevelopment objective、confirmation、年別5/7、proper scoreで上回ったため現registryのselective championではないが、比較用forward候補として固定条件を維持する。
 
 候補差が小さい場合は連続M15足を独立と仮定せず、固定UTC日paired bootstrapも使う:
 
@@ -411,7 +413,7 @@ env PYTHONPATH=src .venv/bin/python methods/next_bar/scripts/bootstrap_fixed_can
   --output experiments/next_bar/intrabar_distribution_shape_vs_extra_trees_m15_053_daily_bootstrap.json
 ```
 
-DistributionとExtra Treesのaccuracy・selection score差は95%区間が0を跨いだため、registryのpoint championを統計的な置換確定とは解釈しない。fixed subgroup監査で見つかったdown-normalの不整合もfresh gateとし、履歴後付けfilterにはしない。
+DistributionとExtra Treesのaccuracy・selection score差は95%区間が0を跨いだため、当時のpoint championを統計的な置換確定とは解釈しない。後続Full PathもDistribution/Extra Treesへのselection score優位はbootstrapで未確定なので、registry順位と統計的置換確定を区別する。fixed subgroup監査で見つかったdown-normalの不整合はFull Pathで局所整合を回復したが、fresh gateとして残し、履歴後付けfilterにはしない。
 
 PressureのCLV・wick・body圧力11列とVolatility Shapeの集中度・時間重心14列を同時に使う固定unionは `--feature-set intrabar_flow_shape` で再現できる。52 intrabar列・全90特徴になる。M15単体方向はbaselineを上回ったが親Volatility Shapeを上積みできず、方向維持0.53 confidenceもdevelopmentの改善がconfirmationで反転した。単純unionは棄却し、subset・weight・閾値を同じ履歴で再探索しない。
 

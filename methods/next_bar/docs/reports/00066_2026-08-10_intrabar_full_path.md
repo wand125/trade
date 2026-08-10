@@ -16,8 +16,8 @@ Intrabar Profileは完成M15内の15本のM1 close経路を20/40/60/80%地点と
 
 | period | 正式baseline | Full Path | 親Profile |
 |---|---:|---:|---:|
-| development | 52.0144% | 52.2692% | 52.0632% |
-| confirmation | 51.5012% | 51.4815% | 51.3938% |
+| development | 52.0144% | 52.2692% | 52.0627% |
+| confirmation | 51.5012% | 51.4815% | 51.3941% |
 | all | 51.8162% | 51.9650% | 51.8045% |
 
 Full Path単体は親Profileへaccuracy 6/7 fold、proper scoreとECEも全期間で勝ち、経路点追加のincremental edgeは確認できた。正式baselineにはdevelopmentで純改善+227件、p=0.0423だったが、confirmationは-11件、全体+216件、p=0.123である。正式baseline 75% + Full Path 25%の通常blendも全体-45件、p=0.526だった。方向候補としては採用せず、既存Volatility Shape単体を維持する。
