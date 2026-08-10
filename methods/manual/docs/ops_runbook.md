@@ -79,9 +79,22 @@
 
 ### 11-A の発動条件(3つすべて。**判定は相談セッションが行う**)
 
-1. 158.68±5pips まで押す
-2. その水準で **M5が3本以上下支え**される
-3. **M15 RSIが70未満**に戻っている(追いかけの禁止)
+1. **158.68±5pips(158.63〜158.73)まで押す**
+2. **M5の直近5本のうち3本以上の安値が 158.63〜158.73 に収まる**
+3. **M15 RSIが70未満**(追いかけの禁止。**最重要**)
+
+**②③は目視でなく数値で判定する**(2026-08-10 19:40 追加):
+
+```
+python3 -c "
+import json
+d=json.load(open('runtime/latest_snapshot_USDJPY-m.json'))
+bars=d['timeframes']['M5']['bars'][-5:]
+hit=[b for b in bars if 158.63 <= b['low'] <= 158.73]
+print('安値:', [f\"{b['low']:.3f}\" for b in bars], f'→ ゾーン内{len(hit)}本')
+"
+python3 methods/manual/scripts/indicators.py USDJPY-m --tf M15   # RSIが70未満か
+```
 
 **運用セッションは①の到達を通知するだけでよい。**②③の判定と発注可否は相談セッションと本人が決める。
 

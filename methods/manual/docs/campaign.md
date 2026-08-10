@@ -191,8 +191,27 @@
 **発動条件(3つすべて満たしたときのみ。1つでも欠けたら発注しない)**:
 
 1. **158.68±5pips(158.63〜158.73)まで押す**
-2. その水準で **M5が3本以上下支え**される(同水準±3pips)
+2. **M5の直近5本のうち3本以上の安値が 158.63〜158.73 に収まっている**(下記の判定手順)
 3. **M15 RSIが70未満**に戻っている(**追いかけの禁止**。これが最重要)
+
+**条件②の判定手順(2026-08-10 19:40、運用セッションの指摘を受けて数値化)**:
+
+`runtime/latest_snapshot_USDJPY-m.json` の `timeframes.M5.bars` の**直近5本**を見て、`low` が **158.63以上 158.73以下** の本数を数える。**3本以上なら成立**。
+
+```
+python3 -c "
+import json
+d=json.load(open('runtime/latest_snapshot_USDJPY-m.json'))
+bars=d['timeframes']['M5']['bars'][-5:]
+hit=[b for b in bars if 158.63 <= b['low'] <= 158.73]
+print(f'直近5本の安値:', [f\"{b['low']:.3f}\" for b in bars])
+print(f'ゾーン内: {len(hit)}本 → 条件②', '成立' if len(hit)>=3 else '未成立')
+"
+```
+
+**「下支え」の意味**: 3本以上の安値がこのゾーンで止まっている = **売り圧力がここで吸収されている**。安値がゾーンを下抜けていたら、それは下支えではなく通過点。
+
+**条件③の判定**: 同じファイルの `timeframes.M15.bars` から RSI14 を計算する。`python3 methods/manual/scripts/indicators.py USDJPY-m --tf M15` で出る。**70未満なら成立**。
 
 **発注内容(この通りに、変更せず)**:
 
