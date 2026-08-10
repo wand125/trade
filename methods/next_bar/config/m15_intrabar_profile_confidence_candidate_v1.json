@@ -1,0 +1,116 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_broad_intrabar_profile",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "feature_candidate": {
+    "feature_set": "intrabar_profile",
+    "baseline_feature_count": 38,
+    "existing_intrabar_feature_count": 15,
+    "additional_profile_feature_count": 12,
+    "profile_features": [
+      "intrabar_profile_level_20",
+      "intrabar_profile_level_40",
+      "intrabar_profile_level_60",
+      "intrabar_profile_level_80",
+      "intrabar_profile_deviation_20",
+      "intrabar_profile_deviation_40",
+      "intrabar_profile_deviation_60",
+      "intrabar_profile_deviation_80",
+      "intrabar_profile_mean_deviation",
+      "intrabar_profile_rms_deviation",
+      "intrabar_profile_max_deviation",
+      "intrabar_profile_min_deviation"
+    ],
+    "normalization": "M1 close displacement divided by the completed M15 high-low range; deviations are measured from the open-to-final-close straight path",
+    "source": "completed M1 rows inside the current completed M15 bar only",
+    "raw_price_levels_used_as_model_features": false
+  },
+  "confidence_candidate": {
+    "candidate_model": "HGB with baseline plus 27 processed intrabar path features",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.515,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_profile_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_intrabar_profile_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_profile_confidence_blend_001",
+    "analysis": "experiments/next_bar/intrabar_profile_candidate_analysis.json",
+    "structure_comparison": "experiments/next_bar/intrabar_profile_vs_structure_0515_analysis.json",
+    "latest_artifact": "experiments/next_bar/intrabar_profile_latest_artifact_001"
+  },
+  "selection_objective": {
+    "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
+    "wilson_z": 1.96
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall_probability_quality": {
+      "baseline_brier": 0.24942610034671497,
+      "candidate_brier": 0.24938192681793894,
+      "baseline_log_loss": 0.6919984520992793,
+      "candidate_log_loss": 0.6919095152300435,
+      "baseline_ece": 0.0034669502731555883,
+      "candidate_ece": 0.00321395290366955
+    },
+    "confidence_0515": {
+      "development": {
+        "coverage": 0.5840171525431339,
+        "accuracy": 0.5322146618998194,
+        "selection_score": 0.021340459638065565
+      },
+      "confirmation": {
+        "coverage": 0.49326578304226054,
+        "accuracy": 0.5274311959784457,
+        "selection_score": 0.015130413701437148
+      },
+      "all": {
+        "coverage": 0.5489665150888797,
+        "accuracy": 0.5305546142550548,
+        "selection_score": 0.020070021868936416
+      }
+    },
+    "fold_stability": {
+      "accuracy_improved_folds": 6,
+      "selection_score_improved_folds": 6,
+      "brier_improved_folds": 6,
+      "log_loss_improved_folds": 6,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "against_parent_structure_at_confidence_0515": {
+      "development_profile_score": 0.021340459638065565,
+      "development_structure_score": 0.020303448447282664,
+      "confirmation_profile_score": 0.015130413701437148,
+      "confirmation_structure_score": 0.014300133126774991,
+      "all_profile_score": 0.020070021868936416,
+      "all_structure_score": 0.019111047536270836,
+      "profile_accuracy_wins": 6,
+      "profile_selection_score_wins": 7,
+      "evaluated_folds": 7
+    },
+    "rejected_direction_variants": {
+      "single_overall_accuracy": 0.5180446465481604,
+      "single_confirmation_accuracy": 0.5139411670264196,
+      "normal_blend_overall_accuracy": 0.5183753617197189,
+      "normal_blend_confirmation_accuracy": 0.5143871416593824,
+      "normal_blend_fixes": 2392,
+      "normal_blend_harms": 2361,
+      "normal_blend_mcnemar_exact_p": 0.6634592361138151
+    }
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_broad_coverage_candidate": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_selection_score_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "reason": "The fixed 0.515 lane improved accuracy and the coverage-aware objective in development and confirmation with strong proper-score stability, but it was selected from historical OOS data and requires a fresh untouched period before authoritative promotion."
+  }
+}

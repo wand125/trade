@@ -1,0 +1,126 @@
+{
+  "format_version": 1,
+  "status": "forward_shadow_local_odds",
+  "target_timeframe_minutes": 5,
+  "confidence_source": "baseline-direction-preserving 75% baseline HGB + 25% Intrabar Profile HGB",
+  "fixed_candidate_threshold": 0.515,
+  "odds_definition": "confidence is the estimated probability that the fixed baseline direction is correct; decimal odds are 1 / confidence",
+  "nested_validation": {
+    "calibration_folds": "all prior OOS folds",
+    "evaluation_fold": "next chronological OOS fold",
+    "rows": 369813,
+    "selected_source": "model_confidence",
+    "calibration_valid_under_global_gate": true,
+    "model_confidence": {
+      "accuracy": 0.5130755273611257,
+      "mean_confidence": 0.5176690755089691,
+      "brier": 0.2496781367235013,
+      "log_loss": 0.6925025192499586,
+      "ece": 0.004614187274898871,
+      "null_brier": 0.24982903058422845
+    },
+    "baseline_model_confidence": {
+      "brier": 0.24969017226367457,
+      "log_loss": 0.692526608457315,
+      "ece": 0.004733531608214181
+    },
+    "hierarchical_empirical_odds": {
+      "adopted": false,
+      "brier": 0.24979007271647502,
+      "log_loss": 0.6927277574741397,
+      "ece": 0.0053839279861215275,
+      "reason": "All three nested proper calibration metrics were worse than the unmodified model confidence."
+    }
+  },
+  "fixed_reliability_audit": {
+    "band_edges": [0.5, 0.515, 0.525, 0.535, 0.55, 0.575, 0.6, 1.0],
+    "cumulative_thresholds": [0.515, 0.525, 0.535, 0.55, 0.575, 0.6],
+    "confirmation": {
+      "confidence_0515": {
+        "rows": 62885,
+        "coverage": 0.3711540391073652,
+        "accuracy": 0.5241154488351754,
+        "mean_confidence": 0.52453615290392,
+        "wilson_lower": 0.5202106608381658,
+        "wilson_upper": 0.5280172906208733,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_0525": {
+        "rows": 24128,
+        "coverage": 0.1424060532015983,
+        "accuracy": 0.5349801061007957,
+        "mean_confidence": 0.5327303836948387,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_0535": {
+        "rows": 6896,
+        "coverage": 0.04070093430363983,
+        "accuracy": 0.5524941995359629,
+        "mean_confidence": 0.5415699748991877,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_055": {
+        "rows": 668,
+        "coverage": 0.003942607905282977,
+        "accuracy": 0.5778443113772455,
+        "mean_confidence": 0.5562390660710274,
+        "wilson_lower": 0.5400488004218937,
+        "wilson_upper": 0.614749592532636,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_0575": {
+        "rows": 12,
+        "coverage": 0.00007082529171167024,
+        "accuracy": 0.5,
+        "mean_confidence": 0.5844421871388727,
+        "edge_confirmed": false,
+        "support_sufficient": false
+      }
+    },
+    "development_local_consistency_at_0515": false,
+    "confirmation_local_consistency_at_0515": true
+  },
+  "experiments": {
+    "predictions": "experiments/next_bar/intrabar_profile_m5_confidence_blend_001",
+    "reliability_analysis": "experiments/next_bar/intrabar_profile_m5_reliability_analysis.json",
+    "odds_calibration": "experiments/next_bar/intrabar_profile_m5_odds_calibration.json",
+    "baseline_odds_calibration": "experiments/next_bar/baseline_m5_complete_odds_calibration.json",
+    "baseline_latest_artifact": "experiments/next_bar/baseline_m5_latest_artifact_001",
+    "profile_latest_artifact": "experiments/next_bar/intrabar_profile_m5_latest_artifact_001",
+    "latest_ensemble": "experiments/next_bar/intrabar_profile_m5_latest_ensemble_001",
+    "runtime_shadow_policy": "methods/next_bar/config/m5_intrabar_profile_runtime_shadow_policy_v1.json"
+  },
+  "runtime_parity": {
+    "verified": true,
+    "shared_probability_function": "trade_data.next_bar_ensemble.blend_probability_values",
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": true,
+    "split_boundaries_match": true,
+    "training_settings_match": true,
+    "latest_decision_timestamp": "2026-06-01T04:55:00Z",
+    "latest_baseline_probability_up": 0.5332709162,
+    "latest_profile_probability_up": 0.5314733746,
+    "latest_blended_probability_up": 0.5328215308,
+    "latest_direction": "up",
+    "numerical_parity_error": 1.1102230246251565e-16,
+    "calibration_gate_passed": true,
+    "runtime_odds_authorized": false,
+    "odds_valid": false,
+    "strict_prediction_eligible": false
+  },
+  "promotion": {
+    "authoritative_fair_odds": false,
+    "runtime_enabled": false,
+    "runtime_shadow_enabled": true,
+    "runtime_parity_verified": true,
+    "use_empirical_hierarchical_recalibration": false,
+    "require_fresh_forward_local_consistency": true,
+    "require_fresh_forward_edge_confirmed": true,
+    "require_runtime_baseline_profile_blend_parity": true,
+    "reason": "Runtime blend parity is verified and the confirmation 0.515 lane is locally calibrated and edge-confirmed, but development 0.515 is mildly overconfident and no fresh untouched period has been observed. Keep model confidence as a non-authorized forward odds shadow only."
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "status": "forward_shadow_not_authorized_for_trading",
+    "source_candidate": "methods/next_bar/config/m30_intrabar_pressure_confidence_candidate_v1.json",
+    "evidence_period": "confirmation folds test2024, test2025, test2026_partial",
+    "direction_policy": "preserve baseline HGB direction",
+    "odds_runtime_authorized": false
+  },
+  "M30": {
+    "enabled": true,
+    "min_confidence": 0.52,
+    "reference_accuracy": 0.5373451327433628,
+    "accuracy_lower_bound": 0.5267150797964936,
+    "reference_coverage": 0.3063880553848379,
+    "quality_score": 0.01478741941207334,
+    "worst_fold_accuracy": null
+  }
+}

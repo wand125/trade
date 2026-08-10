@@ -1,0 +1,108 @@
+{
+  "format_version": 1,
+  "status": "forward_shadow_four_class_body_confidence",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline binary HGB",
+  "confidence_shadow": {
+    "candidate_model": "four-class direction x next-bar-body-size HGB",
+    "body_size_threshold": "sampled train-only median next_bar_body_atr per fold",
+    "class_mapping": {
+      "0": "down_large",
+      "1": "down_small",
+      "2": "up_small",
+      "3": "up_large"
+    },
+    "direction_probability": "P(up_small) + P(up_large), followed by Platt calibration",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.525,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_body_multiclass_hgb_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_body_multiclass_hgb_25_001",
+    "direction_preserving_blend": "experiments/next_bar/body_multiclass_hgb_confidence_blend_001",
+    "analysis": "experiments/next_bar/body_multiclass_hgb_candidate_analysis.json",
+    "clear_body_comparison": "experiments/next_bar/body_multiclass_vs_clear_body_0525_analysis.json"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall_probability_quality": {
+      "base_brier": 0.24942610034671497,
+      "shadow_brier": 0.24939897860601964,
+      "base_log_loss": 0.6919984520992793,
+      "shadow_log_loss": 0.6919432575544525,
+      "base_ece": 0.0034669502731555883,
+      "shadow_ece": 0.0026530569463060795
+    },
+    "confidence_0525": {
+      "development": {
+        "base_rows": 33770,
+        "shadow_rows": 32773,
+        "base_coverage": 0.37908467384349426,
+        "shadow_coverage": 0.367892863958331,
+        "base_accuracy": 0.5385845424933373,
+        "shadow_accuracy": 0.5408720593171208,
+        "base_selection_score": 0.02048028316610968,
+        "shadow_selection_score": 0.021515446004128615
+      },
+      "confirmation": {
+        "base_rows": 14785,
+        "shadow_rows": 13536,
+        "base_coverage": 0.2637493979342455,
+        "shadow_coverage": 0.24146850527142016,
+        "base_accuracy": 0.5377747717281028,
+        "shadow_accuracy": 0.5411495271867612,
+        "base_selection_score": 0.015267988231186176,
+        "shadow_selection_score": 0.016090384878157605
+      },
+      "overall": {
+        "base_rows": 48555,
+        "shadow_rows": 46309,
+        "base_coverage": 0.3345390657296404,
+        "shadow_coverage": 0.31906435166046576,
+        "base_accuracy": 0.5383379672536299,
+        "shadow_accuracy": 0.5409531624522231,
+        "base_selection_score": 0.019607986789226563,
+        "shadow_selection_score": 0.020567179166891752
+      },
+      "fold_accuracy_improvements": "7/7",
+      "fold_selection_score_improvements": "7/7"
+    },
+    "proper_score_fold_improvements": {
+      "brier": "5/7",
+      "log_loss": "5/7",
+      "ece": "5/7"
+    },
+    "rejected_direction_variants": {
+      "single_accuracy": 0.5179344081576409,
+      "single_confirmation_accuracy": 0.5149401502042564,
+      "unrestricted_blend_accuracy": 0.5179964172523082,
+      "unrestricted_blend_confirmation_accuracy": 0.5151720570133971,
+      "unrestricted_blend_paired_fixes": 2664,
+      "unrestricted_blend_paired_harms": 2688,
+      "unrestricted_blend_mcnemar_exact_p": 0.7532276186074387
+    },
+    "against_clear_body_0525": {
+      "development_selection_score": 0.021515446004128615,
+      "clear_body_development_selection_score": 0.021640168202209757,
+      "confirmation_selection_score": 0.016090384878157605,
+      "clear_body_confirmation_selection_score": 0.016754589940831545,
+      "overall_selection_score": 0.020567179166891752,
+      "clear_body_overall_selection_score": 0.020875190088748222,
+      "accuracy_improvement_folds": "1/7",
+      "selection_score_improvement_folds": "3/7",
+      "proper_score_improvement_folds": "3/7 Brier, 3/7 log loss, 5/7 ECE"
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_confidence_shadow": true,
+    "eligible_for_odds_replacement": false,
+    "reason": "The development-selected 0.525 lane improved baseline accuracy and selection score in all 7 folds, but clear-body has higher development, confirmation, and overall scores plus stronger direct fold and proper-score evidence."
+  }
+}

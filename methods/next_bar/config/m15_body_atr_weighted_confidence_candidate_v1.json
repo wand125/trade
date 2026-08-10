@@ -1,0 +1,99 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_precision_lane",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "weighted_training": {
+    "model": "HGB with baseline 38 processed features",
+    "strength": "abs(next_bar_body) / (decision_close * atr_ratio_20)",
+    "raw_sample_weight": "0.5 + clip(strength, 0.0, 1.5)",
+    "normalization": "divide by the training-fold mean so sample weights average 1.0",
+    "usage_boundary": "future next-bar body is used only as a training target weight; it is never an input feature or used in calibration/test inference"
+  },
+  "confidence_candidate": {
+    "baseline_weight": 0.75,
+    "weighted_hgb_weight": 0.25,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.54,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "formula": "raw_blend = 0.75 * P_baseline_HGB + 0.25 * P_body_ATR_weighted_HGB; retain the baseline HGB side and use max(baseline_side_sign * (raw_blend - 0.5), epsilon) as its probability edge"
+  },
+  "precision_lane": {
+    "minimum_candidate_confidence": 0.54,
+    "outside_lane": "keep the baseline HGB direction and current authoritative confidence/policy",
+    "relationship_to_extra_trees_053": "this is a narrower higher-accuracy candidate; Extra Trees confidence 0.53 remains the wider candidate with the higher coverage-weighted selection score"
+  },
+  "experiments": {
+    "weighted_hgb_oos": "experiments/next_bar/walk_forward_body_atr_weighted_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_body_atr_weighted_25_001",
+    "direction_preserving_blend": "experiments/next_bar/body_atr_weighted_confidence_blend_001"
+  },
+  "selection_objective": {
+    "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
+    "wilson_z": 1.96
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall_probability_quality": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671492,
+      "candidate_brier": 0.2493894816707886,
+      "base_log_loss": 0.6919984520992796,
+      "candidate_log_loss": 0.6919244747363966,
+      "base_ece": 0.0034669502731554777,
+      "candidate_ece": 0.0027588660137330473
+    },
+    "confidence_054_overall": {
+      "base_rows": 20887,
+      "candidate_rows": 19564,
+      "base_coverage": 0.1439093289237977,
+      "candidate_coverage": 0.1347939920077167,
+      "base_accuracy": 0.5480921147125006,
+      "candidate_accuracy": 0.5519832345123696,
+      "base_wilson_lower": 0.5413344142980667,
+      "candidate_wilson_lower": 0.5450052374713503,
+      "base_selection_score": 0.015680368406819647,
+      "candidate_selection_score": 0.01652335848680875
+    },
+    "confidence_054_development_2020_2023": {
+      "base_accuracy": 0.5467474647538956,
+      "candidate_accuracy": 0.5511998413432935,
+      "base_selection_score": 0.01664445247868974,
+      "candidate_selection_score": 0.017827183429624274
+    },
+    "confidence_054_confirmation_2024_2026_partial": {
+      "base_accuracy": 0.5527041357370095,
+      "candidate_accuracy": 0.5546540455262565,
+      "base_selection_score": 0.011158304716153509,
+      "candidate_selection_score": 0.011250418445076783
+    },
+    "fold_stability_at_confidence_054": {
+      "candidate_accuracy_improved_folds": 7,
+      "candidate_selection_score_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "rejected_direction_variants": {
+      "weighted_hgb_accuracy": 0.5164599696844426,
+      "unrestricted_blend_accuracy": 0.5179964172523082,
+      "base_confirmation_accuracy": 0.5150115061455305,
+      "unrestricted_blend_confirmation_accuracy": 0.5148331162923453
+    },
+    "confidence_053_non_adoption": {
+      "base_selection_score": 0.019415450930931288,
+      "candidate_selection_score": 0.01909070546310268,
+      "reason": "coverage contraction outweighed the small accuracy increase"
+    }
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_precision_candidate": true,
+    "require_fresh_forward_confidence_054_accuracy_not_below_base": true,
+    "require_fresh_forward_confidence_054_selection_score_not_below_base": true,
+    "require_fresh_forward_brier_not_above_base": true,
+    "reason": "The fixed 0.54 lane improved accuracy in every historical OOS fold and improved the selection objective in development and confirmation, but the candidate was derived from historical OOS research and must pass a fresh forward period before becoming authoritative."
+  }
+}

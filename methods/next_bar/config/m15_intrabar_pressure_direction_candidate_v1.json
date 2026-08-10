@@ -1,0 +1,128 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_intrabar_pressure",
+  "target_timeframe_minutes": 15,
+  "feature_candidate": {
+    "feature_set": "intrabar_pressure",
+    "parent_feature_set": "intrabar_profile",
+    "additional_pressure_feature_count": 11,
+    "pressure_features": [
+      "intrabar_clv_mean",
+      "intrabar_clv_std",
+      "intrabar_early_clv_mean",
+      "intrabar_late_clv_mean",
+      "intrabar_clv_late_minus_early",
+      "intrabar_range_weighted_clv",
+      "intrabar_signed_range_pressure",
+      "intrabar_wick_pressure",
+      "intrabar_body_range_pressure",
+      "intrabar_clv_body_divergence",
+      "intrabar_clv_body_agreement"
+    ],
+    "source": "completed M1 OHLC rows inside the current completed M15 bar only",
+    "normalization": "M1 close-location, body, wick, and signed-range pressure normalized by each M1 range or total completed-bar M1 range",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "direction_candidate": {
+    "baseline_model": "baseline HGB",
+    "candidate_model": "HGB with baseline plus 38 processed intrabar path and pressure features",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_pressure_001",
+    "direction_blend": "experiments/next_bar/ensemble_intrabar_pressure_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_pressure_confidence_blend_001",
+    "analysis": "experiments/next_bar/intrabar_pressure_candidate_analysis.json",
+    "profile_confidence_comparison": "experiments/next_bar/intrabar_pressure_vs_profile_0515_analysis.json",
+    "baseline_latest_artifact": "experiments/next_bar/baseline_m15_latest_artifact_001",
+    "candidate_latest_artifact": "experiments/next_bar/intrabar_pressure_m15_latest_artifact_001",
+    "latest_ensemble": "experiments/next_bar/intrabar_pressure_m15_latest_ensemble_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "direction_blend": {
+      "development": {
+        "baseline_accuracy": 0.5201441352446595,
+        "candidate_accuracy": 0.5207166350482134,
+        "baseline_brier": 0.2493465877907924,
+        "candidate_brier": 0.24929149829785704,
+        "baseline_log_loss": 0.6918397771958668,
+        "candidate_log_loss": 0.6917287922967201
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5150115061455305,
+        "candidate_accuracy": 0.515653709616997,
+        "baseline_brier": 0.24955245775112914,
+        "candidate_brier": 0.2495295492124436,
+        "baseline_log_loss": 0.6922506103742625,
+        "candidate_log_loss": 0.6922046926256377
+      },
+      "all": {
+        "baseline_accuracy": 0.5181617748380873,
+        "candidate_accuracy": 0.5187611960865371,
+        "baseline_brier": 0.24942610034671497,
+        "candidate_brier": 0.24938344001012774,
+        "baseline_log_loss": 0.6919984520992793,
+        "candidate_log_loss": 0.6919125978964042,
+        "baseline_ece": 0.0034669502731555883,
+        "candidate_ece": 0.00258292159004185
+      },
+      "accuracy_improved_folds": 5,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 4,
+      "evaluated_folds": 7,
+      "fixes": 2548,
+      "harms": 2461,
+      "net_improvement": 87,
+      "mcnemar_exact_p": 0.2243126358924345
+    },
+    "against_parent_profile_direction_blend": {
+      "development_profile_accuracy": 0.5208850173433764,
+      "development_pressure_accuracy": 0.5207166350482134,
+      "confirmation_profile_accuracy": 0.5143871416593824,
+      "confirmation_pressure_accuracy": 0.515653709616997,
+      "all_profile_accuracy": 0.5183753617197189,
+      "all_pressure_accuracy": 0.5187611960865371,
+      "pressure_accuracy_wins": 4,
+      "evaluated_folds": 7,
+      "confirmation_mcnemar_exact_p": 0.05772950382838599
+    },
+    "rejected_confidence_variants": {
+      "development_selected_threshold": 0.53,
+      "development_baseline_score": 0.02027495093339169,
+      "development_candidate_score": 0.02148192956125969,
+      "confirmation_baseline_accuracy": 0.5447948916408669,
+      "confirmation_candidate_accuracy": 0.5413446676970634,
+      "confirmation_baseline_score": 0.015106002762317485,
+      "confirmation_candidate_score": 0.013636300952396213,
+      "against_profile_0515_accuracy_wins": 3,
+      "against_profile_0515_score_wins": 3,
+      "evaluated_folds": 7
+    },
+    "latest_runtime": {
+      "decision_timestamp": "2026-06-01T04:45:00Z",
+      "baseline_probability_up": 0.5772537283,
+      "candidate_probability_up": 0.5832838258,
+      "blended_probability_up": 0.5787612527,
+      "predicted_direction": "up",
+      "artifact_parity_verified": true,
+      "odds_valid": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_direction_candidate": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "The fixed 25% direction blend improved accuracy in development, confirmation, and 5/7 folds while Brier and log loss improved in 7/7 folds. The paired direction difference is still weak at p=0.224 after extensive historical candidate research, so it remains a parallel forward candidate until a fresh untouched period confirms the edge."
+  }
+}

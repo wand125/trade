@@ -1,0 +1,152 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_selective_intrabar_pressure",
+  "target_timeframe_minutes": 30,
+  "direction_source": "baseline HGB",
+  "feature_candidate": {
+    "feature_set": "intrabar_pressure",
+    "parent_feature_set": "intrabar_profile",
+    "additional_pressure_feature_count": 11,
+    "source": "completed M1 OHLC rows inside the current completed M30 bar only",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "confidence_candidate": {
+    "candidate_model": "HGB with baseline plus 38 processed intrabar path and pressure features",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.52,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/baseline_m30_complete_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_pressure_m30_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_intrabar_pressure_m30_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_pressure_m30_confidence_blend_001",
+    "analysis": "experiments/next_bar/intrabar_pressure_m30_candidate_analysis.json",
+    "reliability_analysis": "experiments/next_bar/intrabar_pressure_m30_reliability_analysis.json",
+    "parent_profile_comparison_052": "experiments/next_bar/intrabar_pressure_vs_profile_m30_052_analysis.json",
+    "nested_odds": "experiments/next_bar/intrabar_pressure_m30_odds_calibration.json",
+    "baseline_nested_odds": "experiments/next_bar/baseline_m30_complete_odds_calibration.json",
+    "baseline_latest_artifact": "experiments/next_bar/baseline_m30_latest_artifact_001",
+    "candidate_latest_artifact": "experiments/next_bar/intrabar_pressure_m30_latest_artifact_001",
+    "latest_ensemble": "experiments/next_bar/intrabar_pressure_m30_latest_ensemble_001",
+    "runtime_shadow_policy": "methods/next_bar/config/m30_intrabar_pressure_runtime_shadow_policy_v1.json"
+  },
+  "selection_objective": {
+    "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
+    "wilson_z": 1.96,
+    "threshold_selected_from_development_only": true
+  },
+  "evidence": {
+    "rows": 71260,
+    "confidence_052": {
+      "development": {
+        "baseline_coverage": 0.4124406523085392,
+        "candidate_coverage": 0.40195876052203033,
+        "baseline_accuracy": 0.5341452563674786,
+        "candidate_accuracy": 0.5376890156918688,
+        "baseline_selection_score": 0.017241978575151504,
+        "candidate_selection_score": 0.019210141125140176
+      },
+      "confirmation": {
+        "baseline_coverage": 0.3126785004157478,
+        "candidate_coverage": 0.3063880553848379,
+        "baseline_accuracy": 0.5363625852699734,
+        "candidate_accuracy": 0.5373451327433628,
+        "candidate_mean_confidence": 0.5335350091232745,
+        "candidate_wilson_lower": 0.5267150797964936,
+        "baseline_selection_score": 0.01444858236620964,
+        "candidate_selection_score": 0.01478741941207334,
+        "candidate_locally_consistent": true,
+        "candidate_edge_confirmed": true
+      },
+      "all": {
+        "baseline_coverage": 0.37371596968846477,
+        "candidate_coverage": 0.36486107213022734,
+        "baseline_accuracy": 0.5348653824490256,
+        "candidate_accuracy": 0.5375769230769231,
+        "baseline_selection_score": 0.017648980792107943,
+        "candidate_selection_score": 0.019034002673843458
+      }
+    },
+    "fold_stability": {
+      "accuracy_improved_folds": 7,
+      "selection_score_improved_folds": 6,
+      "brier_improved_folds": 5,
+      "log_loss_improved_folds": 5,
+      "ece_improved_folds": 4,
+      "evaluated_folds": 7
+    },
+    "overall_probability_quality": {
+      "baseline_brier": 0.24949787896496803,
+      "candidate_brier": 0.24945470797824162,
+      "baseline_log_loss": 0.6921425331377644,
+      "candidate_log_loss": 0.6920553472497926,
+      "baseline_ece": 0.0016084233771449642,
+      "candidate_ece": 0.0008856001909043072
+    },
+    "against_parent_profile_052": {
+      "development_pressure_score": 0.019210141125140176,
+      "development_profile_score": 0.01662987309182649,
+      "confirmation_pressure_score": 0.01478741941207334,
+      "confirmation_profile_score": 0.016340871946152545,
+      "all_pressure_score": 0.019034002673843458,
+      "all_profile_score": 0.01793132376920296,
+      "pressure_accuracy_wins": 5,
+      "pressure_selection_score_wins": 5,
+      "evaluated_folds": 7,
+      "caveat": "Pressure wins development, all-period, and fold stability, but Profile has the higher aggregate confirmation accuracy and selection score at the same threshold. Fresh head-to-head evidence is required."
+    },
+    "nested_odds": {
+      "rows": 59838,
+      "selected_source": "model_confidence",
+      "baseline_brier": 0.24958826094883682,
+      "candidate_brier": 0.2495426406039015,
+      "baseline_log_loss": 0.6923238707515714,
+      "candidate_log_loss": 0.6922316565426753,
+      "baseline_ece": 0.0031866095015973665,
+      "candidate_ece": 0.002501951065372516,
+      "empirical_recalibration_brier": 0.2496799986247923,
+      "empirical_recalibration_log_loss": 0.6925075523083876,
+      "empirical_recalibration_ece": 0.007176234556257966,
+      "authoritative_fair_odds_adopted": false
+    },
+    "rejected_direction": {
+      "baseline_accuracy": 0.5180746561886052,
+      "single_accuracy": 0.5156328936289644,
+      "normal_blend_accuracy": 0.5173730002806624,
+      "normal_blend_fixes": 1590,
+      "normal_blend_harms": 1640,
+      "normal_blend_mcnemar_exact_p": 0.3885950339909885
+    },
+    "latest_runtime": {
+      "decision_timestamp": "2026-06-01T04:30:00Z",
+      "baseline_probability_up": 0.5219926836,
+      "candidate_probability_up": 0.5156873339,
+      "blended_probability_up": 0.5204163462,
+      "predicted_direction": "up",
+      "prediction_eligible": true,
+      "artifact_parity_verified": true,
+      "odds_calibration_gate_passed": false,
+      "odds_runtime_authorized": false,
+      "odds_valid": false,
+      "strict_prediction_eligible": false
+    }
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_selective_confidence_candidate": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_selection_score_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "require_fresh_head_to_head_score_not_below_profile": true,
+    "reason": "The development-selected 0.52 lane improved accuracy in 7/7 folds and the coverage-aware score in 6/7 folds, including confirmation, while nested raw model confidence improved Brier, log loss, and ECE. Direction variants failed, proper-score fold stability is not unanimous, and Profile has the higher aggregate confirmation score at the same threshold, so this remains a parallel fresh-period confidence candidate and unauthorized odds shadow."
+  }
+}

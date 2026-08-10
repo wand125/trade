@@ -1,0 +1,172 @@
+{
+  "format_version": 1,
+  "status": "forward_shadow_direction_model_odds",
+  "target_timeframe_minutes": 15,
+  "direction_source": "Intrabar Volatility Shape HGB single model",
+  "confidence_source": "the same model's Platt-calibrated predicted-class probability",
+  "fixed_candidate_threshold": null,
+  "odds_definition": "confidence is the estimated probability that the Shape model's predicted direction is correct; decimal odds are 1 / confidence",
+  "nested_validation": {
+    "calibration_folds": "all prior OOS folds",
+    "evaluation_fold": "next chronological OOS fold",
+    "rows": 121950,
+    "selected_source": "model_confidence",
+    "calibration_valid_under_global_gate": true,
+    "model_confidence": {
+      "accuracy": 0.5175317753177532,
+      "mean_confidence": 0.5217308215211901,
+      "brier": 0.24958237078895315,
+      "log_loss": 0.6923126935302693,
+      "ece": 0.004199046203436831,
+      "null_brier": 0.2496926368542078
+    },
+    "baseline_model_confidence": {
+      "accuracy": 0.516219762197622,
+      "mean_confidence": 0.5214694653957282,
+      "brier": 0.2495873078741403,
+      "log_loss": 0.692322481040108,
+      "ece": 0.00524970319810622,
+      "same_evaluation_rows": 121950
+    },
+    "hierarchical_empirical_odds": {
+      "adopted": false,
+      "brier": 0.24977469948267397,
+      "log_loss": 0.692699880780316,
+      "ece": 0.00936308172566036,
+      "reason": "All three nested proper calibration metrics were worse than the unmodified Shape model confidence."
+    },
+    "rejected_side_platt": {
+      "rows": 121950,
+      "brier": 0.2496217186489592,
+      "log_loss": 0.6923922287957778,
+      "ece": 0.005302594574779757,
+      "below_chance_all_rows": 7421,
+      "below_chance_all_accuracy": 0.5103085837488209,
+      "below_chance_confirmation_rows": 2857,
+      "below_chance_confirmation_accuracy": 0.5204760238011901,
+      "adopted": false,
+      "reason": "Side-specific correctness Platt worsened all nested proper metrics, and its below-0.5 lane remained above chance in confirmation."
+    }
+  },
+  "fixed_reliability_audit": {
+    "band_edges": [0.5, 0.515, 0.525, 0.535, 0.55, 0.575, 0.6, 1.0],
+    "cumulative_thresholds": [0.515, 0.525, 0.535, 0.55, 0.575, 0.6],
+    "development": {
+      "overall_locally_consistent": true,
+      "band_accuracy_monotonic": true,
+      "cumulative_0515_locally_consistent": false,
+      "cumulative_0525_locally_consistent": false,
+      "cumulative_0535_locally_consistent": true,
+      "cumulative_0550_locally_consistent": false
+    },
+    "confirmation": {
+      "overall": {
+        "rows": 56057,
+        "accuracy": 0.5158320994701822,
+        "mean_confidence": 0.518172329424934,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "band_accuracy_monotonic": true,
+      "confidence_0515": {
+        "rows": 28274,
+        "coverage": 0.5043794708956955,
+        "accuracy": 0.5252528825068968,
+        "mean_confidence": 0.5289147830022379,
+        "wilson_lower": 0.5194291111365322,
+        "wilson_upper": 0.5310697925704606,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_0525": {
+        "rows": 15228,
+        "coverage": 0.27165206843034767,
+        "accuracy": 0.5342789598108747,
+        "mean_confidence": 0.5368954479016574,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_0535": {
+        "rows": 7128,
+        "coverage": 0.1271562873503755,
+        "accuracy": 0.542368125701459,
+        "mean_confidence": 0.5452438489749438,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_0550": {
+        "rows": 1697,
+        "coverage": 0.030272758085520095,
+        "accuracy": 0.5615792575132587,
+        "mean_confidence": 0.5585545447340624,
+        "wilson_lower": 0.5378580560186409,
+        "wilson_upper": 0.585022287453673,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "confidence_0575_support_sufficient": false,
+      "confidence_0600_support_sufficient": false
+    },
+    "selection_comparison": {
+      "shape_is_high_confidence_champion": false,
+      "reason": "In confirmation, baseline accuracy was higher at fixed 0.515, 0.525, and 0.535 thresholds. Shape was higher only at 0.55 with lower support."
+    },
+    "confirmation_subgroups_at_0535": {
+      "group_columns": ["predicted_direction", "volatility_regime"],
+      "up_high": {"rows": 3778, "accuracy": 0.5468501852832186, "wilson_lower": 0.5309368142511101, "edge_confirmed": true},
+      "up_low": {"rows": 414, "accuracy": 0.5579710144927537, "wilson_lower": 0.5098159245465909, "edge_confirmed": true},
+      "up_normal": {"rows": 1354, "accuracy": 0.5302806499261448, "wilson_lower": 0.5036485641734737, "edge_confirmed": true},
+      "down_high": {"rows": 755, "accuracy": 0.5602649006622517, "wilson_lower": 0.5246423912554877, "edge_confirmed": true},
+      "down_low": {"rows": 263, "accuracy": 0.5133079847908745, "wilson_lower": 0.45314451885380247, "edge_confirmed": false},
+      "down_normal": {"rows": 564, "accuracy": 0.5195035460992907, "wilson_lower": 0.4782770655230925, "edge_confirmed": false},
+      "subgroup_gate_adopted": false,
+      "reason": "The asymmetry was diagnosed on the already inspected confirmation period and is not eligible for a post-hoc trading gate."
+    }
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_volatility_shape_m15_001",
+    "reliability_analysis": "experiments/next_bar/intrabar_volatility_shape_m15_direction_reliability_analysis.json",
+    "odds_calibration": "experiments/next_bar/intrabar_volatility_shape_m15_direction_odds_calibration.json",
+    "baseline_odds_calibration": "experiments/next_bar/baseline_m15_complete_odds_calibration.json",
+    "candidate_subgroup_reliability": "experiments/next_bar/intrabar_volatility_shape_m15_direction_subgroup_reliability.json",
+    "baseline_subgroup_reliability": "experiments/next_bar/baseline_m15_complete_subgroup_reliability.json",
+    "side_platt_oos": "experiments/next_bar/walk_forward_intrabar_volatility_shape_side_platt_m15_001",
+    "side_platt_reliability": "experiments/next_bar/intrabar_volatility_shape_side_platt_m15_reliability_analysis.json",
+    "side_platt_odds_calibration": "experiments/next_bar/intrabar_volatility_shape_side_platt_m15_odds_calibration.json",
+    "side_platt_subgroup_reliability": "experiments/next_bar/intrabar_volatility_shape_side_platt_m15_subgroup_reliability.json",
+    "baseline_latest_artifact": "experiments/next_bar/baseline_m15_latest_artifact_001",
+    "candidate_latest_artifact": "experiments/next_bar/intrabar_volatility_shape_m15_latest_artifact_001",
+    "latest_odds_shadow": "experiments/next_bar/intrabar_volatility_shape_m15_latest_odds_shadow_001"
+  },
+  "runtime_shadow": {
+    "verified": true,
+    "candidate_weight": 1.0,
+    "preserve_baseline_direction": false,
+    "latest_decision_timestamp": "2026-06-01T04:45:00Z",
+    "latest_direction": "up",
+    "latest_confidence": 0.5648713654,
+    "local_empirical_accuracy": 0.5517428096,
+    "local_wilson_lower": 0.5388692523,
+    "local_wilson_upper": 0.5645473938,
+    "local_support": 5260,
+    "calibration_gate_passed": false,
+    "runtime_odds_authorized": false,
+    "odds_valid": false,
+    "strict_prediction_eligible": false
+  },
+  "promotion": {
+    "authoritative_fair_odds": false,
+    "runtime_enabled": false,
+    "runtime_shadow_enabled": true,
+    "use_model_confidence_as_shadow_odds": true,
+    "use_empirical_hierarchical_recalibration": false,
+    "use_side_platt_recalibration": false,
+    "replace_authoritative_confidence": false,
+    "replace_high_confidence_selection_candidate": false,
+    "require_fresh_forward_global_calibration": true,
+    "require_fresh_forward_local_consistency": true,
+    "require_fresh_forward_edge_confirmed": true,
+    "require_fresh_forward_side_regime_stability": true,
+    "reason": "Nested model confidence beats baseline on accuracy, Brier, log loss, and ECE on identical rows, but development cumulative lanes are often overconfident and the latest value fails the local interval gate. Keep it as non-authorized odds shadow for the independent Shape direction only."
+  }
+}

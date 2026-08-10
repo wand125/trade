@@ -1,0 +1,97 @@
+{
+  "format_version": 1,
+  "status": "research_shadow_multi_model_confidence",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline binary HGB",
+  "confidence_shadow": {
+    "candidate_models": [
+      "baseline binary HGB",
+      "clear-body-filtered binary HGB",
+      "Extra Trees classifier",
+      "signed-body HGB regressor",
+      "intrabar-structure binary HGB"
+    ],
+    "model_weights": "equal",
+    "baseline_alignment": true,
+    "uncertainty_penalty": 0.0,
+    "confidence_edge": "max(mean(baseline-aligned model probability edges), epsilon)",
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.515,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "equal_mean_unrestricted": "experiments/next_bar/disagreement_mean_001",
+    "one_sigma_lower_bound": "experiments/next_bar/disagreement_lower_bound_001",
+    "mean_edge_direction_preserved": "experiments/next_bar/disagreement_mean_direction_preserved_001",
+    "analysis": "experiments/next_bar/disagreement_mean_direction_preserved_analysis.json"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall_probability_quality": {
+      "base_brier": 0.24942610034671497,
+      "shadow_brier": 0.24933826038301637,
+      "base_log_loss": 0.6919984520992793,
+      "shadow_log_loss": 0.6918210582480672,
+      "base_ece": 0.0034669502731555883,
+      "shadow_ece": 0.0002950788518236447
+    },
+    "confidence_0515": {
+      "development": {
+        "base_rows": 52243,
+        "shadow_rows": 45892,
+        "base_coverage": 0.5864530830798245,
+        "shadow_coverage": 0.5151600193078365,
+        "base_accuracy": 0.5310185096567961,
+        "shadow_accuracy": 0.5356053342630523,
+        "base_selection_score": 0.020475305472386462,
+        "shadow_selection_score": 0.022278499768775842
+      },
+      "confirmation": {
+        "base_rows": 27681,
+        "shadow_rows": 24567,
+        "base_coverage": 0.493800952601816,
+        "shadow_coverage": 0.43825035231996007,
+        "base_accuracy": 0.5257396770347892,
+        "shadow_accuracy": 0.5276590548296495,
+        "base_selection_score": 0.013951635882393433,
+        "shadow_selection_score": 0.014175074394501306
+      },
+      "overall": {
+        "base_rows": 79924,
+        "shadow_rows": 70459,
+        "base_coverage": 0.5506683202425244,
+        "shadow_coverage": 0.48545542235083367,
+        "base_accuracy": 0.5291902307191833,
+        "shadow_accuracy": 0.5328346981932756,
+        "base_selection_score": 0.019092246320790304,
+        "shadow_selection_score": 0.020309465312931395
+      },
+      "fold_accuracy_improvements": "6/7",
+      "fold_selection_score_improvements": "5/7"
+    },
+    "proper_score_fold_improvements": {
+      "brier": "6/7",
+      "log_loss": "6/7",
+      "ece": "3/7"
+    },
+    "rejected_variants": {
+      "unrestricted_mean_confirmation_accuracy": 0.5149044722336193,
+      "baseline_confirmation_accuracy": 0.5150115061455305,
+      "unrestricted_mean_paired_fixes": 5984,
+      "unrestricted_mean_paired_harms": 5909,
+      "unrestricted_mean_mcnemar_exact_p": 0.49742054407098263,
+      "one_sigma_development_selection_score": 0.020105,
+      "one_sigma_baseline_development_selection_score": 0.020475305472386462
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_research_shadow": true,
+    "eligible_for_odds_replacement": false,
+    "requires_independent_final_artifact_path": true,
+    "reason": "The zero-penalty structural ablation was inspected after the preregistered one-sigma penalty underperformed, its confirmation selection score remains below the existing clear-body 0.525 candidate, ECE improved in only 3/7 folds, and 2026 partial accuracy/score declined."
+  }
+}

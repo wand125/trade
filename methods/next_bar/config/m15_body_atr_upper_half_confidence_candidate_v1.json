@@ -1,0 +1,91 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_mid_coverage_clear_target",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline binary HGB",
+  "confidence_candidate": {
+    "candidate_model": "binary HGB trained only on next-bar body/ATR at or above the train-only median",
+    "train_target_filter": "body_atr_upper_half",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.525,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_body_atr_upper_half_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_body_atr_upper_half_25_001",
+    "direction_preserving_blend": "experiments/next_bar/body_atr_upper_half_confidence_blend_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671497,
+      "candidate_brier": 0.24938000971131408,
+      "base_log_loss": 0.6919984520992793,
+      "candidate_log_loss": 0.6919053795638217,
+      "base_ece": 0.0034669502731555883,
+      "candidate_ece": 0.0025405281127890427
+    },
+    "confidence_0525": {
+      "development": {
+        "base_rows": 33770,
+        "candidate_rows": 31748,
+        "base_coverage": 0.37908467384349426,
+        "candidate_coverage": 0.35638674045553026,
+        "base_accuracy": 0.5385845424933373,
+        "candidate_accuracy": 0.541734912435429,
+        "base_selection_score": 0.02048028316610968,
+        "candidate_selection_score": 0.021640168202209757
+      },
+      "confirmation": {
+        "base_rows": 14785,
+        "candidate_rows": 13854,
+        "base_coverage": 0.2637493979342455,
+        "candidate_coverage": 0.24714130260270795,
+        "base_accuracy": 0.5377747717281028,
+        "candidate_accuracy": 0.5420095279341707,
+        "base_selection_score": 0.015267988231186176,
+        "candidate_selection_score": 0.016754589940831545
+      },
+      "overall": {
+        "base_rows": 48555,
+        "candidate_rows": 45602,
+        "base_coverage": 0.3345390657296404,
+        "candidate_coverage": 0.3141931927793854,
+        "base_accuracy": 0.5383379672536299,
+        "candidate_accuracy": 0.5418183413008202,
+        "base_selection_score": 0.019607986789226563,
+        "candidate_selection_score": 0.020875190088748222
+      },
+      "fold_accuracy_improvements": "7/7",
+      "fold_selection_score_improvements": "7/7"
+    },
+    "proper_score_fold_improvements": {
+      "brier": "7/7",
+      "log_loss": "7/7",
+      "ece": "5/7"
+    },
+    "rejected_direction_variants": {
+      "single_accuracy": 0.5170662808322999,
+      "single_confirmation_accuracy": 0.5131205737017679,
+      "unrestricted_blend_accuracy": 0.5181755546369023,
+      "unrestricted_blend_confirmation_accuracy": 0.514404980644701,
+      "unrestricted_blend_paired_fixes": 2798,
+      "unrestricted_blend_paired_harms": 2796,
+      "unrestricted_blend_mcnemar_exact_p": 0.9893325793377796
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_confidence_candidate": true,
+    "eligible_for_odds_replacement": false,
+    "require_fresh_accuracy_selection_brier_logloss_and_ece_not_below_base": true,
+    "reason": "The development-selected 0.525 lane reproduced in confirmation and improved lane accuracy/score in 7/7 folds plus Brier/log loss in 7/7, but it was selected from historical OOS data and must remain parallel until a fresh period confirms it."
+  }
+}

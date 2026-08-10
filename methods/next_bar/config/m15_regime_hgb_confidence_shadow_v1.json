@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "status": "forward_shadow_calibration_ece_only",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "confidence_shadow": {
+    "candidate_model": "three volatility-regime HGB classifiers",
+    "regime_feature": "volatility_20",
+    "regime_boundaries": "training-only 1/3 and 2/3 quantiles, fixed for calibration and test",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.55,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "regime_model_oos": "experiments/next_bar/walk_forward_regime_hgb_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_regime_hgb_25_001",
+    "direction_preserving_blend": "experiments/next_bar/regime_hgb_confidence_blend_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall": {
+      "base_accuracy": 0.5181617748380873,
+      "regime_single_accuracy": 0.5162257131045886,
+      "unrestricted_blend_accuracy": 0.518347802122089,
+      "direction_preserving_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671492,
+      "direction_preserving_brier": 0.2494117243626246,
+      "base_log_loss": 0.6919984520992796,
+      "direction_preserving_log_loss": 0.691969447106035,
+      "base_ece": 0.0034669502731554777,
+      "direction_preserving_ece": 0.001999099706761887
+    },
+    "development_2020_2023": {
+      "base_accuracy": 0.520144135,
+      "regime_single_accuracy": 0.517753107,
+      "unrestricted_blend_accuracy": 0.520896243,
+      "base_brier": 0.2493465878,
+      "direction_preserving_brier": 0.249323937,
+      "base_log_loss": 0.6918397772,
+      "direction_preserving_log_loss": 0.691794038,
+      "base_ece": 0.0037716803,
+      "direction_preserving_ece": 0.002026415
+    },
+    "confirmation_2024_2026_partial": {
+      "base_accuracy": 0.515011506,
+      "regime_single_accuracy": 0.513798455,
+      "unrestricted_blend_accuracy": 0.514297947,
+      "base_brier": 0.2495524578,
+      "direction_preserving_brier": 0.249551231,
+      "base_log_loss": 0.6922506104,
+      "direction_preserving_log_loss": 0.692248198,
+      "base_ece": 0.0029826884,
+      "direction_preserving_ece": 0.001955691
+    },
+    "fold_improvements": {
+      "brier": "2/7",
+      "log_loss": "2/7",
+      "ece": "5/7"
+    },
+    "confidence_055": {
+      "base_rows": 11708,
+      "shadow_rows": 9435,
+      "base_accuracy": 0.5550051247010591,
+      "shadow_accuracy": 0.5564387917329093,
+      "base_selection_score": 0.0130611,
+      "shadow_selection_score": 0.0118285
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_confidence_shadow": true,
+    "required_fresh_evidence": "ECE, Brier, and log loss must all improve with acceptable high-confidence selection score on a fully unused period",
+    "reason": "Aggregate calibration improved, especially ECE, but direction accuracy fell for the standalone model, unrestricted blending lost confirmation accuracy, Brier/log-loss fold consistency was only 2/7, and every tested high-confidence lane had a lower coverage-aware selection score."
+  }
+}

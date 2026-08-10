@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "status": "research_shadow_calibration_only",
+  "target_timeframe_minutes": 30,
+  "direction_source": "baseline HGB",
+  "feature_candidate": {
+    "feature_set": "intrabar_profile",
+    "additional_profile_feature_count": 12,
+    "source": "completed M1 rows inside the current completed M30 bar only",
+    "raw_price_levels_used_as_model_features": false
+  },
+  "confidence_shadow": {
+    "candidate_model": "HGB with processed intrabar structure and trajectory features",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.515,
+    "approved_use": "aggregate probability calibration diagnostics only",
+    "selection_lane_approved": false
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_profile_m5_m30_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_intrabar_profile_m30_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_profile_m30_confidence_blend_001",
+    "analysis": "experiments/next_bar/intrabar_profile_m30_candidate_analysis.json"
+  },
+  "evidence": {
+    "rows": 71260,
+    "overall_probability_quality": {
+      "baseline_brier": 0.24949787896496803,
+      "candidate_brier": 0.24945268296040526,
+      "baseline_log_loss": 0.6921425331377644,
+      "candidate_log_loss": 0.6920512655216359,
+      "baseline_ece": 0.0016084233771449642,
+      "candidate_ece": 0.0009900251019950377
+    },
+    "proper_score_fold_improvements": {
+      "brier": 7,
+      "log_loss": 7,
+      "ece": 5,
+      "evaluated_folds": 7
+    },
+    "rejected_confidence_0515": {
+      "development_baseline_score": 0.01796839398209352,
+      "development_candidate_score": 0.01792424473486124,
+      "confirmation_baseline_coverage": 0.43302845161057085,
+      "confirmation_candidate_coverage": 0.42644879071617076,
+      "confirmation_baseline_accuracy": 0.5329771247286692,
+      "confirmation_candidate_accuracy": 0.53195998643608,
+      "confirmation_baseline_score": 0.015814974943304288,
+      "confirmation_candidate_score": 0.01498465436703569,
+      "accuracy_improved_folds": 4,
+      "selection_score_improved_folds": 3,
+      "evaluated_folds": 7
+    },
+    "rejected_direction_variants": {
+      "single_overall_accuracy": 0.5175273645804098,
+      "baseline_overall_accuracy": 0.5180746561886052,
+      "normal_blend_overall_accuracy": 0.5172467022172327,
+      "normal_blend_confirmation_accuracy": 0.5141535013195474,
+      "normal_blend_fixes": 1507,
+      "normal_blend_harms": 1566,
+      "normal_blend_mcnemar_exact_p": 0.2954318875407909
+    }
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_selection_candidate": false,
+    "reason": "Brier and log loss improved in 7/7 folds, but the fixed 0.515 confidence lane reduced confirmation accuracy, coverage, and selection score. Keep only as a calibration research shadow."
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_high_precision_lane",
+  "target_timeframe_minutes": 15,
+  "feature_candidate": {
+    "feature_set": "intrabar_manual",
+    "baseline_feature_count": 38,
+    "additional_feature_count": 7,
+    "additional_features": [
+      "intrabar_return_std",
+      "intrabar_up_fraction",
+      "intrabar_body_directional_efficiency",
+      "intrabar_body_concentration",
+      "intrabar_early_body_return",
+      "intrabar_late_body_return",
+      "intrabar_late_minus_early"
+    ],
+    "source": "completed M1 rows through the current completed M15 bar; the first close return may use the immediately preceding completed M1 close",
+    "raw_price_levels_used_as_model_features": false
+  },
+  "confidence_candidate": {
+    "direction_source": "baseline HGB",
+    "baseline_weight": 0.75,
+    "intrabar_hgb_weight": 0.25,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.55,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "formula": "raw_blend = 0.75 * P_baseline_HGB + 0.25 * P_intrabar_HGB; retain the baseline HGB side and use max(baseline_side_sign * (raw_blend - 0.5), epsilon) as its probability edge"
+  },
+  "high_precision_lane": {
+    "minimum_candidate_confidence": 0.55,
+    "role": "a narrower higher-accuracy tier; it is not the global maximum of the coverage-weighted objective",
+    "outside_lane": "keep the baseline HGB direction and current authoritative confidence/policy"
+  },
+  "experiments": {
+    "intrabar_hgb_oos": "experiments/next_bar/walk_forward_intrabar_manual_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_intrabar_manual_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_manual_confidence_blend_001"
+  },
+  "selection_objective": {
+    "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
+    "wilson_z": 1.96
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall_probability_quality": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671492,
+      "candidate_brier": 0.24939261298784612,
+      "base_log_loss": 0.6919984520992796,
+      "candidate_log_loss": 0.6919309175759321,
+      "base_ece": 0.0034669502731554777,
+      "candidate_ece": 0.00320329190420499
+    },
+    "confidence_055_overall": {
+      "base_rows": 11708,
+      "candidate_rows": 11268,
+      "base_coverage": 0.08066694226264297,
+      "candidate_coverage": 0.07763538652335676,
+      "base_accuracy": 0.5550051247010591,
+      "candidate_accuracy": 0.5592829250976216,
+      "base_wilson_lower": 0.5459865055035622,
+      "candidate_wilson_lower": 0.5500972365887434,
+      "base_selection_score": 0.013061053442159149,
+      "candidate_selection_score": 0.013958656825158572
+    },
+    "confidence_055_development_2020_2023": {
+      "base_accuracy": 0.5545260156806843,
+      "candidate_accuracy": 0.5583176001678204,
+      "base_selection_score": 0.01483409975705613,
+      "candidate_selection_score": 0.015810242322841016
+    },
+    "confidence_055_confirmation_2024_2026_partial": {
+      "base_accuracy": 0.5574986751457339,
+      "candidate_accuracy": 0.5645905420991926,
+      "base_selection_score": 0.006420426778198654,
+      "candidate_selection_score": 0.00723488795782566
+    },
+    "fold_stability_at_confidence_055": {
+      "candidate_accuracy_improved_folds": 6,
+      "candidate_selection_score_improved_folds": 6,
+      "evaluated_folds": 7
+    },
+    "direction_diagnostics": {
+      "intrabar_single_accuracy": 0.5184098112167562,
+      "intrabar_single_confirmation_accuracy": 0.5137984551438715,
+      "unrestricted_blend_accuracy": 0.5184787102108309,
+      "unrestricted_blend_confirmation_accuracy": 0.5152612519399896,
+      "unrestricted_blend_base_wrong_candidate_right": 2003,
+      "unrestricted_blend_base_right_candidate_wrong": 1957,
+      "unrestricted_blend_exact_mcnemar_p": 0.47455369018540206,
+      "unrestricted_blend_improved_accuracy_folds": 3,
+      "evaluated_folds": 7
+    },
+    "confidence_053_non_adoption": {
+      "base_selection_score": 0.019415450930931288,
+      "candidate_selection_score": 0.019070102811739174,
+      "reason": "the wider lane did not improve the coverage-weighted objective"
+    }
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "emit_unrestricted_direction_blend_as_shadow": true,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_high_precision_candidate": true,
+    "require_fresh_forward_confidence_055_accuracy_not_below_base": true,
+    "require_fresh_forward_confidence_055_selection_score_not_below_base": true,
+    "require_fresh_forward_brier_not_above_base": true,
+    "reason": "The 0.55 lane improved accuracy and selection score in development, confirmation, and six of seven OOS folds, while the unrestricted direction improvement was small and statistically weak."
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "format_version": 1,
+  "status": "shadow_independent_sequence_confidence",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline binary HGB",
+  "confidence_candidate": {
+    "candidate_model": "two-layer causal TCN on 16 completed bars x 5 stationary channels",
+    "sequence_length": 16,
+    "sequence_channels": [
+      "return_atr",
+      "body_atr",
+      "range_atr",
+      "close_location_centered",
+      "wick_balance_atr"
+    ],
+    "hidden_channels": 16,
+    "epochs": 8,
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.52,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_tcn_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_tcn_25_001",
+    "direction_preserving_blend": "experiments/next_bar/tcn_confidence_blend_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671497,
+      "candidate_brier": 0.2494099373116456,
+      "base_log_loss": 0.6919984520992793,
+      "candidate_log_loss": 0.6919656316301296,
+      "base_ece": 0.0034669502731555883,
+      "candidate_ece": 0.0021583045738493376
+    },
+    "confidence_052": {
+      "development": {
+        "base_rows": 42153,
+        "candidate_rows": 40479,
+        "base_coverage": 0.4731879258668882,
+        "candidate_coverage": 0.45439646172670434,
+        "base_accuracy": 0.5337935615495931,
+        "candidate_accuracy": 0.5356851700881938,
+        "base_selection_score": 0.0199682384123694,
+        "candidate_selection_score": 0.02077780164585861
+      },
+      "confirmation": {
+        "base_rows": 20545,
+        "candidate_rows": 19045,
+        "base_coverage": 0.36650195336889235,
+        "candidate_coverage": 0.33974347539111976,
+        "base_accuracy": 0.529179849111706,
+        "candidate_accuracy": 0.5321606720924127,
+        "base_selection_score": 0.013530294225709063,
+        "candidate_selection_score": 0.014611713216850508
+      },
+      "overall": {
+        "base_rows": 62698,
+        "candidate_rows": 59524,
+        "base_coverage": 0.43198291304946945,
+        "candidate_coverage": 0.41011437233016396,
+        "base_accuracy": 0.5322817314746882,
+        "candidate_accuracy": 0.5345574894160339,
+        "base_selection_score": 0.018649080205213452,
+        "candidate_selection_score": 0.01956311687055412
+      },
+      "fold_accuracy_improvements": "6/7",
+      "fold_selection_score_improvements": "6/7"
+    },
+    "proper_score_fold_improvements": {
+      "brier": "5/7",
+      "log_loss": "5/7",
+      "ece": "5/7"
+    },
+    "rejected_direction_variants": {
+      "single_accuracy": 0.5164186302879978,
+      "single_confirmation_accuracy": 0.5124962092156198,
+      "unrestricted_blend_accuracy": 0.5182513435303845,
+      "unrestricted_blend_confirmation_accuracy": 0.5144941755712935,
+      "unrestricted_blend_paired_fixes": 2825,
+      "unrestricted_blend_paired_harms": 2812,
+      "unrestricted_blend_mcnemar_exact_p": 0.873017115967657
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_shadow": true,
+    "eligible_for_odds_replacement": false,
+    "reason": "The 0.52 confidence lane reproduced in confirmation and 6/7 folds, but the existing signed-body 0.52 candidate has a higher development, confirmation, and overall selection score for the same broad-coverage role."
+  }
+}

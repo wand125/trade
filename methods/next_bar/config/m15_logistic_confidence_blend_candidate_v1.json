@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_confidence_only",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "confidence_candidate": {
+    "linear_model": "standardized L2 logistic regression",
+    "logistic_c": 0.1,
+    "logistic_weight": 0.25,
+    "hgb_weight": 0.75,
+    "fixed_confidence_threshold": 0.54,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "formula": "raw_blend = 0.75 * P_HGB + 0.25 * P_logistic; retain the HGB side and use max(HGB_side_sign * (raw_blend - 0.5), epsilon) as its probability edge",
+    "when_models_disagree_past_0_5": "confidence becomes approximately 0.50 instead of reflecting disagreement into false confidence"
+  },
+  "experiments": {
+    "logistic_oos": "experiments/next_bar/walk_forward_logistic_001",
+    "direction_preserving_blend": "experiments/next_bar/logistic_confidence_blend_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_balanced_accuracy": 0.517560301057883,
+      "candidate_balanced_accuracy": 0.517560301057883,
+      "base_brier": 0.24942610034671492,
+      "candidate_brier": 0.24940931888379367,
+      "base_log_loss": 0.6919984520992796,
+      "candidate_log_loss": 0.6919643295628451,
+      "base_ece": 0.0034669502731554777,
+      "candidate_ece": 0.0024806916069512073
+    },
+    "development_2020_2023": {
+      "base_brier": 0.24934658779079238,
+      "candidate_brier": 0.24932429157591918,
+      "base_log_loss": 0.691839777195867,
+      "candidate_log_loss": 0.6917943307193984,
+      "base_ece": 0.003771680309932883,
+      "candidate_ece": 0.002633668860611749
+    },
+    "confirmation_2024_2026_partial": {
+      "base_brier": 0.24955245775112914,
+      "candidate_brier": 0.2495444400580873,
+      "base_log_loss": 0.6922506103742626,
+      "candidate_log_loss": 0.6922344832808598,
+      "base_ece": 0.0029826884349150092,
+      "candidate_ece": 0.0022375877539471123
+    },
+    "rejected_direction_variants": {
+      "logistic_alone_accuracy": 0.5174727848973405,
+      "unrestricted_25pct_blend_accuracy": 0.518141105139865,
+      "unrestricted_blend_confirmation_accuracy": 0.513959006011738,
+      "baseline_confirmation_accuracy": 0.5150115061455305
+    },
+    "confidence_054": {
+      "base_rows": 20887,
+      "candidate_rows": 18533,
+      "base_accuracy": 0.5480921147125006,
+      "candidate_accuracy": 0.5482652565693628,
+      "base_selection_score": 0.015680368406819647,
+      "candidate_selection_score": 0.014683351121975741
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_confidence_candidate": true,
+    "require_fresh_forward_brier_not_above_base": true,
+    "require_fresh_forward_log_loss_not_above_base": true,
+    "require_fresh_forward_ece_not_above_base": true,
+    "reason": "Calibration improved in both development and confirmation without changing direction, but the historical confidence-threshold selection score fell because coverage contracted."
+  }
+}

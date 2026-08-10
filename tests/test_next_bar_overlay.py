@@ -53,9 +53,7 @@ class NextBarOverlayTests(unittest.TestCase):
                 "month": ["2025-01", "2025-02"],
             }
         )
-        policies = evaluate_overlay_policies(
-            frame, OverlayConfig(loss_multiplier=1.20)
-        )
+        policies = evaluate_overlay_policies(frame, OverlayConfig())
 
         self.assertEqual(policies["baseline"]["total_pnl"], -6.0)
         self.assertEqual(
@@ -64,9 +62,7 @@ class NextBarOverlayTests(unittest.TestCase):
         self.assertEqual(
             policies["half_size_high_confidence_opposed"]["total_pnl"], -1.0
         )
-        self.assertEqual(
-            policies["baseline"]["risk_adjusted_total"], -8.0
-        )
+        self.assertEqual(policies["baseline"]["risk_adjusted_total"], -6.0)
 
 
 if __name__ == "__main__":

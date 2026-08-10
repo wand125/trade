@@ -1,0 +1,94 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_high_precision_structure",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "confidence_candidate": {
+    "candidate_model": "HGB with baseline plus 15 processed intrabar M1 path features",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.55,
+    "selection_score": "sqrt(coverage) * max(Wilson95Lower(accuracy) - 0.50, 0)"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_structure_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_intrabar_structure_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_structure_confidence_blend_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671492,
+      "candidate_brier": 0.24938812141151784,
+      "base_log_loss": 0.6919984520992796,
+      "candidate_log_loss": 0.6919217832256063,
+      "base_ece": 0.0034669502731554777,
+      "candidate_ece": 0.003278105438154504
+    },
+    "development_2020_2023": {
+      "base_brier": 0.24934658779079238,
+      "candidate_brier": 0.24928782630018284,
+      "base_log_loss": 0.691839777195867,
+      "candidate_log_loss": 0.6917211065645156,
+      "base_ece": 0.003771680309932883,
+      "candidate_ece": 0.0035993800135532042
+    },
+    "confirmation_2024_2026_partial": {
+      "base_brier": 0.24955245775112914,
+      "candidate_brier": 0.2495475054207058,
+      "base_log_loss": 0.6922506103742626,
+      "candidate_log_loss": 0.692240688607627,
+      "base_ece": 0.0029826884349150092,
+      "candidate_ece": 0.0027743118304224663
+    },
+    "confidence_055": {
+      "overall": {
+        "base_rows": 11708,
+        "candidate_rows": 11439,
+        "base_coverage": 0.08066694226264297,
+        "candidate_coverage": 0.0788135593220339,
+        "base_accuracy": 0.5550051247010591,
+        "candidate_accuracy": 0.5601014074656876,
+        "base_selection_score": 0.013061053442159149,
+        "candidate_selection_score": 0.014313765172926384
+      },
+      "confirmation": {
+        "base_rows": 1887,
+        "candidate_rows": 1740,
+        "base_coverage": 0.03366216529603796,
+        "candidate_coverage": 0.031039834454216243,
+        "base_accuracy": 0.5574986751457339,
+        "candidate_accuracy": 0.5643678160919541,
+        "base_selection_score": 0.006420426778198654,
+        "candidate_selection_score": 0.007215160074036593
+      },
+      "fold_accuracy_improvements": "7/7",
+      "fold_selection_score_improvements": "5/7, non-worse 6/7"
+    },
+    "proper_score_fold_improvements": {
+      "brier": "6/7",
+      "log_loss": "6/7",
+      "ece": "6/7"
+    },
+    "rejected_direction_variants": {
+      "single_confirmation_accuracy": 0.5133881584815456,
+      "unrestricted_blend_confirmation_accuracy": 0.5142979467327898,
+      "baseline_confirmation_accuracy": 0.5150115061455305,
+      "unrestricted_blend_paired_fixes": 2185,
+      "unrestricted_blend_paired_harms": 2187,
+      "unrestricted_blend_mcnemar_exact_p": 0.9879336713224673
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_confidence_candidate": true,
+    "compare_to_existing_intrabar_candidate_only_on_fresh_data": true,
+    "reason": "The fixed 0.55 lane improved accuracy and the coverage-aware score in development and confirmation, with 7/7 fold accuracy improvement and 6/7 proper-score improvement. It was discovered on the same historical folds as the earlier intrabar candidate, so neither may be selected retrospectively as the winner."
+  }
+}

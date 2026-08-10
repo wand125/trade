@@ -1,0 +1,131 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_intrabar_pressure",
+  "target_timeframe_minutes": 5,
+  "feature_candidate": {
+    "feature_set": "intrabar_pressure",
+    "parent_feature_set": "intrabar_profile",
+    "additional_pressure_feature_count": 11,
+    "pressure_features": [
+      "intrabar_clv_mean",
+      "intrabar_clv_std",
+      "intrabar_early_clv_mean",
+      "intrabar_late_clv_mean",
+      "intrabar_clv_late_minus_early",
+      "intrabar_range_weighted_clv",
+      "intrabar_signed_range_pressure",
+      "intrabar_wick_pressure",
+      "intrabar_body_range_pressure",
+      "intrabar_clv_body_divergence",
+      "intrabar_clv_body_agreement"
+    ],
+    "source": "completed M1 OHLC rows inside the current completed M5 bar only",
+    "normalization": "M1 close-location, body, wick, and signed-range pressure normalized by each M1 range or total completed-bar M1 range",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "direction_candidate": {
+    "baseline_model": "baseline HGB",
+    "candidate_model": "HGB with baseline plus 38 processed intrabar path and pressure features",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_intrabar_pressure_m5_001",
+    "direction_blend": "experiments/next_bar/ensemble_intrabar_pressure_m5_25_001",
+    "direction_preserving_blend": "experiments/next_bar/intrabar_pressure_m5_confidence_blend_001",
+    "analysis": "experiments/next_bar/intrabar_pressure_m5_candidate_analysis.json",
+    "reliability_analysis": "experiments/next_bar/intrabar_pressure_m5_reliability_analysis.json",
+    "profile_confidence_comparison": "experiments/next_bar/intrabar_pressure_vs_profile_m5_0515_analysis.json",
+    "rejected_profile_pressure_confidence_blend": "experiments/next_bar/intrabar_profile_pressure_m5_confidence_blend_001",
+    "rejected_profile_pressure_comparison": "experiments/next_bar/intrabar_profile_pressure_vs_profile_m5_0515_analysis.json",
+    "baseline_latest_artifact": "experiments/next_bar/baseline_m5_latest_artifact_001",
+    "candidate_latest_artifact": "experiments/next_bar/intrabar_pressure_m5_latest_artifact_001",
+    "latest_ensemble": "experiments/next_bar/intrabar_pressure_m5_latest_ensemble_001"
+  },
+  "evidence": {
+    "rows": 439881,
+    "direction_blend": {
+      "development": {
+        "baseline_accuracy": 0.5187946015899427,
+        "candidate_accuracy": 0.5192346089850249,
+        "baseline_brier": 0.24942166569243593,
+        "candidate_brier": 0.24939701543205114,
+        "baseline_log_loss": 0.6919881716171112,
+        "candidate_log_loss": 0.6919387097943982
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5104083668277942,
+        "candidate_accuracy": 0.5105087026577191,
+        "baseline_brier": 0.2497476608527442,
+        "candidate_brier": 0.24974127343253844,
+        "baseline_log_loss": 0.6926419696159329,
+        "candidate_log_loss": 0.6926292072067116
+      },
+      "all": {
+        "baseline_accuracy": 0.5155644367453925,
+        "candidate_accuracy": 0.5158736112721395,
+        "baseline_brier": 0.2495472307566378,
+        "candidate_brier": 0.24952961487890285,
+        "baseline_log_loss": 0.6922399980172929,
+        "candidate_log_loss": 0.6922046718774744,
+        "baseline_ece": 0.0036868436868081225,
+        "candidate_ece": 0.0033793605310072565
+      },
+      "accuracy_improved_folds": 5,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7,
+      "fixes": 5145,
+      "harms": 5009,
+      "net_improvement": 136,
+      "mcnemar_exact_p": 0.18033239879616922
+    },
+    "against_parent_profile_direction_blend": {
+      "development_profile_accuracy": 0.5188167868367536,
+      "development_pressure_accuracy": 0.5192346089850249,
+      "confirmation_profile_accuracy": 0.510231303598515,
+      "confirmation_pressure_accuracy": 0.5105087026577191,
+      "all_profile_accuracy": 0.5155098765347901,
+      "all_pressure_accuracy": 0.5158736112721395,
+      "pressure_accuracy_wins": 6,
+      "evaluated_folds": 7
+    },
+    "confidence_0515_not_adopted": {
+      "development_baseline_score": 0.01913138008659457,
+      "development_pressure_score": 0.019481556071205497,
+      "confirmation_baseline_score": 0.01199268783723726,
+      "confirmation_pressure_score": 0.01232209663080234,
+      "pressure_accuracy_improved_folds_vs_baseline": 6,
+      "pressure_score_improved_folds_vs_baseline": 6,
+      "pressure_accuracy_wins_vs_profile": 3,
+      "profile_accuracy_wins_vs_pressure": 4,
+      "profile_pressure_average_accuracy_wins_vs_profile": 3,
+      "profile_accuracy_wins_vs_profile_pressure_average": 4,
+      "reason": "Pressure is a near-duplicate of the adopted Profile 0.515 lane and does not beat it by fold stability. Their fixed equal average reduces confirmation and all-period selection score versus Profile."
+    },
+    "latest_runtime": {
+      "decision_timestamp": "2026-06-01T04:55:00Z",
+      "baseline_probability_up": 0.5332709162,
+      "candidate_probability_up": 0.54136285,
+      "blended_probability_up": 0.5352938996,
+      "predicted_direction": "up",
+      "artifact_parity_verified": true,
+      "odds_valid": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_direction_candidate": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "The M15-fixed Pressure definition and 25% blend improved M5 accuracy in development, confirmation, and 5/7 folds; Brier and log loss improved in 7/7 folds; and it beat the parent Profile direction blend in 6/7 folds. The paired direction difference remains weak at p=0.180 after historical candidate research, so it is only a parallel forward candidate until a fresh untouched period confirms the edge."
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_broad_coverage",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline binary HGB",
+  "confidence_candidate": {
+    "candidate_model": "HGB regression on signed asinh-transformed next-bar body/ATR",
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.52,
+    "selection_score": "sqrt(coverage) * max(Wilson95Lower(accuracy) - 0.50, 0)"
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_signed_body_hgb_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_signed_body_hgb_25_001",
+    "direction_preserving_blend": "experiments/next_bar/signed_body_hgb_confidence_blend_001"
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671492,
+      "candidate_brier": 0.24940248724716763,
+      "base_log_loss": 0.6919984520992796,
+      "candidate_log_loss": 0.6919504756913413,
+      "base_ece": 0.0034669502731554777,
+      "candidate_ece": 0.0007143835289551496
+    },
+    "development_2020_2023": {
+      "base_brier": 0.24934658779079238,
+      "candidate_brier": 0.2493112914425933,
+      "base_log_loss": 0.691839777195867,
+      "candidate_log_loss": 0.6917679512774088,
+      "base_ece": 0.003771680309932883,
+      "candidate_ece": 0.0005236913422590973
+    },
+    "confirmation_2024_2026_partial": {
+      "base_brier": 0.24955245775112914,
+      "candidate_brier": 0.2495474110900222,
+      "base_log_loss": 0.6922506103742626,
+      "candidate_log_loss": 0.6922405344238164,
+      "base_ece": 0.0029826884349150092,
+      "candidate_ece": 0.0010174220802057145
+    },
+    "confidence_052": {
+      "development": {
+        "base_rows": 42153,
+        "candidate_rows": 35839,
+        "base_coverage": 0.4731879258668882,
+        "candidate_coverage": 0.4023102050896355,
+        "base_accuracy": 0.5337935615495931,
+        "candidate_accuracy": 0.5380730489131951,
+        "base_selection_score": 0.0199682384123694,
+        "candidate_selection_score": 0.020872628339066106
+      },
+      "confirmation": {
+        "base_rows": 20545,
+        "candidate_rows": 17235,
+        "base_coverage": 0.36650195336889235,
+        "candidate_coverage": 0.30745491196460745,
+        "base_accuracy": 0.529179849111706,
+        "candidate_accuracy": 0.5359442993907746,
+        "base_selection_score": 0.013530294225709063,
+        "candidate_selection_score": 0.01579819257085553
+      },
+      "overall": {
+        "base_rows": 62698,
+        "candidate_rows": 53074,
+        "base_coverage": 0.43198291304946945,
+        "candidate_coverage": 0.36567452115199117,
+        "base_accuracy": 0.5322817314746882,
+        "candidate_accuracy": 0.5373817688510382,
+        "base_selection_score": 0.018649080205213452,
+        "candidate_selection_score": 0.020038430832037806
+      },
+      "fold_accuracy_improvements": "7/7",
+      "fold_selection_score_improvements": "6/7"
+    },
+    "proper_score_fold_improvements": {
+      "brier": "4/7",
+      "log_loss": "4/7",
+      "ece": "4/7"
+    },
+    "rejected_direction_variants": {
+      "signed_body_single_accuracy": 0.5134904230398236,
+      "signed_body_single_confirmation_accuracy": 0.5095884546087018,
+      "unrestricted_blend_accuracy": 0.518023976849938,
+      "unrestricted_blend_confirmation_accuracy": 0.5148509552776638,
+      "unrestricted_blend_paired_fixes": 2675,
+      "unrestricted_blend_paired_harms": 2695,
+      "unrestricted_blend_mcnemar_exact_p": 0.7954232850672187
+    }
+  },
+  "promotion": {
+    "replace_direction_probability": false,
+    "replace_authoritative_confidence": false,
+    "replace_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_confidence_candidate": true,
+    "require_fresh_accuracy_and_selection_score_not_below_base": true,
+    "reason": "The development-selected 0.52 lane improved accuracy and the coverage-aware score again in confirmation, with accuracy improvement in 7/7 folds and score improvement in 6/7. The model was explored on the historical folds, so authoritative confidence remains unchanged until a fully unused period confirms it."
+  }
+}

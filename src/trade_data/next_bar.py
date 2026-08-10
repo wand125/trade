@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -10,7 +10,13 @@ from typing import Iterable, Sequence
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier
+from scipy.optimize import minimize
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    HistGradientBoostingClassifier,
+    HistGradientBoostingRegressor,
+)
+from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, brier_score_loss, log_loss
 from sklearn.neural_network import MLPClassifier
@@ -25,9 +31,49 @@ CONFIDENCE_THRESHOLDS = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80)
 LAG_PERIODS = (1, 2, 3, 5, 8, 13, 21)
 ROLLING_WINDOWS = (5, 10, 20, 50)
 RAW_PRICE_COLUMNS = {"open", "high", "low", "close"}
-FEATURE_SETS = ("baseline", "enhanced_manual", "sequence_manual")
+FEATURE_SETS = (
+    "baseline",
+    "enhanced_manual",
+    "trend_structure",
+    "path_persistence",
+    "haar_multiscale",
+    "session_relative",
+    "sequence_manual",
+    "tcn_sequence",
+    "intrabar_manual",
+    "intrabar_structure",
+    "intrabar_profile",
+    "intrabar_pressure",
+    "intrabar_volatility_shape",
+    "intrabar_frequency_shape",
+    "intrabar_signed_variation",
+)
 CONFIDENCE_MODELS = ("class_probability", "side_platt", "context_hgb")
-MODEL_TYPES = ("hgb", "mlp", "logistic")
+PROBABILITY_CALIBRATIONS = ("platt", "isotonic", "beta")
+MODEL_TYPES = (
+    "hgb",
+    "mlp",
+    "logistic",
+    "extra_trees",
+    "xgboost",
+    "regime_hgb",
+    "body_atr_soft_hgb",
+    "body_multiclass_hgb",
+    "signed_body_hgb",
+    "signed_body_quantile_hgb",
+    "tcn",
+    "causal_transformer",
+)
+TCN_SEQUENCE_LENGTH = 16
+TCN_SEQUENCE_CHANNELS = (
+    "return_atr",
+    "body_atr",
+    "range_atr",
+    "close_location_centered",
+    "wick_balance_atr",
+)
+TRAIN_WEIGHTING_MODES = ("uniform", "body_atr")
+TRAIN_TARGET_FILTERS = ("all", "body_atr_upper_half")
 CONFIDENCE_CONTEXT_FEATURES = (
     "body_ratio",
     "range_ratio",
@@ -62,11 +108,39 @@ class TrainConfig:
     l2_regularization: float = 1.0
     feature_set: str = "baseline"
     confidence_model: str = "class_probability"
+    probability_calibration: str = "platt"
+    train_weighting: str = "uniform"
+    train_target_filter: str = "all"
     model_type: str = "hgb"
     mlp_learning_rate: float = 0.001
     mlp_alpha: float = 0.001
     mlp_batch_size: int = 1024
     logistic_c: float = 0.10
+    train_window_days: int = 0
+    extra_trees_estimators: int = 200
+    extra_trees_max_depth: int = 12
+    extra_trees_min_samples_leaf: int = 50
+    extra_trees_max_features: float = 0.75
+    xgboost_estimators: int = 300
+    xgboost_max_depth: int = 4
+    xgboost_learning_rate: float = 0.03
+    xgboost_min_child_weight: float = 20.0
+    xgboost_subsample: float = 0.80
+    xgboost_column_sample: float = 0.80
+    xgboost_l2: float = 5.0
+    tcn_epochs: int = 8
+    tcn_batch_size: int = 2048
+    tcn_learning_rate: float = 0.001
+    tcn_hidden_channels: int = 16
+    tcn_weight_decay: float = 0.0001
+    transformer_epochs: int = 8
+    transformer_batch_size: int = 2048
+    transformer_learning_rate: float = 0.0005
+    transformer_model_dimension: int = 16
+    transformer_attention_heads: int = 4
+    transformer_encoder_layers: int = 1
+    transformer_feedforward_dimension: int = 32
+    transformer_weight_decay: float = 0.0001
 
 
 @dataclass(frozen=True)
@@ -121,6 +195,400 @@ class PlattCalibrator:
         logits = np.log(np.clip(raw, 1e-6, 1 - 1e-6) / np.clip(1 - raw, 1e-6, 1))
         calibrated = 1.0 / (1.0 + np.exp(-(self.slope * logits + self.intercept)))
         return np.clip(calibrated, 1e-6, 1 - 1e-6)
+
+
+@dataclass(frozen=True)
+class IsotonicCalibrator:
+    x_thresholds: tuple[float, ...]
+    y_thresholds: tuple[float, ...]
+
+    def predict(self, probability_up: np.ndarray) -> np.ndarray:
+        raw = np.asarray(probability_up, dtype="float64")
+        calibrated = np.interp(raw, self.x_thresholds, self.y_thresholds)
+        return np.clip(calibrated, 1e-6, 1 - 1e-6)
+
+
+@dataclass(frozen=True)
+class BetaCalibrator:
+    log_probability_coefficient: float
+    negative_log_complement_coefficient: float
+    intercept: float
+
+    def predict(self, probability_up: np.ndarray) -> np.ndarray:
+        probability = np.clip(
+            np.asarray(probability_up, dtype="float64"), 1e-6, 1 - 1e-6
+        )
+        linear = (
+            self.log_probability_coefficient * np.log(probability)
+            - self.negative_log_complement_coefficient * np.log1p(-probability)
+            + self.intercept
+        )
+        calibrated = 1.0 / (1.0 + np.exp(-np.clip(linear, -40, 40)))
+        return np.clip(calibrated, 1e-6, 1 - 1e-6)
+
+
+@dataclass
+class VolatilityRegimeHGBClassifier:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    min_samples_leaf: int
+    l2_regularization: float
+    random_state: int
+    volatility_column: str = "volatility_20"
+    low_threshold_: float | None = field(default=None, init=False)
+    high_threshold_: float | None = field(default=None, init=False)
+    models_: dict[str, HistGradientBoostingClassifier] = field(
+        default_factory=dict,
+        init=False,
+    )
+    regime_counts_: dict[str, int] = field(default_factory=dict, init=False)
+    classes_: np.ndarray = field(
+        default_factory=lambda: np.array([0, 1], dtype="int8"),
+        init=False,
+    )
+
+    def _regime_masks(self, values: pd.DataFrame) -> dict[str, np.ndarray]:
+        if self.low_threshold_ is None or self.high_threshold_ is None:
+            raise ValueError("volatility regime model has not been fitted")
+        volatility = values[self.volatility_column].to_numpy(dtype="float64")
+        return {
+            "low": volatility <= self.low_threshold_,
+            "normal": (volatility > self.low_threshold_)
+            & (volatility <= self.high_threshold_),
+            "high": volatility > self.high_threshold_,
+        }
+
+    def fit(
+        self,
+        values: pd.DataFrame,
+        labels: pd.Series | np.ndarray,
+        sample_weight: np.ndarray | None = None,
+    ) -> VolatilityRegimeHGBClassifier:
+        if self.volatility_column not in values:
+            raise ValueError(
+                f"regime model requires feature: {self.volatility_column}"
+            )
+        volatility = values[self.volatility_column].to_numpy(dtype="float64")
+        if not np.isfinite(volatility).all():
+            raise ValueError("regime model volatility values must be finite")
+        low, high = np.quantile(volatility, [1 / 3, 2 / 3])
+        if not low < high:
+            raise ValueError("regime model requires distinct volatility quantiles")
+        self.low_threshold_ = float(low)
+        self.high_threshold_ = float(high)
+        target = np.asarray(labels, dtype="int8")
+        weights = (
+            None if sample_weight is None else np.asarray(sample_weight, dtype="float64")
+        )
+        self.models_.clear()
+        self.regime_counts_.clear()
+        for regime, mask in self._regime_masks(values).items():
+            regime_labels = target[mask]
+            if len(regime_labels) == 0 or np.unique(regime_labels).size != 2:
+                raise ValueError(
+                    f"regime training partition must contain both classes: {regime}"
+                )
+            model = HistGradientBoostingClassifier(
+                max_iter=self.max_iter,
+                learning_rate=self.learning_rate,
+                max_leaf_nodes=self.max_leaf_nodes,
+                min_samples_leaf=self.min_samples_leaf,
+                l2_regularization=self.l2_regularization,
+                early_stopping=False,
+                random_state=self.random_state,
+            )
+            model.fit(
+                values.loc[mask],
+                regime_labels,
+                sample_weight=None if weights is None else weights[mask],
+            )
+            self.models_[regime] = model
+            self.regime_counts_[regime] = int(mask.sum())
+        return self
+
+    def predict_proba(self, values: pd.DataFrame) -> np.ndarray:
+        if set(self.models_) != {"low", "normal", "high"}:
+            raise ValueError("volatility regime model has not been fitted")
+        output = np.empty((len(values), 2), dtype="float64")
+        for regime, mask in self._regime_masks(values).items():
+            if not mask.any():
+                continue
+            model = self.models_[regime]
+            probabilities = model.predict_proba(values.loc[mask])
+            match = np.flatnonzero(model.classes_ == 1)
+            if len(match) != 1:
+                raise ValueError(f"regime model does not contain the up class: {regime}")
+            probability_up = probabilities[:, int(match[0])]
+            output[mask, 0] = 1 - probability_up
+            output[mask, 1] = probability_up
+        return output
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "volatility_column": self.volatility_column,
+            "low_threshold": self.low_threshold_,
+            "high_threshold": self.high_threshold_,
+            "train_rows_by_regime": self.regime_counts_,
+        }
+
+
+@dataclass
+class BodyATRSoftHGBClassifier:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    min_samples_leaf: int
+    l2_regularization: float
+    random_state: int
+    model_: HistGradientBoostingRegressor | None = field(default=None, init=False)
+    target_summary_: dict[str, float] = field(default_factory=dict, init=False)
+    classes_: np.ndarray = field(
+        default_factory=lambda: np.array([0, 1], dtype="int8"),
+        init=False,
+    )
+
+    def fit(
+        self,
+        values: pd.DataFrame,
+        soft_direction_target: pd.Series | np.ndarray,
+        sample_weight: np.ndarray | None = None,
+    ) -> BodyATRSoftHGBClassifier:
+        target = np.asarray(soft_direction_target, dtype="float64")
+        if not np.isfinite(target).all() or np.any((target < 0) | (target > 1)):
+            raise ValueError("body/ATR soft target must be finite and within [0, 1]")
+        if not (np.any(target < 0.5) and np.any(target > 0.5)):
+            raise ValueError("body/ATR soft target must contain both directions")
+        self.model_ = HistGradientBoostingRegressor(
+            loss="squared_error",
+            max_iter=self.max_iter,
+            learning_rate=self.learning_rate,
+            max_leaf_nodes=self.max_leaf_nodes,
+            min_samples_leaf=self.min_samples_leaf,
+            l2_regularization=self.l2_regularization,
+            early_stopping=False,
+            random_state=self.random_state,
+        )
+        self.model_.fit(values, target, sample_weight=sample_weight)
+        self.target_summary_ = {
+            "minimum": float(target.min()),
+            "mean": float(target.mean()),
+            "standard_deviation": float(target.std()),
+            "maximum": float(target.max()),
+        }
+        return self
+
+    def predict_proba(self, values: pd.DataFrame) -> np.ndarray:
+        if self.model_ is None:
+            raise ValueError("body/ATR soft-label model has not been fitted")
+        probability_up = np.clip(self.model_.predict(values), 1e-6, 1 - 1e-6)
+        return np.column_stack([1 - probability_up, probability_up])
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "target_transform": "0.5 + direction_sign * 0.5 * tanh(next_bar_body_atr)",
+            "regression_loss": "squared_error",
+            "transformed_target": self.target_summary_,
+        }
+
+
+@dataclass
+class BodyMulticlassHGBClassifier:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    min_samples_leaf: int
+    l2_regularization: float
+    random_state: int
+    model_: HistGradientBoostingClassifier | None = field(default=None, init=False)
+    target_counts_: dict[str, int] = field(default_factory=dict, init=False)
+    classes_: np.ndarray = field(
+        default_factory=lambda: np.array([0, 1], dtype="int8"),
+        init=False,
+    )
+
+    def fit(
+        self,
+        values: pd.DataFrame,
+        body_class_target: pd.Series | np.ndarray,
+        sample_weight: np.ndarray | None = None,
+    ) -> BodyMulticlassHGBClassifier:
+        target = np.asarray(body_class_target, dtype="int8")
+        unique, counts = np.unique(target, return_counts=True)
+        if not np.array_equal(unique, np.array([0, 1, 2, 3], dtype="int8")):
+            raise ValueError("body multiclass target must contain all four classes")
+        self.model_ = HistGradientBoostingClassifier(
+            max_iter=self.max_iter,
+            learning_rate=self.learning_rate,
+            max_leaf_nodes=self.max_leaf_nodes,
+            min_samples_leaf=self.min_samples_leaf,
+            l2_regularization=self.l2_regularization,
+            early_stopping=False,
+            random_state=self.random_state,
+        )
+        self.model_.fit(values, target, sample_weight=sample_weight)
+        self.target_counts_ = {
+            str(int(label)): int(count) for label, count in zip(unique, counts, strict=True)
+        }
+        return self
+
+    def predict_proba(self, values: pd.DataFrame) -> np.ndarray:
+        if self.model_ is None:
+            raise ValueError("body multiclass model has not been fitted")
+        probabilities = self.model_.predict_proba(values)
+        up_columns = np.flatnonzero(np.isin(self.model_.classes_, [2, 3]))
+        if len(up_columns) != 2:
+            raise ValueError("body multiclass model does not contain both up classes")
+        probability_up = probabilities[:, up_columns].sum(axis=1)
+        return np.column_stack([1 - probability_up, probability_up])
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "target_transform": "direction x next_bar_body_atr above sampled-train median",
+            "class_mapping": {
+                "0": "down_large",
+                "1": "down_small",
+                "2": "up_small",
+                "3": "up_large",
+            },
+            "train_rows_by_class": self.target_counts_,
+            "direction_probability": "P(up_small) + P(up_large)",
+        }
+
+
+@dataclass
+class SignedBodyHGBClassifier:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    min_samples_leaf: int
+    l2_regularization: float
+    random_state: int
+    model_: HistGradientBoostingRegressor | None = field(default=None, init=False)
+    target_summary_: dict[str, float] = field(default_factory=dict, init=False)
+    classes_: np.ndarray = field(
+        default_factory=lambda: np.array([0, 1], dtype="int8"),
+        init=False,
+    )
+
+    def fit(
+        self,
+        values: pd.DataFrame,
+        signed_body_target: pd.Series | np.ndarray,
+        sample_weight: np.ndarray | None = None,
+    ) -> SignedBodyHGBClassifier:
+        target = np.asarray(signed_body_target, dtype="float64")
+        if not np.isfinite(target).all():
+            raise ValueError("signed body regression target must be finite")
+        if not (np.any(target < 0) and np.any(target > 0)):
+            raise ValueError("signed body regression target must contain both directions")
+        self.model_ = HistGradientBoostingRegressor(
+            loss="squared_error",
+            max_iter=self.max_iter,
+            learning_rate=self.learning_rate,
+            max_leaf_nodes=self.max_leaf_nodes,
+            min_samples_leaf=self.min_samples_leaf,
+            l2_regularization=self.l2_regularization,
+            early_stopping=False,
+            random_state=self.random_state,
+        )
+        self.model_.fit(values, target, sample_weight=sample_weight)
+        self.target_summary_ = {
+            "minimum": float(target.min()),
+            "mean": float(target.mean()),
+            "standard_deviation": float(target.std()),
+            "maximum": float(target.max()),
+        }
+        return self
+
+    def predict_proba(self, values: pd.DataFrame) -> np.ndarray:
+        if self.model_ is None:
+            raise ValueError("signed body regression model has not been fitted")
+        score = self.model_.predict(values)
+        probability_up = 1.0 / (1.0 + np.exp(-np.clip(score, -40, 40)))
+        return np.column_stack([1 - probability_up, probability_up])
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "target_transform": "sign(next_bar_body) * asinh(abs(next_bar_body) / decision_atr20)",
+            "regression_loss": "squared_error",
+            "transformed_target": self.target_summary_,
+        }
+
+
+@dataclass
+class SignedBodyQuantileHGBClassifier:
+    max_iter: int
+    learning_rate: float
+    max_leaf_nodes: int
+    min_samples_leaf: int
+    l2_regularization: float
+    random_state: int
+    quantiles: tuple[float, ...] = (0.25, 0.50, 0.75)
+    models_: dict[float, HistGradientBoostingRegressor] = field(
+        default_factory=dict, init=False
+    )
+    target_summary_: dict[str, float] = field(default_factory=dict, init=False)
+    classes_: np.ndarray = field(
+        default_factory=lambda: np.array([0, 1], dtype="int8"),
+        init=False,
+    )
+
+    def fit(
+        self,
+        values: pd.DataFrame,
+        signed_body_target: pd.Series | np.ndarray,
+        sample_weight: np.ndarray | None = None,
+    ) -> SignedBodyQuantileHGBClassifier:
+        target = np.asarray(signed_body_target, dtype="float64")
+        if not np.isfinite(target).all():
+            raise ValueError("signed body quantile target must be finite")
+        if not (np.any(target < 0) and np.any(target > 0)):
+            raise ValueError("signed body quantile target must contain both directions")
+        self.models_.clear()
+        for quantile in self.quantiles:
+            model = HistGradientBoostingRegressor(
+                loss="quantile",
+                quantile=quantile,
+                max_iter=self.max_iter,
+                learning_rate=self.learning_rate,
+                max_leaf_nodes=self.max_leaf_nodes,
+                min_samples_leaf=self.min_samples_leaf,
+                l2_regularization=self.l2_regularization,
+                early_stopping=False,
+                random_state=self.random_state,
+            )
+            model.fit(values, target, sample_weight=sample_weight)
+            self.models_[quantile] = model
+        self.target_summary_ = {
+            "minimum": float(target.min()),
+            "mean": float(target.mean()),
+            "standard_deviation": float(target.std()),
+            "maximum": float(target.max()),
+        }
+        return self
+
+    def predict_proba(self, values: pd.DataFrame) -> np.ndarray:
+        if set(self.models_) != set(self.quantiles):
+            raise ValueError("signed body quantile model has not been fitted")
+        lower = self.models_[0.25].predict(values)
+        median = self.models_[0.50].predict(values)
+        upper = self.models_[0.75].predict(values)
+        interquartile_width = np.maximum(np.abs(upper - lower), 1e-6)
+        standardized_score = median / interquartile_width
+        probability_up = 1.0 / (
+            1.0 + np.exp(-np.clip(standardized_score, -40, 40))
+        )
+        return np.column_stack([1 - probability_up, probability_up])
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "target_transform": "sign(next_bar_body) * asinh(abs(next_bar_body) / decision_atr20)",
+            "regression_loss": "quantile",
+            "quantiles": list(self.quantiles),
+            "direction_score": "median / max(abs(q75 - q25), 1e-6)",
+            "transformed_target": self.target_summary_,
+        }
 
 
 @dataclass(frozen=True)
@@ -207,6 +675,210 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         raise ValueError("timeframe_minutes must be positive")
     source = validate_m1_frame(m1).set_index("timestamp")
     rule = f"{timeframe_minutes}min"
+    previous_close = source["close"].shift(1).replace(0, np.nan)
+    source["_intrabar_return"] = np.log(source["close"] / previous_close)
+    source["_intrabar_body_return"] = (
+        (source["close"] - source["open"])
+        / source["open"].abs().replace(0, np.nan)
+    )
+    source["_intrabar_abs_body_return"] = source["_intrabar_body_return"].abs()
+    source["_intrabar_up"] = source["_intrabar_body_return"].gt(0).astype("float64")
+    bucket = source.index.floor(rule)
+    position = source.groupby(bucket, sort=False).cumcount()
+    bucket_group = source.groupby(bucket, sort=False)
+    normalized_position = position / max(timeframe_minutes - 1, 1)
+    bucket_high = bucket_group["high"].transform("max")
+    bucket_low = bucket_group["low"].transform("min")
+    bucket_open = bucket_group["open"].transform("first")
+    bucket_close = bucket_group["close"].transform("last")
+    bucket_range = bucket_high - bucket_low
+    profile_scale = bucket_range.replace(0, np.nan)
+    m1_range = source["high"] - source["low"]
+    m1_range_scale = m1_range.replace(0, np.nan)
+    lower_wick = np.minimum(source["open"], source["close"]) - source["low"]
+    upper_wick = source["high"] - np.maximum(source["open"], source["close"])
+    source["_intrabar_clv"] = (
+        (2 * source["close"] - source["high"] - source["low"]) / m1_range_scale
+    ).fillna(0.0)
+    source["_intrabar_range"] = m1_range
+    source["_intrabar_clv_range_product"] = source["_intrabar_clv"] * m1_range
+    source["_intrabar_signed_range"] = np.sign(
+        source["close"] - source["open"]
+    ) * m1_range
+    source["_intrabar_wick_pressure"] = lower_wick - upper_wick
+    source["_intrabar_body"] = source["close"] - source["open"]
+    source["_intrabar_clv_body_agreement"] = (
+        np.sign(source["_intrabar_clv"])
+        * np.sign(source["close"] - source["open"])
+        > 0
+    ).astype("float64")
+    source["_intrabar_high_position"] = normalized_position.where(
+        source["high"].eq(bucket_high)
+    )
+    source["_intrabar_low_position"] = normalized_position.where(
+        source["low"].eq(bucket_low)
+    )
+    body_direction = np.sign(source["_intrabar_body_return"])
+    previous_body_direction = body_direction.groupby(bucket, sort=False).shift(1)
+    source["_intrabar_direction_change"] = (
+        position.gt(0) & body_direction.ne(previous_body_direction)
+    ).astype("float64")
+    source["_intrabar_abs_return"] = source["_intrabar_return"].abs()
+    source["_intrabar_return_square"] = source["_intrabar_return"].pow(2)
+    for frequency in range(1, 5):
+        basis = (
+            np.sqrt(2.0 / timeframe_minutes)
+            * np.cos(
+                np.pi
+                * (position.to_numpy(dtype="float64") + 0.5)
+                * frequency
+                / timeframe_minutes
+            )
+            if frequency < timeframe_minutes
+            else np.zeros(len(source), dtype="float64")
+        )
+        source[f"_intrabar_return_dct_{frequency}"] = (
+            source["_intrabar_return"] * basis
+        )
+    for frequency in range(1, 3):
+        basis = (
+            np.sqrt(2.0 / timeframe_minutes)
+            * np.cos(
+                np.pi
+                * (position.to_numpy(dtype="float64") + 0.5)
+                * frequency
+                / timeframe_minutes
+            )
+            if frequency < timeframe_minutes
+            else np.zeros(len(source), dtype="float64")
+        )
+        source[f"_intrabar_range_dct_{frequency}"] = (
+            source["_intrabar_range"] * basis
+        )
+    source["_intrabar_range_square"] = source["_intrabar_range"].pow(2)
+    for lag in range(1, 4):
+        lagged_return = source["_intrabar_return"].groupby(
+            bucket, sort=False
+        ).shift(lag)
+        source[f"_intrabar_return_lag_product_{lag}"] = (
+            source["_intrabar_return"] * lagged_return
+        ).fillna(0.0)
+    source["_intrabar_upside_variance"] = source[
+        "_intrabar_return_square"
+    ].where(source["_intrabar_return"].gt(0), 0.0)
+    source["_intrabar_downside_variance"] = source[
+        "_intrabar_return_square"
+    ].where(source["_intrabar_return"].lt(0), 0.0)
+    range_rank = source["_intrabar_range"].groupby(bucket, sort=False).rank(
+        method="first", ascending=False
+    )
+    variance_rank = source["_intrabar_return_square"].groupby(
+        bucket, sort=False
+    ).rank(method="first", ascending=False)
+    source["_intrabar_upside_variance_position_product"] = (
+        source["_intrabar_upside_variance"] * normalized_position
+    )
+    source["_intrabar_downside_variance_position_product"] = (
+        source["_intrabar_downside_variance"] * normalized_position
+    )
+    previous_abs_return = source["_intrabar_abs_return"].groupby(
+        bucket, sort=False
+    ).shift(1)
+    source["_intrabar_bipower_product"] = (
+        source["_intrabar_abs_return"] * previous_abs_return
+    ).fillna(0.0)
+    source["_intrabar_signed_largest_jump"] = (
+        np.sign(source["_intrabar_return"])
+        * source["_intrabar_return_square"]
+    ).where(variance_rank.eq(1), 0.0)
+    source["_intrabar_continuous_upside_variance"] = source[
+        "_intrabar_upside_variance"
+    ].where(~variance_rank.eq(1), 0.0)
+    source["_intrabar_continuous_downside_variance"] = source[
+        "_intrabar_downside_variance"
+    ].where(~variance_rank.eq(1), 0.0)
+    source["_intrabar_range_top3"] = source["_intrabar_range"].where(
+        range_rank.le(3), 0.0
+    )
+    source["_intrabar_variance_top3"] = source[
+        "_intrabar_return_square"
+    ].where(variance_rank.le(3), 0.0)
+    source["_intrabar_range_position_product"] = (
+        source["_intrabar_range"] * normalized_position
+    )
+    source["_intrabar_variance_position_product"] = (
+        source["_intrabar_return_square"] * normalized_position
+    )
+    running_high_close = source["close"].groupby(bucket, sort=False).cummax()
+    running_low_close = source["close"].groupby(bucket, sort=False).cummin()
+    source["_intrabar_drawdown"] = 1 - source["close"] / running_high_close
+    source["_intrabar_runup"] = source["close"] / running_low_close - 1
+    profile_progress = (position + 1) / timeframe_minutes
+    source["_intrabar_profile_level"] = (
+        source["close"] - bucket_open
+    ) / profile_scale
+    source["_intrabar_profile_deviation"] = source[
+        "_intrabar_profile_level"
+    ] - ((bucket_close - bucket_open) / profile_scale) * profile_progress
+    flat_bucket = bucket_range.eq(0)
+    source.loc[flat_bucket, "_intrabar_profile_level"] = 0.0
+    source.loc[flat_bucket, "_intrabar_profile_deviation"] = 0.0
+    source["_intrabar_profile_deviation_square"] = source[
+        "_intrabar_profile_deviation"
+    ].pow(2)
+    for percentile in (20, 40, 60, 80):
+        sample_position = max(
+            0,
+            min(
+                timeframe_minutes - 1,
+                int(np.ceil(timeframe_minutes * percentile / 100)) - 1,
+            ),
+        )
+        source[f"_intrabar_profile_level_{percentile}"] = source[
+            "_intrabar_profile_level"
+        ].where(position.eq(sample_position))
+        source[f"_intrabar_profile_deviation_{percentile}"] = source[
+            "_intrabar_profile_deviation"
+        ].where(position.eq(sample_position))
+    segment_rows = max(1, timeframe_minutes // 3)
+    source["_intrabar_early_body_return"] = source["_intrabar_body_return"].where(
+        position < segment_rows,
+        0.0,
+    )
+    source["_intrabar_late_body_return"] = source["_intrabar_body_return"].where(
+        position >= timeframe_minutes - segment_rows,
+        0.0,
+    )
+    source["_intrabar_early_clv"] = source["_intrabar_clv"].where(
+        position < segment_rows
+    )
+    source["_intrabar_late_clv"] = source["_intrabar_clv"].where(
+        position >= timeframe_minutes - segment_rows
+    )
+    source["_intrabar_early_range"] = source["_intrabar_range"].where(
+        position < segment_rows, 0.0
+    )
+    source["_intrabar_late_range"] = source["_intrabar_range"].where(
+        position >= timeframe_minutes - segment_rows, 0.0
+    )
+    source["_intrabar_early_variance"] = source[
+        "_intrabar_return_square"
+    ].where(position < segment_rows, 0.0)
+    source["_intrabar_late_variance"] = source[
+        "_intrabar_return_square"
+    ].where(position >= timeframe_minutes - segment_rows, 0.0)
+    source["_intrabar_early_upside_variance"] = source[
+        "_intrabar_upside_variance"
+    ].where(position < segment_rows, 0.0)
+    source["_intrabar_early_downside_variance"] = source[
+        "_intrabar_downside_variance"
+    ].where(position < segment_rows, 0.0)
+    source["_intrabar_late_upside_variance"] = source[
+        "_intrabar_upside_variance"
+    ].where(position >= timeframe_minutes - segment_rows, 0.0)
+    source["_intrabar_late_downside_variance"] = source[
+        "_intrabar_downside_variance"
+    ].where(position >= timeframe_minutes - segment_rows, 0.0)
     grouped = source.resample(rule, origin="epoch", label="left", closed="left")
     bars = grouped.agg(
         open=("open", "first"),
@@ -214,8 +886,541 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         low=("low", "min"),
         close=("close", "last"),
         source_rows=("close", "count"),
+        intrabar_return_std=("_intrabar_return", "std"),
+        intrabar_up_fraction=("_intrabar_up", "mean"),
+        _intrabar_body_return_sum=("_intrabar_body_return", "sum"),
+        _intrabar_abs_body_return_sum=("_intrabar_abs_body_return", "sum"),
+        _intrabar_max_abs_body_return=("_intrabar_abs_body_return", "max"),
+        intrabar_early_body_return=("_intrabar_early_body_return", "sum"),
+        intrabar_late_body_return=("_intrabar_late_body_return", "sum"),
+        intrabar_high_position=("_intrabar_high_position", "min"),
+        intrabar_low_position=("_intrabar_low_position", "min"),
+        intrabar_direction_change_fraction=("_intrabar_direction_change", "mean"),
+        _intrabar_return_sum=("_intrabar_return", "sum"),
+        _intrabar_abs_return_sum=("_intrabar_abs_return", "sum"),
+        _intrabar_return_square_sum=("_intrabar_return_square", "sum"),
+        _intrabar_return_dct_1_sum=("_intrabar_return_dct_1", "sum"),
+        _intrabar_return_dct_2_sum=("_intrabar_return_dct_2", "sum"),
+        _intrabar_return_dct_3_sum=("_intrabar_return_dct_3", "sum"),
+        _intrabar_return_dct_4_sum=("_intrabar_return_dct_4", "sum"),
+        _intrabar_return_lag_product_1_sum=(
+            "_intrabar_return_lag_product_1",
+            "sum",
+        ),
+        _intrabar_return_lag_product_2_sum=(
+            "_intrabar_return_lag_product_2",
+            "sum",
+        ),
+        _intrabar_return_lag_product_3_sum=(
+            "_intrabar_return_lag_product_3",
+            "sum",
+        ),
+        intrabar_max_drawdown=("_intrabar_drawdown", "max"),
+        intrabar_max_runup=("_intrabar_runup", "max"),
+        intrabar_profile_level_20=("_intrabar_profile_level_20", "min"),
+        intrabar_profile_level_40=("_intrabar_profile_level_40", "min"),
+        intrabar_profile_level_60=("_intrabar_profile_level_60", "min"),
+        intrabar_profile_level_80=("_intrabar_profile_level_80", "min"),
+        intrabar_profile_deviation_20=(
+            "_intrabar_profile_deviation_20",
+            "min",
+        ),
+        intrabar_profile_deviation_40=(
+            "_intrabar_profile_deviation_40",
+            "min",
+        ),
+        intrabar_profile_deviation_60=(
+            "_intrabar_profile_deviation_60",
+            "min",
+        ),
+        intrabar_profile_deviation_80=(
+            "_intrabar_profile_deviation_80",
+            "min",
+        ),
+        intrabar_profile_mean_deviation=(
+            "_intrabar_profile_deviation",
+            "mean",
+        ),
+        _intrabar_profile_mean_square_deviation=(
+            "_intrabar_profile_deviation_square",
+            "mean",
+        ),
+        intrabar_profile_max_deviation=(
+            "_intrabar_profile_deviation",
+            "max",
+        ),
+        intrabar_profile_min_deviation=(
+            "_intrabar_profile_deviation",
+            "min",
+        ),
+        intrabar_clv_mean=("_intrabar_clv", "mean"),
+        intrabar_clv_std=("_intrabar_clv", "std"),
+        intrabar_early_clv_mean=("_intrabar_early_clv", "mean"),
+        intrabar_late_clv_mean=("_intrabar_late_clv", "mean"),
+        _intrabar_range_sum=("_intrabar_range", "sum"),
+        _intrabar_range_square_sum=("_intrabar_range_square", "sum"),
+        _intrabar_range_dct_1_sum=("_intrabar_range_dct_1", "sum"),
+        _intrabar_range_dct_2_sum=("_intrabar_range_dct_2", "sum"),
+        _intrabar_range_max=("_intrabar_range", "max"),
+        _intrabar_range_mean=("_intrabar_range", "mean"),
+        _intrabar_range_std=("_intrabar_range", "std"),
+        _intrabar_range_top3_sum=("_intrabar_range_top3", "sum"),
+        _intrabar_range_position_sum=(
+            "_intrabar_range_position_product",
+            "sum",
+        ),
+        _intrabar_early_range_sum=("_intrabar_early_range", "sum"),
+        _intrabar_late_range_sum=("_intrabar_late_range", "sum"),
+        _intrabar_return_square_max=("_intrabar_return_square", "max"),
+        _intrabar_variance_top3_sum=("_intrabar_variance_top3", "sum"),
+        _intrabar_variance_position_sum=(
+            "_intrabar_variance_position_product",
+            "sum",
+        ),
+        _intrabar_early_variance_sum=("_intrabar_early_variance", "sum"),
+        _intrabar_late_variance_sum=("_intrabar_late_variance", "sum"),
+        _intrabar_upside_variance_sum=("_intrabar_upside_variance", "sum"),
+        _intrabar_downside_variance_sum=("_intrabar_downside_variance", "sum"),
+        _intrabar_upside_variance_max=("_intrabar_upside_variance", "max"),
+        _intrabar_downside_variance_max=("_intrabar_downside_variance", "max"),
+        _intrabar_upside_variance_position_sum=(
+            "_intrabar_upside_variance_position_product",
+            "sum",
+        ),
+        _intrabar_downside_variance_position_sum=(
+            "_intrabar_downside_variance_position_product",
+            "sum",
+        ),
+        _intrabar_bipower_product_sum=("_intrabar_bipower_product", "sum"),
+        _intrabar_signed_largest_jump_sum=(
+            "_intrabar_signed_largest_jump",
+            "sum",
+        ),
+        _intrabar_continuous_upside_variance_sum=(
+            "_intrabar_continuous_upside_variance",
+            "sum",
+        ),
+        _intrabar_continuous_downside_variance_sum=(
+            "_intrabar_continuous_downside_variance",
+            "sum",
+        ),
+        _intrabar_early_upside_variance_sum=(
+            "_intrabar_early_upside_variance",
+            "sum",
+        ),
+        _intrabar_early_downside_variance_sum=(
+            "_intrabar_early_downside_variance",
+            "sum",
+        ),
+        _intrabar_late_upside_variance_sum=(
+            "_intrabar_late_upside_variance",
+            "sum",
+        ),
+        _intrabar_late_downside_variance_sum=(
+            "_intrabar_late_downside_variance",
+            "sum",
+        ),
+        _intrabar_clv_range_product_sum=("_intrabar_clv_range_product", "sum"),
+        _intrabar_signed_range_sum=("_intrabar_signed_range", "sum"),
+        _intrabar_wick_pressure_sum=("_intrabar_wick_pressure", "sum"),
+        _intrabar_body_sum=("_intrabar_body", "sum"),
+        intrabar_clv_body_agreement=("_intrabar_clv_body_agreement", "mean"),
     )
     bars = bars.loc[bars["source_rows"] == timeframe_minutes].reset_index()
+    intrabar_denominator = bars["_intrabar_abs_body_return_sum"].replace(0, np.nan)
+    bars["intrabar_body_directional_efficiency"] = (
+        bars["_intrabar_body_return_sum"] / intrabar_denominator
+    )
+    bars["intrabar_body_concentration"] = (
+        bars["_intrabar_max_abs_body_return"] / intrabar_denominator
+    )
+    no_intrabar_body = bars["_intrabar_abs_body_return_sum"].eq(0)
+    bars.loc[
+        no_intrabar_body, "intrabar_body_directional_efficiency"
+    ] = 0.0
+    bars.loc[no_intrabar_body, "intrabar_body_concentration"] = 0.0
+    bars["intrabar_late_minus_early"] = (
+        bars["intrabar_late_body_return"] - bars["intrabar_early_body_return"]
+    )
+    bars["intrabar_high_minus_low_position"] = (
+        bars["intrabar_high_position"] - bars["intrabar_low_position"]
+    )
+    bars["intrabar_close_path_efficiency"] = (
+        bars["_intrabar_return_sum"].abs()
+        / bars["_intrabar_abs_return_sum"].replace(0, np.nan)
+    )
+    bars.loc[
+        bars["_intrabar_abs_return_sum"].eq(0),
+        "intrabar_close_path_efficiency",
+    ] = 0.0
+    log_range = np.log(bars["high"] / bars["low"])
+    bars["intrabar_realized_variance_range"] = (
+        bars["_intrabar_return_square_sum"] / log_range.pow(2).replace(0, np.nan)
+    )
+    bars.loc[log_range.eq(0), "intrabar_realized_variance_range"] = 0.0
+    bars["intrabar_profile_rms_deviation"] = np.sqrt(
+        bars["_intrabar_profile_mean_square_deviation"]
+    )
+    bars["intrabar_clv_std"] = bars["intrabar_clv_std"].fillna(0.0)
+    bars["intrabar_clv_late_minus_early"] = (
+        bars["intrabar_late_clv_mean"] - bars["intrabar_early_clv_mean"]
+    )
+    range_denominator = bars["_intrabar_range_sum"].replace(0, np.nan)
+    bars["intrabar_range_weighted_clv"] = (
+        bars["_intrabar_clv_range_product_sum"] / range_denominator
+    )
+    bars["intrabar_signed_range_pressure"] = (
+        bars["_intrabar_signed_range_sum"] / range_denominator
+    )
+    bars["intrabar_wick_pressure"] = (
+        bars["_intrabar_wick_pressure_sum"] / range_denominator
+    )
+    bars["intrabar_body_range_pressure"] = (
+        bars["_intrabar_body_sum"] / range_denominator
+    )
+    zero_intrabar_range = bars["_intrabar_range_sum"].eq(0)
+    pressure_ratio_columns = [
+        "intrabar_range_weighted_clv",
+        "intrabar_signed_range_pressure",
+        "intrabar_wick_pressure",
+        "intrabar_body_range_pressure",
+    ]
+    bars.loc[zero_intrabar_range, pressure_ratio_columns] = 0.0
+    bars["intrabar_clv_body_divergence"] = (
+        bars["intrabar_range_weighted_clv"]
+        - bars["intrabar_body_range_pressure"]
+    )
+    bars["intrabar_range_concentration"] = (
+        bars["_intrabar_range_max"] / range_denominator
+    )
+    bars["intrabar_range_top3_fraction"] = (
+        bars["_intrabar_range_top3_sum"] / range_denominator
+    )
+    bars["intrabar_range_dispersion"] = (
+        bars["_intrabar_range_std"]
+        / bars["_intrabar_range_mean"].replace(0, np.nan)
+    )
+    bars["intrabar_range_center_of_mass"] = (
+        bars["_intrabar_range_position_sum"] / range_denominator
+    )
+    bars["intrabar_early_range_fraction"] = (
+        bars["_intrabar_early_range_sum"] / range_denominator
+    )
+    bars["intrabar_late_range_fraction"] = (
+        bars["_intrabar_late_range_sum"] / range_denominator
+    )
+    bars["intrabar_range_late_minus_early"] = (
+        bars["intrabar_late_range_fraction"]
+        - bars["intrabar_early_range_fraction"]
+    )
+    range_shape_columns = [
+        "intrabar_range_concentration",
+        "intrabar_range_top3_fraction",
+        "intrabar_range_dispersion",
+        "intrabar_range_center_of_mass",
+        "intrabar_early_range_fraction",
+        "intrabar_late_range_fraction",
+        "intrabar_range_late_minus_early",
+    ]
+    bars.loc[zero_intrabar_range, range_shape_columns] = 0.0
+
+    variance_denominator = bars["_intrabar_return_square_sum"].replace(0, np.nan)
+    bars["intrabar_variance_concentration"] = (
+        bars["_intrabar_return_square_max"] / variance_denominator
+    )
+    bars["intrabar_variance_top3_fraction"] = (
+        bars["_intrabar_variance_top3_sum"] / variance_denominator
+    )
+    bars["intrabar_variance_center_of_mass"] = (
+        bars["_intrabar_variance_position_sum"] / variance_denominator
+    )
+    bars["intrabar_early_variance_fraction"] = (
+        bars["_intrabar_early_variance_sum"] / variance_denominator
+    )
+    bars["intrabar_late_variance_fraction"] = (
+        bars["_intrabar_late_variance_sum"] / variance_denominator
+    )
+    bars["intrabar_variance_late_minus_early"] = (
+        bars["intrabar_late_variance_fraction"]
+        - bars["intrabar_early_variance_fraction"]
+    )
+    variance_shape_columns = [
+        "intrabar_variance_concentration",
+        "intrabar_variance_top3_fraction",
+        "intrabar_variance_center_of_mass",
+        "intrabar_early_variance_fraction",
+        "intrabar_late_variance_fraction",
+        "intrabar_variance_late_minus_early",
+    ]
+    zero_intrabar_variance = bars["_intrabar_return_square_sum"].eq(0)
+    bars.loc[zero_intrabar_variance, variance_shape_columns] = 0.0
+    bars["intrabar_range_variance_concentration_gap"] = (
+        bars["intrabar_range_concentration"]
+        - bars["intrabar_variance_concentration"]
+    )
+    centered_return_energy = (
+        bars["_intrabar_return_square_sum"]
+        - bars["_intrabar_return_sum"].pow(2) / timeframe_minutes
+    ).clip(lower=0.0)
+    centered_return_denominator = centered_return_energy.replace(0, np.nan)
+    return_frequency_columns = []
+    for frequency in range(1, 5):
+        name = f"intrabar_return_dct_energy_fraction_{frequency}"
+        bars[name] = (
+            bars[f"_intrabar_return_dct_{frequency}_sum"].pow(2)
+            / centered_return_denominator
+        ).clip(lower=0.0, upper=1.0)
+        return_frequency_columns.append(name)
+    bars["intrabar_return_low_frequency_fraction"] = (
+        bars["intrabar_return_dct_energy_fraction_1"]
+        + bars["intrabar_return_dct_energy_fraction_2"]
+    ).clip(upper=1.0)
+    bars["intrabar_return_mid_frequency_fraction"] = (
+        bars["intrabar_return_dct_energy_fraction_3"]
+        + bars["intrabar_return_dct_energy_fraction_4"]
+    ).clip(upper=1.0)
+    bars["intrabar_return_high_frequency_fraction"] = (
+        1.0
+        - bars[return_frequency_columns].sum(axis=1)
+    ).clip(lower=0.0, upper=1.0)
+    bars["intrabar_return_low_high_frequency_balance"] = (
+        bars["intrabar_return_low_frequency_fraction"]
+        - bars["intrabar_return_high_frequency_fraction"]
+    )
+    return_energy_denominator = bars["_intrabar_return_square_sum"].replace(
+        0, np.nan
+    )
+    for lag in range(1, 4):
+        scale_factor = (
+            timeframe_minutes / (timeframe_minutes - lag)
+            if timeframe_minutes > lag
+            else 0.0
+        )
+        bars[f"intrabar_return_autocorrelation_{lag}"] = (
+            scale_factor
+            * bars[f"_intrabar_return_lag_product_{lag}_sum"]
+            / return_energy_denominator
+        ).clip(lower=-1.0, upper=1.0)
+    centered_range_energy = (
+        bars["_intrabar_range_square_sum"]
+        - bars["_intrabar_range_sum"].pow(2) / timeframe_minutes
+    ).clip(lower=0.0)
+    centered_range_denominator = centered_range_energy.replace(0, np.nan)
+    bars["intrabar_range_low_frequency_fraction"] = (
+        (
+            bars["_intrabar_range_dct_1_sum"].pow(2)
+            + bars["_intrabar_range_dct_2_sum"].pow(2)
+        )
+        / centered_range_denominator
+    ).clip(lower=0.0, upper=1.0)
+    frequency_shape_columns = [
+        *return_frequency_columns,
+        "intrabar_return_low_frequency_fraction",
+        "intrabar_return_mid_frequency_fraction",
+        "intrabar_return_high_frequency_fraction",
+        "intrabar_return_low_high_frequency_balance",
+        "intrabar_return_autocorrelation_1",
+        "intrabar_return_autocorrelation_2",
+        "intrabar_return_autocorrelation_3",
+        "intrabar_range_low_frequency_fraction",
+    ]
+    bars.loc[
+        centered_return_energy.eq(0),
+        return_frequency_columns
+        + [
+            "intrabar_return_low_frequency_fraction",
+            "intrabar_return_mid_frequency_fraction",
+            "intrabar_return_high_frequency_fraction",
+            "intrabar_return_low_high_frequency_balance",
+        ],
+    ] = 0.0
+    bars.loc[
+        bars["_intrabar_return_square_sum"].eq(0),
+        [
+            "intrabar_return_autocorrelation_1",
+            "intrabar_return_autocorrelation_2",
+            "intrabar_return_autocorrelation_3",
+        ],
+    ] = 0.0
+    bars.loc[
+        centered_range_energy.eq(0),
+        "intrabar_range_low_frequency_fraction",
+    ] = 0.0
+    upside_variance_denominator = bars["_intrabar_upside_variance_sum"].replace(
+        0, np.nan
+    )
+    downside_variance_denominator = bars[
+        "_intrabar_downside_variance_sum"
+    ].replace(0, np.nan)
+    bars["intrabar_upside_semivariance_fraction"] = (
+        bars["_intrabar_upside_variance_sum"] / variance_denominator
+    )
+    bars["intrabar_downside_semivariance_fraction"] = (
+        bars["_intrabar_downside_variance_sum"] / variance_denominator
+    )
+    bars["intrabar_semivariance_imbalance"] = (
+        bars["_intrabar_upside_variance_sum"]
+        - bars["_intrabar_downside_variance_sum"]
+    ) / variance_denominator
+    upside_fraction = bars["intrabar_upside_semivariance_fraction"].clip(
+        1e-12, 1 - 1e-12
+    )
+    bars["intrabar_semivariance_entropy"] = -(
+        upside_fraction * np.log(upside_fraction)
+        + (1 - upside_fraction) * np.log1p(-upside_fraction)
+    ) / np.log(2.0)
+    bars["intrabar_upside_variance_concentration"] = (
+        bars["_intrabar_upside_variance_max"] / upside_variance_denominator
+    )
+    bars["intrabar_downside_variance_concentration"] = (
+        bars["_intrabar_downside_variance_max"] / downside_variance_denominator
+    )
+    bars["intrabar_upside_variance_center_of_mass"] = (
+        bars["_intrabar_upside_variance_position_sum"]
+        / upside_variance_denominator
+    )
+    bars["intrabar_downside_variance_center_of_mass"] = (
+        bars["_intrabar_downside_variance_position_sum"]
+        / downside_variance_denominator
+    )
+    bars["intrabar_semivariance_timing_spread"] = (
+        bars["intrabar_upside_variance_center_of_mass"]
+        - bars["intrabar_downside_variance_center_of_mass"]
+    )
+    bars["intrabar_bipower_variation_ratio"] = (
+        (np.pi / 2.0) * bars["_intrabar_bipower_product_sum"]
+        / variance_denominator
+    )
+    bars["intrabar_jump_variation_fraction"] = (
+        1.0 - bars["intrabar_bipower_variation_ratio"]
+    ).clip(lower=0.0)
+    bars["intrabar_signed_largest_jump_fraction"] = (
+        bars["_intrabar_signed_largest_jump_sum"] / variance_denominator
+    )
+    continuous_variance_denominator = (
+        bars["_intrabar_continuous_upside_variance_sum"]
+        + bars["_intrabar_continuous_downside_variance_sum"]
+    ).replace(0, np.nan)
+    bars["intrabar_continuous_semivariance_imbalance"] = (
+        bars["_intrabar_continuous_upside_variance_sum"]
+        - bars["_intrabar_continuous_downside_variance_sum"]
+    ) / continuous_variance_denominator
+    early_variance_denominator = (
+        bars["_intrabar_early_upside_variance_sum"]
+        + bars["_intrabar_early_downside_variance_sum"]
+    ).replace(0, np.nan)
+    late_variance_denominator = (
+        bars["_intrabar_late_upside_variance_sum"]
+        + bars["_intrabar_late_downside_variance_sum"]
+    ).replace(0, np.nan)
+    early_semivariance_imbalance = (
+        bars["_intrabar_early_upside_variance_sum"]
+        - bars["_intrabar_early_downside_variance_sum"]
+    ) / early_variance_denominator
+    late_semivariance_imbalance = (
+        bars["_intrabar_late_upside_variance_sum"]
+        - bars["_intrabar_late_downside_variance_sum"]
+    ) / late_variance_denominator
+    bars["intrabar_semivariance_imbalance_late_minus_early"] = (
+        late_semivariance_imbalance.fillna(0.0)
+        - early_semivariance_imbalance.fillna(0.0)
+    )
+    signed_variation_columns = [
+        "intrabar_upside_semivariance_fraction",
+        "intrabar_downside_semivariance_fraction",
+        "intrabar_semivariance_imbalance",
+        "intrabar_semivariance_entropy",
+        "intrabar_upside_variance_concentration",
+        "intrabar_downside_variance_concentration",
+        "intrabar_upside_variance_center_of_mass",
+        "intrabar_downside_variance_center_of_mass",
+        "intrabar_semivariance_timing_spread",
+        "intrabar_bipower_variation_ratio",
+        "intrabar_jump_variation_fraction",
+        "intrabar_signed_largest_jump_fraction",
+        "intrabar_continuous_semivariance_imbalance",
+        "intrabar_semivariance_imbalance_late_minus_early",
+    ]
+    bars.loc[zero_intrabar_variance, signed_variation_columns] = 0.0
+    one_sided_up = bars["_intrabar_downside_variance_sum"].eq(0)
+    one_sided_down = bars["_intrabar_upside_variance_sum"].eq(0)
+    bars.loc[
+        one_sided_up,
+        [
+            "intrabar_downside_variance_concentration",
+            "intrabar_downside_variance_center_of_mass",
+        ],
+    ] = 0.0
+    bars.loc[
+        one_sided_down,
+        [
+            "intrabar_upside_variance_concentration",
+            "intrabar_upside_variance_center_of_mass",
+        ],
+    ] = 0.0
+    bars.loc[
+        one_sided_up | one_sided_down,
+        "intrabar_semivariance_entropy",
+    ] = 0.0
+    bars["intrabar_semivariance_timing_spread"] = (
+        bars["intrabar_upside_variance_center_of_mass"]
+        - bars["intrabar_downside_variance_center_of_mass"]
+    )
+    bars["intrabar_continuous_semivariance_imbalance"] = bars[
+        "intrabar_continuous_semivariance_imbalance"
+    ].fillna(0.0)
+    bars = bars.drop(
+        columns=[
+            "_intrabar_body_return_sum",
+            "_intrabar_abs_body_return_sum",
+            "_intrabar_max_abs_body_return",
+            "_intrabar_return_sum",
+            "_intrabar_abs_return_sum",
+            "_intrabar_return_square_sum",
+            "_intrabar_return_dct_1_sum",
+            "_intrabar_return_dct_2_sum",
+            "_intrabar_return_dct_3_sum",
+            "_intrabar_return_dct_4_sum",
+            "_intrabar_return_lag_product_1_sum",
+            "_intrabar_return_lag_product_2_sum",
+            "_intrabar_return_lag_product_3_sum",
+            "_intrabar_profile_mean_square_deviation",
+            "_intrabar_range_sum",
+            "_intrabar_range_square_sum",
+            "_intrabar_range_dct_1_sum",
+            "_intrabar_range_dct_2_sum",
+            "_intrabar_range_max",
+            "_intrabar_range_mean",
+            "_intrabar_range_std",
+            "_intrabar_range_top3_sum",
+            "_intrabar_range_position_sum",
+            "_intrabar_early_range_sum",
+            "_intrabar_late_range_sum",
+            "_intrabar_return_square_max",
+            "_intrabar_variance_top3_sum",
+            "_intrabar_variance_position_sum",
+            "_intrabar_early_variance_sum",
+            "_intrabar_late_variance_sum",
+            "_intrabar_upside_variance_sum",
+            "_intrabar_downside_variance_sum",
+            "_intrabar_upside_variance_max",
+            "_intrabar_downside_variance_max",
+            "_intrabar_upside_variance_position_sum",
+            "_intrabar_downside_variance_position_sum",
+            "_intrabar_bipower_product_sum",
+            "_intrabar_signed_largest_jump_sum",
+            "_intrabar_continuous_upside_variance_sum",
+            "_intrabar_continuous_downside_variance_sum",
+            "_intrabar_early_upside_variance_sum",
+            "_intrabar_early_downside_variance_sum",
+            "_intrabar_late_upside_variance_sum",
+            "_intrabar_late_downside_variance_sum",
+            "_intrabar_clv_range_product_sum",
+            "_intrabar_signed_range_sum",
+            "_intrabar_wick_pressure_sum",
+            "_intrabar_body_sum",
+        ]
+    )
     bars["timeframe_minutes"] = timeframe_minutes
     return bars
 
@@ -285,6 +1490,242 @@ def build_feature_frame(
         add(f"range_location_{window}", (close - rolling_low) / (rolling_high - rolling_low).replace(0, np.nan))
         add(f"efficiency_{window}", net_move / path_length.replace(0, np.nan))
 
+    if feature_set == "trend_structure":
+        period = 14
+        up_move = high.diff()
+        down_move = -low.diff()
+        plus_directional_movement = up_move.where(
+            (up_move > down_move) & (up_move > 0), 0.0
+        )
+        minus_directional_movement = down_move.where(
+            (down_move > up_move) & (down_move > 0), 0.0
+        )
+        atr_14 = true_range.ewm(
+            alpha=1 / period,
+            adjust=False,
+            min_periods=period,
+        ).mean()
+        plus_di = plus_directional_movement.ewm(
+            alpha=1 / period,
+            adjust=False,
+            min_periods=period,
+        ).mean() / atr_14.replace(0, np.nan)
+        minus_di = minus_directional_movement.ewm(
+            alpha=1 / period,
+            adjust=False,
+            min_periods=period,
+        ).mean() / atr_14.replace(0, np.nan)
+        directional_sum = (plus_di + minus_di).replace(0, np.nan)
+        directional_index = (plus_di - minus_di).abs() / directional_sum
+        adx = directional_index.ewm(
+            alpha=1 / period,
+            adjust=False,
+            min_periods=period,
+        ).mean()
+        add("plus_di_14", plus_di)
+        add("minus_di_14", minus_di)
+        add("adx_14", adx)
+        add("di_balance_14", (plus_di - minus_di) / directional_sum)
+        add("adx_change_3", adx.diff(3))
+
+        atr_20 = rolling_atr[20].replace(0, np.nan)
+        ema_12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
+        ema_26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
+        macd = ema_12 - ema_26
+        macd_signal = macd.ewm(span=9, adjust=False, min_periods=9).mean()
+        add("macd_atr_20", macd / atr_20)
+        add("macd_signal_gap_atr_20", (macd - macd_signal) / atr_20)
+        add(
+            "atr_compression_5_20",
+            rolling_atr[5] / rolling_atr[20].replace(0, np.nan),
+        )
+        add(
+            "volatility_ratio_5_20",
+            rolling_volatility[5] / rolling_volatility[20].replace(0, np.nan),
+        )
+
+        positive_realized = (
+            log_return_1.clip(lower=0).pow(2).rolling(20, min_periods=20).sum().pow(0.5)
+        )
+        negative_realized = (
+            log_return_1.clip(upper=0).pow(2).rolling(20, min_periods=20).sum().pow(0.5)
+        )
+        realized_sum = (positive_realized + negative_realized).replace(0, np.nan)
+        add(
+            "realized_volatility_balance_20",
+            (positive_realized - negative_realized) / realized_sum,
+        )
+        up_fraction = (
+            log_return_1.gt(0).astype("float64").rolling(20, min_periods=20).mean()
+        )
+        bounded_up_fraction = up_fraction.clip(1e-6, 1 - 1e-6)
+        add(
+            "direction_entropy_20",
+            -(
+                bounded_up_fraction * np.log(bounded_up_fraction)
+                + (1 - bounded_up_fraction) * np.log1p(-bounded_up_fraction)
+            )
+            / np.log(2.0),
+        )
+
+    if feature_set == "path_persistence":
+        absolute_path = log_return_1.abs()
+        for window in (5, 10, 20, 50):
+            path_length = absolute_path.rolling(
+                window, min_periods=window
+            ).sum().replace(0, np.nan)
+            add(
+                f"signed_efficiency_{window}",
+                np.log(close / close.shift(window)) / path_length,
+            )
+
+        for window in (10, 20):
+            add(
+                f"return_autocorrelation_{window}",
+                log_return_1.rolling(window, min_periods=window).corr(
+                    log_return_1.shift(1)
+                ),
+            )
+
+        direction = np.sign(log_return_1).astype("float64")
+        direction_changed = direction.ne(direction.shift(1)).astype("float64")
+        for window in (10, 20):
+            add(
+                f"direction_change_fraction_{window}",
+                direction_changed.rolling(window, min_periods=window).mean(),
+            )
+
+        one_step_variance = log_return_1.rolling(50, min_periods=50).var()
+        for aggregation in (2, 5, 10):
+            aggregated_return = np.log(close / close.shift(aggregation))
+            aggregated_variance = aggregated_return.rolling(
+                50, min_periods=50
+            ).var()
+            add(
+                f"variance_ratio_{aggregation}_50",
+                aggregated_variance
+                / (aggregation * one_step_variance).replace(0, np.nan),
+            )
+
+        previous_up = direction.shift(1).gt(0)
+        previous_down = direction.shift(1).lt(0)
+        add(
+            "up_persistence_20",
+            (previous_up & direction.gt(0))
+            .astype("float64")
+            .rolling(20, min_periods=20)
+            .sum()
+            / previous_up.astype("float64")
+            .rolling(20, min_periods=20)
+            .sum()
+            .replace(0, np.nan),
+        )
+        add(
+            "down_persistence_20",
+            (previous_down & direction.lt(0))
+            .astype("float64")
+            .rolling(20, min_periods=20)
+            .sum()
+            / previous_down.astype("float64")
+            .rolling(20, min_periods=20)
+            .sum()
+            .replace(0, np.nan),
+        )
+        direction_group = direction.ne(direction.shift(1)).cumsum()
+        signed_streak = (
+            direction.groupby(direction_group).cumcount().add(1).astype("float64")
+            * direction
+        )
+        add("signed_return_streak_20", signed_streak.clip(-20, 20) / 20.0)
+
+    if feature_set == "haar_multiscale":
+        absolute_return = log_return_1.abs()
+        direction = np.sign(log_return_1).astype("float64")
+        for window in (4, 8, 16, 32):
+            half_window = window // 2
+            recent_return = log_return_1.rolling(
+                half_window, min_periods=half_window
+            ).sum()
+            prior_return = recent_return.shift(half_window)
+            return_scale = (
+                log_return_1.rolling(window, min_periods=window).std()
+                * np.sqrt(window)
+            ).replace(0, np.nan)
+            add(
+                f"haar_return_detail_{window}",
+                (recent_return - prior_return) / return_scale,
+            )
+
+            recent_absolute = absolute_return.rolling(
+                half_window, min_periods=half_window
+            ).sum()
+            prior_absolute = recent_absolute.shift(half_window)
+            total_absolute = absolute_return.rolling(
+                window, min_periods=window
+            ).sum().replace(0, np.nan)
+            add(
+                f"haar_absolute_detail_{window}",
+                (recent_absolute - prior_absolute) / total_absolute,
+            )
+
+            recent_direction = direction.rolling(
+                half_window, min_periods=half_window
+            ).mean()
+            prior_direction = recent_direction.shift(half_window)
+            add(
+                f"haar_direction_detail_{window}",
+                (recent_direction - prior_direction) / 2.0,
+            )
+
+    if feature_set == "session_relative":
+        session_hour = result["timestamp"].dt.dayofweek * 24 + result["timestamp"].dt.hour
+        window = 32
+        min_periods = 12
+
+        def prior_session_stat(values: pd.Series, statistic: str) -> pd.Series:
+            shifted = values.groupby(session_hour, sort=False).shift(1)
+            rolling = shifted.groupby(session_hour, sort=False).rolling(
+                window, min_periods=min_periods
+            )
+            if statistic == "mean":
+                computed = rolling.mean()
+            elif statistic == "std":
+                computed = rolling.std(ddof=0)
+            else:
+                raise ValueError(f"unknown session statistic: {statistic}")
+            return computed.droplevel(0).sort_index()
+
+        body_ratio = (close - open_) / scale
+        range_ratio = (high - low) / scale
+        prior_return_mean = prior_session_stat(log_return_1, "mean")
+        prior_return_std = prior_session_stat(log_return_1, "std").replace(0, np.nan)
+        prior_body_mean = prior_session_stat(body_ratio, "mean")
+        prior_body_std = prior_session_stat(body_ratio, "std").replace(0, np.nan)
+        prior_absolute_return = prior_session_stat(log_return_1.abs(), "mean").replace(
+            0, np.nan
+        )
+        prior_range = prior_session_stat(range_ratio, "mean").replace(0, np.nan)
+        prior_direction = prior_session_stat(
+            np.sign(log_return_1).astype("float64"), "mean"
+        )
+        add(
+            "session_return_z_32",
+            ((log_return_1 - prior_return_mean) / prior_return_std).clip(-10, 10),
+        )
+        add(
+            "session_body_z_32",
+            ((body_ratio - prior_body_mean) / prior_body_std).clip(-10, 10),
+        )
+        add(
+            "session_absolute_return_ratio_32",
+            (log_return_1.abs() / prior_absolute_return).clip(0, 10),
+        )
+        add(
+            "session_range_ratio_32",
+            (range_ratio / prior_range).clip(0, 10),
+        )
+        add("session_direction_bias_32", prior_direction.clip(-1, 1))
+
     if feature_set == "enhanced_manual":
         body = close - open_
         direction = np.sign(body).astype("float64")
@@ -319,7 +1760,7 @@ def build_feature_frame(
         add("ema_spread_atr_20", (ema_12 - ema_26) / atr_20)
         add("ema_12_slope_atr_20", ema_12.diff(3) / atr_20)
 
-    if feature_set == "sequence_manual":
+    if feature_set in ("sequence_manual", "tcn_sequence"):
         atr_20 = rolling_atr[20].replace(0, np.nan)
         sequence_values = {
             "return_atr": close.diff() / atr_20,
@@ -334,9 +1775,227 @@ def build_feature_frame(
             )
             / atr_20,
         }
+
+    if feature_set == "sequence_manual":
         for lag in range(8):
             for sequence_name, values in sequence_values.items():
                 add(f"sequence_{sequence_name}_lag_{lag}", values.shift(lag))
+
+    if feature_set == "tcn_sequence":
+        if tuple(sequence_values) != TCN_SEQUENCE_CHANNELS:
+            raise AssertionError("TCN sequence channel order must remain fixed")
+        tcn_features = {
+            f"tcn_{sequence_name}_lag_{lag}": values.shift(lag)
+            for lag in range(TCN_SEQUENCE_LENGTH)
+            for sequence_name, values in sequence_values.items()
+        }
+        result = pd.concat(
+            [result, pd.DataFrame(tcn_features, index=result.index)], axis=1
+        )
+        feature_columns.extend(tcn_features)
+
+    if feature_set in (
+        "intrabar_manual",
+        "intrabar_structure",
+        "intrabar_profile",
+        "intrabar_pressure",
+        "intrabar_volatility_shape",
+        "intrabar_frequency_shape",
+        "intrabar_signed_variation",
+    ):
+        intrabar_columns = (
+            "intrabar_return_std",
+            "intrabar_up_fraction",
+            "intrabar_body_directional_efficiency",
+            "intrabar_body_concentration",
+            "intrabar_early_body_return",
+            "intrabar_late_body_return",
+            "intrabar_late_minus_early",
+        )
+        missing_intrabar = sorted(set(intrabar_columns) - set(bars.columns))
+        if missing_intrabar:
+            raise ValueError(
+                "bar frame is missing intrabar columns: " + ", ".join(missing_intrabar)
+            )
+        for column in intrabar_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set in (
+        "intrabar_structure",
+        "intrabar_profile",
+        "intrabar_pressure",
+        "intrabar_volatility_shape",
+        "intrabar_frequency_shape",
+        "intrabar_signed_variation",
+    ):
+        structure_columns = (
+            "intrabar_high_position",
+            "intrabar_low_position",
+            "intrabar_high_minus_low_position",
+            "intrabar_direction_change_fraction",
+            "intrabar_close_path_efficiency",
+            "intrabar_realized_variance_range",
+            "intrabar_max_drawdown",
+            "intrabar_max_runup",
+        )
+        missing_structure = sorted(set(structure_columns) - set(bars.columns))
+        if missing_structure:
+            raise ValueError(
+                "bar frame is missing intrabar structure columns: "
+                + ", ".join(missing_structure)
+            )
+        atr_ratio_20 = rolling_atr[20] / scale
+        for column in structure_columns[:-2]:
+            add(column, bars[column].to_numpy(dtype="float64"))
+        add(
+            "intrabar_max_drawdown_atr_20",
+            bars["intrabar_max_drawdown"].to_numpy(dtype="float64")
+            / atr_ratio_20.replace(0, np.nan),
+        )
+        add(
+            "intrabar_max_runup_atr_20",
+            bars["intrabar_max_runup"].to_numpy(dtype="float64")
+            / atr_ratio_20.replace(0, np.nan),
+        )
+
+    if feature_set in (
+        "intrabar_profile",
+        "intrabar_pressure",
+        "intrabar_volatility_shape",
+        "intrabar_frequency_shape",
+        "intrabar_signed_variation",
+    ):
+        profile_columns = (
+            "intrabar_profile_level_20",
+            "intrabar_profile_level_40",
+            "intrabar_profile_level_60",
+            "intrabar_profile_level_80",
+            "intrabar_profile_deviation_20",
+            "intrabar_profile_deviation_40",
+            "intrabar_profile_deviation_60",
+            "intrabar_profile_deviation_80",
+            "intrabar_profile_mean_deviation",
+            "intrabar_profile_rms_deviation",
+            "intrabar_profile_max_deviation",
+            "intrabar_profile_min_deviation",
+        )
+        missing_profile = sorted(set(profile_columns) - set(bars.columns))
+        if missing_profile:
+            raise ValueError(
+                "bar frame is missing intrabar profile columns: "
+                + ", ".join(missing_profile)
+            )
+        for column in profile_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set == "intrabar_pressure":
+        pressure_columns = (
+            "intrabar_clv_mean",
+            "intrabar_clv_std",
+            "intrabar_early_clv_mean",
+            "intrabar_late_clv_mean",
+            "intrabar_clv_late_minus_early",
+            "intrabar_range_weighted_clv",
+            "intrabar_signed_range_pressure",
+            "intrabar_wick_pressure",
+            "intrabar_body_range_pressure",
+            "intrabar_clv_body_divergence",
+            "intrabar_clv_body_agreement",
+        )
+        missing_pressure = sorted(set(pressure_columns) - set(bars.columns))
+        if missing_pressure:
+            raise ValueError(
+                "bar frame is missing intrabar pressure columns: "
+                + ", ".join(missing_pressure)
+            )
+        for column in pressure_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set in (
+        "intrabar_volatility_shape",
+        "intrabar_frequency_shape",
+        "intrabar_signed_variation",
+    ):
+        volatility_shape_columns = (
+            "intrabar_range_concentration",
+            "intrabar_range_top3_fraction",
+            "intrabar_range_dispersion",
+            "intrabar_range_center_of_mass",
+            "intrabar_early_range_fraction",
+            "intrabar_late_range_fraction",
+            "intrabar_range_late_minus_early",
+            "intrabar_variance_concentration",
+            "intrabar_variance_top3_fraction",
+            "intrabar_variance_center_of_mass",
+            "intrabar_early_variance_fraction",
+            "intrabar_late_variance_fraction",
+            "intrabar_variance_late_minus_early",
+            "intrabar_range_variance_concentration_gap",
+        )
+        missing_volatility_shape = sorted(
+            set(volatility_shape_columns) - set(bars.columns)
+        )
+        if missing_volatility_shape:
+            raise ValueError(
+                "bar frame is missing intrabar volatility shape columns: "
+                + ", ".join(missing_volatility_shape)
+            )
+        for column in volatility_shape_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set == "intrabar_frequency_shape":
+        frequency_shape_columns = (
+            "intrabar_return_dct_energy_fraction_1",
+            "intrabar_return_dct_energy_fraction_2",
+            "intrabar_return_dct_energy_fraction_3",
+            "intrabar_return_dct_energy_fraction_4",
+            "intrabar_return_low_frequency_fraction",
+            "intrabar_return_mid_frequency_fraction",
+            "intrabar_return_high_frequency_fraction",
+            "intrabar_return_low_high_frequency_balance",
+            "intrabar_return_autocorrelation_1",
+            "intrabar_return_autocorrelation_2",
+            "intrabar_return_autocorrelation_3",
+            "intrabar_range_low_frequency_fraction",
+        )
+        missing_frequency_shape = sorted(
+            set(frequency_shape_columns) - set(bars.columns)
+        )
+        if missing_frequency_shape:
+            raise ValueError(
+                "bar frame is missing intrabar frequency shape columns: "
+                + ", ".join(missing_frequency_shape)
+            )
+        for column in frequency_shape_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set == "intrabar_signed_variation":
+        signed_variation_columns = (
+            "intrabar_upside_semivariance_fraction",
+            "intrabar_downside_semivariance_fraction",
+            "intrabar_semivariance_imbalance",
+            "intrabar_semivariance_entropy",
+            "intrabar_upside_variance_concentration",
+            "intrabar_downside_variance_concentration",
+            "intrabar_upside_variance_center_of_mass",
+            "intrabar_downside_variance_center_of_mass",
+            "intrabar_semivariance_timing_spread",
+            "intrabar_bipower_variation_ratio",
+            "intrabar_jump_variation_fraction",
+            "intrabar_signed_largest_jump_fraction",
+            "intrabar_continuous_semivariance_imbalance",
+            "intrabar_semivariance_imbalance_late_minus_early",
+        )
+        missing_signed_variation = sorted(
+            set(signed_variation_columns) - set(bars.columns)
+        )
+        if missing_signed_variation:
+            raise ValueError(
+                "bar frame is missing intrabar signed variation columns: "
+                + ", ".join(missing_signed_variation)
+            )
+        for column in signed_variation_columns:
+            add(column, bars[column].to_numpy(dtype="float64"))
 
     gap_units = result["timestamp"].diff() / pd.Timedelta(minutes=timeframe_minutes)
     add("gap_bars", gap_units.clip(upper=100))
@@ -367,6 +2026,10 @@ def build_labeled_dataset(
 
     frame["target_timestamp"] = next_start + pd.Timedelta(minutes=timeframe_minutes)
     frame["next_bar_body"] = next_body
+    frame["next_bar_body_atr"] = (
+        next_body.abs()
+        / (frame["close"].abs() * frame["atr_ratio_20"]).replace(0, np.nan)
+    )
     frame["target_up"] = np.where(consecutive & ~flat, (next_body > 0).astype("float64"), np.nan)
     non_finite_features = ~np.isfinite(frame[feature_columns].to_numpy(dtype="float64")).all(axis=1)
     diagnostics = {
@@ -510,6 +2173,92 @@ def fit_platt_calibrator(y_true: np.ndarray, raw_probability_up: np.ndarray) -> 
     model = LogisticRegression(random_state=0)
     model.fit(logits.reshape(-1, 1), labels)
     return PlattCalibrator(slope=float(model.coef_[0, 0]), intercept=float(model.intercept_[0]))
+
+
+def fit_isotonic_calibrator(
+    y_true: np.ndarray, raw_probability_up: np.ndarray
+) -> IsotonicCalibrator:
+    labels = np.asarray(y_true, dtype="int8")
+    if len(np.unique(labels)) != 2:
+        raise ValueError("calibration partition must contain both up and down classes")
+    probability = np.asarray(raw_probability_up, dtype="float64")
+    model = IsotonicRegression(
+        y_min=1e-6,
+        y_max=1 - 1e-6,
+        out_of_bounds="clip",
+    )
+    model.fit(probability, labels)
+    return IsotonicCalibrator(
+        x_thresholds=tuple(float(value) for value in model.X_thresholds_),
+        y_thresholds=tuple(float(value) for value in model.y_thresholds_),
+    )
+
+
+def fit_beta_calibrator(
+    y_true: np.ndarray, raw_probability_up: np.ndarray
+) -> BetaCalibrator:
+    labels = np.asarray(y_true, dtype="float64")
+    if len(np.unique(labels)) != 2:
+        raise ValueError("calibration partition must contain both up and down classes")
+    probability = np.clip(
+        np.asarray(raw_probability_up, dtype="float64"), 1e-6, 1 - 1e-6
+    )
+    log_probability = np.log(probability)
+    negative_log_complement = -np.log1p(-probability)
+    platt = fit_platt_calibrator(labels.astype("int8"), probability)
+    initial = np.array(
+        [max(platt.slope, 0.0), max(platt.slope, 0.0), platt.intercept],
+        dtype="float64",
+    )
+    regularization = 1e-6
+
+    def objective(parameters: np.ndarray) -> tuple[float, np.ndarray]:
+        first, second, intercept = parameters
+        linear = first * log_probability + second * negative_log_complement + intercept
+        loss = np.mean(np.logaddexp(0.0, linear) - labels * linear)
+        loss += regularization * (first * first + second * second)
+        fitted = 1.0 / (1.0 + np.exp(-np.clip(linear, -40, 40)))
+        error = fitted - labels
+        gradient = np.array(
+            [
+                np.mean(error * log_probability) + 2 * regularization * first,
+                np.mean(error * negative_log_complement)
+                + 2 * regularization * second,
+                np.mean(error),
+            ],
+            dtype="float64",
+        )
+        return float(loss), gradient
+
+    fitted = minimize(
+        objective,
+        initial,
+        method="L-BFGS-B",
+        jac=True,
+        bounds=((0.0, None), (0.0, None), (None, None)),
+        options={"maxiter": 500, "ftol": 1e-12},
+    )
+    if not fitted.success or not np.isfinite(fitted.x).all():
+        raise ValueError(f"beta calibration failed: {fitted.message}")
+    return BetaCalibrator(
+        log_probability_coefficient=float(fitted.x[0]),
+        negative_log_complement_coefficient=float(fitted.x[1]),
+        intercept=float(fitted.x[2]),
+    )
+
+
+def fit_probability_calibrator(
+    y_true: np.ndarray,
+    raw_probability_up: np.ndarray,
+    method: str,
+) -> PlattCalibrator | IsotonicCalibrator | BetaCalibrator:
+    if method == "platt":
+        return fit_platt_calibrator(y_true, raw_probability_up)
+    if method == "isotonic":
+        return fit_isotonic_calibrator(y_true, raw_probability_up)
+    if method == "beta":
+        return fit_beta_calibrator(y_true, raw_probability_up)
+    raise ValueError(f"unknown probability_calibration: {method}")
 
 
 def _fit_correctness_calibrator(
@@ -1148,6 +2897,80 @@ def evaluate_odds_calibration(
     }
 
 
+def training_sample_weights(
+    train: pd.DataFrame,
+    mode: str,
+) -> np.ndarray | None:
+    if mode == "uniform":
+        return None
+    if mode != "body_atr":
+        raise ValueError(f"unknown train_weighting: {mode}")
+    if "next_bar_body_atr" not in train:
+        raise ValueError("training data is missing next_bar_body_atr")
+    strength = train["next_bar_body_atr"].to_numpy(dtype="float64")
+    if not np.isfinite(strength).all():
+        raise ValueError("next_bar_body_atr must be finite for weighted training")
+    raw_weight = 0.5 + np.clip(strength, 0.0, 1.5)
+    return raw_weight / raw_weight.mean()
+
+
+def model_training_target(train: pd.DataFrame, model_type: str) -> np.ndarray:
+    direction = train["target_up"].to_numpy(dtype="int8")
+    if model_type not in {
+        "body_atr_soft_hgb",
+        "body_multiclass_hgb",
+        "signed_body_hgb",
+        "signed_body_quantile_hgb",
+    }:
+        return direction
+    if "next_bar_body_atr" not in train:
+        raise ValueError("body/ATR target model requires next_bar_body_atr")
+    magnitude = train["next_bar_body_atr"].to_numpy(dtype="float64")
+    if not np.isfinite(magnitude).all() or np.any(magnitude < 0):
+        raise ValueError("next_bar_body_atr must be finite and non-negative")
+    sign = np.where(direction == 1, 1.0, -1.0)
+    if model_type == "body_atr_soft_hgb":
+        return 0.5 + sign * 0.5 * np.tanh(magnitude)
+    if model_type == "body_multiclass_hgb":
+        large = magnitude >= np.median(magnitude)
+        output = np.empty(len(direction), dtype="int8")
+        output[(direction == 0) & large] = 0
+        output[(direction == 0) & ~large] = 1
+        output[(direction == 1) & ~large] = 2
+        output[(direction == 1) & large] = 3
+        return output
+    return sign * np.arcsinh(magnitude)
+
+
+def filter_training_targets(
+    train: pd.DataFrame, mode: str
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    if mode == "all":
+        return train, {
+            "mode": mode,
+            "input_rows": len(train),
+            "output_rows": len(train),
+            "body_atr_threshold": None,
+        }
+    if mode != "body_atr_upper_half":
+        raise ValueError(f"unknown train_target_filter: {mode}")
+    if "next_bar_body_atr" not in train:
+        raise ValueError("target filtering requires next_bar_body_atr")
+    magnitude = train["next_bar_body_atr"].to_numpy(dtype="float64")
+    if not np.isfinite(magnitude).all():
+        raise ValueError("next_bar_body_atr must be finite for target filtering")
+    threshold = float(np.median(magnitude))
+    filtered = train.loc[train["next_bar_body_atr"].ge(threshold)].copy()
+    if filtered.empty or filtered["target_up"].nunique() != 2:
+        raise ValueError("target filtering must retain both direction classes")
+    return filtered, {
+        "mode": mode,
+        "input_rows": len(train),
+        "output_rows": len(filtered),
+        "body_atr_threshold": threshold,
+    }
+
+
 def train_timeframe(
     dataset: pd.DataFrame,
     feature_columns: list[str],
@@ -1159,10 +2982,42 @@ def train_timeframe(
     validate_stationary_feature_set(feature_columns)
     if config.confidence_model not in CONFIDENCE_MODELS:
         raise ValueError(f"unknown confidence_model: {config.confidence_model}")
+    if config.probability_calibration not in PROBABILITY_CALIBRATIONS:
+        raise ValueError(
+            f"unknown probability_calibration: {config.probability_calibration}"
+        )
     if config.model_type not in MODEL_TYPES:
         raise ValueError(f"unknown model_type: {config.model_type}")
+    if config.model_type in {"tcn", "causal_transformer"} and config.feature_set != "tcn_sequence":
+        raise ValueError(
+            f"{config.model_type} model_type requires feature_set=tcn_sequence"
+        )
+    if config.train_weighting not in TRAIN_WEIGHTING_MODES:
+        raise ValueError(f"unknown train_weighting: {config.train_weighting}")
+    if config.train_target_filter not in TRAIN_TARGET_FILTERS:
+        raise ValueError(f"unknown train_target_filter: {config.train_target_filter}")
+    if config.train_weighting != "uniform" and config.model_type not in {
+        "hgb",
+        "regime_hgb",
+    }:
+        raise ValueError(
+            "non-uniform train weighting is currently supported only for hgb models"
+        )
     splits = chronological_split(dataset, train_end, calibration_end, test_end)
-    train = _even_sample(splits["train"], config.max_train_rows)
+    if config.train_window_days < 0:
+        raise ValueError("train_window_days must not be negative")
+    if config.train_window_days > 0:
+        window_start = train_end - pd.Timedelta(days=config.train_window_days)
+        splits["train"] = splits["train"].loc[
+            pd.to_datetime(splits["train"]["decision_timestamp"], utc=True)
+            >= window_start
+        ].copy()
+        if splits["train"].empty:
+            raise ValueError("training window produced an empty training partition")
+    filtered_train, target_filter_diagnostics = filter_training_targets(
+        splits["train"], config.train_target_filter
+    )
+    train = _even_sample(filtered_train, config.max_train_rows)
     if train["target_up"].nunique() != 2:
         raise ValueError("training partition must contain both up and down classes")
     if config.model_type == "mlp":
@@ -1193,6 +3048,130 @@ def train_timeframe(
                 random_state=config.random_seed,
             ),
         )
+    elif config.model_type == "extra_trees":
+        if config.extra_trees_estimators <= 0:
+            raise ValueError("extra_trees_estimators must be positive")
+        if config.extra_trees_max_depth <= 0:
+            raise ValueError("extra_trees_max_depth must be positive")
+        if config.extra_trees_min_samples_leaf <= 0:
+            raise ValueError("extra_trees_min_samples_leaf must be positive")
+        if not 0 < config.extra_trees_max_features <= 1:
+            raise ValueError("extra_trees_max_features must be in (0, 1]")
+        model = ExtraTreesClassifier(
+            n_estimators=config.extra_trees_estimators,
+            max_depth=config.extra_trees_max_depth,
+            min_samples_leaf=config.extra_trees_min_samples_leaf,
+            max_features=config.extra_trees_max_features,
+            n_jobs=-1,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "xgboost":
+        # XGBoost and PyTorch ship separate OpenMP runtimes on Intel macOS.
+        # Keep both optional backends lazy so a single-model CLI process loads
+        # only the runtime it actually needs.
+        from xgboost import XGBClassifier
+
+        if config.xgboost_estimators <= 0:
+            raise ValueError("xgboost_estimators must be positive")
+        if config.xgboost_max_depth <= 0:
+            raise ValueError("xgboost_max_depth must be positive")
+        if config.xgboost_learning_rate <= 0:
+            raise ValueError("xgboost_learning_rate must be positive")
+        if config.xgboost_min_child_weight <= 0:
+            raise ValueError("xgboost_min_child_weight must be positive")
+        if not 0 < config.xgboost_subsample <= 1:
+            raise ValueError("xgboost_subsample must be in (0, 1]")
+        if not 0 < config.xgboost_column_sample <= 1:
+            raise ValueError("xgboost_column_sample must be in (0, 1]")
+        if config.xgboost_l2 < 0:
+            raise ValueError("xgboost_l2 must not be negative")
+        model = XGBClassifier(
+            n_estimators=config.xgboost_estimators,
+            max_depth=config.xgboost_max_depth,
+            learning_rate=config.xgboost_learning_rate,
+            min_child_weight=config.xgboost_min_child_weight,
+            subsample=config.xgboost_subsample,
+            colsample_bytree=config.xgboost_column_sample,
+            reg_lambda=config.xgboost_l2,
+            objective="binary:logistic",
+            eval_metric="logloss",
+            tree_method="hist",
+            n_jobs=-1,
+            random_state=config.random_seed,
+            verbosity=0,
+        )
+    elif config.model_type == "regime_hgb":
+        model = VolatilityRegimeHGBClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "body_atr_soft_hgb":
+        model = BodyATRSoftHGBClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "body_multiclass_hgb":
+        model = BodyMulticlassHGBClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "signed_body_hgb":
+        model = SignedBodyHGBClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "signed_body_quantile_hgb":
+        model = SignedBodyQuantileHGBClassifier(
+            max_iter=config.max_iter,
+            learning_rate=config.learning_rate,
+            max_leaf_nodes=config.max_leaf_nodes,
+            min_samples_leaf=config.min_samples_leaf,
+            l2_regularization=config.l2_regularization,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "tcn":
+        from trade_data.next_bar_tcn import CausalTCNClassifier
+
+        model = CausalTCNClassifier(
+            sequence_length=TCN_SEQUENCE_LENGTH,
+            hidden_channels=config.tcn_hidden_channels,
+            epochs=config.tcn_epochs,
+            batch_size=config.tcn_batch_size,
+            learning_rate=config.tcn_learning_rate,
+            weight_decay=config.tcn_weight_decay,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "causal_transformer":
+        from trade_data.next_bar_tcn import CausalTransformerClassifier
+
+        model = CausalTransformerClassifier(
+            sequence_length=TCN_SEQUENCE_LENGTH,
+            model_dimension=config.transformer_model_dimension,
+            attention_heads=config.transformer_attention_heads,
+            encoder_layers=config.transformer_encoder_layers,
+            feedforward_dimension=config.transformer_feedforward_dimension,
+            epochs=config.transformer_epochs,
+            batch_size=config.transformer_batch_size,
+            learning_rate=config.transformer_learning_rate,
+            weight_decay=config.transformer_weight_decay,
+            random_state=config.random_seed,
+        )
     else:
         model = HistGradientBoostingClassifier(
             max_iter=config.max_iter,
@@ -1203,7 +3182,16 @@ def train_timeframe(
             early_stopping=False,
             random_state=config.random_seed,
         )
-    model.fit(train[feature_columns], train["target_up"])
+    sample_weight = training_sample_weights(train, config.train_weighting)
+    training_target = model_training_target(train, config.model_type)
+    if sample_weight is None:
+        model.fit(train[feature_columns], training_target)
+    else:
+        model.fit(
+            train[feature_columns],
+            training_target,
+            sample_weight=sample_weight,
+        )
     calibration = splits["calibration"]
     raw_calibration_probability = _positive_probability(model, calibration[feature_columns])
     class_calibration = calibration
@@ -1214,8 +3202,10 @@ def train_timeframe(
             raise ValueError("context confidence model requires at least 300 calibration rows")
         class_calibration = calibration.iloc[:midpoint]
         class_calibration_probability = raw_calibration_probability[:midpoint]
-    calibrator = fit_platt_calibrator(
-        class_calibration["target_up"].to_numpy(), class_calibration_probability
+    calibrator = fit_probability_calibrator(
+        class_calibration["target_up"].to_numpy(),
+        class_calibration_probability,
+        config.probability_calibration,
     )
     calibrated_calibration_probability = calibrator.predict(raw_calibration_probability)
     direction_confidence_calibrator: DirectionConfidenceCalibrator | None = None
@@ -1273,6 +3263,21 @@ def train_timeframe(
     metrics = {
         "split_rows": {name: len(value) for name, value in splits.items()},
         "sampled_train_rows": len(train),
+        "train_window_days": config.train_window_days,
+        "train_weighting": config.train_weighting,
+        "train_target_filter": target_filter_diagnostics,
+        "train_sample_weight": (
+            {
+                "minimum": float(sample_weight.min()),
+                "mean": float(sample_weight.mean()),
+                "maximum": float(sample_weight.max()),
+            }
+            if sample_weight is not None
+            else None
+        ),
+        "model_diagnostics": (
+            model.diagnostics() if callable(getattr(model, "diagnostics", None)) else None
+        ),
         "split_ranges": {
             name: {
                 "decision_start": value["decision_timestamp"].min().isoformat(),
@@ -1290,7 +3295,14 @@ def train_timeframe(
             "majority_accuracy": float((labels == majority_class).mean()),
             "previous_bar_direction_accuracy": float((labels == previous_direction).mean()),
         },
-        "platt_calibrator": asdict(calibrator),
+        "probability_calibration": config.probability_calibration,
+        "probability_calibrator": {
+            "method": config.probability_calibration,
+            **asdict(calibrator),
+        },
+        "platt_calibrator": (
+            asdict(calibrator) if isinstance(calibrator, PlattCalibrator) else None
+        ),
         "confidence_model": config.confidence_model,
         "direction_confidence_calibrator": (
             asdict(direction_confidence_calibrator)
@@ -1316,6 +3328,7 @@ def train_timeframe(
     artifact = {
         "model": model,
         "calibrator": calibrator,
+        "probability_calibration": config.probability_calibration,
         "direction_confidence_calibrator": direction_confidence_calibrator,
         "context_confidence_model": context_confidence_model,
         "feature_columns": feature_columns,
@@ -1352,6 +3365,7 @@ def train_all_timeframes(
         },
         "target_definition": "direction of next consecutive completed candle: close > open",
         "confidence_definition": config.confidence_model,
+        "probability_calibration": config.probability_calibration,
         "timeframes": {},
     }
     manifest: dict[str, object] = {
@@ -1630,30 +3644,67 @@ def optimize_walk_forward_policy(
 
 
 def build_walk_forward_odds_calibration(
-    predictions_dir: Path,
+    predictions_dir: Path | Sequence[Path],
     output: Path,
     config: OddsCalibrationConfig | None = None,
 ) -> dict[str, object]:
     """Fit deployable odds tables and validate calibration on later OOS folds."""
     odds_config = config or OddsCalibrationConfig()
-    manifest = json.loads((predictions_dir / "manifest.json").read_text(encoding="utf-8"))
+    prediction_dirs = (
+        (predictions_dir,)
+        if isinstance(predictions_dir, Path)
+        else tuple(Path(directory) for directory in predictions_dir)
+    )
+    if not prediction_dirs:
+        raise ValueError("at least one predictions directory is required")
+    manifests = [
+        json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+        for directory in prediction_dirs
+    ]
+    timeframe_names = list(
+        dict.fromkeys(
+            timeframe
+            for manifest in manifests
+            for timeframe in manifest["timeframes"]
+        )
+    )
     payload: dict[str, object] = {
         "_meta": {
             "format_version": 1,
             "created_at": datetime.now(UTC).isoformat(),
-            "source": str(predictions_dir),
+            "source": (
+                str(prediction_dirs[0])
+                if len(prediction_dirs) == 1
+                else [str(directory) for directory in prediction_dirs]
+            ),
             "config": asdict(odds_config),
             "validation": "nested chronological: prior OOS folds calibrate, next fold evaluates",
             "confidence_definition": "estimated probability that predicted direction is correct",
         }
     }
-    for timeframe, entry in manifest["timeframes"].items():
-        prediction_name = entry.get("predictions")
-        if prediction_name is None:
-            raise ValueError(f"walk-forward manifest has no predictions for {timeframe}")
-        frame = _prepare_policy_frame(pd.read_parquet(predictions_dir / prediction_name))
+    for timeframe in timeframe_names:
+        frames = []
+        for directory, manifest in zip(prediction_dirs, manifests):
+            entry = manifest["timeframes"].get(timeframe)
+            if entry is None:
+                continue
+            prediction_name = entry.get("predictions")
+            if prediction_name is None:
+                raise ValueError(
+                    f"walk-forward manifest has no predictions for {timeframe}"
+                )
+            frames.append(pd.read_parquet(directory / prediction_name))
+        frame = _prepare_policy_frame(pd.concat(frames, ignore_index=True))
         if "fold" not in frame:
             raise ValueError(f"walk-forward predictions have no fold column for {timeframe}")
+        duplicate_keys = ["fold", "timestamp"]
+        if frame.duplicated(duplicate_keys).any():
+            raise ValueError(
+                f"walk-forward prediction directories overlap for {timeframe}"
+            )
+        frame = frame.sort_values(["decision_timestamp", "fold"]).reset_index(
+            drop=True
+        )
         fold_order = [
             str(value)
             for value in (
@@ -1895,11 +3946,54 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument(
         "--confidence-model", choices=CONFIDENCE_MODELS, default="class_probability"
     )
+    train.add_argument(
+        "--probability-calibration",
+        choices=PROBABILITY_CALIBRATIONS,
+        default="platt",
+    )
+    train.add_argument(
+        "--train-weighting", choices=TRAIN_WEIGHTING_MODES, default="uniform"
+    )
+    train.add_argument(
+        "--train-target-filter", choices=TRAIN_TARGET_FILTERS, default="all"
+    )
     train.add_argument("--model-type", choices=MODEL_TYPES, default="hgb")
     train.add_argument("--mlp-learning-rate", type=float, default=0.001)
     train.add_argument("--mlp-alpha", type=float, default=0.001)
     train.add_argument("--mlp-batch-size", type=int, default=1024)
     train.add_argument("--logistic-c", type=float, default=0.10)
+    train.add_argument(
+        "--train-window-days",
+        type=int,
+        default=0,
+        help="Use only this many days before train_end; zero keeps the full expanding history.",
+    )
+    train.add_argument("--extra-trees-estimators", type=int, default=200)
+    train.add_argument("--extra-trees-max-depth", type=int, default=12)
+    train.add_argument("--extra-trees-min-samples-leaf", type=int, default=50)
+    train.add_argument("--extra-trees-max-features", type=float, default=0.75)
+    train.add_argument("--xgboost-estimators", type=int, default=300)
+    train.add_argument("--xgboost-max-depth", type=int, default=4)
+    train.add_argument("--xgboost-learning-rate", type=float, default=0.03)
+    train.add_argument("--xgboost-min-child-weight", type=float, default=20.0)
+    train.add_argument("--xgboost-subsample", type=float, default=0.80)
+    train.add_argument("--xgboost-column-sample", type=float, default=0.80)
+    train.add_argument("--xgboost-l2", type=float, default=5.0)
+    train.add_argument("--tcn-epochs", type=int, default=8)
+    train.add_argument("--tcn-batch-size", type=int, default=2048)
+    train.add_argument("--tcn-learning-rate", type=float, default=0.001)
+    train.add_argument("--tcn-hidden-channels", type=int, default=16)
+    train.add_argument("--tcn-weight-decay", type=float, default=0.0001)
+    train.add_argument("--transformer-epochs", type=int, default=8)
+    train.add_argument("--transformer-batch-size", type=int, default=2048)
+    train.add_argument("--transformer-learning-rate", type=float, default=0.0005)
+    train.add_argument("--transformer-model-dimension", type=int, default=16)
+    train.add_argument("--transformer-attention-heads", type=int, default=4)
+    train.add_argument("--transformer-encoder-layers", type=int, default=1)
+    train.add_argument(
+        "--transformer-feedforward-dimension", type=int, default=32
+    )
+    train.add_argument("--transformer-weight-decay", type=float, default=0.0001)
 
     walk_forward = subparsers.add_parser(
         "walk-forward", help="run multiple expanding chronological folds"
@@ -1928,11 +4022,56 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument(
         "--confidence-model", choices=CONFIDENCE_MODELS, default="class_probability"
     )
+    walk_forward.add_argument(
+        "--probability-calibration",
+        choices=PROBABILITY_CALIBRATIONS,
+        default="platt",
+    )
+    walk_forward.add_argument(
+        "--train-weighting", choices=TRAIN_WEIGHTING_MODES, default="uniform"
+    )
+    walk_forward.add_argument(
+        "--train-target-filter", choices=TRAIN_TARGET_FILTERS, default="all"
+    )
     walk_forward.add_argument("--model-type", choices=MODEL_TYPES, default="hgb")
     walk_forward.add_argument("--mlp-learning-rate", type=float, default=0.001)
     walk_forward.add_argument("--mlp-alpha", type=float, default=0.001)
     walk_forward.add_argument("--mlp-batch-size", type=int, default=1024)
     walk_forward.add_argument("--logistic-c", type=float, default=0.10)
+    walk_forward.add_argument(
+        "--train-window-days",
+        type=int,
+        default=0,
+        help="Use only this many days before each train_end; zero keeps expanding history.",
+    )
+    walk_forward.add_argument("--extra-trees-estimators", type=int, default=200)
+    walk_forward.add_argument("--extra-trees-max-depth", type=int, default=12)
+    walk_forward.add_argument("--extra-trees-min-samples-leaf", type=int, default=50)
+    walk_forward.add_argument("--extra-trees-max-features", type=float, default=0.75)
+    walk_forward.add_argument("--xgboost-estimators", type=int, default=300)
+    walk_forward.add_argument("--xgboost-max-depth", type=int, default=4)
+    walk_forward.add_argument("--xgboost-learning-rate", type=float, default=0.03)
+    walk_forward.add_argument("--xgboost-min-child-weight", type=float, default=20.0)
+    walk_forward.add_argument("--xgboost-subsample", type=float, default=0.80)
+    walk_forward.add_argument("--xgboost-column-sample", type=float, default=0.80)
+    walk_forward.add_argument("--xgboost-l2", type=float, default=5.0)
+    walk_forward.add_argument("--tcn-epochs", type=int, default=8)
+    walk_forward.add_argument("--tcn-batch-size", type=int, default=2048)
+    walk_forward.add_argument("--tcn-learning-rate", type=float, default=0.001)
+    walk_forward.add_argument("--tcn-hidden-channels", type=int, default=16)
+    walk_forward.add_argument("--tcn-weight-decay", type=float, default=0.0001)
+    walk_forward.add_argument("--transformer-epochs", type=int, default=8)
+    walk_forward.add_argument("--transformer-batch-size", type=int, default=2048)
+    walk_forward.add_argument(
+        "--transformer-learning-rate", type=float, default=0.0005
+    )
+    walk_forward.add_argument("--transformer-model-dimension", type=int, default=16)
+    walk_forward.add_argument("--transformer-attention-heads", type=int, default=4)
+    walk_forward.add_argument("--transformer-encoder-layers", type=int, default=1)
+    walk_forward.add_argument(
+        "--transformer-feedforward-dimension", type=int, default=32
+    )
+    walk_forward.add_argument("--transformer-weight-decay", type=float, default=0.0001)
 
     optimize = subparsers.add_parser(
         "optimize-policy",
@@ -1950,7 +4089,13 @@ def build_parser() -> argparse.ArgumentParser:
         "build-odds-calibration",
         help="calibrate probability-of-correctness from walk-forward predictions",
     )
-    odds.add_argument("--predictions-dir", type=Path, required=True)
+    odds.add_argument(
+        "--predictions-dir",
+        type=Path,
+        action="append",
+        required=True,
+        help="repeat to combine non-overlapping chronological OOS prediction sets",
+    )
     odds.add_argument("--output", type=Path, required=True)
     odds.add_argument("--bins", type=int, default=10)
     odds.add_argument("--min-support", type=int, default=500)
@@ -1988,11 +4133,39 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         l2_regularization=args.l2_regularization,
         feature_set=args.feature_set,
         confidence_model=args.confidence_model,
+        probability_calibration=args.probability_calibration,
+        train_weighting=args.train_weighting,
+        train_target_filter=args.train_target_filter,
         model_type=args.model_type,
         mlp_learning_rate=args.mlp_learning_rate,
         mlp_alpha=args.mlp_alpha,
         mlp_batch_size=args.mlp_batch_size,
         logistic_c=args.logistic_c,
+        train_window_days=args.train_window_days,
+        extra_trees_estimators=args.extra_trees_estimators,
+        extra_trees_max_depth=args.extra_trees_max_depth,
+        extra_trees_min_samples_leaf=args.extra_trees_min_samples_leaf,
+        extra_trees_max_features=args.extra_trees_max_features,
+        xgboost_estimators=args.xgboost_estimators,
+        xgboost_max_depth=args.xgboost_max_depth,
+        xgboost_learning_rate=args.xgboost_learning_rate,
+        xgboost_min_child_weight=args.xgboost_min_child_weight,
+        xgboost_subsample=args.xgboost_subsample,
+        xgboost_column_sample=args.xgboost_column_sample,
+        xgboost_l2=args.xgboost_l2,
+        tcn_epochs=args.tcn_epochs,
+        tcn_batch_size=args.tcn_batch_size,
+        tcn_learning_rate=args.tcn_learning_rate,
+        tcn_hidden_channels=args.tcn_hidden_channels,
+        tcn_weight_decay=args.tcn_weight_decay,
+        transformer_epochs=args.transformer_epochs,
+        transformer_batch_size=args.transformer_batch_size,
+        transformer_learning_rate=args.transformer_learning_rate,
+        transformer_model_dimension=args.transformer_model_dimension,
+        transformer_attention_heads=args.transformer_attention_heads,
+        transformer_encoder_layers=args.transformer_encoder_layers,
+        transformer_feedforward_dimension=args.transformer_feedforward_dimension,
+        transformer_weight_decay=args.transformer_weight_decay,
     )
 
 

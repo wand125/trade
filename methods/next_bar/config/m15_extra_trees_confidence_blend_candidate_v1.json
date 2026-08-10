@@ -1,0 +1,100 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_high_confidence_adoption",
+  "target_timeframe_minutes": 15,
+  "direction_source": "baseline HGB",
+  "confidence_candidate": {
+    "diversity_model": "ExtraTreesClassifier",
+    "extra_trees_weight": 0.25,
+    "hgb_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.53,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "formula": "raw_blend = 0.75 * P_HGB + 0.25 * P_ExtraTrees; retain the HGB side and use max(HGB_side_sign * (raw_blend - 0.5), epsilon) as its probability edge",
+    "when_models_disagree_past_0_5": "confidence becomes approximately 0.50 instead of reflecting disagreement into false confidence"
+  },
+  "adoption_lane": {
+    "minimum_candidate_confidence": 0.53,
+    "threshold_selection": "selected from the predeclared 0.53/0.54/0.55/0.60 grid on development_2020_2023, then checked unchanged on confirmation_2024_2026_partial",
+    "outside_lane": "keep the baseline HGB direction and current authoritative confidence/policy"
+  },
+  "extra_trees_model": {
+    "feature_set": "baseline",
+    "feature_count": 38,
+    "raw_ohlc_levels_used": false,
+    "n_estimators": 200,
+    "max_depth": 12,
+    "min_samples_leaf": 50,
+    "max_features": 0.75,
+    "random_seed": 42
+  },
+  "experiments": {
+    "extra_trees_oos": "experiments/next_bar/walk_forward_extra_trees_001",
+    "unrestricted_blend": "experiments/next_bar/ensemble_extra_trees_25_001",
+    "direction_preserving_blend": "experiments/next_bar/extra_trees_confidence_blend_001"
+  },
+  "selection_objective": {
+    "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
+    "wilson_z": 1.96
+  },
+  "evidence": {
+    "rows": 145140,
+    "overall_probability_quality": {
+      "base_accuracy": 0.5181617748380873,
+      "candidate_accuracy": 0.5181617748380873,
+      "base_brier": 0.24942610034671492,
+      "candidate_brier": 0.2493956618757209,
+      "base_log_loss": 0.6919984520992796,
+      "candidate_log_loss": 0.6919370250495874,
+      "base_ece": 0.0034669502731554777,
+      "candidate_ece": 0.0031852402717607877
+    },
+    "confidence_053_overall": {
+      "base_rows": 36943,
+      "candidate_rows": 36343,
+      "base_coverage": 0.2545335538101144,
+      "candidate_coverage": 0.25039961416563317,
+      "base_accuracy": 0.5435671169098341,
+      "candidate_accuracy": 0.5452219134358749,
+      "base_wilson_lower": 0.5384835352361049,
+      "candidate_wilson_lower": 0.5400978484553985,
+      "base_selection_score": 0.019415450930931288,
+      "candidate_selection_score": 0.02006494149778122
+    },
+    "confidence_053_development_2020_2023": {
+      "base_accuracy": 0.5430901642424926,
+      "candidate_accuracy": 0.5446694688574704,
+      "base_selection_score": 0.02027495093339169,
+      "candidate_selection_score": 0.02093751695485027
+    },
+    "confidence_053_confirmation_2024_2026_partial": {
+      "base_accuracy": 0.5447948916408669,
+      "candidate_accuracy": 0.5466430748058586,
+      "base_selection_score": 0.015106002762317485,
+      "candidate_selection_score": 0.015742119787553046
+    },
+    "fold_stability_at_confidence_053": {
+      "candidate_accuracy_improved_folds": 7,
+      "candidate_selection_score_improved_folds": 6,
+      "evaluated_folds": 7
+    },
+    "rejected_direction_variants": {
+      "extra_trees_accuracy": 0.5177346010748243,
+      "unrestricted_blend_accuracy": 0.5186233980983878,
+      "base_confirmation_accuracy": 0.5150115061455305,
+      "unrestricted_blend_confirmation_accuracy": 0.5147082433951157,
+      "unrestricted_blend_exact_mcnemar_p": 0.3186953103283831
+    }
+  },
+  "promotion": {
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_high_confidence_candidate": true,
+    "require_fresh_forward_confidence_053_selection_score_not_below_base": true,
+    "require_fresh_forward_confidence_053_accuracy_not_below_base": true,
+    "require_fresh_forward_brier_not_above_base": true,
+    "reason": "The fixed confidence lane improved the selection objective in both development and confirmation and was stable by fold, but it was selected from historical OOS folds and therefore needs a fresh forward period before becoming authoritative."
+  }
+}

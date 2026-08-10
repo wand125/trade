@@ -4,11 +4,21 @@ version = "0.1.0"
 description = "Historical XAUUSD data pipeline for short-term trade modelling"
 requires-python = ">=3.10"
 dependencies = [
-  "numpy>=1.26",
-  "pandas>=2.2",
+  "numpy>=1.26,<2; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+  "numpy>=1.26; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+  "pandas>=2.2,<3",
   "pyarrow>=16.0",
   "requests>=2.32",
-  "scikit-learn>=1.5",
+  "scikit-learn>=1.5,<1.8",
+  "scipy>=1.13,<1.16",
+  "torch>=2.2,<2.3; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+  "torch>=2.4; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+  "xgboost>=2.1,<4",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
 ]
 
 [project.scripts]
@@ -21,6 +31,8 @@ trade-model = "trade_data.modeling:main"
 trade-meta = "trade_data.meta_model:main"
 trade-next-bar = "trade_data.next_bar:main"
 trade-next-bar-ensemble = "trade_data.next_bar_ensemble:main"
+trade-next-bar-disagreement = "trade_data.next_bar_disagreement:main"
+trade-next-bar-online-ensemble = "trade_data.next_bar_online_ensemble:main"
 trade-next-bar-meta = "trade_data.next_bar_meta:main"
 trade-next-bar-ev = "trade_data.next_bar_ev:main"
 trade-next-bar-overlay = "trade_data.next_bar_overlay:main"
