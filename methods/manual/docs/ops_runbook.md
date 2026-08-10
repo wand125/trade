@@ -35,6 +35,7 @@
 - **2026-08-10 21:2X〜21:28 JST: 作戦12撤回(未エントリー)**。監視中に4,329・4,325を通知したのち、archive/campaign_closed.mdへの移動をrunbook更新(21:28、「現役は作戦11のみ」)で確認。旧task `b7ql93jsw` を停止し、金3水準を外した新task `bbo06pmn4` を起動(USDJPY4水準・指標警報は継続)
 - **2026-08-11 01:5X JST: ブリッジ停止によりMonitor `bbo06pmn4` がkilled通知**。原因確認したところMT5ブリッジ(`mt5_ai_bridge.py`)プロセスが停止しhealthエンドポイント無応答(runtimeファイルは21:57 JSTで更新停止、約4時間の空白)。ポジション・注文はブリッジ停止前後とも一貫してゼロ(委任執行への影響なし)。ブリッジを再起動しhealth OK・データ流入再開を確認、campaign.md「作戦11」を一次確認(現役・未エントリーで変更なし)。同一パラメータ(USDJPY4水準158.68/159.05/158.42/159.80、CPI 8/12・PPI 8/13・小売売上高8/14の21:30 EVENT_WARN)で新task `b1i270s0p` を起動
 - **2026-08-11 08:1X〜02:19 JST: 作戦11→13置き換え、buy_stop設置**。相談セッションからcross-session-messageで通知(runbook 08:16更新・commit 589fc7e/campaign.md commit 474ea12は既に相談セッション側が反映済み)。campaign.md「作戦13」節を一次確認しメッセージ内容と一致を確認。発行直前に価格再取得(159.254/159.266、159.40未満・ポジション注文ゼロ)してから `create_trade_command.py buy_stop --symbol USDJPY-m --volume 40 --price 159.40 --sl 159.14 --tp 159.75 --expires-in-seconds 150 --reason "campaign13 box breakout" --live --confirm LIVE` を実行。EA処理待ちをMonitorのuntilループで確認し、`status: executed`(order 90204917、retcode 10009 pending order placed)を確認。**まだポジション化はしておらず、159.40到達待ちのpending注文**。旧task `b1i270s0p` を停止し、作戦13の水準(159.40/159.14/159.75/159.80)で新task `b7wypct48` を起動
+- **2026-08-11 08:58 JST: USDJPY-mが159.14を下抜け(159.125)**。buy_stop注文(159.40)は未約定・ポジションゼロのため直接影響なし。campaign.md無効化条件④「箱を下抜けて戻れない」に関わる動きだが、この判定・注文撤去は委任表に含まれないため**報告のみ**とし相談セッションへ通知。運用セッション側では撤去等を実行していない
 
 ## 現在の状態(2026-08-10 19:26 JST 更新)
 
