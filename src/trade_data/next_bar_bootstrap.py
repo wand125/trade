@@ -36,7 +36,8 @@ def _wilson_lower(
 def _daily_aggregates(
     first: pd.DataFrame,
     second: pd.DataFrame,
-    threshold: float,
+    first_threshold: float,
+    second_threshold: float,
 ) -> pd.DataFrame:
     assert_aligned(second, first, "first")
     timestamp = pd.to_datetime(first["timestamp"], utc=True)
@@ -47,8 +48,8 @@ def _daily_aggregates(
     second_probability = np.clip(
         second["probability_up"].to_numpy(dtype="float64"), 1e-12, 1 - 1e-12
     )
-    first_selected = first["confidence"].ge(threshold).to_numpy(dtype="int64")
-    second_selected = second["confidence"].ge(threshold).to_numpy(dtype="int64")
+    first_selected = first["confidence"].ge(first_threshold).to_numpy(dtype="int64")
+    second_selected = second["confidence"].ge(second_threshold).to_numpy(dtype="int64")
     first_correct = first["correct"].to_numpy(dtype="int64")
     second_correct = second["correct"].to_numpy(dtype="int64")
     source = pd.DataFrame(
@@ -125,15 +126,25 @@ def _summarize_delta(
     point: float,
     samples: np.ndarray,
     higher_is_better: bool,
-) -> dict[str, float | bool | str]:
+) -> dict[str, object]:
     finite = samples[np.isfinite(samples)]
     if finite.size == 0:
-        raise ValueError("bootstrap produced no finite metric samples")
+        return {
+            "available": False,
+            "delta_first_minus_second": None,
+            "bootstrap_mean_delta": None,
+            "confidence_interval_95": [None, None],
+            "higher_is_better": higher_is_better,
+            "probability_first_better": None,
+            "interval_supports_first_better": False,
+            "reason": "metric is undefined because at least one lane has no selected rows",
+        }
     lower, upper = np.quantile(finite, [0.025, 0.975])
     probability_first_better = (
         np.mean(finite > 0) if higher_is_better else np.mean(finite < 0)
     )
     return {
+        "available": True,
         "delta_first_minus_second": float(point),
         "bootstrap_mean_delta": float(finite.mean()),
         "confidence_interval_95": [float(lower), float(upper)],
@@ -152,9 +163,14 @@ def paired_daily_block_bootstrap(
     iterations: int = 2_000,
     random_seed: int = 42,
     development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
+    second_threshold: float | None = None,
 ) -> dict[str, object]:
+    if second_threshold is None:
+        second_threshold = threshold
     if not 0.5 <= threshold < 1:
-        raise ValueError("threshold must be between 0.5 inclusive and 1")
+        raise ValueError("first threshold must be between 0.5 inclusive and 1")
+    if not 0.5 <= second_threshold < 1:
+        raise ValueError("second threshold must be between 0.5 inclusive and 1")
     if iterations < 100:
         raise ValueError("iterations must be at least 100")
     assert_aligned(first, second, "second")
@@ -171,6 +187,7 @@ def paired_daily_block_bootstrap(
             first.loc[mask].reset_index(drop=True),
             second.loc[mask].reset_index(drop=True),
             threshold,
+            second_threshold,
         )
         if daily.empty:
             continue
@@ -200,7 +217,8 @@ def paired_daily_block_bootstrap(
     return {
         "format_version": 1,
         "method": "paired nonparametric UTC-day block bootstrap",
-        "threshold": threshold,
+        "first_threshold": threshold,
+        "second_threshold": second_threshold,
         "iterations": iterations,
         "random_seed": random_seed,
         "development_folds": list(development_folds),
@@ -219,6 +237,7 @@ def run_paired_daily_block_bootstrap(
     iterations: int,
     random_seed: int,
     output: Path,
+    second_threshold: float | None = None,
 ) -> dict[str, object]:
     report = paired_daily_block_bootstrap(
         read_prediction_sets(first_dirs, timeframe),
@@ -226,6 +245,7 @@ def run_paired_daily_block_bootstrap(
         threshold,
         iterations,
         random_seed,
+        second_threshold=second_threshold,
     )
     report["first_name"] = first_name
     report["second_name"] = second_name

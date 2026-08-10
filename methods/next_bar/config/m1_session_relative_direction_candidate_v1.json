@@ -1,0 +1,147 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_probability_quality_specialist_session_relative",
+  "target_timeframe_minutes": 1,
+  "feature_candidate": {
+    "feature_set": "session_relative",
+    "parent_feature_set": "baseline",
+    "additional_feature_count": 5,
+    "features": [
+      "session_return_z_32",
+      "session_body_z_32",
+      "session_absolute_return_ratio_32",
+      "session_range_ratio_32",
+      "session_direction_bias_32"
+    ],
+    "group": "UTC day-of-week x hour",
+    "prior_observations": 32,
+    "minimum_prior_observations": 12,
+    "exclude_current_observation": true,
+    "z_clip": [-10.0, 10.0],
+    "ratio_clip": [0.0, 10.0],
+    "degenerate_zero_over_zero_value": 0.0,
+    "nonzero_over_zero_value": "signed z clip or positive ratio clip",
+    "m1_semantics": "Within each weekday-hour group, recent M1 observations dominate until the hour boundary; this is a local session-regime deviation rather than an exact minute-of-hour seasonal baseline.",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "direction_candidate": {
+    "baseline_model": "baseline HGB",
+    "candidate_model": "HGB with baseline plus 5 session-relative features",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "role": "probability-quality specialist direction candidate",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_session_relative_m1_finite_001",
+    "direction_blend": "experiments/next_bar/session_relative_m1_blend_current_001",
+    "rejected_confidence_blend": "experiments/next_bar/session_relative_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/session_relative_m1_candidate_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/session_relative_m1_direction_bootstrap.json",
+    "path_direct_comparison": "experiments/next_bar/session_vs_path_m1_direction_analysis.json",
+    "path_direct_bootstrap": "experiments/next_bar/session_vs_path_m1_direction_bootstrap.json",
+    "trend_direct_comparison": "experiments/next_bar/session_vs_trend_m1_direction_analysis.json",
+    "trend_direct_bootstrap": "experiments/next_bar/session_vs_trend_m1_direction_bootstrap.json",
+    "tcn_confidence_policy_bootstrap": "experiments/next_bar/session_051_vs_tcn_0515_m1_confidence_bootstrap.json"
+  },
+  "evidence": {
+    "source_rows": 6025170,
+    "usable_rows": 5736657,
+    "oos_rows": 2183717,
+    "direction_blend": {
+      "development": {
+        "baseline_accuracy": 0.5093738008388342,
+        "candidate_accuracy": 0.5096268845027689,
+        "net_improvement": 339,
+        "mcnemar_exact_p": 0.14753303257323955
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5060000781769144,
+        "candidate_accuracy": 0.5063862247538908,
+        "net_improvement": 326,
+        "mcnemar_exact_p": 0.0841111456317141
+      },
+      "all": {
+        "baseline_accuracy": 0.5080694980164554,
+        "candidate_accuracy": 0.5083740246561254,
+        "baseline_brier": 0.24986887966799923,
+        "candidate_brier": 0.24985614746046933,
+        "baseline_log_loss": 0.69288487311603,
+        "candidate_log_loss": 0.6928593321022996,
+        "baseline_ece": 0.0020289380971560927,
+        "candidate_ece": 0.0015423059579391858,
+        "fixes": 45266,
+        "harms": 44601,
+        "net_improvement": 665,
+        "mcnemar_exact_p": 0.02676153488961659
+      },
+      "accuracy_improved_folds": 7,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "paired_utc_day_bootstrap_20000_candidate_minus_baseline": {
+      "development_accuracy_delta_ci95": [-0.00009986519495360212, 0.0006103554575402015],
+      "confirmation_accuracy_delta_ci95": [-0.000041189971832329564, 0.0008145590142623089],
+      "all_accuracy_delta_ci95": [0.00003392066149432194, 0.0005748329134952435],
+      "development_brier_delta_ci95": [-0.000021671203717725516, -0.000013441128797999496],
+      "confirmation_brier_delta_ci95": [-0.000007909451478911585, -0.000002193512065169767],
+      "all_brier_delta_ci95": [-0.00001546805422125152, -0.000009954022963651332],
+      "development_log_loss_delta_ci95": [-0.000043480838328557856, -0.000026975274477378243],
+      "confirmation_log_loss_delta_ci95": [-0.000015828923295377316, -0.000004383815873906793],
+      "all_log_loss_delta_ci95": [-0.00003103000734260286, -0.000019971262644064015]
+    },
+    "against_path_accuracy_champion": {
+      "development_session_accuracy": 0.5096268845027689,
+      "development_path_accuracy": 0.5097888879100665,
+      "confirmation_session_accuracy": 0.5063862247538908,
+      "confirmation_path_accuracy": 0.5064572946760337,
+      "all_session_accuracy": 0.5083740246561254,
+      "all_path_accuracy": 0.5085008725947547,
+      "session_accuracy_wins": 2,
+      "path_accuracy_wins": 5,
+      "session_minus_path_accuracy_ci95": [-0.00040316371193979683, 0.00014630254835792903],
+      "session_minus_path_brier_ci95": [-0.000011417303019328057, -0.000005832707783633152],
+      "session_minus_path_log_loss_ci95": [-0.000022895019715166166, -0.000011708835492840748]
+    },
+    "against_trend_structure": {
+      "all_session_accuracy": 0.5083740246561254,
+      "all_trend_accuracy": 0.5083795198736832,
+      "session_accuracy_wins": 4,
+      "trend_accuracy_wins": 3,
+      "session_minus_trend_accuracy_ci95": [-0.00027832385390939293, 0.0002679785253968028],
+      "session_minus_trend_brier_ci95": [-0.000010937270746228661, -0.000005345225846229568],
+      "session_minus_trend_log_loss_ci95": [-0.000021919071118614576, -0.000010717301916604585]
+    },
+    "confidence_not_adopted": {
+      "development_selected_threshold": 0.51,
+      "development_baseline_score": 0.009629480660047105,
+      "development_candidate_score": 0.010275389635180097,
+      "confirmation_baseline_score": 0.007791178437376946,
+      "confirmation_candidate_score": 0.007708384706507882,
+      "candidate_accuracy_improved_folds": 6,
+      "candidate_score_improved_folds": 6,
+      "session_051_minus_tcn_0515_all_score_ci95": [-0.0002445129903444583, 0.0007730698238620725],
+      "reason": "The confirmation score fell below the baseline at the same 0.51 threshold, and its point score advantage over the higher-precision TCN 0.515 policy was not bootstrap-confirmed."
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_path_persistence_accuracy_champion": false,
+    "replace_tcn_selective_confidence_candidate": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_probability_quality_direction_candidate": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "The fixed session-relative transfer improved accuracy, Brier, and log loss in all seven folds; all-period accuracy and all period-specific proper-score UTC-day intervals supported improvement. Path remains the accuracy point champion. The later Volatility State candidate has a slightly higher accuracy point estimate, but their direct accuracy and proper-score UTC-day intervals all cross zero, so Session remains an independent probability-quality specialist rather than being discarded or combined on the same history."
+  }
+}

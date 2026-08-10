@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-10 19:06 JST
+更新日時: 2026-08-11 06:50 JST
 
 ## 現在の状態
 
@@ -271,6 +271,97 @@
 - Path単体は全体+289件、p=0.548、accuracy 4/7foldで不採用。一方baseline 75% + Path 25%の通常方向blendはaccuracyを50.80695%から50.85009%へ上げ、開発+556件、確認+386件、全体+942件、accuracy 7/7fold、Brier/log loss各6/7fold改善した。
 - UTC日paired bootstrap 20,000回のaccuracy差95%区間は開発+0.0135〜+0.0694pt、確認+0.0114〜+0.0806pt、全体+0.0216〜+0.0648pt。M1方向専用parallel forward候補へ固定した。
 - development選択0.51 confidenceは確認3/3foldでaccuracy・scoreが反転したため不採用。authoritative方向/confidence/odds/policyは置換せず、完全未使用期間まで特徴窓・subset・25% weight・閾値を再探索しない。
+- M1へTrend Structure 11特徴を固定移植し、無変動窓のDI/ADX、MACD/ATR、volatility比などの0/0を意味的ゼロへ修正した。flat有限0テストと現baselineとのusable 5,737,928行、OOS 2,183,717行完全一致を確認した。
+- Trend単体は全体+369件、p=0.445、accuracy 4/7foldで不採用。通常25%方向blendは開発+361件、確認+316件、全体+677件、p=0.0053で、accuracy/Brier/log lossを各6/7fold改善した。
+- TrendのUTC日bootstrap accuracy差はconfirmation +0.0031〜+0.0719pt、全体+0.0089〜+0.0530ptで改善側だが、developmentは-0.0018〜+0.0553ptで0を跨いだ。M1方向secondary challengerへ固定した。
+- Pathとの直接比較はTrendが全期間-0.0121pt、年別3/7対4/7。accuracy/proper score差の日次区間は0を跨ぐため統計的置換とはせず、Pathをpoint champion、Trendを独立challengerとして並行維持する。union・再weightは行わない。
+- Trend confidenceのdevelopment選択0.515は確認aggregate scoreが僅かに上がったが改善は1/3foldのため不採用。authoritative confidence・odds・policyは変更しない。
+- M15で固定済みの16本×5定常系列・2層1,073 parameter因果TCNをM1へ変更せず移植した。完全無変動足のATR比/close location 0/0を意味的ゼロへ修正し、flat区間80列の有限0、未来不参照、baselineとのusable 5,737,928行・OOS 2,183,717行完全一致を確認した。
+- TCN単体はbaseline比-1,970件、p=0.00615で悪化。通常25%方向blendは全体+587件でもp=0.0945、確認+125件・p=0.565、accuracy 5/7foldで、Path方向候補より弱いため方向用途を棄却した。
+- baseline方向固定TCN confidenceのdevelopment選択0.515は確認accuracyを52.509%から53.041%、coverage-aware scoreを0.006837から0.007506へ改善した。accuracy 7/7、score 6/7、Brier/log loss各6/7fold改善し、UTC日bootstrapのaccuracy/score差もdevelopment・confirmation・allで改善側だった。
+- 0.515確認laneは67,042件、mean confidence 51.972%に対してaccuracy 53.041%で局所的に過小評価した。nested global Brier/log loss/ECEはbaselineを上回るが、0.55は58件だけでedge未確認。`m1_tcn_confidence_candidate_v1.json` にselective forward候補として固定し、fair odds/runtime authorizationとauthoritative confidence・policyは変更しない。
+- 確認0.515の固定side×volatility監査はdown/up highとup-normalだけWilson edgeが成立した。履歴からsubgroup filterを作らず、6セルを完全未使用期間の監視gateとする。
+- M15固定のSession Relative 5特徴をM1へ移植した。M1では同じ曜日×時内の直近分足regimeが中心になることを明記し、prior分散/平均0の0/0を意味的ゼロ、非ゼロ/0をclip端へ定義した。flat有限0、未来不参照、価格水準排除をテストした。
+- Session単体は全体+639件だがaccuracy/Brier/log loss各4/7foldで不採用。通常25%方向blendは開発+339件、確認+326件、全体+665件・p=0.0268で、accuracy/Brier/log lossを7/7、ECEを5/7fold改善した。
+- UTC日bootstrapは全期間accuracy差+0.0034〜+0.0575pt、Brier/log lossはdevelopment・confirmation・allで改善側。Pathにはaccuracy 2/7で負けるがproper scoreを明確に改善し、Trendとはaccuracy同等・4/7勝でproper scoreが明確に良かった。
+- Session検証時点ではPathをM1 accuracy champion、Sessionをprobability-quality secondary、Trendをtertiary方向challengerへ整理した。後続Volatility検証後の現役割は下記のbalanced secondary／specialist区分を優先する。候補をstack・union・再weightせず、authoritative方向・policyは変更しない。
+- Session confidenceのdevelopment選択0.51は確認scoreがbaselineを僅かに下回ったため不採用。候補別固定閾値bootstrapではSession 0.51とTCN 0.515のscore差が未確定であり、同閾値baselineを改善するTCNをselective confidence候補として維持する。
+- M15固定のVolatility State 11特徴をM1へ移植した。vol-of-vol、加速度、range clustering/圧縮、jump、range-based variance balanceを生価格水準なしで加工し、flat有限0、scale不変、未来不参照、baselineとのusable 5,737,928行・OOS 2,183,717行完全一致を確認した。
+- Volatility単体は全体-311件で棄却。通常25%方向blendは開発+348件、確認+414件・p=0.0297、全体+762件・p=0.0104で、accuracy 6/7、Brier/log loss 7/7、ECE 5/7foldを改善した。
+- UTC日bootstrapはconfirmation/allのaccuracy差とdevelopment/confirmation/allのBrier/log loss差が改善側。Pathより全体accuracyは-0.00824ptだがproper scoreが良く、Sessionとはaccuracy/proper score差が未確定のため、balanced secondary方向候補に固定した。
+- Volatility confidence 0.515はbaselineを改善したが、TCNよりconfirmation accuracy -0.300pt、all -0.095ptで日次bootstrapも劣位。coverage差でselection scoreは未確定のため不採用とし、TCN 0.515をselective confidence候補として維持する。
+- M15固定のHaar Multiscale 12特徴をM1へ移植した。4/8/16/32本の前半対後半からreturn・absolute return・方向のdetailを加工し、完全無変動0/0を変化なしの0へ定義した。flat有限0、価格scale不変、未来不参照、baselineとのusable 5,737,928行・OOS 2,183,717行完全一致を確認した。
+- Haar単体はdevelopmentで悪化しproper scoreも3/7のため不採用。通常25%方向blendは開発+425件・p=0.0204、確認+267件・p=0.0668、全体+692件・p=0.00307で、accuracy/Brier/log lossを7/7、ECEを5/7fold改善した。
+- UTC日bootstrapはdevelopment/allのaccuracyと全期間のBrier/log lossが改善側。Path/Volatility/Session/Trendとの直接accuracy差は全て未確定で、Volatility/Sessionよりproper scoreが悪いため、tertiary multiscale方向challengerに限定した。Trendは独立structural challengerとして残す。
+- Haar confidence 0.515はaggregate baselineを改善するが、TCNにaccuracy・selection score各0/7対7/7で負けるため不採用。TCN 0.515をselective confidence候補として維持する。
+- M15固定のLightGBM 4.7.0、31 leaves、300 trees、learning rate 0.03、min child 100、row/column sample 0.8、L2 5をM1加工済みbaseline特徴へ適用した。独立CLI processで7foldを学習し、baselineとのusable 5,737,928行・OOS 2,183,717行完全一致、保存artifactからのlatest推論を確認した。
+- LightGBM単体は開発+275件、確認+663件・p=0.0185、全体+938件・p=0.0395。accuracy/Brier/log lossは各5/7foldだが、UTC日bootstrapのaccuracy差はconfirmation/allで改善側だった。Pathとは全体4件差、年別4/7対3/7、直接accuracy差区間0跨ぎのため、異種学習器accuracy co-challengerに固定した。
+- HGB 75% + LightGBM 25%は全体+770件・p=0.000897、accuracy/Brier/log loss 7/7foldで安定するが単体より点精度が低く、Volatility/Sessionのproper-score役割も超えない。別configを増やさずsupporting sensitivity成果物に留めた。
+- LightGBM confidence 0.515はbaseline比accuracy/score 6/7、Brier/log loss 7/7foldでも、TCNよりconfirmation accuracy -0.458pt、all -0.184ptでbootstrapも劣位。confidence・oddsには使わずTCN 0.515を維持する。
+- M15固定のCatBoost 1.2.10、Ordered boosting、symmetric depth 6、300 iteration、learning rate 0.03、L2 5をM1加工済みbaseline特徴へ適用した。独立CLI processで7foldを学習し、baselineとのusable 5,737,928行・OOS 2,183,717行完全一致を確認した。
+- CatBoost単体はbaseline比development +85件、confirmation +42件、全体+127件でpaired p=0.794。通常25%方向blendは全体+490件・p=0.0430、accuracy 6/7、Brier/log loss 7/7foldで、日次bootstrapもdevelopment/all accuracyと全期間proper scoreの改善を支持した。
+- CatBoost blendはPath/LightGBMにaccuracy各2/7対5/7で、LightGBMへのconfirmation accuracy差95%区間は全て負だった。Volatility/Sessionのproper-score役割も超えず、追加方向候補には採用しない。
+- CatBoost confidence 0.515はTCNよりcoverageが広いがaccuracy 0/7、score 1/7。confirmation/all accuracyと全期間Brier/log lossのbootstrapも劣位を支持したため、confidence・oddsには使わない。
+- M15固定のXGBoost 3.4.0、300 trees、depth 4、learning rate 0.03、min child weight 20、row/column subsample 0.8、L2 5をM1加工済みbaseline特徴へ適用した。独立CLI processで7foldを学習し、baselineとのusable 5,737,928行・OOS 2,183,717行完全一致を確認した。
+- XGBoost単体はbaseline比development +171件、confirmation +275件、全体+446件でaccuracy 3/7。通常25%方向blendは全体+607件・p=0.00587、accuracy/Brier/log loss 7/7foldで、日次bootstrapもconfirmation/all accuracyと全期間proper scoreの改善を支持した。
+- XGBoost blendはPathにaccuracy 1/7対6/7、LightGBMに3/7対4/7で、Volatility/Sessionの確率品質も超えない。baseline補完性はsupporting sensitivityとして保存するが、追加方向候補には採用しない。
+- XGBoost confidence 0.515はTCNよりcoverageが広いがaccuracy 0/7、score 2/7。confirmation/all accuracyと全期間Brier/log lossのbootstrapも劣位を支持したため、confidence・oddsには使わない。
+- M15固定のExtra Trees 200 trees、depth 12、min leaf 50、max features 0.75をM1加工済みbaseline 38特徴へ適用した。7foldでbaselineとのusable 5,737,928行・OOS 2,183,717行完全一致を確認した。
+- Extra Trees単体は全体+782件でもp=0.127、accuracy/Brier/log loss各4/7foldのため不採用。HGB 75% + Extra Trees 25%はdevelopment +610件・p=0.00286、confirmation +255件、all +865件・p=0.000879でaccuracy/Brier/log loss 7/7、ECE 5/7foldを改善した。
+- UTC日bootstrapはall accuracy差+0.0162〜+0.0626ptと全期間Brier/log lossの改善を支持した。Pathには全体-77件でもaccuracy 4/7、proper scoreが良く、LightGBMには全体-73件・accuracy 2/7対5/7。既存point役割を置換せずheterogeneous learner stability方向challengerへ固定した。
+- Volatility/Sessionより点accuracyは高いがproper scoreが悪く、両候補の役割を置換しない。Extra Trees confidence 0.515はTCNにaccuracy・score各0/7対7/7で、bootstrapもaccuracy劣位のため不採用。
+- 保存済み最終foldから最新推論を復元し、2026-06-01 04:59 UTCはup、probability_up 0.501065を確認した。単体artifactの機能確認値で、異種75/25 runtime blendとoddsは未認可。全履歴特徴再計算に約137秒かかるため、運用昇格にはincremental latestとblend parityを要求する。
+- 完成M1足のbody/wick/close pressure、range加重body/wickを3/8/21本で集約し、3本−8本の加速度を加えるCandle Pressure State 18特徴を実装した。scale不変、未来不参照、flat有限0、raw OHLC非使用、artifact latest経路をテストした。
+- Pressure State単体は全体-15件・p=0.977で不採用。通常25%blendはdevelopment +466件、confirmation +116件、all +582件・p=0.0184、accuracy/Brier/log loss 6/7、ECE 5/7foldを改善した。日次bootstrapもall accuracyとproper score改善を支持した。
+- 方向blendはPathにaccuracy 2/7、Extra Treesに1/7で、Sessionのconfirmation accuracyと全期間proper scoreも超えなかった。baseline補完性は再現したが、既存方向役割への増分がないため候補へ追加しない。
+- Pressure State confidence 0.515はbaselineを改善したがTCNにaccuracy・score各0/7対7/7。confirmation accuracy差95%区間は-0.649〜-0.221pt、all proper scoreもTCNが有意に良いためconfidence・oddsへ使わない。
+- 現在足を除く直前1/5/20本high/lowに対するclose breakout、wick rejection、inside/outside、方向付きrange expansion、ATR正規化境界距離を作るM1 Bar Breakout / Rejection 18特徴を実装した。scale不変、未来不参照、flat有限0、binary 0/1、artifact latest経路をテストした。
+- Breakout単体は全体+5件・p=0.993でproper score悪化。通常25%blendはdevelopment +194件、confirmation +33件、all +227件・p=0.293、accuracy 5/7、Brier/log loss 7/7foldだった。
+- 日次bootstrapは全期間のaccuracy差が0を跨ぎ、all Brier/log lossだけ改善側だった。Sessionとの直接比較はaccuracy 1/7対6/7で、development/confirmation/allのaccuracy・proper scoreを全て下回ったため確率品質shadowにも追加しない。
+- development選択0.51 confidenceはconfirmationでaccuracy 51.8000%→51.7889%、coverage 24.21%→24.10%、score 0.007791→0.007716と反転した。confidence・oddsへ使わずTCN 0.515を維持する。
+- M1固定方向候補5系統をfold内train由来のlow/normal/high volatility regimeで切り替えるrouterを実装した。固定development選択と、各評価foldより前のOOSだけで更新するchronological選択を分離し、alignment、有限確率、regime完全被覆、future非参照をテストした。
+- 固定routerはlow=LightGBM、normal=Path、high=Extra Treesを選び、baseline比all +1,150件、accuracy/Brier/log lossの日次区間も改善側だった。一方confirmationはPath -89件、LightGBM -366件で、両直接差区間は0を跨いだ。chronological nestedもPath/LightGBMを下回り、既存候補への増分edgeは再現しなかった。
+- 固定router 0.515はTCNよりcoverage +2.834ptでもaccuracy -0.213pt、selection scoreも低く、accuracy・score 0/7対7/7。bootstrapも精度劣位を支持したためconfidence・oddsには使わない。
+- baseline HGB、Path HGB、Extra Trees、LightGBM、causal TCNの5モデルを等重みでbaseline方向へ整列し、平均edgeをconfidenceにするM1 disagreement 0.515を固定移植した。M15 shadow由来のpenalty 0・閾値をM1結果へ合わせて変更していない。
+- disagreement 0.515はbaseline比でdevelopment/confirmation/allのaccuracyとselection scoreを日次bootstrapで改善し、accuracy・score 6/7fold。全行Brier/log lossも3期間すべてbootstrap改善側だった。
+- TCN 0.515とはall accuracy 52.309%対52.303%で日次区間上は同等。coverage 19.896%対18.897%、selection score 0.009636対0.009348、score 6/7fold、all Brier/log lossはdisagreementが優位。TCNをaccuracy specialist、disagreementをbalanced coverage/probability-quality confidence challengerとして並行固定する。
+- disagreement confirmationはmean confidence 51.970%に対しaccuracy 53.031%で約1.060pt過小評価する。固定6セルのdown-low/down-normal/up-lowもedge未確認なのでfair odds・policyには使わず、runtime parityとfresh局所校正を要求する。
+- Disagreement confidenceへ各評価foldより前のOOSだけでcorrectness isotonic/Plattを学習するnested odds再校正を適用した。test2020を除く1,838,693行でraw・isotonic・Plattを同一行比較した。
+- isotonicはECEを0.1463%→0.0260%へ改善したが、Brier/log lossは6/6fold悪化。0.515はall nestedでaccuracy +0.443ptでもcoverage -6.757pt、selection score 0.007471→0.006629となり、日次bootstrapも開発・確認・全期間のscoreとproper score悪化を支持した。
+- Plattはall nested Brier/log loss/ECEを全て悪化させ、test2023以降の4foldとconfirmation全体で0.515以上が0件。両再校正を棄却し、元Disagreement confidenceを維持する。
+- TCNと同じ16本×5加工系列を単層causal GRU hidden 16で学習するM1固定比較を追加した。GRUはPyTorchの2組gate biasを含む1,121 parameterでTCNより48（4.47%）多く、8 epoch・batch 2,048・AdamW・seed 42・train上限750,000・Plattを共通化した。7fold 2,183,717行はbaseline/TCNと時刻・target・foldが完全一致し、artifact別プロセス再読込も確認した。
+- GRU単体はbaseline比-996件で不採用。通常25%方向blendはdevelopment +207件、confirmation +353件、all +560件、accuracy 6/7・Brier/log loss 5/7foldだが、all accuracy日次95%区間は-0.0068〜+0.0580pt、TCN blendとも同等で既存方向役割を超えなかった。
+- GRU方向維持0.515はbaseline比accuracy・selection scoreを7/7fold改善し、all 52.2712% / coverage 19.7809% / score 0.009439。TCNよりcoverage +0.884ptでもaccuracy -0.0316pt、score差は未確定。5-model Disagreementにはaccuracy -0.0377pt、coverage -0.115pt、score -0.000198で、all Brier/log loss悪化の日次区間も確定したためconfidence候補へ追加しない。
+- GRUを5-model Disagreementへ等重みで追加した6-model感度は、all 0.515 accuracyを+0.0258ptにしたがcoverage -0.624pt、score -0.0000495。confirmationでもscore低下、all proper-score差も未確定なので拡張を棄却し、元5-model DisagreementとTCNを維持する。GRUのwindow、hidden、epoch、学習率、weight、0.515以外の閾値を同じ履歴で再探索しない。
+- M1 Direction Transition Bayesを実装した。現在方向×run length×反転率bucket×volatility状態の135 encoded slot中81状態が構造的に到達可能で、7foldすべて81/81状態・9/9親状態を観測した。state prior 64、parent prior 256、通常25% blend、Plattを固定し、scale不変・未来不参照・flat有限0・artifact/latest経路をテストした。
+- 単体方向はaccuracy 50.4655%で不採用。通常25%方向blendはbaseline比全体+89件でaccuracy差区間が0を跨いだ。Brier/log loss改善は確定したがSession Relativeがaccuracy/proper scoreで点優位のため方向役割へ追加しない。
+- 元の方向維持0.515はall accuracy 52.4006% / coverage 15.5185% / score 0.008794。TCNよりaccuracy +0.0978ptでもscore悪化が確定し、Disagreementよりcoverage・score・proper scoreが低いため単独採用しない。0.515→0.55で累積accuracyは単調上昇したがconfirmation 0.55は16件だけだった。
+- development固定6セルでup×low volatilityだけが29,394件・accuracy 50.6022%・mean confidence 52.1284%と過信したため、このセルを0.5 abstentionへ固定してconfirmationを監査した。confirmationも1,208件・50.4967%で、guardはraw比all accuracy +0.1789pt、score +0.000235、両bootstrap区間を改善した。
+- guard済み遷移confidenceをDisagreementへdevelopment grid選択50%で合成した。固定0.515はall accuracy 52.5827% / coverage 16.0178% / score 0.009674。baselineにはaccuracy・score各7/7fold、TCNにはaccuracy 7/7・score 6/7fold勝ち、TCN比accuracy差区間+0.1936〜+0.3652ptとなったため新accuracy specialistへ採用する。
+- Disagreement比はaccuracy 7/7fold・all +0.2738ptでもcoverage -3.8781pt、score差区間-0.000294〜+0.000372、confirmation scoreは僅かに低い。Disagreementをbalanced coverage/probability-quality候補として維持する。最終confidenceはconfirmationで1.4021pt過小評価、0.55は39件・edge未確認なのでfair odds・policyは非認可のままとする。
+- 実configからM1 candidate registryを再構築し、50/50方式が0.515 broad-role development score championかつdevelopment/confirmation accuracy leader、Disagreementがcoverage leaderのPareto challenger、TCNがdominatedであることを確認した。履歴championとforward候補の範囲に留め、authoritative運用へは自動昇格しない。
+- M15棄却済みchronological expert stackingを、Disagreementと同じbaseline/Path/Extra Trees/LightGBM/TCNへC=0.10、stack 25%、方向維持、0.515のままM1固定移植した。各foldはprior OOSだけでfitし、test2020 fallbackを含む2,183,717行の整列を確認した。
+- stack単体はbaseline比-193件でBrier/log loss/ECEも悪化。方向維持版はbaseline方向と完全一致しECEだけ改善したが、全行Brier/log lossは僅かに悪化した。0.515はall accuracy 52.0630% / coverage 21.0386% / score 0.008800だった。
+- DisagreementとTransition guard 50/50 championには0.515 accuracy・score各0/7対7/7。champion比all accuracy差95%区間-0.6097〜-0.4304pt、score差-0.001241〜-0.000509、Brier/log loss悪化も確定したため棄却し、config・latest・oddsを発行しない。
+- 確定済みM5/M15 OOS予測を最大age 15分でM1へbackward as-of結合し、C=0.10、25% weightを固定再検証した。元M1 2,183,717行中2,141,340行を結合でき、評価6foldは1,801,986行。M5 age中央値2分・最大14分、M15中央値7分・最大15分、未来context 0行を確認した。
+- 全方向accuracyはaligned baseline比+194件、+0.0108ptだが、日次bootstrap 95%区間-0.0139〜+0.0352ptで未確定。Brier/log loss悪化区間は確定した。0.515 selection scoreはdevelopment・confirmation・allで低下し、現Transition guard championにaccuracy・score各0/6対6/6だった。
+- champion比0.515はaccuracy -0.5908pt、score -0.000891で両bootstrap区間が悪化側に確定。高閾値でもchampion accuracyを上回らず過信が拡大したため、cross-TF metaを方向・confidenceとも再現専用として棄却し、config・latest・odds・policyを発行しない。
+- M1の短期分布shiftを、直近128本の履歴順位、直近8本対直前非重複64本のlocation/scale・方向/tail占有率・candle pressure差の固定16列へ加工した。価格scale不変、未来不参照、flat全0、artifact/latest経路をテストし、baselineと同じ2,183,717 OOS行を7foldで生成した。
+- Distribution Shift単体はbaseline比-465件で棄却したが、通常25% blendはdevelopment +485、confirmation +374、all +859件、accuracy/Brier/log lossを7/7fold改善した。日次bootstrapのaccuracyとproper scoreはdevelopment・confirmation・allすべて改善側だった。
+- Pathにはaccuracy -83件だがBrier/log loss改善区間が確定。Extra Treesとはaccuracy -6件の同等でproper scoreを明確に改善し、confirmationも上回ったためstability研究役割を引き継ぐ。Volatility/Sessionとの直接差は未確定なので両候補を維持する。
+- 方向維持0.51はall accuracy 51.7536% / coverage 35.6128% / score 0.009802。baseline比accuracy・score 6/7foldで、registryのdevelopment coverage leader/Pareto challengerへ採用した。Transition guard 0.515は精度とdevelopment scoreで維持する。局所校正が時期で反転しconfirmation down-lowがedge未確認なのでfair odds・policyは非認可とした。
+- M15で固定済みの小型causal Transformerを、同じ16本×5加工系列、dimension 16、4-head、1層、2,625 parameter、8 epoch、train上限750,000、PlattのままM1へ移植した。7fold 2,183,717行はbaselineと完全整列し、全artifactでloss低下、確率欠損0を確認した。
+- Transformer単体はbaseline比-1,667件で棄却。通常25%方向blendはdevelopment +301、confirmation +171、all +472件、accuracy/Brier/log lossを6/7fold改善したが、日次accuracy区間は全期間で0を跨ぎ、既存Path/Distribution Shiftの方向役割を超えなかった。
+- 方向維持0.51はbaseline比accuracy 7/7、score 5/7fold、all 51.7312% / coverage 34.3071% / score 0.009477。confirmation accuracy差は改善側でもscore差は未確定で、Distribution Shift 0.51にscore 2/7、Transition guard 0.515にaccuracy 0/7だった。confirmation 0.55は24件だけでedge未確認のため、Transformerを再現専用として棄却しconfig・latest・oddsを発行しない。
+- 親Distribution Shiftの54特徴を固定LightGBM 4.7.0、31 leaves、300 trees、learning rate 0.03、min child 100、row/column sample 0.8、L2 5、train上限750,000、Plattへ適用した。7fold 2,183,717行はbaseline/親HGBと完全整列し、保存artifact再読込とlatest推論を確認した。
+- Shift × LightGBM単体はbaseline比-324件で、baseline-feature LightGBM単体にもall -0.0578pt、日次95%区間-0.1102〜-0.0044ptと悪化した。通常25% blendはall +287件、Brier/log loss 7/7foldでもaccuracy 3/7fold・日次区間0跨ぎのため方向候補へ追加しない。
+- 方向維持0.51はbaseline比accuracy/score各6/7fold、all 51.7273% / coverage 36.1745% / score 0.009726。親HGBよりdevelopment coverage +0.4499ptだがscore 0.010333対0.010357で最大化対象を改善せず、confirmation 0.55も76件・accuracy 50%だった。再現専用として棄却し、親HGB Distribution Shift、config、odds、policyを維持する。
+- 直近64完成M1足のreturn分布を、RMS正規化10/25/50/75/90%分位、Bowley/tail skew、中央spread比、L1/L2集中度の固定9列へ加工するRolling Distribution Shapeを実装した。全47特徴でscale不変、未来不参照、flat有限0、数値式、2,183,717 OOS行整列、artifact latest経路を確認した。
+- Shape単体はbaseline比all +542件でもdevelopment -30件、日次accuracy区間はdevelopment/confirmation/allすべて0跨ぎ、Brier/log loss各2/7foldで不採用。通常25% blendもall +65件・p=0.792、accuracy 3/7foldで、proper scoreだけを理由に方向候補へ追加しない。
+- 方向維持0.51はdevelopment 51.6506% / coverage 43.6951% / score 0.010065から、confirmation 51.7932% / 23.9284% / 0.007706へ反転し、baselineのaccuracy・coverage・scoreを全て下回った。Distribution Shiftにもaccuracy/score各1/7対6/7、confirmation 0.55は119件でedge未確認のため再現専用として棄却し、config・odds・policyを発行しない。
+- 直近15完成M1足のjoint range内で、最初のopenから11時点のclose位置を表すRolling Full Pathを実装した。全49特徴でscale不変、未来不参照、flat有限0、式一致、2,183,717 OOS行整列、artifact latest経路を確認した。volume 6,025,170行は全0のため除外した。
+- Full Path単体はbaseline比all +199件で不採用。通常25% blendはconfirmation +389件・日次accuracy区間改善、all +419件・Brier/log loss 6/7foldだったが、all accuracy区間は0を跨ぎ、既存Pathがdevelopment/allで有意に上回ったため方向候補へ追加しない。
+- 方向維持0.515はall 52.1157% / coverage 21.1262% / score 0.009062でもconfirmation scoreが反転した。Disagreementはall accuracy 52.309% / score 0.009636、accuracy・score各6/7fold、3期間の日次bootstrapでも優位だった。confirmation 0.55は146件でedge未確認のため再現専用として棄却し、config・registry・odds・policyを発行しない。
 
 ## ベースライン評価
 
@@ -290,7 +381,7 @@
 8. tree lag、TCN単体、Transformer単体は棄却済み。TCN confidence shadow 0.52だけを固定監視し、sequence architectureの履歴内再調整は停止する。
 9. logistic confidence blendは新規期間でBrier、log loss、ECEを並行出力し、3指標すべてがbaseline以下の場合だけconfidence昇格を検討する。
 10. training windowはexpandingを標準とする。`--train-window-days` は再現実験専用で、別のwindow長を履歴へ合わせて最適化しない。
-11. Extra Trees confidence blendはconfidence 0.53を変更せずforward運用し、accuracy、selection score、Brierがすべてbaseline以上の場合だけ高信頼採用laneへの昇格を検討する。
+11. M15 Extra Trees confidence blendはconfidence 0.53を変更せずforward運用し、accuracy、selection score、Brierがすべてbaseline以上の場合だけ高信頼採用laneへの昇格を検討する。
 12. isotonic校正は棄却済み。`--probability-calibration isotonic` は再現専用とし、履歴に合わせたstep smoothingや閾値の再探索は行わない。
 13. body/ATR weighted confidence blendは0.54を変更せずforward運用し、Extra Trees 0.53のcoverage重視laneと別々にaccuracy・coverage・selection scoreを比較する。
 14. intrabar confidence blendは0.55を変更せず高精度laneとしてforward運用する。通常方向blendはshadow出力だけを行い、fresh期間でfold安定性が確認できるまで方向を置換しない。
@@ -305,7 +396,7 @@
 23. body/ATR soft targetは再現専用とする。同じ教師情報のclear-body 0.525がcoverage/accuracy/selection scoreとfold安定性で上回るため、softening関数を履歴へ合わせて再探索しない。
 24. trend-structure 0.525は再現専用とする。clear-body 0.525より目的関数が低いためforward laneへ追加せず、同じ履歴でDI/ADX/MACD期間や閾値を再調整しない。
 25. path-persistence 0.525は再現専用とする。confirmationで複数指標を改善したが既存0.525候補の目的関数を超えないため、同じ履歴で窓長・variance aggregation・blend weightを再調整しない。
-26. XGBoostは再現用学習器とする。通常教師・clear-body教師とも既存採用候補を超えないため、同じ履歴でtree parameterやblend weightを最適化しない。
+26. M15 XGBoostは再現用学習器とする。通常教師・clear-body教師とも既存採用候補を超えないため、同じ履歴でtree parameterやblend weightを最適化しない。M1の後続固定移植は下記78を優先する。
 27. Haar multiscaleは再現専用とする。developmentで選んだ0.525 laneがconfirmationで悪化したため、同じ履歴で窓長・系列・blend weightを再調整しない。
 28. disagreement confidence 0.515は研究shadowとして完全未使用期間だけを測る。今回の履歴でモデル部分集合、weight、penalty、閾値を再探索せず、clear-body/signed-body候補を置換しない。
 29. causal online expert weightingは再現専用とする。history rows、学習率、expert subsetを同じ履歴で再探索せず、固定等重みおよびsigned-body候補を置換しない。
@@ -335,10 +426,10 @@
 53. candidate差が小さい場合はM15行単位の点推定だけで昇格せず、固定UTC日paired bootstrapとside×volatilityセルを併記する。Distributionはfresh down-normal局所整合も必須とし、現在の履歴からsubgroup除外ruleを作らない。
 54. Intrabar Flow Shape unionは棄却済みとする。Pressure/Shape subset、union weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape方向候補とDistribution/Extra Trees 0.53 selective候補を維持する。
 55. Intrabar Breakout Stateは棄却済みとする。breakout/rejection定義、特徴subset、blend weight、0.515以外の閾値を同じ履歴で再探索せず、Profile 0.515 broad championとsigned-body 0.52 challengerを維持する。
-56. CatBoostは再現専用学習器とする。Ordered/Plain、depth、iterations、learning rate、regularization、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。
+56. M15 CatBoostは再現専用学習器とする。Ordered/Plain、depth、iterations、learning rate、regularization、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。M1の後続固定移植は下記77を優先する。
 57. Temperature scalingは再現専用校正とする。温度範囲、期間平滑化、confidence閾値を同じ履歴で再探索せず、Platt標準校正とIntrabar Structure 0.55 precision championを維持する。
 58. Intrabar Ordinal Shapeは再現専用とする。pattern長、tie処理、pattern subset、blend weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape方向候補、Distribution/Extra Trees 0.53、Structure 0.55を維持する。
-59. LightGBMは再現専用学習器とする。leaves、trees、learning rate、sampling、regularization、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。
+59. M15 LightGBMは再現専用学習器とする。leaves、trees、learning rate、sampling、regularization、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。M1の後続固定移植は下記76を優先する。
 60. Directional Clarity教師filterは再現専用とする。clarity cutoff、保持率、body/ATRとの合成、blend weight、confidence閾値を同じ履歴で再探索せず、Distribution Shape/Extra Trees 0.53を維持する。
 61. Signed Clarity連続教師は再現専用とする。target非線形化、loss、blend weight、confidence閾値を同じ履歴で再探索せず、Volatility Shape/Pressure方向候補とSigned-body Quantile/Clear-body 0.525を維持する。
 62. Directional Clarity sample weightingは再現専用とする。weight offset、非線形化、上限、blend weight、confidence閾値を同じ履歴で再探索せず、Signed-body Quantile/Clear-body 0.525を維持する。
@@ -350,3 +441,26 @@
 68. Full Path temporal uncertaintyは再現専用とする。training window、window数、uncertainty penalty、モデルweight、0.515以外の閾値を同じ履歴で再探索せず、expanding Full Path 0.53と既存異種disagreement shadowを維持する。
 69. M1 × M5/M15 as-of metaは再現専用とする。context subset、最大age、regularization、blend weight、0.51以外の閾値を同じ履歴で再探索せず、次のM1候補は確定済みmicrostructure/regime特徴を独立に加工して評価する。
 70. M1 Path Persistence 25%を方向専用parallel forward候補とする。14特徴、degenerate窓=0、HGB/Platt、25% weightを固定し、完全未使用期間でbaseline以上のaccuracy、Brier、log lossを同時に確認するまでauthoritative方向・confidence・odds・paper/live policyを変更しない。
+71. M1 Trend Structure 25%を方向専用secondary challengerとする。11特徴、degenerate窓=0、HGB/Platt、25% weightを固定し、Pathとunion・再weightせず完全未使用期間で独立比較する。Path point championとauthoritative方向・confidence・odds・policyは変更しない。
+72. M1 causal TCN方向維持0.515をselective confidenceのparallel forward候補とする。16本×5系列、2層1,073 parameter、8 epoch、25% weight、閾値を再探索せず、完全未使用期間でaccuracy・selection score・Brier・log loss、固定side×volatility 6セル、runtime parity、局所校正が通るまでauthoritative confidence・fair odds・policyへ昇格しない。方向用途には使わずPath方向候補とstackしない。
+73. M1 Session Relative 25%をprobability-quality specialist方向候補とする。曜日×UTC時、prior 32/min 12、5特徴、degenerate定義、25% weightを固定し、完全未使用期間でbaseline以上のaccuracy/Brier/log lossを同時に要求する。Path accuracy champion、Volatility balanced secondary、Trend tertiary、TCN confidenceとはstackせず、Session confidence 0.51は使わない。
+74. M1 Volatility State 25%をbalanced secondary方向候補とする。11特徴、degenerate窓=0、HGB/Platt、25% weightを固定し、完全未使用期間でbaseline以上のaccuracy/Brier/log lossを同時に要求する。Path/Session/Trendとunion・再weightせず、Volatility confidence 0.515は使わない。
+75. M1 Haar Multiscale 25%をtertiary multiscale方向challengerとする。4/8/16/32本×3系列、degenerate窓=0、HGB/Platt、25% weightを固定し、完全未使用期間でbaseline以上のaccuracy/Brier/log lossを同時に要求する。既存方向候補とunion・再weightせず、Haar confidence 0.515は使わない。
+76. M1 standalone LightGBMを異種学習器accuracy co-challengerとする。31 leaves、300 trees、learning rate 0.03、min child 100、row/column sample 0.8、L2 5、expanding、Plattを固定し、完全未使用期間でbaseline以上のaccuracy/Brier/log lossを同時に要求する。Pathを4件差のpoint championとして維持し、stack・router・parameter再探索を行わず、LightGBM confidence 0.515は使わない。
+77. M1 CatBoostは再現専用学習器とする。通常25%方向blendのbaseline改善はsupporting sensitivityとして保存するが、Path/LightGBM、Volatility/Session、TCN confidenceの各役割を置換しない。Ordered/Plain、depth、iterations、learning rate、regularization、blend weight、0.515以外の閾値を同じ履歴で再探索せず、config・latest・oddsを発行しない。
+78. M1 XGBoostは再現専用学習器とする。通常25%方向blendの7/7fold baseline改善はsupporting sensitivityとして保存するが、Path/LightGBM、Volatility/Session、TCN confidenceの各役割を置換しない。tree数、depth、learning rate、min child、sampling、regularization、blend weight、0.515以外の閾値を同じ履歴で再探索せず、config・latest・oddsを発行しない。
+79. M1 Extra Trees 25% normal blendは異種学習器比較候補として維持するが、stability方向役割は89のDistribution Shiftへ引き継ぐ。200 trees、depth 12、min leaf 50、max features 0.75、25% weightを再探索せず、Extra Trees confidence 0.515は使わない。
+80. M1 Candle Pressure Stateは再現専用とする。3/8/21本、body/wick/close pressure、range加重pressure、3−8加速度、18列、25% weightを同じ履歴へ合わせて再探索しない。baseline補完性は保存するがPath/LightGBM、Extra Trees、Volatility/Session、TCNの各役割を置換せず、config・latest・oddsを発行しない。
+81. M1 Bar Breakout / Rejectionは再現専用とする。prior-only 1/5/20本境界、breakout/rejection、inside/outside、range expansion、ATR距離、18列、25% weight、0.51を同じ履歴へ合わせて再探索しない。aggregate proper-score改善だけで候補を増やさず、既存方向・probability-quality・TCN confidenceを維持する。
+82. M1 Volatility Regime Candidate Routerは再現・安定性監査専用とする。low/normal/high境界、Path/Volatility/Session/Extra Trees/LightGBMの候補pool、accuracy選択、cross cell、0.515を同じ履歴で再探索しない。baseline改善を新規独立edgeと解釈せず、Path/LightGBM、Volatility/Session、TCN confidenceを固定並行維持する。
+83. M1 Five-model Disagreement方向維持0.515をbalanced coverage/probability-quality confidence challengerとして固定する。baseline/Path/Extra Trees/LightGBM/TCN、等重み、penalty 0、0.515を同じ履歴で再探索しない。86のTransition guard 50/50 accuracy specialistと完全未使用期間でaccuracy・coverage・selection score・Brier/log loss・固定6セルを比較し、runtime parityと局所整合が通るまでauthoritative confidence・fair odds・policyへ昇格しない。
+84. M1 Disagreement chronological correctness isotonic/Plattは再現専用として棄却する。isotonicのECEだけを理由に採用せず、smoothing、Platt regularization、rolling期間、別写像、0.515以外の閾値を同じ履歴で再探索しない。元equal-mean confidenceを維持し、fair oddsはfresh global/local整合まで非認可とする。
+85. M1 causal GRUとGRU追加6-model Disagreementは再現専用とする。16本×5系列、hidden 16、1,121 parameter、8 epoch、25% blend、6-model等重み、0.515を同じ履歴で再探索しない。方向は既存Path/LightGBM等、confidenceは86のTransition guard 50/50 accuracy specialistと5-model Disagreement balanced challengerを維持し、GRU/TCNは比較再現用としてconfig・latest・oddsを新規発行しない。
+86. M1 Direction Transition Bayes単体・通常方向blend・raw confidenceは再現専用とする。state/parent prior、状態境界、25% weightを再探索しない。development固定のup×low abstentionとDisagreement 50/50、0.515だけをaccuracy-specialist confidence候補として完全未使用期間へ固定する。TCNの同役割を履歴上で更新するが、Disagreement balanced候補、authoritative方向/confidence、fair odds、paper/live policyは変更しない。
+87. M1 chronological expert stackingは再現専用として棄却する。C=0.10、baseline/Path/Extra Trees/LightGBM/TCN、25% weight、方向維持、0.515を同じ履歴で再探索しない。equal-mean DisagreementとTransition guard 50/50 championを維持し、学習weightを理由に候補・odds・policyを増やさない。
+88. M1 × M5/M15 as-of meta再検証は再現専用として棄却する。最大age 15分、C=0.10、25% weight、0.515を固定し、M30追加、context subset、age、regularization、weight、閾値を同じ履歴で再探索しない。Transition guard 50/50 accuracy championと5-model Disagreement balanced challengerを維持する。
+89. M1 Distribution Shift通常25% blendをstability/proper-score方向challenger、方向維持0.51をultra-broad coverage Pareto confidence challengerへ固定する。8/64/128窓、quantile、16列、HGB、25% weight、0.51を同じ履歴で再探索しない。Path accuracy、Transition guard 0.515 accuracy-confidence、Disagreement balanced-confidenceを置換せず、fresh方向3指標、0.51 score、固定6セル、runtime parity、局所校正が通るまでauthoritative方向/confidence・fair odds・policyへ昇格しない。
+90. M1 causal Transformerは再現専用とする。16本×5系列、dimension 16、4-head、1層、feed-forward 32、8 epoch、25% weight、0.51を同じ履歴で再探索しない。方向はPath/Distribution Shift、confidenceはTransition guard/Disagreement/Distribution Shiftを維持し、Transformerのaggregate proper-score改善や疎な高閾値を理由にconfig・odds・policyを増やさない。
+91. M1 Distribution Shift × LightGBMは再現専用とする。54特徴、31 leaves、300 trees、learning rate 0.03、min child 100、row/column sample 0.8、L2 5、25% weight、0.51を同じ履歴で再探索しない。親HGB Distribution Shiftを維持し、僅かなcoverage増加やaggregate proper-scoreだけを理由にconfig・registry・odds・policyを増やさない。
+92. M1 Rolling Distribution Shapeは再現専用とする。64本、10/25/50/75/90%分位、9列、HGB、25% weight、0.51を同じ履歴で再探索しない。確認期間でobjectiveが反転したため、単体のconfirmation点精度や高閾値の疎なaccuracyを理由にconfig・registry・odds・policyを増やさず、既存Distribution Shiftを維持する。
+93. M1 Rolling Full Pathは再現専用とする。15本、11採取点、joint range正規化、HGB、25% weight、0.515を同じ履歴で再探索しない。confirmation方向改善だけを理由に候補を増やさず、既存Path/Distribution Shift方向、Transition guard/Disagreement/Distribution Shift confidenceを維持し、config・registry・odds・policyを発行しない。

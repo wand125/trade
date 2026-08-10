@@ -1,0 +1,150 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_confidence_disagreement_balanced",
+  "target_timeframe_minutes": 1,
+  "input_models": [
+    {
+      "role": "authoritative direction anchor",
+      "model": "baseline HGB",
+      "predictions": "experiments/next_bar/walk_forward_baseline_m1_current_001"
+    },
+    {
+      "role": "manual path representation",
+      "model": "Path Persistence HGB",
+      "predictions": "experiments/next_bar/walk_forward_path_persistence_m1_finite_001"
+    },
+    {
+      "role": "bagged tree learner",
+      "model": "Extra Trees",
+      "predictions": "experiments/next_bar/walk_forward_extra_trees_m1_fixed_001"
+    },
+    {
+      "role": "boosted tree learner",
+      "model": "LightGBM",
+      "predictions": "experiments/next_bar/walk_forward_lightgbm_m1_fixed_001"
+    },
+    {
+      "role": "sequence learner",
+      "model": "causal TCN",
+      "predictions": "experiments/next_bar/walk_forward_tcn_m1_finite_001"
+    }
+  ],
+  "confidence_candidate": {
+    "mode": "equal_weight_baseline_aligned_mean_edge",
+    "model_count": 5,
+    "uncertainty_penalty": 0.0,
+    "preserve_baseline_direction": true,
+    "formula": "confidence edge = max(mean(s * (p_i - 0.5)), epsilon), where s is the baseline direction",
+    "fixed_confidence_threshold": 0.515,
+    "threshold_source": "fixed transfer of the M15 disagreement confidence shadow; not selected on M1 confirmation",
+    "loss_multiplier": 1.0,
+    "role": "balanced coverage and probability-quality selective-confidence challenger"
+  },
+  "experiments": {
+    "predictions": "experiments/next_bar/disagreement_confidence_m1_fixed_001",
+    "baseline_comparison": "experiments/next_bar/disagreement_vs_baseline_m1_confidence_0515_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/disagreement_vs_baseline_m1_confidence_0515_bootstrap.json",
+    "tcn_comparison": "experiments/next_bar/disagreement_vs_tcn_m1_confidence_0515_analysis.json",
+    "tcn_bootstrap": "experiments/next_bar/disagreement_vs_tcn_m1_confidence_0515_bootstrap.json",
+    "tcn_reliability_comparison": "experiments/next_bar/disagreement_vs_tcn_m1_confidence_reliability.json",
+    "fixed_subgroups": "experiments/next_bar/disagreement_m1_confidence_subgroups.json",
+    "rejected_chronological_odds_recalibration": "experiments/next_bar/disagreement_m1_chronological_odds_recalibration_001"
+  },
+  "evidence": {
+    "oos_rows": 2183717,
+    "direction": {
+      "agreement_with_baseline": 1.0,
+      "direction_accuracy_unchanged": true
+    },
+    "confidence_0515": {
+      "development": {
+        "coverage": 0.26915335675539276,
+        "accuracy": 0.5216087649954927,
+        "selection_score": 0.010364545725266898
+      },
+      "confirmation": {
+        "coverage": 0.08758894104631508,
+        "accuracy": 0.5303058988991967,
+        "selection_score": 0.007904103527770589
+      },
+      "all": {
+        "coverage": 0.19895938896844234,
+        "accuracy": 0.523088997884784,
+        "selection_score": 0.009636260794366122
+      },
+      "accuracy_improved_folds_vs_baseline": 6,
+      "selection_score_improved_folds_vs_baseline": 6,
+      "accuracy_wins_vs_tcn": 3,
+      "selection_score_wins_vs_tcn": 6
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline": {
+      "development_accuracy_delta_ci95": [0.001259549983846245, 0.0029841632329538625],
+      "confirmation_accuracy_delta_ci95": [0.0029991182238574055, 0.007413340086565906],
+      "all_accuracy_delta_ci95": [0.001775509094752606, 0.0033815926654556126],
+      "development_selection_score_delta_ci95": [0.0003385189099712498, 0.0012346634124960354],
+      "confirmation_selection_score_delta_ci95": [0.00038930095461667914, 0.0017356899631547362],
+      "all_selection_score_delta_ci95": [0.00045151360170828613, 0.0011762249625609012],
+      "all_brier_delta_ci95": [-0.00002637165798149363, -0.00001647766652054378],
+      "all_log_loss_delta_ci95": [-0.00005294105473739319, -0.00003305408220374839]
+    },
+    "against_tcn_0515": {
+      "all_coverage_delta": 0.009988473781172208,
+      "all_accuracy_delta": 0.00006151029818102227,
+      "all_selection_score_delta": 0.00028859220825644925,
+      "all_coverage_delta_ci95": [0.009495755164412815, 0.01047709802810576],
+      "all_accuracy_delta_ci95": [-0.0006609391909762286, 0.0007897188898242411],
+      "all_selection_score_delta_ci95": [-0.000029338508077604826, 0.0006083823987531421],
+      "all_brier_delta_ci95": [-0.000009565506668319373, -0.0000032821427938423162],
+      "all_log_loss_delta_ci95": [-0.0000191836875762158, -0.000006589745982552025]
+    },
+    "calibration_limits": {
+      "confirmation_mean_confidence_0515": 0.5197023446425837,
+      "confirmation_accuracy_0515": 0.5303058988991967,
+      "confirmation_underconfidence": 0.010603554256612968,
+      "confirmation_locally_consistent": false,
+      "weak_fixed_cells": [
+        "down|low",
+        "down|normal",
+        "up|low"
+      ],
+      "subgroup_filter_created": false
+    },
+    "rejected_correctness_recalibration": {
+      "nested_rows": 1838693,
+      "raw_brier": 0.24989796476340229,
+      "raw_log_loss": 0.6929430597450291,
+      "raw_ece": 0.0014631434160627772,
+      "isotonic_brier": 0.24990382736563277,
+      "isotonic_log_loss": 0.6929548075955567,
+      "isotonic_ece": 0.0002604907884534388,
+      "isotonic_all_0515_selection_score": 0.006628857796781187,
+      "raw_all_0515_selection_score": 0.007471046121520647,
+      "platt_brier": 0.2499446477716199,
+      "platt_log_loss": 0.6930364784760141,
+      "platt_confirmation_0515_rows": 0,
+      "decision": "reject both; retain raw equal-mean disagreement confidence"
+    }
+  },
+  "fresh_forward_gates": {
+    "require_accuracy_not_below_tcn_at_0515": true,
+    "require_selection_score_not_below_tcn_at_0515": true,
+    "require_coverage_not_below_tcn_at_0515": true,
+    "require_brier_not_above_tcn": true,
+    "require_log_loss_not_above_tcn": true,
+    "monitor_fixed_predicted_direction_x_volatility_regime_cells": true,
+    "do_not_create_post_hoc_subgroup_filters": true,
+    "require_runtime_probability_parity_before_operational_promotion": true,
+    "require_local_confidence_consistency_before_odds_authorization": true
+  },
+  "promotion": {
+    "replace_tcn_selective_accuracy_candidate": false,
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_balanced_confidence_candidate": true,
+    "odds_runtime_authorized": false,
+    "reason": "The fixed five-model mean-edge confidence preserves baseline direction, improves the 0.515 accuracy and coverage-aware score versus baseline in development, confirmation, six of seven folds, and UTC-day bootstrap. It matches TCN lane accuracy within uncertainty while adding about one percentage point of coverage and improving aggregate Brier/log loss, so it is retained as a balanced coverage/probability-quality challenger rather than replacing the TCN accuracy specialist. Confirmation remains materially underconfident and weak side-regime cells remain, so fair odds and trading policy are not authorized."
+  }
+}

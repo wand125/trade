@@ -1,0 +1,145 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_balanced_volatility_state",
+  "target_timeframe_minutes": 1,
+  "feature_candidate": {
+    "feature_set": "volatility_state",
+    "parent_feature_set": "baseline",
+    "additional_feature_count": 11,
+    "features": [
+      "volatility_of_volatility_5_20",
+      "volatility_of_volatility_5_50",
+      "volatility_acceleration_5_3",
+      "volatility_acceleration_20_5",
+      "range_coefficient_of_variation_20",
+      "range_autocorrelation_20",
+      "range_median_deviation_20",
+      "range_compression_fraction_5_50",
+      "jump_variation_fraction_20",
+      "parkinson_close_variance_balance_20",
+      "garman_klass_close_variance_balance_20"
+    ],
+    "degenerate_zero_over_zero_value": 0.0,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "direction_candidate": {
+    "baseline_model": "baseline HGB",
+    "candidate_model": "HGB with baseline plus 11 volatility-state features",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "role": "balanced secondary direction candidate",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_volatility_state_m1_finite_001",
+    "direction_blend": "experiments/next_bar/volatility_state_m1_blend_current_001",
+    "rejected_confidence_blend": "experiments/next_bar/volatility_state_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/volatility_state_m1_candidate_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/volatility_state_m1_direction_bootstrap.json",
+    "path_direct_comparison": "experiments/next_bar/volatility_state_vs_path_m1_direction_analysis.json",
+    "path_direct_bootstrap": "experiments/next_bar/volatility_state_vs_path_m1_direction_bootstrap.json",
+    "session_direct_comparison": "experiments/next_bar/volatility_state_vs_session_m1_direction_analysis.json",
+    "session_direct_bootstrap": "experiments/next_bar/volatility_state_vs_session_m1_direction_bootstrap.json",
+    "tcn_confidence_comparison": "experiments/next_bar/volatility_state_vs_tcn_m1_confidence_0515_analysis.json",
+    "tcn_confidence_bootstrap": "experiments/next_bar/volatility_state_vs_tcn_m1_confidence_0515_bootstrap.json"
+  },
+  "evidence": {
+    "source_rows": 6025170,
+    "usable_rows": 5737928,
+    "oos_rows": 2183717,
+    "direction_blend": {
+      "development": {
+        "baseline_accuracy": 0.5093738008388342,
+        "candidate_accuracy": 0.5096336035380947,
+        "net_improvement": 348,
+        "mcnemar_exact_p": 0.12867843821430291
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5060000781769144,
+        "candidate_accuracy": 0.5064904606397004,
+        "net_improvement": 414,
+        "mcnemar_exact_p": 0.029682213944542516
+      },
+      "all": {
+        "baseline_accuracy": 0.5080694980164554,
+        "candidate_accuracy": 0.5084184443313854,
+        "baseline_brier": 0.24986887966799923,
+        "candidate_brier": 0.24985784788748938,
+        "baseline_log_loss": 0.69288487311603,
+        "candidate_log_loss": 0.6928627411839446,
+        "baseline_ece": 0.0020289380971560927,
+        "candidate_ece": 0.0014680017564316814,
+        "fixes": 44502,
+        "harms": 43740,
+        "net_improvement": 762,
+        "mcnemar_exact_p": 0.010412411007293988
+      },
+      "accuracy_improved_folds": 6,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "paired_utc_day_bootstrap_20000_candidate_minus_baseline": {
+      "development_accuracy_delta_ci95": [-0.00008699350502729121, 0.0006061439350016018],
+      "confirmation_accuracy_delta_ci95": [0.00003950146311039022, 0.0009284333746354151],
+      "all_accuracy_delta_ci95": [0.00007794634001015991, 0.000618303825838154],
+      "development_brier_delta_ci95": [-0.00002006334105292204, -0.000011918384080165933],
+      "confirmation_brier_delta_ci95": [-0.000006097972740037176, -2.617691160874958e-7],
+      "all_brier_delta_ci95": [-0.000013803057504062354, -0.000008188861870059294],
+      "development_log_loss_delta_ci95": [-0.00004026428587757813, -0.000023920235426619363],
+      "confirmation_log_loss_delta_ci95": [-0.000012199997919493108, -5.15070823675634e-7],
+      "all_log_loss_delta_ci95": [-0.000027691436492249808, -0.000016421517869497083]
+    },
+    "against_path_accuracy_champion": {
+      "all_candidate_accuracy": 0.5084184443313854,
+      "all_path_accuracy": 0.5085008725947547,
+      "candidate_accuracy_wins": 4,
+      "path_accuracy_wins": 3,
+      "candidate_minus_path_accuracy_ci95": [-0.00036069751596979894, 0.00019386161663978712],
+      "candidate_minus_path_brier_ci95": [-0.000009709916860595192, -0.000004118085955075876],
+      "candidate_minus_path_log_loss_ci95": [-0.000019474358782473054, -0.000008267574991011061]
+    },
+    "against_session_probability_quality": {
+      "all_candidate_accuracy": 0.5084184443313854,
+      "all_session_accuracy": 0.5083740246561254,
+      "candidate_accuracy_wins": 3,
+      "session_accuracy_wins": 4,
+      "candidate_minus_session_accuracy_ci95": [-0.00023568124183803162, 0.00032203194077409786],
+      "candidate_minus_session_brier_ci95": [-0.000001023482707325496, 0.0000044017388522027395],
+      "candidate_minus_session_log_loss_ci95": [-0.0000020557135303633786, 0.000008822598857413655]
+    },
+    "confidence_not_adopted": {
+      "development_selected_threshold": 0.515,
+      "confirmation_candidate_accuracy": 0.5274122669738209,
+      "confirmation_candidate_coverage": 0.09460946485533125,
+      "confirmation_candidate_score": 0.007366288008458557,
+      "confirmation_tcn_accuracy": 0.5304137704722413,
+      "confirmation_tcn_coverage": 0.07941116200507202,
+      "confirmation_tcn_score": 0.007505530774741382,
+      "candidate_minus_tcn_confirmation_accuracy_ci95": [-0.0051579836418130355, -0.0008193014519933483],
+      "candidate_minus_tcn_all_accuracy_ci95": [-0.0017189892764740895, -0.00017122610927828595],
+      "candidate_minus_tcn_all_score_ci95": [-0.000279721240369938, 0.000394351251896624],
+      "reason": "The volatility candidate expands coverage but has bootstrap-confirmed lower confirmation and all-period lane accuracy than TCN at the same 0.515 threshold; its selection-score difference is not established and its all-period proper scores are worse."
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_path_persistence_accuracy_champion": false,
+    "replace_session_probability_quality_specialist": false,
+    "replace_tcn_selective_confidence_candidate": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_balanced_direction_candidate": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "The fixed volatility-state transfer improved confirmation and all-period accuracy with UTC-day support and improved Brier/log loss in all seven folds. Path remains the accuracy point champion; Session remains the proper-score specialist because the direct Volatility-versus-Session differences are unresolved. Volatility is retained as a balanced secondary direction candidate and is not used for confidence because TCN has bootstrap-confirmed higher 0.515 lane accuracy."
+  }
+}

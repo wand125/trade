@@ -1,0 +1,154 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_heterogeneous_extra_trees_blend",
+  "target_timeframe_minutes": 1,
+  "feature_policy": {
+    "feature_set": "baseline",
+    "processed_feature_count": 38,
+    "processed_stationary_features_only": true,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "model": {
+    "model_type": "extra_trees",
+    "estimators": 200,
+    "maximum_depth": 12,
+    "minimum_samples_leaf": 50,
+    "maximum_features": 0.75,
+    "random_seed": 42,
+    "maximum_train_rows_per_fold": 750000,
+    "training_window": "expanding",
+    "probability_calibration": "Platt on each fold calibration period"
+  },
+  "direction_candidate": {
+    "mode": "fixed_probability_blend",
+    "baseline_model": "HGB baseline",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "blended probability_up >= 0.5",
+    "role": "heterogeneous learner stability direction challenger",
+    "path_persistence_remains_point_champion": true,
+    "lightgbm_remains_accuracy_learner_co_challenger": true,
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_extra_trees_m1_fixed_001",
+    "direction_blend": "experiments/next_bar/extra_trees_m1_blend_current_001",
+    "rejected_confidence_blend": "experiments/next_bar/extra_trees_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/extra_trees_m1_candidate_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/extra_trees_blend_m1_direction_bootstrap.json",
+    "path_comparison": "experiments/next_bar/extra_trees_blend_vs_path_m1_direction_analysis.json",
+    "path_bootstrap": "experiments/next_bar/extra_trees_blend_vs_path_m1_direction_bootstrap.json",
+    "lightgbm_comparison": "experiments/next_bar/extra_trees_blend_vs_lightgbm_m1_direction_analysis.json",
+    "lightgbm_bootstrap": "experiments/next_bar/extra_trees_blend_vs_lightgbm_m1_direction_bootstrap.json",
+    "volatility_comparison": "experiments/next_bar/extra_trees_blend_vs_volatility_state_m1_direction_analysis.json",
+    "volatility_bootstrap": "experiments/next_bar/extra_trees_blend_vs_volatility_state_m1_direction_bootstrap.json",
+    "session_comparison": "experiments/next_bar/extra_trees_blend_vs_session_relative_m1_direction_analysis.json",
+    "session_bootstrap": "experiments/next_bar/extra_trees_blend_vs_session_relative_m1_direction_bootstrap.json",
+    "tcn_confidence_comparison": "experiments/next_bar/extra_trees_vs_tcn_m1_confidence_0515_analysis.json",
+    "tcn_confidence_bootstrap": "experiments/next_bar/extra_trees_vs_tcn_m1_confidence_0515_bootstrap.json",
+    "latest_runtime_output": "experiments/next_bar/extra_trees_m1_latest_prediction.json"
+  },
+  "evidence": {
+    "source_rows": 6025170,
+    "usable_rows": 5737928,
+    "oos_rows": 2183717,
+    "normal_blend": {
+      "development": {
+        "baseline_accuracy": 0.5093738008388342,
+        "candidate_accuracy": 0.5098292021220207,
+        "net_improvement": 610,
+        "mcnemar_exact_p": 0.00285993945002885
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5060000781769144,
+        "candidate_accuracy": 0.5063021253460217,
+        "net_improvement": 255,
+        "mcnemar_exact_p": 0.1135405473544816
+      },
+      "all": {
+        "baseline_accuracy": 0.5080694980164554,
+        "candidate_accuracy": 0.5084656116154245,
+        "baseline_brier": 0.24986887966799923,
+        "candidate_brier": 0.24986116195585545,
+        "baseline_log_loss": 0.69288487311603,
+        "candidate_log_loss": 0.6928693866924145,
+        "baseline_ece": 0.0020289380971560927,
+        "candidate_ece": 0.0016738856698286923,
+        "fixes": 34163,
+        "harms": 33298,
+        "net_improvement": 865,
+        "mcnemar_exact_p": 0.0008793138539277751
+      },
+      "accuracy_improved_folds": 7,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "paired_utc_day_bootstrap_20000_blend_minus_baseline": {
+      "development_accuracy_delta_ci95": [0.00015570349462559475, 0.0007481255044818914],
+      "confirmation_accuracy_delta_ci95": [-0.00007658785901328014, 0.0006797014340209293],
+      "all_accuracy_delta_ci95": [0.00016216581413293628, 0.00062574925501645],
+      "confirmation_brier_delta_ci95": [-0.000005553824882006953, -0.0000012576591665459946],
+      "all_brier_delta_ci95": [-0.00000984732463870236, -0.000005616662536429147],
+      "all_log_loss_delta_ci95": [-0.000019757609599985183, -0.000011271196894424578]
+    },
+    "against_path_point_champion": {
+      "all_candidate_accuracy": 0.5084656116154245,
+      "all_path_accuracy": 0.5085008725947547,
+      "candidate_correct_rows_behind": 77,
+      "candidate_accuracy_wins": 4,
+      "path_accuracy_wins": 3,
+      "candidate_minus_path_all_accuracy_ci95": [-0.000272592, 0.000202135],
+      "candidate_minus_path_all_brier_ci95": [-0.0000058677, -0.0000014376]
+    },
+    "against_lightgbm_accuracy_challenger": {
+      "all_candidate_accuracy": 0.5084656116154245,
+      "all_lightgbm_accuracy": 0.5084990408555687,
+      "candidate_accuracy_wins": 2,
+      "lightgbm_accuracy_wins": 5,
+      "candidate_minus_lightgbm_all_accuracy_ci95": [-0.000419469, 0.000354835]
+    },
+    "confidence_not_adopted": {
+      "threshold": 0.515,
+      "all_candidate_accuracy": 0.5210240144031218,
+      "all_candidate_coverage": 0.2156914105628156,
+      "all_candidate_selection_score": 0.00910143163167824,
+      "all_tcn_accuracy": 0.523027487586603,
+      "all_tcn_coverage": 0.18897091518727013,
+      "all_tcn_selection_score": 0.009347668586109673,
+      "candidate_accuracy_wins_vs_tcn": 0,
+      "candidate_score_wins_vs_tcn": 0,
+      "candidate_minus_tcn_all_accuracy_ci95": [-0.00277163, -0.00125064],
+      "reason": "Extra Trees expands coverage but has bootstrap-confirmed lower accuracy and worse proper scores than the fixed TCN lane."
+    },
+    "runtime": {
+      "latest_decision_timestamp": "2026-06-01T04:59:00.000Z",
+      "latest_predicted_direction": "up",
+      "latest_probability_up": 0.5010652084,
+      "odds_valid": false,
+      "blend_runtime_promoted": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_path_persistence_point_champion": false,
+    "replace_lightgbm_accuracy_learner_challenger": false,
+    "replace_volatility_state_balanced_secondary": false,
+    "replace_session_probability_quality_specialist": false,
+    "replace_tcn_selective_confidence_candidate": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_heterogeneous_direction_challenger": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "require_runtime_blend_parity_before_operational_promotion": true,
+    "reason": "The fixed 25% Extra Trees blend improves accuracy, Brier score, and log loss in all seven folds and has bootstrap-supported aggregate gains. It is statistically tied with Path and LightGBM but does not replace their point-accuracy roles or the existing probability-quality and confidence candidates."
+  }
+}

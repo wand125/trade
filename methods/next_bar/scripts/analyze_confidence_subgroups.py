@@ -38,6 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--predictions-dir", type=Path, action="append", required=True)
     parser.add_argument("--timeframe", type=int, default=15)
     parser.add_argument(
+        "--confidence-column",
+        default="confidence",
+        help="Prediction column to audit as probability of correctness.",
+    )
+    parser.add_argument(
         "--group-columns",
         type=comma_strings,
         default=("predicted_direction", "volatility_regime"),
@@ -57,13 +62,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    predictions = read_prediction_sets(args.predictions_dir, args.timeframe)
+    if args.confidence_column not in predictions:
+        parser.error(
+            f"predictions do not contain confidence column: {args.confidence_column}"
+        )
+    predictions = predictions.copy()
+    predictions["confidence"] = predictions[args.confidence_column]
     report = confidence_reliability_subgroups(
-        read_prediction_sets(args.predictions_dir, args.timeframe),
+        predictions,
         args.group_columns,
         args.development_folds,
         args.band_edges,
         args.thresholds,
     )
+    report["confidence_column"] = args.confidence_column
     args.output.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
     args.output.write_text(payload, encoding="utf-8")

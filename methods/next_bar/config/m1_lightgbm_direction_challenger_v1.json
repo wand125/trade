@@ -1,0 +1,165 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_accuracy_learner_lightgbm",
+  "target_timeframe_minutes": 1,
+  "feature_policy": {
+    "feature_set": "baseline",
+    "processed_stationary_features_only": true,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "model": {
+    "model_type": "lightgbm",
+    "version": "4.7.0",
+    "boosting": "gbdt leaf-wise",
+    "estimators": 300,
+    "num_leaves": 31,
+    "learning_rate": 0.03,
+    "minimum_child_samples": 100,
+    "row_sample": 0.8,
+    "column_sample": 0.8,
+    "l2": 5.0,
+    "random_seed": 42,
+    "maximum_train_rows_per_fold": 750000,
+    "training_window": "expanding",
+    "probability_calibration": "Platt on each fold calibration period"
+  },
+  "direction_candidate": {
+    "mode": "standalone",
+    "direction_rule": "probability_up >= 0.5",
+    "role": "alternative learner accuracy co-challenger",
+    "path_persistence_remains_point_champion": true,
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_lightgbm_m1_fixed_001",
+    "supporting_direction_blend": "experiments/next_bar/lightgbm_m1_blend_current_001",
+    "rejected_confidence_blend": "experiments/next_bar/lightgbm_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/lightgbm_m1_candidate_analysis.json",
+    "single_baseline_bootstrap": "experiments/next_bar/lightgbm_single_m1_direction_bootstrap.json",
+    "blend_baseline_bootstrap": "experiments/next_bar/lightgbm_blend_m1_direction_bootstrap.json",
+    "single_blend_bootstrap": "experiments/next_bar/lightgbm_single_vs_blend_m1_direction_bootstrap.json",
+    "path_comparison": "experiments/next_bar/lightgbm_single_vs_path_m1_direction_analysis.json",
+    "path_bootstrap": "experiments/next_bar/lightgbm_single_vs_path_m1_direction_bootstrap.json",
+    "volatility_comparison": "experiments/next_bar/lightgbm_single_vs_volatility_state_m1_direction_analysis.json",
+    "volatility_bootstrap": "experiments/next_bar/lightgbm_single_vs_volatility_state_m1_direction_bootstrap.json",
+    "session_comparison": "experiments/next_bar/lightgbm_single_vs_session_m1_direction_analysis.json",
+    "session_bootstrap": "experiments/next_bar/lightgbm_single_vs_session_m1_direction_bootstrap.json",
+    "tcn_confidence_comparison": "experiments/next_bar/lightgbm_vs_tcn_m1_confidence_0515_analysis.json",
+    "tcn_confidence_bootstrap": "experiments/next_bar/lightgbm_vs_tcn_m1_confidence_0515_bootstrap.json",
+    "latest_runtime_output": "experiments/next_bar/lightgbm_m1_latest_prediction.json"
+  },
+  "evidence": {
+    "source_rows": 6025170,
+    "usable_rows": 5737928,
+    "oos_rows": 2183717,
+    "standalone": {
+      "development": {
+        "baseline_accuracy": 0.5093738008388342,
+        "candidate_accuracy": 0.5095791046960084,
+        "net_improvement": 275,
+        "mcnemar_exact_p": 0.44406079760458295
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5060000781769144,
+        "candidate_accuracy": 0.5067854008165934,
+        "net_improvement": 663,
+        "mcnemar_exact_p": 0.01852921630091035
+      },
+      "all": {
+        "baseline_accuracy": 0.5080694980164554,
+        "candidate_accuracy": 0.5084990408555687,
+        "baseline_brier": 0.24986887966799923,
+        "candidate_brier": 0.24986321706496764,
+        "baseline_log_loss": 0.69288487311603,
+        "candidate_log_loss": 0.6928735232470881,
+        "baseline_ece": 0.0020289380971560927,
+        "candidate_ece": 0.0022866409096785533,
+        "fixes": 104067,
+        "harms": 103129,
+        "net_improvement": 938,
+        "mcnemar_exact_p": 0.03954279689940679
+      },
+      "accuracy_improved_folds": 5,
+      "brier_improved_folds": 5,
+      "log_loss_improved_folds": 5,
+      "ece_improved_folds": 2,
+      "evaluated_folds": 7
+    },
+    "paired_utc_day_bootstrap_20000_single_minus_baseline": {
+      "development_accuracy_delta_ci95": [-0.0003252703264531198, 0.0007343730309071481],
+      "confirmation_accuracy_delta_ci95": [0.00010202891717129015, 0.0014422513313181692],
+      "all_accuracy_delta_ci95": [0.000010125753579906528, 0.0008471706403780752],
+      "development_brier_delta_ci95": [-0.000015375723954928755, 0.000004431532777345017],
+      "confirmation_brier_delta_ci95": [-0.000013106907881307167, 0.000001410683735641317],
+      "all_brier_delta_ci95": [-0.000012268626508538105, 0.0000010143912125622146]
+    },
+    "supporting_normal_blend_not_emitted_separately": {
+      "all_accuracy": 0.5084221078097574,
+      "all_net_improvement": 770,
+      "all_mcnemar_exact_p": 0.0008967359641329974,
+      "accuracy_improved_folds": 7,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "all_accuracy_delta_vs_baseline_ci95": [0.00014067532338956078, 0.0005612076528886592],
+      "all_brier_delta_vs_baseline_ci95": [-0.0000080324113513483, -0.000004704422994163821],
+      "single_minus_blend_all_accuracy_ci95": [-0.00027455777926359005, 0.00042849674584974313],
+      "reason": "The blend is more fold-stable but has a lower accuracy point estimate than standalone LightGBM and does not exceed the existing Volatility or Session proper-score roles, so a second LightGBM direction config would add no distinct role."
+    },
+    "against_path_point_champion": {
+      "all_candidate_accuracy": 0.5084990408555687,
+      "all_path_accuracy": 0.5085008725947547,
+      "candidate_correct_rows_behind": 4,
+      "candidate_accuracy_wins": 4,
+      "path_accuracy_wins": 3,
+      "candidate_minus_path_development_accuracy_ci95": [-0.0007034948790265616, 0.00028643309798467224],
+      "candidate_minus_path_confirmation_accuracy_ci95": [-0.00031454529527993603, 0.0009674528320725857],
+      "candidate_minus_path_all_accuracy_ci95": [-0.0003960568831885947, 0.00039219182150601595]
+    },
+    "against_probability_quality_candidates": {
+      "all_volatility_accuracy": 0.5084184443313854,
+      "all_session_accuracy": 0.5083740246561254,
+      "candidate_minus_volatility_accuracy_ci95": [-0.0003112287407553538, 0.00047830904590559747],
+      "candidate_minus_session_accuracy_ci95": [-0.0002737566898171978, 0.0005241996281188456],
+      "candidate_minus_volatility_brier_ci95": [-0.0000008907643789475561, 0.00001168726150465385],
+      "candidate_minus_session_brier_ci95": [0.0000007711912102192909, 0.00001338709444481459]
+    },
+    "confidence_not_adopted": {
+      "development_selected_threshold": 0.515,
+      "confirmation_candidate_accuracy": 0.5258387272959688,
+      "confirmation_candidate_coverage": 0.10192966683604998,
+      "confirmation_candidate_score": 0.007183882865500382,
+      "confirmation_tcn_accuracy": 0.5304137704722413,
+      "confirmation_tcn_coverage": 0.07941116200507202,
+      "confirmation_tcn_score": 0.007505530774741382,
+      "candidate_accuracy_wins_vs_tcn": 1,
+      "candidate_score_wins_vs_tcn": 2,
+      "candidate_minus_tcn_confirmation_accuracy_ci95": [-0.006786082606446661, -0.0023718341941051328],
+      "candidate_minus_tcn_all_accuracy_ci95": [-0.002616059794099479, -0.0010734910342496714],
+      "reason": "The LightGBM confidence blend expands coverage but has bootstrap-confirmed lower 0.515 accuracy than TCN and worse all-period Brier/log loss."
+    },
+    "runtime": {
+      "latest_decision_timestamp": "2026-06-01T04:59:00.000Z",
+      "latest_predicted_direction": "down",
+      "latest_probability_up": 0.4962113514,
+      "odds_valid": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_path_persistence_point_champion": false,
+    "replace_volatility_state_balanced_secondary": false,
+    "replace_session_probability_quality_specialist": false,
+    "replace_tcn_selective_confidence_candidate": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_accuracy_learner_challenger": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "Standalone fixed LightGBM has bootstrap-supported confirmation and all-period accuracy improvement over baseline and is statistically tied with the Path point champion while using a different learner. Its ECE and probability quality do not justify confidence or odds use, so it remains a direction-only parallel accuracy challenger."
+  }
+}

@@ -16,7 +16,14 @@ def main() -> int:
     parser.add_argument("--first-name", required=True)
     parser.add_argument("--second-dir", type=Path, action="append", required=True)
     parser.add_argument("--second-name", required=True)
-    parser.add_argument("--threshold", type=float, required=True)
+    parser.add_argument(
+        "--threshold", type=float, required=True,
+        help="Fixed threshold for the first candidate and, by default, the second.",
+    )
+    parser.add_argument(
+        "--second-threshold", type=float,
+        help="Optional independently fixed threshold for the second candidate.",
+    )
     parser.add_argument("--timeframe", type=int, default=15)
     parser.add_argument("--iterations", type=int, default=2_000)
     parser.add_argument("--random-seed", type=int, default=42)
@@ -32,6 +39,7 @@ def main() -> int:
         args.iterations,
         args.random_seed,
         args.output,
+        args.second_threshold,
     )
     print(json.dumps(report["periods"], ensure_ascii=False, indent=2))
     return 0

@@ -48,7 +48,12 @@ def aligned_prediction_matrix(
         probability_columns.append(
             aligned["probability_up"].to_numpy(dtype="float64")
         )
-    return output, np.column_stack(probability_columns)
+    probabilities = np.column_stack(probability_columns)
+    if not np.isfinite(probabilities).all() or np.any(
+        (probabilities < 0) | (probabilities > 1)
+    ):
+        raise ValueError("model probabilities must be finite and within [0, 1]")
+    return output, probabilities
 
 
 def combine_disagreement_predictions(

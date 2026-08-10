@@ -20,13 +20,18 @@ def comma_strings(value: str) -> tuple[str, ...]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Compare two aligned next-bar candidates at one fixed threshold."
+        description="Compare two aligned next-bar candidates at fixed thresholds."
     )
     parser.add_argument("--first-dir", type=Path, required=True)
     parser.add_argument("--first-name", required=True)
     parser.add_argument("--second-dir", type=Path, required=True)
     parser.add_argument("--second-name", required=True)
     parser.add_argument("--threshold", type=float, required=True)
+    parser.add_argument(
+        "--second-threshold",
+        type=float,
+        help="Optional independently fixed threshold for the second candidate.",
+    )
     parser.add_argument("--timeframe", type=int, default=15)
     parser.add_argument(
         "--development-folds",
@@ -46,6 +51,7 @@ def main() -> int:
         args.first_name,
         args.second_name,
         args.development_folds,
+        args.second_threshold,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(report, indent=2, ensure_ascii=False) + "\n"

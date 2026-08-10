@@ -1,0 +1,160 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_selective_confidence_tcn",
+  "target_timeframe_minutes": 1,
+  "direction_source": "baseline binary HGB",
+  "confidence_candidate": {
+    "candidate_model": "two-layer causal TCN on 16 completed M1 bars x 5 stationary channels",
+    "feature_set": "tcn_sequence",
+    "model_type": "tcn",
+    "sequence_length": 16,
+    "sequence_channels": [
+      "return_atr",
+      "body_atr",
+      "range_atr",
+      "close_location_centered",
+      "wick_balance_atr"
+    ],
+    "hidden_channels": 16,
+    "parameter_count": 1073,
+    "epochs": 8,
+    "batch_size": 2048,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "random_seed": 42,
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.515,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_tcn_m1_finite_001",
+    "rejected_direction_blend": "experiments/next_bar/tcn_m1_blend_current_001",
+    "direction_preserving_blend": "experiments/next_bar/tcn_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/tcn_m1_candidate_analysis.json",
+    "direction_bootstrap": "experiments/next_bar/tcn_m1_direction_bootstrap.json",
+    "confidence_bootstrap": "experiments/next_bar/tcn_m1_confidence_bootstrap.json",
+    "confidence_reliability": "experiments/next_bar/tcn_m1_confidence_reliability.json",
+    "confidence_subgroups": "experiments/next_bar/tcn_m1_confidence_subgroups.json",
+    "candidate_odds_recalibration": "experiments/next_bar/tcn_m1_odds_recalibration_001",
+    "baseline_odds_recalibration": "experiments/next_bar/baseline_m1_odds_recalibration_001"
+  },
+  "evidence": {
+    "rows": 2183717,
+    "overall_probability_quality": {
+      "baseline_accuracy": 0.5080694980164554,
+      "candidate_accuracy": 0.5080694980164554,
+      "baseline_brier": 0.24986887966799923,
+      "candidate_brier": 0.24985390316937042,
+      "baseline_log_loss": 0.69288487311603,
+      "candidate_log_loss": 0.6928548052950225,
+      "baseline_ece": 0.0020289380971560927,
+      "candidate_ece": 0.001188562800107522,
+      "brier_improved_folds": 6,
+      "log_loss_improved_folds": 6,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "confidence_0515": {
+      "development": {
+        "baseline_rows": 383238,
+        "candidate_rows": 345617,
+        "baseline_coverage": 0.28610996223902146,
+        "candidate_coverage": 0.25802364801810856,
+        "baseline_accuracy": 0.5195048507715831,
+        "candidate_accuracy": 0.5215947132230185,
+        "baseline_selection_score": 0.009586786124955683,
+        "candidate_selection_score": 0.010123173491476742
+      },
+      "confirmation": {
+        "baseline_rows": 83755,
+        "candidate_rows": 67042,
+        "baseline_coverage": 0.0992076888179769,
+        "candidate_coverage": 0.07941116200507202,
+        "baseline_accuracy": 0.5250910393409348,
+        "candidate_accuracy": 0.5304137704722413,
+        "baseline_selection_score": 0.00683741376530776,
+        "candidate_selection_score": 0.007505530774741382
+      },
+      "all": {
+        "baseline_rows": 466993,
+        "candidate_rows": 412659,
+        "baseline_coverage": 0.2138523444200874,
+        "candidate_coverage": 0.18897091518727013,
+        "baseline_accuracy": 0.5205067313642817,
+        "candidate_accuracy": 0.523027487586603,
+        "baseline_selection_score": 0.008820476212437355,
+        "candidate_selection_score": 0.009347668586109673
+      },
+      "accuracy_improved_folds": 7,
+      "selection_score_improved_folds": 6,
+      "evaluated_folds": 7
+    },
+    "paired_utc_day_bootstrap_20000_candidate_minus_baseline": {
+      "development_accuracy_delta_ci95": [0.0013014033725380796, 0.0028909335836040466],
+      "confirmation_accuracy_delta_ci95": [0.0031561719132894798, 0.0074779052793793295],
+      "all_accuracy_delta_ci95": [0.0017604796288512325, 0.0032725325908662646],
+      "development_selection_score_delta_ci95": [0.000134183507596522, 0.0009426297276851075],
+      "confirmation_selection_score_delta_ci95": [0.00003899239141873366, 0.0013016211460814939],
+      "all_selection_score_delta_ci95": [0.00019515625182071655, 0.0008547097984441014]
+    },
+    "confidence_reliability": {
+      "development_mean_confidence_0515": 0.5249840982176557,
+      "development_accuracy_0515": 0.5215947132230185,
+      "confirmation_mean_confidence_0515": 0.5197185363667168,
+      "confirmation_accuracy_0515": 0.5304137704722413,
+      "confirmation_locally_consistent": false,
+      "confirmation_is_underconfident_by": 0.01069523410552442,
+      "all_mean_confidence_0515": 0.524128636934585,
+      "all_accuracy_0515": 0.523027487586603,
+      "all_locally_consistent": true,
+      "confirmation_055_rows": 58,
+      "confirmation_055_edge_confirmed": false
+    },
+    "nested_odds_metrics_excluding_first_fold": {
+      "candidate_raw_brier": 0.24990157648708167,
+      "baseline_raw_brier": 0.24991283495442607,
+      "candidate_raw_log_loss": 0.6929502983945224,
+      "baseline_raw_log_loss": 0.692972860466439,
+      "candidate_raw_ece": 0.001317339978816132,
+      "baseline_raw_ece": 0.001857102030586779,
+      "isotonic_improves_all_candidate_proper_metrics": false,
+      "platt_correctness_improves_all_candidate_proper_metrics": false
+    },
+    "rejected_direction_use": {
+      "single_accuracy": 0.5071673664673582,
+      "single_net_fixes": -1970,
+      "single_mcnemar_exact_p": 0.0061482870100881834,
+      "direction_blend_accuracy": 0.5083383057419987,
+      "direction_blend_net_fixes": 587,
+      "direction_blend_mcnemar_exact_p": 0.09454518234855533,
+      "direction_blend_accuracy_improved_folds": 5,
+      "reason": "The confirmation direction gain was only 125 rows with p=0.565, and the fixed Path Persistence direction candidate remains stronger."
+    }
+  },
+  "fresh_forward_gates": {
+    "require_accuracy_not_below_baseline_at_0515": true,
+    "require_selection_score_not_below_baseline_at_0515": true,
+    "require_brier_not_above_baseline": true,
+    "require_log_loss_not_above_baseline": true,
+    "monitor_fixed_predicted_direction_x_volatility_regime_cells": true,
+    "do_not_create_post_hoc_subgroup_filters": true,
+    "require_runtime_probability_parity_before_odds_authorization": true,
+    "require_local_confidence_consistency_before_odds_authorization": true
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_selective_confidence_candidate": true,
+    "odds_calibration_gate_passed_globally": true,
+    "odds_runtime_authorized": false,
+    "reason": "The fixed M15-defined TCN improved the M1 0.515 accuracy and coverage-aware score in development, confirmation, paired UTC-day bootstrap, and nearly every fold while preserving the baseline direction. The confirmation probability is materially underconfident and sparse high thresholds are unstable, so it is a selective-confidence forward candidate rather than authoritative fair odds or a trading-policy change."
+  }
+}

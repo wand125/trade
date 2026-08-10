@@ -37,8 +37,14 @@ FEATURE_SETS = (
     "trend_structure",
     "volatility_state",
     "path_persistence",
+    "direction_transition_state",
     "haar_multiscale",
     "session_relative",
+    "candle_pressure_state",
+    "bar_breakout_rejection",
+    "distribution_shift",
+    "rolling_distribution_shape",
+    "rolling_full_path",
     "sequence_manual",
     "tcn_sequence",
     "intrabar_manual",
@@ -72,7 +78,9 @@ MODEL_TYPES = (
     "signed_body_hgb",
     "signed_clarity_hgb",
     "signed_body_quantile_hgb",
+    "transition_bayes",
     "tcn",
+    "causal_gru",
     "causal_transformer",
 )
 TCN_SEQUENCE_LENGTH = 16
@@ -162,6 +170,8 @@ class TrainConfig:
     lightgbm_subsample: float = 0.80
     lightgbm_column_sample: float = 0.80
     lightgbm_l2: float = 5.0
+    transition_state_prior_strength: float = 64.0
+    transition_parent_prior_strength: float = 256.0
     tcn_epochs: int = 8
     tcn_batch_size: int = 2048
     tcn_learning_rate: float = 0.001
@@ -2207,7 +2217,53 @@ def build_feature_frame(
         )
         add("signed_return_streak_20", signed_streak.clip(-20, 20) / 20.0)
 
+    if feature_set == "direction_transition_state":
+        direction = np.sign(log_return_1).astype("float64")
+        previous_direction = direction.shift(1)
+        run_group = direction.ne(previous_direction).cumsum()
+        run_length = (
+            direction.groupby(run_group).cumcount().add(1).clip(upper=4)
+        )
+        add("transition_current_direction", direction)
+        add(
+            "transition_run_length_bucket",
+            run_length.where(direction.ne(0), 0).astype("float64"),
+        )
+
+        valid_transition = direction.ne(0) & previous_direction.ne(0)
+        reversal = (
+            valid_transition & direction.ne(previous_direction)
+        ).astype("float64")
+        valid_count = valid_transition.astype("float64").rolling(
+            8, min_periods=8
+        ).sum()
+        reversal_count = reversal.rolling(8, min_periods=8).sum()
+        add(
+            "transition_reversal_fraction_8",
+            (reversal_count / valid_count.replace(0, np.nan)).fillna(0.0),
+        )
+
+        short_volatility = log_return_1.rolling(5, min_periods=5).std()
+        long_volatility = log_return_1.rolling(20, min_periods=20).std()
+        volatility_ratio = short_volatility / long_volatility.replace(0, np.nan)
+        volatility_ratio = volatility_ratio.mask(
+            short_volatility.eq(0) & long_volatility.eq(0), 1.0
+        )
+        volatility_ratio = volatility_ratio.mask(
+            short_volatility.gt(0) & long_volatility.eq(0), np.inf
+        )
+        volatility_state = pd.Series(0.0, index=result.index)
+        volatility_state = volatility_state.mask(volatility_ratio.lt(0.8), -1.0)
+        volatility_state = volatility_state.mask(volatility_ratio.gt(1.25), 1.0)
+        add("transition_volatility_state_5_20", volatility_state)
+
     if feature_set == "haar_multiscale":
+        def zero_safe_haar_ratio(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            return output.mask(denominator.eq(0), 0.0)
+
         absolute_return = log_return_1.abs()
         direction = np.sign(log_return_1).astype("float64")
         for window in (4, 8, 16, 32):
@@ -2219,10 +2275,10 @@ def build_feature_frame(
             return_scale = (
                 log_return_1.rolling(window, min_periods=window).std()
                 * np.sqrt(window)
-            ).replace(0, np.nan)
+            )
             add(
                 f"haar_return_detail_{window}",
-                (recent_return - prior_return) / return_scale,
+                zero_safe_haar_ratio(recent_return - prior_return, return_scale),
             )
 
             recent_absolute = absolute_return.rolling(
@@ -2231,10 +2287,12 @@ def build_feature_frame(
             prior_absolute = recent_absolute.shift(half_window)
             total_absolute = absolute_return.rolling(
                 window, min_periods=window
-            ).sum().replace(0, np.nan)
+            ).sum()
             add(
                 f"haar_absolute_detail_{window}",
-                (recent_absolute - prior_absolute) / total_absolute,
+                zero_safe_haar_ratio(
+                    recent_absolute - prior_absolute, total_absolute
+                ),
             )
 
             recent_direction = direction.rolling(
@@ -2246,10 +2304,413 @@ def build_feature_frame(
                 (recent_direction - prior_direction) / 2.0,
             )
 
+    if feature_set == "candle_pressure_state":
+        candle_range = high - low
+        safe_range = candle_range.replace(0, np.nan)
+        upper_wick = high - pd.concat([open_, close], axis=1).max(axis=1)
+        lower_wick = pd.concat([open_, close], axis=1).min(axis=1) - low
+        body_share = ((close - open_) / safe_range).fillna(0.0).clip(-1, 1)
+        wick_balance = (
+            (lower_wick - upper_wick) / safe_range
+        ).fillna(0.0).clip(-1, 1)
+        close_pressure = (
+            (2.0 * close - high - low) / safe_range
+        ).fillna(0.0).clip(-1, 1)
+
+        rolling_body_pressure: dict[int, pd.Series] = {}
+        rolling_wick_pressure: dict[int, pd.Series] = {}
+        rolling_close_pressure: dict[int, pd.Series] = {}
+        for pressure_window in (3, 8, 21):
+            rolling_body_pressure[pressure_window] = body_share.rolling(
+                pressure_window, min_periods=pressure_window
+            ).mean()
+            rolling_wick_pressure[pressure_window] = wick_balance.rolling(
+                pressure_window, min_periods=pressure_window
+            ).mean()
+            rolling_close_pressure[pressure_window] = close_pressure.rolling(
+                pressure_window, min_periods=pressure_window
+            ).mean()
+            range_sum = candle_range.rolling(
+                pressure_window, min_periods=pressure_window
+            ).sum()
+            add(
+                f"body_pressure_mean_{pressure_window}",
+                rolling_body_pressure[pressure_window],
+            )
+            add(
+                f"wick_pressure_mean_{pressure_window}",
+                rolling_wick_pressure[pressure_window],
+            )
+            add(
+                f"close_pressure_mean_{pressure_window}",
+                rolling_close_pressure[pressure_window],
+            )
+            add(
+                f"range_weighted_body_pressure_{pressure_window}",
+                (
+                    (close - open_).rolling(
+                        pressure_window, min_periods=pressure_window
+                    ).sum()
+                    / range_sum.replace(0, np.nan)
+                ).fillna(0.0).clip(-1, 1),
+            )
+            add(
+                f"range_weighted_wick_pressure_{pressure_window}",
+                (
+                    (lower_wick - upper_wick).rolling(
+                        pressure_window, min_periods=pressure_window
+                    ).sum()
+                    / range_sum.replace(0, np.nan)
+                ).fillna(0.0).clip(-1, 1),
+            )
+
+        add(
+            "body_pressure_acceleration_3_8",
+            rolling_body_pressure[3] - rolling_body_pressure[8],
+        )
+        add(
+            "wick_pressure_acceleration_3_8",
+            rolling_wick_pressure[3] - rolling_wick_pressure[8],
+        )
+        add(
+            "close_pressure_acceleration_3_8",
+            rolling_close_pressure[3] - rolling_close_pressure[8],
+        )
+
+    if feature_set == "bar_breakout_rejection":
+        for breakout_window in (1, 5, 20):
+            prior_high = high.rolling(
+                breakout_window, min_periods=breakout_window
+            ).max().shift(1)
+            prior_low = low.rolling(
+                breakout_window, min_periods=breakout_window
+            ).min().shift(1)
+            add(
+                f"close_breakout_up_{breakout_window}",
+                close.gt(prior_high).astype("float64"),
+            )
+            add(
+                f"close_breakout_down_{breakout_window}",
+                close.lt(prior_low).astype("float64"),
+            )
+            add(
+                f"high_rejection_{breakout_window}",
+                (high.gt(prior_high) & close.le(prior_high)).astype("float64"),
+            )
+            add(
+                f"low_rejection_{breakout_window}",
+                (low.lt(prior_low) & close.ge(prior_low)).astype("float64"),
+            )
+
+        candle_range = high - low
+        previous_range = candle_range.shift(1)
+        range_active = candle_range.gt(0) | previous_range.gt(0)
+        add(
+            "inside_previous_bar",
+            (
+                range_active
+                & high.le(high.shift(1))
+                & low.ge(low.shift(1))
+            ).astype("float64"),
+        )
+        add(
+            "outside_previous_bar",
+            (
+                range_active
+                & high.gt(high.shift(1))
+                & low.lt(low.shift(1))
+            ).astype("float64"),
+        )
+        expanding_range = candle_range.gt(previous_range)
+        add(
+            "upward_range_expansion",
+            (expanding_range & close.gt(open_)).astype("float64"),
+        )
+        add(
+            "downward_range_expansion",
+            (expanding_range & close.lt(open_)).astype("float64"),
+        )
+
+        prior_high_20 = high.rolling(20, min_periods=20).max().shift(1)
+        prior_low_20 = low.rolling(20, min_periods=20).min().shift(1)
+        prior_atr_20 = rolling_atr[20].shift(1)
+
+        def bounded_breakout_distance(numerator: pd.Series) -> pd.Series:
+            output = numerator / prior_atr_20.replace(0, np.nan)
+            output = output.mask(prior_atr_20.eq(0) & numerator.eq(0), 0.0)
+            output = output.mask(prior_atr_20.eq(0) & numerator.gt(0), 10.0)
+            output = output.mask(prior_atr_20.eq(0) & numerator.lt(0), -10.0)
+            return output.clip(-10, 10)
+
+        add(
+            "close_distance_to_prior_high_20_atr",
+            bounded_breakout_distance(close - prior_high_20),
+        )
+        add(
+            "close_distance_to_prior_low_20_atr",
+            bounded_breakout_distance(close - prior_low_20),
+        )
+
+    if feature_set == "distribution_shift":
+        recent_window = 8
+        reference_window = 64
+        rank_window = 128
+
+        def zero_safe_ratio(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            return output.mask(denominator.eq(0), 0.0)
+
+        def symmetric_shift(
+            recent: pd.Series, reference: pd.Series
+        ) -> pd.Series:
+            denominator = recent.abs() + reference.abs()
+            return zero_safe_ratio(recent - reference, denominator).clip(-1, 1)
+
+        def centered_rolling_rank(values: pd.Series) -> pd.Series:
+            rank = values.rolling(
+                rank_window, min_periods=rank_window
+            ).rank(method="average")
+            midpoint = (rank_window + 1.0) / 2.0
+            half_span = (rank_window - 1.0) / 2.0
+            return ((rank - midpoint) / half_span).clip(-1, 1)
+
+        log_range = np.log(high / low.replace(0, np.nan)).clip(lower=0)
+        log_body = np.log(close / open_.replace(0, np.nan))
+        for name, values in (
+            ("return", log_return_1),
+            ("absolute_return", log_return_1.abs()),
+            ("range", log_range),
+            ("absolute_body", log_body.abs()),
+        ):
+            add(
+                f"distribution_shift_{name}_rank_{rank_window}",
+                centered_rolling_rank(values),
+            )
+
+        def recent_mean(values: pd.Series) -> pd.Series:
+            return values.rolling(
+                recent_window, min_periods=recent_window
+            ).mean()
+
+        def reference_mean(values: pd.Series) -> pd.Series:
+            return values.shift(recent_window).rolling(
+                reference_window, min_periods=reference_window
+            ).mean()
+
+        reference_return_mean = reference_mean(log_return_1)
+        reference_return_std = log_return_1.shift(recent_window).rolling(
+            reference_window, min_periods=reference_window
+        ).std()
+        add(
+            "distribution_shift_return_location_8_64",
+            zero_safe_ratio(
+                recent_mean(log_return_1) - reference_return_mean,
+                reference_return_std,
+            ).clip(-5, 5),
+        )
+
+        recent_absolute_return = recent_mean(log_return_1.abs())
+        reference_absolute_return = reference_mean(log_return_1.abs())
+        add(
+            "distribution_shift_absolute_return_scale_8_64",
+            symmetric_shift(recent_absolute_return, reference_absolute_return),
+        )
+        add(
+            "distribution_shift_variance_scale_8_64",
+            symmetric_shift(
+                recent_mean(log_return_1.pow(2)),
+                reference_mean(log_return_1.pow(2)),
+            ),
+        )
+        add(
+            "distribution_shift_up_fraction_8_64",
+            recent_mean(log_return_1.gt(0).astype("float64"))
+            - reference_mean(log_return_1.gt(0).astype("float64")),
+        )
+
+        upper_threshold = log_return_1.shift(recent_window).rolling(
+            reference_window, min_periods=reference_window
+        ).quantile(0.80)
+        lower_threshold = log_return_1.shift(recent_window).rolling(
+            reference_window, min_periods=reference_window
+        ).quantile(0.20)
+        recent_returns = pd.concat(
+            [log_return_1.shift(offset) for offset in range(recent_window)],
+            axis=1,
+        )
+        upper_fraction = recent_returns.gt(upper_threshold, axis=0).mean(axis=1)
+        lower_fraction = recent_returns.lt(lower_threshold, axis=0).mean(axis=1)
+        active_reference = reference_absolute_return.gt(0)
+        add(
+            "distribution_shift_tail_balance_8_64",
+            (upper_fraction - lower_fraction).where(active_reference, 0.0),
+        )
+        add(
+            "distribution_shift_tail_activity_8_64",
+            (upper_fraction + lower_fraction - 0.40).where(
+                active_reference, 0.0
+            ),
+        )
+
+        add(
+            "distribution_shift_range_scale_8_64",
+            symmetric_shift(recent_mean(log_range), reference_mean(log_range)),
+        )
+        add(
+            "distribution_shift_body_scale_8_64",
+            symmetric_shift(
+                recent_mean(log_body.abs()), reference_mean(log_body.abs())
+            ),
+        )
+
+        candle_range = (high - low).astype("float64")
+        body_pressure = zero_safe_ratio(close - open_, candle_range).fillna(0.0)
+        upper_wick = high - pd.concat([open_, close], axis=1).max(axis=1)
+        lower_wick = pd.concat([open_, close], axis=1).min(axis=1) - low
+        wick_pressure = zero_safe_ratio(
+            lower_wick - upper_wick, candle_range
+        ).fillna(0.0)
+        close_pressure = zero_safe_ratio(
+            2.0 * close - high - low, candle_range
+        ).fillna(0.0)
+        for name, values in (
+            ("body_pressure", body_pressure),
+            ("wick_pressure", wick_pressure),
+            ("close_pressure", close_pressure),
+        ):
+            add(
+                f"distribution_shift_{name}_8_64",
+                (recent_mean(values) - reference_mean(values)).clip(-2, 2)
+                / 2.0,
+            )
+        add(
+            "distribution_shift_close_pressure_dispersion_8_64",
+            symmetric_shift(
+                close_pressure.rolling(
+                    recent_window, min_periods=recent_window
+                ).std(),
+                close_pressure.shift(recent_window).rolling(
+                    reference_window, min_periods=reference_window
+                ).std(),
+            ),
+        )
+
+    if feature_set == "rolling_distribution_shape":
+        distribution_window = 64
+        rolling_returns = log_return_1.rolling(
+            distribution_window,
+            min_periods=distribution_window,
+        )
+        return_rms = log_return_1.pow(2).rolling(
+            distribution_window,
+            min_periods=distribution_window,
+        ).mean().pow(0.5)
+        return_rms = return_rms.replace(0, np.nan)
+        return_quantiles = {
+            percentile: rolling_returns.quantile(quantile)
+            for percentile, quantile in (
+                (10, 0.10),
+                (25, 0.25),
+                (50, 0.50),
+                (75, 0.75),
+                (90, 0.90),
+            )
+        }
+        for percentile in (10, 25, 50, 75, 90):
+            add(
+                f"rolling_return_quantile_{percentile}_rms_64",
+                (return_quantiles[percentile] / return_rms).fillna(0.0),
+            )
+
+        interquartile_range = return_quantiles[75] - return_quantiles[25]
+        interdecile_range = return_quantiles[90] - return_quantiles[10]
+        add(
+            "rolling_return_bowley_skew_64",
+            (
+                (
+                    return_quantiles[75]
+                    + return_quantiles[25]
+                    - 2.0 * return_quantiles[50]
+                )
+                / interquartile_range.replace(0, np.nan)
+            ).fillna(0.0),
+        )
+        add(
+            "rolling_return_tail_skew_64",
+            (
+                (
+                    return_quantiles[90]
+                    + return_quantiles[10]
+                    - 2.0 * return_quantiles[50]
+                )
+                / interdecile_range.replace(0, np.nan)
+            ).fillna(0.0),
+        )
+        add(
+            "rolling_return_central_spread_fraction_64",
+            (
+                interquartile_range
+                / interdecile_range.replace(0, np.nan)
+            ).fillna(0.0).clip(0, 1),
+        )
+        add(
+            "rolling_return_l1_l2_concentration_64",
+            (
+                log_return_1.abs().rolling(
+                    distribution_window,
+                    min_periods=distribution_window,
+                ).mean()
+                / return_rms
+            ).fillna(0.0).clip(0, 1),
+        )
+
+    if feature_set == "rolling_full_path":
+        path_window = 15
+        path_open = open_.shift(path_window - 1)
+        path_high = high.rolling(
+            path_window,
+            min_periods=path_window,
+        ).max()
+        path_low = low.rolling(
+            path_window,
+            min_periods=path_window,
+        ).min()
+        path_range = path_high - path_low
+        for point in INTRABAR_FULL_PATH_GRID_POINTS:
+            point_close = close.shift(path_window - point)
+            add(
+                f"rolling_full_path_level_{point:02d}",
+                (
+                    (point_close - path_open)
+                    / path_range.replace(0, np.nan)
+                ).fillna(0.0).clip(-1, 1),
+            )
+
     if feature_set == "session_relative":
         session_hour = result["timestamp"].dt.dayofweek * 24 + result["timestamp"].dt.hour
         window = 32
         min_periods = 12
+
+        def zero_safe_session_z(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            zero_denominator = denominator.eq(0)
+            output = output.mask(zero_denominator & numerator.eq(0), 0.0)
+            output = output.mask(zero_denominator & numerator.gt(0), 10.0)
+            output = output.mask(zero_denominator & numerator.lt(0), -10.0)
+            return output.clip(-10, 10)
+
+        def zero_safe_session_ratio(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            zero_denominator = denominator.eq(0)
+            output = output.mask(zero_denominator & numerator.eq(0), 0.0)
+            output = output.mask(zero_denominator & numerator.gt(0), 10.0)
+            return output.clip(0, 10)
 
         def prior_session_stat(values: pd.Series, statistic: str) -> pd.Series:
             shifted = values.groupby(session_hour, sort=False).shift(1)
@@ -2267,31 +2728,29 @@ def build_feature_frame(
         body_ratio = (close - open_) / scale
         range_ratio = (high - low) / scale
         prior_return_mean = prior_session_stat(log_return_1, "mean")
-        prior_return_std = prior_session_stat(log_return_1, "std").replace(0, np.nan)
+        prior_return_std = prior_session_stat(log_return_1, "std")
         prior_body_mean = prior_session_stat(body_ratio, "mean")
-        prior_body_std = prior_session_stat(body_ratio, "std").replace(0, np.nan)
-        prior_absolute_return = prior_session_stat(log_return_1.abs(), "mean").replace(
-            0, np.nan
-        )
-        prior_range = prior_session_stat(range_ratio, "mean").replace(0, np.nan)
+        prior_body_std = prior_session_stat(body_ratio, "std")
+        prior_absolute_return = prior_session_stat(log_return_1.abs(), "mean")
+        prior_range = prior_session_stat(range_ratio, "mean")
         prior_direction = prior_session_stat(
             np.sign(log_return_1).astype("float64"), "mean"
         )
         add(
             "session_return_z_32",
-            ((log_return_1 - prior_return_mean) / prior_return_std).clip(-10, 10),
+            zero_safe_session_z(log_return_1 - prior_return_mean, prior_return_std),
         )
         add(
             "session_body_z_32",
-            ((body_ratio - prior_body_mean) / prior_body_std).clip(-10, 10),
+            zero_safe_session_z(body_ratio - prior_body_mean, prior_body_std),
         )
         add(
             "session_absolute_return_ratio_32",
-            (log_return_1.abs() / prior_absolute_return).clip(0, 10),
+            zero_safe_session_ratio(log_return_1.abs(), prior_absolute_return),
         )
         add(
             "session_range_ratio_32",
-            (range_ratio / prior_range).clip(0, 10),
+            zero_safe_session_ratio(range_ratio, prior_range),
         )
         add("session_direction_bias_32", prior_direction.clip(-1, 1))
 
@@ -2330,19 +2789,28 @@ def build_feature_frame(
         add("ema_12_slope_atr_20", ema_12.diff(3) / atr_20)
 
     if feature_set in ("sequence_manual", "tcn_sequence"):
-        atr_20 = rolling_atr[20].replace(0, np.nan)
+        atr_20 = rolling_atr[20]
+
+        def zero_safe_sequence_ratio(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            return output.mask(denominator.eq(0), 0.0).fillna(0.0)
+
+        candle_range = high - low
+        close_location_centered = (
+            (close - low) / candle_range.replace(0, np.nan) - 0.5
+        ).mask(candle_range.eq(0), 0.0).fillna(0.0)
         sequence_values = {
-            "return_atr": close.diff() / atr_20,
-            "body_atr": (close - open_) / atr_20,
-            "range_atr": (high - low) / atr_20,
-            "close_location_centered": (
-                (close - low) / (high - low).replace(0, np.nan) - 0.5
-            ),
-            "wick_balance_atr": (
+            "return_atr": zero_safe_sequence_ratio(close.diff(), atr_20),
+            "body_atr": zero_safe_sequence_ratio(close - open_, atr_20),
+            "range_atr": zero_safe_sequence_ratio(candle_range, atr_20),
+            "close_location_centered": close_location_centered,
+            "wick_balance_atr": zero_safe_sequence_ratio(
                 (pd.concat([open_, close], axis=1).min(axis=1) - low)
-                - (high - pd.concat([open_, close], axis=1).max(axis=1))
-            )
-            / atr_20,
+                - (high - pd.concat([open_, close], axis=1).max(axis=1)),
+                atr_20,
+            ),
         }
 
     if feature_set == "sequence_manual":
@@ -3758,9 +4226,18 @@ def train_timeframe(
         )
     if config.model_type not in MODEL_TYPES:
         raise ValueError(f"unknown model_type: {config.model_type}")
-    if config.model_type in {"tcn", "causal_transformer"} and config.feature_set != "tcn_sequence":
+    sequence_model_types = {"tcn", "causal_gru", "causal_transformer"}
+    if config.model_type in sequence_model_types and config.feature_set != "tcn_sequence":
         raise ValueError(
             f"{config.model_type} model_type requires feature_set=tcn_sequence"
+        )
+    if (
+        config.model_type == "transition_bayes"
+        and config.feature_set != "direction_transition_state"
+    ):
+        raise ValueError(
+            "transition_bayes model_type requires "
+            "feature_set=direction_transition_state"
         )
     if config.train_weighting not in TRAIN_WEIGHTING_MODES:
         raise ValueError(f"unknown train_weighting: {config.train_weighting}")
@@ -3992,10 +4469,31 @@ def train_timeframe(
             l2_regularization=config.l2_regularization,
             random_state=config.random_seed,
         )
+    elif config.model_type == "transition_bayes":
+        from trade_data.next_bar_transition import (
+            HierarchicalDirectionTransitionClassifier,
+        )
+
+        model = HierarchicalDirectionTransitionClassifier(
+            state_prior_strength=config.transition_state_prior_strength,
+            parent_prior_strength=config.transition_parent_prior_strength,
+        )
     elif config.model_type == "tcn":
         from trade_data.next_bar_tcn import CausalTCNClassifier
 
         model = CausalTCNClassifier(
+            sequence_length=TCN_SEQUENCE_LENGTH,
+            hidden_channels=config.tcn_hidden_channels,
+            epochs=config.tcn_epochs,
+            batch_size=config.tcn_batch_size,
+            learning_rate=config.tcn_learning_rate,
+            weight_decay=config.tcn_weight_decay,
+            random_state=config.random_seed,
+        )
+    elif config.model_type == "causal_gru":
+        from trade_data.next_bar_tcn import CausalGRUClassifier
+
+        model = CausalGRUClassifier(
             sequence_length=TCN_SEQUENCE_LENGTH,
             hidden_channels=config.tcn_hidden_channels,
             epochs=config.tcn_epochs,
@@ -4839,6 +5337,8 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--lightgbm-subsample", type=float, default=0.80)
     train.add_argument("--lightgbm-column-sample", type=float, default=0.80)
     train.add_argument("--lightgbm-l2", type=float, default=5.0)
+    train.add_argument("--transition-state-prior-strength", type=float, default=64.0)
+    train.add_argument("--transition-parent-prior-strength", type=float, default=256.0)
     train.add_argument("--tcn-epochs", type=int, default=8)
     train.add_argument("--tcn-batch-size", type=int, default=2048)
     train.add_argument("--tcn-learning-rate", type=float, default=0.001)
@@ -4930,6 +5430,12 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument("--lightgbm-subsample", type=float, default=0.80)
     walk_forward.add_argument("--lightgbm-column-sample", type=float, default=0.80)
     walk_forward.add_argument("--lightgbm-l2", type=float, default=5.0)
+    walk_forward.add_argument(
+        "--transition-state-prior-strength", type=float, default=64.0
+    )
+    walk_forward.add_argument(
+        "--transition-parent-prior-strength", type=float, default=256.0
+    )
     walk_forward.add_argument("--tcn-epochs", type=int, default=8)
     walk_forward.add_argument("--tcn-batch-size", type=int, default=2048)
     walk_forward.add_argument("--tcn-learning-rate", type=float, default=0.001)
@@ -5041,6 +5547,8 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         lightgbm_subsample=args.lightgbm_subsample,
         lightgbm_column_sample=args.lightgbm_column_sample,
         lightgbm_l2=args.lightgbm_l2,
+        transition_state_prior_strength=args.transition_state_prior_strength,
+        transition_parent_prior_strength=args.transition_parent_prior_strength,
         tcn_epochs=args.tcn_epochs,
         tcn_batch_size=args.tcn_batch_size,
         tcn_learning_rate=args.tcn_learning_rate,
@@ -5165,4 +5673,9 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # Running this file with ``python -m trade_data.next_bar`` otherwise defines
+    # calibrator classes under ``__main__`` and produces non-portable joblib
+    # artifacts. Re-enter through the canonical module name before training.
+    from trade_data.next_bar import main as canonical_main
+
+    raise SystemExit(canonical_main())

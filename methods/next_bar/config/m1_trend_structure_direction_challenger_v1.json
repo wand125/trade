@@ -1,0 +1,136 @@
+{
+  "format_version": 1,
+  "status": "forward_challenger_direction_trend_structure_tertiary",
+  "target_timeframe_minutes": 1,
+  "feature_candidate": {
+    "feature_set": "trend_structure",
+    "parent_feature_set": "baseline",
+    "additional_feature_count": 11,
+    "features": [
+      "plus_di_14",
+      "minus_di_14",
+      "adx_14",
+      "di_balance_14",
+      "adx_change_3",
+      "macd_atr_20",
+      "macd_signal_gap_atr_20",
+      "atr_compression_5_20",
+      "volatility_ratio_5_20",
+      "realized_volatility_balance_20",
+      "direction_entropy_20"
+    ],
+    "source": "completed M1 OHLC rows at or before the current completed M1 bar",
+    "normalization": "Wilder DI/ADX, ATR-normalized MACD, short/long volatility ratios, realized-volatility balance, and bounded direction entropy",
+    "degenerate_window_value": 0.0,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "direction_challenger": {
+    "baseline_model": "baseline HGB",
+    "candidate_model": "HGB with baseline plus 11 trend-structure features",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_trend_structure_m1_finite_001",
+    "direction_blend": "experiments/next_bar/trend_structure_m1_blend_current_001",
+    "rejected_confidence_blend": "experiments/next_bar/trend_structure_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/trend_structure_m1_candidate_analysis.json",
+    "direction_bootstrap": "experiments/next_bar/trend_structure_m1_direction_bootstrap.json",
+    "path_direct_comparison": "experiments/next_bar/trend_vs_path_m1_direction_analysis.json",
+    "path_direct_bootstrap": "experiments/next_bar/trend_vs_path_m1_direction_bootstrap.json",
+    "session_direct_comparison": "experiments/next_bar/session_vs_trend_m1_direction_analysis.json",
+    "session_direct_bootstrap": "experiments/next_bar/session_vs_trend_m1_direction_bootstrap.json"
+  },
+  "evidence": {
+    "rows": 2183717,
+    "direction_blend": {
+      "development": {
+        "baseline_accuracy": 0.5093738008388342,
+        "candidate_accuracy": 0.5096433088113429,
+        "net_improvement": 361,
+        "mcnemar_exact_p": 0.06082974376646825
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5060000781769144,
+        "candidate_accuracy": 0.5063743797668669,
+        "net_improvement": 316,
+        "mcnemar_exact_p": 0.033569311359487916
+      },
+      "all": {
+        "baseline_accuracy": 0.5080694980164554,
+        "candidate_accuracy": 0.5083795198736832,
+        "baseline_brier": 0.24986887966799923,
+        "candidate_brier": 0.24986429526609713,
+        "baseline_log_loss": 0.69288487311603,
+        "candidate_log_loss": 0.692875664972894,
+        "baseline_ece": 0.0020289380971560927,
+        "candidate_ece": 0.0016341320140309727,
+        "fixes": 29761,
+        "harms": 29084,
+        "net_improvement": 677,
+        "mcnemar_exact_p": 0.005324157523377174
+      },
+      "accuracy_improved_folds": 6,
+      "brier_improved_folds": 6,
+      "log_loss_improved_folds": 6,
+      "ece_improved_folds": 5,
+      "evaluated_folds": 7
+    },
+    "paired_utc_day_bootstrap_20000": {
+      "development_accuracy_delta_ci95": [-0.00001847407414895807, 0.0005532267550292428],
+      "confirmation_accuracy_delta_ci95": [0.00003129774377588213, 0.0007194169592059901],
+      "all_accuracy_delta_ci95": [0.00008920399284765569, 0.0005299186881116052],
+      "all_brier_delta_ci95": [-0.000006420286595456431, -0.000002728509630854637],
+      "all_log_loss_delta_ci95": [-0.000012886066951298125, -0.000005487776742460482]
+    },
+    "against_path_persistence_champion": {
+      "development_trend_accuracy": 0.5096433088113429,
+      "development_path_accuracy": 0.5097888879100665,
+      "confirmation_trend_accuracy": 0.5063743797668669,
+      "confirmation_path_accuracy": 0.5064572946760337,
+      "all_trend_accuracy": 0.5083795198736832,
+      "all_path_accuracy": 0.5085008725947547,
+      "trend_accuracy_wins": 3,
+      "path_accuracy_wins": 4,
+      "trend_minus_path_accuracy_ci95": [-0.00034182030411563367, 0.00009767894136361573],
+      "trend_minus_path_brier_ci95": [-0.0000026127097372742604, 0.0000016034526185697271],
+      "trend_minus_path_log_loss_ci95": [-0.000005247079473003069, 0.000003208664446094348]
+    },
+    "against_session_relative_probability_quality_candidate": {
+      "all_trend_accuracy": 0.5083795198736832,
+      "all_session_accuracy": 0.5083740246561254,
+      "trend_accuracy_wins": 3,
+      "session_accuracy_wins": 4,
+      "session_minus_trend_accuracy_ci95": [-0.00027832385390939293, 0.0002679785253968028],
+      "session_minus_trend_brier_ci95": [-0.000010937270746228661, -0.000005345225846229568],
+      "session_minus_trend_log_loss_ci95": [-0.000021919071118614576, -0.000010717301916604585]
+    },
+    "confidence_not_adopted": {
+      "development_selected_threshold": 0.515,
+      "development_baseline_score": 0.009586786124955683,
+      "development_candidate_score": 0.010025576922760867,
+      "confirmation_baseline_score": 0.00683741376530776,
+      "confirmation_candidate_score": 0.0068655228366036125,
+      "confirmation_accuracy_improved_folds": 1,
+      "confirmation_evaluated_folds": 3
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_path_persistence_direction_champion": false,
+    "replace_authoritative_confidence": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_secondary_direction_challenger": false,
+    "emit_as_tertiary_direction_challenger": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "The fixed Trend Structure transfer improved M1 direction versus baseline, but the later Session Relative candidate matched its accuracy within uncertainty, won 4/7 direct folds, and improved Brier/log loss with UTC-day intervals wholly on the better side. A subsequent Volatility State transfer also passed the baseline gate and is retained as the balanced secondary candidate. Path remains the accuracy champion, Session the probability-quality specialist, and Trend an independent tertiary structural challenger; none are combined or reweighted on the same history."
+  }
+}

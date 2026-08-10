@@ -1,0 +1,248 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_and_ultra_broad_confidence_distribution_shift",
+  "target_timeframe_minutes": 1,
+  "feature_candidate": {
+    "feature_set": "distribution_shift",
+    "parent_feature_set": "baseline",
+    "additional_feature_count": 16,
+    "features": [
+      "distribution_shift_return_rank_128",
+      "distribution_shift_absolute_return_rank_128",
+      "distribution_shift_range_rank_128",
+      "distribution_shift_absolute_body_rank_128",
+      "distribution_shift_return_location_8_64",
+      "distribution_shift_absolute_return_scale_8_64",
+      "distribution_shift_variance_scale_8_64",
+      "distribution_shift_up_fraction_8_64",
+      "distribution_shift_tail_balance_8_64",
+      "distribution_shift_tail_activity_8_64",
+      "distribution_shift_range_scale_8_64",
+      "distribution_shift_body_scale_8_64",
+      "distribution_shift_body_pressure_8_64",
+      "distribution_shift_wick_pressure_8_64",
+      "distribution_shift_close_pressure_8_64",
+      "distribution_shift_close_pressure_dispersion_8_64"
+    ],
+    "recent_window": 8,
+    "nonoverlapping_reference_window": 64,
+    "empirical_rank_window": 128,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false,
+    "future_rows_used": false,
+    "flat_history_value": 0.0
+  },
+  "direction_candidate": {
+    "baseline_model": "baseline HGB",
+    "candidate_model": "HGB with baseline plus 16 rolling distribution-shift features",
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "role": "distribution-shift stability and proper-score direction challenger",
+    "supersedes_extra_trees_stability_role": true,
+    "replace_path_accuracy_champion": false,
+    "confidence_is_authoritative": false
+  },
+  "confidence_candidate": {
+    "mode": "direction-preserving baseline 75% plus distribution-shift 25% edge",
+    "fixed_confidence_threshold": 0.51,
+    "threshold_source": "maximum development selection score over the fixed 0.51/0.515/0.525/0.535/0.55 grid; confirmation was audit only",
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "preserve_baseline_direction": true,
+    "loss_multiplier": 1.0,
+    "role": "ultra-broad coverage Pareto confidence challenger",
+    "odds_runtime_authorized": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "candidate_oos": "experiments/next_bar/walk_forward_distribution_shift_m1_fixed_001",
+    "direction_blend": "experiments/next_bar/distribution_shift_m1_blend_current_001",
+    "direction_preserving_blend": "experiments/next_bar/distribution_shift_m1_confidence_blend_current_001",
+    "analysis": "experiments/next_bar/distribution_shift_m1_candidate_analysis.json",
+    "direction_bootstrap": "experiments/next_bar/distribution_shift_vs_baseline_m1_direction_bootstrap.json",
+    "confidence_bootstrap": "experiments/next_bar/distribution_shift_vs_baseline_m1_confidence_051_bootstrap.json",
+    "path_comparison": "experiments/next_bar/distribution_shift_vs_path_m1_direction_analysis.json",
+    "path_bootstrap": "experiments/next_bar/distribution_shift_vs_path_m1_direction_bootstrap.json",
+    "extra_trees_comparison": "experiments/next_bar/distribution_shift_vs_extra_trees_m1_direction_analysis.json",
+    "extra_trees_bootstrap": "experiments/next_bar/distribution_shift_vs_extra_trees_m1_direction_bootstrap.json",
+    "volatility_comparison": "experiments/next_bar/distribution_shift_vs_volatility_state_m1_direction_analysis.json",
+    "volatility_bootstrap": "experiments/next_bar/distribution_shift_vs_volatility_state_m1_direction_bootstrap.json",
+    "session_comparison": "experiments/next_bar/distribution_shift_vs_session_relative_m1_direction_analysis.json",
+    "session_bootstrap": "experiments/next_bar/distribution_shift_vs_session_relative_m1_direction_bootstrap.json",
+    "champion_confidence_comparison": "experiments/next_bar/distribution_shift_051_vs_transition_guard_champion_0515_m1_confidence_analysis.json",
+    "champion_confidence_bootstrap": "experiments/next_bar/distribution_shift_051_vs_transition_guard_champion_0515_m1_confidence_bootstrap.json",
+    "disagreement_confidence_comparison": "experiments/next_bar/distribution_shift_051_vs_disagreement_0515_m1_confidence_analysis.json",
+    "disagreement_confidence_bootstrap": "experiments/next_bar/distribution_shift_051_vs_disagreement_0515_m1_confidence_bootstrap.json",
+    "confidence_reliability": "experiments/next_bar/distribution_shift_vs_transition_guard_champion_m1_confidence_reliability.json",
+    "confidence_subgroups": "experiments/next_bar/distribution_shift_m1_confidence_subgroups.json",
+    "candidate_registry": "experiments/next_bar/m1_candidate_registry_distribution_shift_001.json",
+    "latest_runtime_output": "experiments/next_bar/distribution_shift_m1_latest_prediction.json"
+  },
+  "evidence": {
+    "source_rows": 6025170,
+    "usable_rows": 5737873,
+    "oos_rows": 2183717,
+    "direction_blend": {
+      "development_accuracy": 0.5097358821869414,
+      "confirmation_accuracy": 0.5064430806916052,
+      "all_accuracy": 0.5084628640066455,
+      "baseline_all_accuracy": 0.5080694980164554,
+      "all_net_improvement": 859,
+      "mcnemar_exact_p": 0.0044928385946483886,
+      "accuracy_improved_folds": 7,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 5,
+      "all_brier": 0.2498578496262048,
+      "all_log_loss": 0.692862748041034,
+      "all_ece": 0.0014148048778617973
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline_direction": {
+      "development_accuracy_delta_ci95": [
+        0.000002241094436036817,
+        0.0007127015860535267
+      ],
+      "confirmation_accuracy_delta_ci95": [
+        0.00000589660972952213,
+        0.0008845020140194974
+      ],
+      "all_accuracy_delta_ci95": [
+        0.0001140532141072792,
+        0.0006746176131355805
+      ],
+      "all_brier_delta_ci95": [
+        -0.000013887846867279701,
+        -0.000008202189212802582
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.00002785050806799472,
+        -0.00001645098375873677
+      ]
+    },
+    "against_existing_direction_candidates": {
+      "path_all_accuracy": 0.5085008725947547,
+      "candidate_minus_path_accuracy_ci95": [
+        -0.0003149347165875255,
+        0.00023976027644507727
+      ],
+      "candidate_minus_path_brier_ci95": [
+        -0.0000097624191867339,
+        -0.000004171531913782503
+      ],
+      "extra_trees_all_accuracy": 0.5084656116154245,
+      "candidate_minus_extra_trees_accuracy_ci95": [
+        -0.00027041341860165323,
+        0.0002634075581900125
+      ],
+      "candidate_minus_extra_trees_brier_ci95": [
+        -0.000006014757937396198,
+        -0.0000006093179864233306
+      ],
+      "volatility_all_accuracy": 0.5084184443313854,
+      "session_all_accuracy": 0.5083740246561254
+    },
+    "confidence_051": {
+      "development": {
+        "coverage": 0.4323161709262862,
+        "accuracy": 0.5170391553469481,
+        "selection_score": 0.010357037495724898
+      },
+      "confirmation": {
+        "coverage": 0.23524736478651187,
+        "accuracy": 0.5189849198157146,
+        "selection_score": 0.008142145296707877
+      },
+      "all": {
+        "coverage": 0.35612810634345016,
+        "accuracy": 0.5175360654662633,
+        "selection_score": 0.009802088150170373
+      },
+      "accuracy_improved_folds_vs_baseline": 6,
+      "selection_score_improved_folds_vs_baseline": 6
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline_confidence_051": {
+      "development_accuracy_delta_ci95": [
+        0.0007798729430759016,
+        0.0017269908176862439
+      ],
+      "development_selection_score_delta_ci95": [
+        0.0004166103549213127,
+        0.0010422167545459965
+      ],
+      "confirmation_accuracy_delta_ci95": [
+        0.00005439660388426582,
+        0.0019176534214899864
+      ],
+      "confirmation_selection_score_delta_ci95": [
+        -0.00010221668084920817,
+        0.0008032602312924696
+      ],
+      "all_selection_score_delta_ci95": [
+        0.000345600862002037,
+        0.0008520222016764113
+      ]
+    },
+    "against_current_confidence_champion": {
+      "candidate_development_score": 0.010357037495724898,
+      "champion_development_score": 0.010446527909734694,
+      "candidate_confirmation_score": 0.008142145296707877,
+      "champion_confirmation_score": 0.007829499580556456,
+      "candidate_all_score": 0.009802088150170373,
+      "champion_all_score": 0.009674301454009623,
+      "candidate_score_wins": 4,
+      "champion_score_wins": 3,
+      "all_score_delta_ci95": [
+        -0.0004218345693793118,
+        0.0006815548299051316
+      ],
+      "all_accuracy_delta_ci95": [
+        -0.009593605107540478,
+        -0.007016357160410761
+      ]
+    },
+    "calibration_limits": {
+      "development_051_mean_confidence": 0.521249450482346,
+      "development_051_accuracy": 0.5170391553469481,
+      "confirmation_051_mean_confidence": 0.5153269880819891,
+      "confirmation_051_accuracy": 0.5189849198157146,
+      "confirmation_down_low_rows": 2336,
+      "confirmation_down_low_accuracy": 0.4991438356164384,
+      "confirmation_down_low_edge_confirmed": false,
+      "subgroup_filter_created": false
+    },
+    "latest_runtime": {
+      "decision_timestamp": "2026-06-01T04:59:00.000Z",
+      "predicted_direction": "down",
+      "probability_up": 0.4985584768,
+      "odds_valid": false,
+      "strict_prediction_eligible": false
+    }
+  },
+  "fresh_forward_gates": {
+    "require_direction_accuracy_not_below_baseline": true,
+    "require_direction_brier_not_above_baseline": true,
+    "require_direction_log_loss_not_above_baseline": true,
+    "require_confidence_selection_score_not_below_baseline_at_051": true,
+    "monitor_fixed_predicted_direction_x_volatility_regime_cells": true,
+    "require_down_low_edge_confirmation": true,
+    "do_not_create_post_hoc_subgroup_filters": true,
+    "require_runtime_probability_parity_before_operational_promotion": true,
+    "require_local_confidence_consistency_before_odds_authorization": true
+  },
+  "promotion": {
+    "emit_as_direction_candidate": true,
+    "emit_as_ultra_broad_confidence_candidate": true,
+    "historical_registry_broad_role_champion": false,
+    "replace_path_accuracy_champion": false,
+    "replace_transition_guard_accuracy_confidence_champion": false,
+    "replace_disagreement_balanced_confidence_candidate": false,
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "odds_runtime_authorized": false,
+    "reason": "The fixed distribution-shift blend improves baseline direction accuracy, Brier, and log loss in all seven folds with development, confirmation, and all-period UTC-day support. It matches Extra Trees direction accuracy while improving proper scores and remains near the Path accuracy champion. Its 0.51 direction-preserving lane is a higher-coverage Pareto point whose development objective is just below the current accuracy champion; local calibration and confirmation down-low edge are insufficient for odds or policy authorization."
+  }
+}

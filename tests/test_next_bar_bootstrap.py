@@ -55,11 +55,41 @@ class NextBarBootstrapTests(unittest.TestCase):
         coverage = all_rows["periods"]["all"]["metrics"]["lane_coverage"]
         self.assertEqual(coverage["delta_first_minus_second"], 0.0)
 
+        different_thresholds = paired_daily_block_bootstrap(
+            first,
+            second,
+            0.53,
+            iterations=100,
+            random_seed=7,
+            second_threshold=0.54,
+        )
+        self.assertEqual(different_thresholds["first_threshold"], 0.53)
+        self.assertEqual(different_thresholds["second_threshold"], 0.54)
+        different_coverage = different_thresholds["periods"]["all"]["metrics"][
+            "lane_coverage"
+        ]
+        self.assertLess(different_coverage["delta_first_minus_second"], 0)
+
     def test_daily_bootstrap_rejects_misaligned_predictions(self):
         first, second = prediction_frames()
         second.loc[0, "timestamp"] += pd.Timedelta(minutes=1)
         with self.assertRaisesRegex(ValueError, "align"):
             paired_daily_block_bootstrap(first, second, 0.53, iterations=100)
+
+    def test_daily_bootstrap_marks_empty_lane_metrics_unavailable(self):
+        first, second = prediction_frames()
+        first["confidence"] = 0.50
+
+        report = paired_daily_block_bootstrap(
+            first, second, 0.53, iterations=100, random_seed=7
+        )
+
+        accuracy = report["periods"]["all"]["metrics"]["lane_accuracy"]
+        self.assertFalse(accuracy["available"])
+        self.assertIsNone(accuracy["delta_first_minus_second"])
+        self.assertTrue(
+            report["periods"]["all"]["metrics"]["brier_score"]["available"]
+        )
 
 
 if __name__ == "__main__":

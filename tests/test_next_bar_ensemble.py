@@ -329,6 +329,28 @@ class NextBarEnsembleTests(unittest.TestCase):
         self.assertTrue((opposition["confidence"] < 0.500001).all())
         self.assertTrue((opposition["aligned_edge_mean"] < 0).all())
 
+    def test_disagreement_mean_is_candidate_order_invariant_and_rejects_nan(self):
+        baseline = prediction_frame([0.60, 0.40])
+        first = prediction_frame([0.55, 0.45])
+        second = prediction_frame([0.70, 0.30])
+
+        forward = combine_disagreement_predictions(
+            baseline, [first, second], uncertainty_penalty=0.0
+        )
+        reverse = combine_disagreement_predictions(
+            baseline, [second, first], uncertainty_penalty=0.0
+        )
+        np.testing.assert_allclose(
+            forward["probability_up"], reverse["probability_up"]
+        )
+
+        invalid = first.copy()
+        invalid.loc[0, "probability_up"] = np.nan
+        with self.assertRaisesRegex(ValueError, "finite and within"):
+            combine_disagreement_predictions(
+                baseline, [invalid], uncertainty_penalty=0.0
+            )
+
     def test_blends_probabilities_and_recomputes_prediction_fields(self):
         baseline = prediction_frame([0.60, 0.40])
         candidate = prediction_frame([0.40, 0.60])

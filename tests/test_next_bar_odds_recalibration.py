@@ -41,6 +41,8 @@ class NextBarOddsRecalibrationTests(unittest.TestCase):
         self.assertEqual(calibrated["predicted_up"].tolist(), source.loc[6:, "predicted_up"].tolist())
         self.assertTrue(calibrated["isotonic_confidence"].between(0, 1).all())
         self.assertTrue(calibrated["platt_correctness_confidence"].between(0, 1).all())
+        self.assertEqual(report["fixed_thresholds"], [0.515, 0.525, 0.535, 0.55])
+        self.assertEqual(report["periods"]["all_nested"]["raw_model_confidence"]["lanes"]["0.515"]["rows"], 10)
 
         changed = source.copy()
         changed.loc[changed["fold"].eq("test2021"), "correct"] = ~changed.loc[
@@ -61,6 +63,12 @@ class NextBarOddsRecalibrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least two"):
             chronological_correctness_recalibration(
                 prediction_frame().loc[lambda frame: frame["fold"].eq("test2020")]
+            )
+
+    def test_recalibration_rejects_invalid_fixed_thresholds(self):
+        with self.assertRaisesRegex(ValueError, "odds thresholds"):
+            chronological_correctness_recalibration(
+                prediction_frame(), thresholds=(0.49,)
             )
 
 

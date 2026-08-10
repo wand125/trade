@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -60,7 +60,16 @@ def read_prediction_sets(
     for directory in directories:
         path = directory / filename
         if not path.exists():
-            raise FileNotFoundError(path)
+            manifest_path = directory / "manifest.json"
+            if not manifest_path.exists():
+                raise FileNotFoundError(path)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            entry = manifest.get("timeframes", {}).get(f"M{timeframe}")
+            if not isinstance(entry, dict) or not entry.get("predictions"):
+                raise FileNotFoundError(path)
+            path = directory / str(entry["predictions"])
+            if not path.exists():
+                raise FileNotFoundError(path)
         frames.append(pd.read_parquet(path))
     output = pd.concat(frames, ignore_index=True)
     missing = sorted(REQUIRED_PREDICTION_COLUMNS - set(output.columns))
@@ -70,6 +79,102 @@ def read_prediction_sets(
     if output.duplicated(keys).any():
         raise ValueError("prediction sets contain duplicate fold/timestamp rows")
     return output.sort_values(keys).reset_index(drop=True)
+
+
+def align_prediction_subset(
+    predictions: pd.DataFrame, reference: pd.DataFrame
+) -> pd.DataFrame:
+    """Select predictions on exactly the ordered fold/timestamp/target reference."""
+    keys = ["fold", "timestamp", "target_up"]
+    for name, frame in (("predictions", predictions), ("reference", reference)):
+        missing = sorted(set(keys) - set(frame.columns))
+        if missing:
+            raise ValueError(f"{name} are missing alignment columns: {', '.join(missing)}")
+        if frame.duplicated(["fold", "timestamp"]).any():
+            raise ValueError(f"{name} contain duplicate fold/timestamp rows")
+
+    ordered_keys = reference[keys].copy()
+    ordered_keys["_reference_order"] = np.arange(len(ordered_keys), dtype="int64")
+    aligned = ordered_keys.merge(
+        predictions,
+        on=keys,
+        how="left",
+        validate="one_to_one",
+        indicator=True,
+    )
+    if not aligned["_merge"].eq("both").all():
+        raise ValueError("predictions do not cover every reference row and target")
+    return (
+        aligned.sort_values("_reference_order")
+        .drop(columns=["_reference_order", "_merge"])
+        .reset_index(drop=True)
+    )
+
+
+def apply_confidence_exclusion_guard(
+    frame: pd.DataFrame,
+    excluded_groups: Sequence[Mapping[str, object]],
+    abstain_confidence: float = 0.5,
+) -> pd.DataFrame:
+    """Turn development-selected weak subgroups into confidence abstentions."""
+    if not excluded_groups:
+        raise ValueError("at least one excluded confidence group is required")
+    if not 0.5 <= abstain_confidence < 1:
+        raise ValueError("abstain_confidence must be between 0.5 inclusive and 1")
+    if "confidence" not in frame:
+        raise ValueError("predictions are missing confidence")
+
+    output = frame.copy()
+    excluded = pd.Series(False, index=output.index, dtype="bool")
+    normalized_groups: list[dict[str, object]] = []
+    for group in excluded_groups:
+        normalized = dict(group)
+        if not normalized:
+            raise ValueError("excluded confidence groups cannot be empty")
+        missing = sorted(set(normalized) - set(output.columns))
+        if missing:
+            raise ValueError(
+                f"confidence guard columns are missing: {', '.join(missing)}"
+            )
+        group_mask = pd.Series(True, index=output.index, dtype="bool")
+        for column, value in normalized.items():
+            group_mask &= output[column].eq(value)
+        excluded |= group_mask
+        normalized_groups.append(normalized)
+
+    output["pre_guard_confidence"] = output["confidence"].astype("float64")
+    output["confidence_guard_excluded"] = excluded
+    output.loc[excluded, "confidence"] = abstain_confidence
+    output.attrs["confidence_guard"] = {
+        "excluded_groups": normalized_groups,
+        "abstain_confidence": abstain_confidence,
+    }
+    return output
+
+
+def blend_confidence_frames(
+    base: pd.DataFrame,
+    contributor: pd.DataFrame,
+    contributor_weight: float,
+) -> pd.DataFrame:
+    """Blend aligned correctness confidence without changing direction probabilities."""
+    if not 0 <= contributor_weight <= 1:
+        raise ValueError("contributor_weight must be between 0 and 1")
+    assert_aligned(base, contributor, "confidence contributor")
+    if "confidence" not in base or "confidence" not in contributor:
+        raise ValueError("predictions are missing confidence")
+
+    output = base.copy()
+    output["base_confidence"] = base["confidence"].to_numpy(dtype="float64")
+    output["contributor_confidence"] = contributor["confidence"].to_numpy(
+        dtype="float64"
+    )
+    output["confidence"] = (
+        (1 - contributor_weight) * output["base_confidence"]
+        + contributor_weight * output["contributor_confidence"]
+    )
+    output["confidence_contributor_weight"] = contributor_weight
+    return output
 
 
 def assert_aligned(
@@ -373,6 +478,10 @@ def discover_candidate_specs(
         prediction_value = experiments.get("direction_preserving_blend")
         if prediction_value is None:
             prediction_value = experiments.get("mean_edge_direction_preserved")
+        if prediction_value is None:
+            prediction_value = experiments.get("predictions")
+        if prediction_value is None:
+            prediction_value = experiments.get("final_confidence_blend")
         if not prediction_value:
             raise ValueError(f"{path} has no direction-preserving prediction path")
         prediction_dir = project_root / str(prediction_value)
@@ -671,9 +780,17 @@ def compare_fixed_candidate_frames(
     first_name: str = "first",
     second_name: str = "second",
     development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
+    second_threshold: float | None = None,
 ) -> dict[str, object]:
-    if not 0.5 < threshold < 1:
-        raise ValueError("threshold must be between 0.5 and 1")
+    if not 0.5 <= threshold < 1:
+        raise ValueError("threshold must be between 0.5 inclusive and 1")
+    resolved_second_threshold = (
+        threshold if second_threshold is None else second_threshold
+    )
+    if not 0.5 <= resolved_second_threshold < 1:
+        raise ValueError(
+            "second_threshold must be between 0.5 inclusive and 1"
+        )
     assert_aligned(first, second, second_name)
     masks = _period_masks(first, development_folds)
     periods: dict[str, object] = {}
@@ -681,7 +798,9 @@ def compare_fixed_candidate_frames(
         first_period = first.loc[mask]
         second_period = second.loc[mask]
         first_selected = first_period["confidence"].ge(threshold)
-        second_selected = second_period["confidence"].ge(threshold)
+        second_selected = second_period["confidence"].ge(
+            resolved_second_threshold
+        )
         both = first_selected & second_selected
         union = first_selected | second_selected
         periods[period] = {
@@ -691,7 +810,7 @@ def compare_fixed_candidate_frames(
             },
             second_name: {
                 "probability": probability_metrics(second_period),
-                "lane": lane_metrics(second_period, threshold),
+                "lane": lane_metrics(second_period, resolved_second_threshold),
             },
             "selection_overlap": {
                 "both_rows": int(both.sum()),
@@ -720,7 +839,7 @@ def compare_fixed_candidate_frames(
     for fold in first["fold"].drop_duplicates():
         mask = first["fold"].eq(fold)
         first_lane = lane_metrics(first.loc[mask], threshold)
-        second_lane = lane_metrics(second.loc[mask], threshold)
+        second_lane = lane_metrics(second.loc[mask], resolved_second_threshold)
         accuracy_comparison = compare_optional(
             first_lane["accuracy"], second_lane["accuracy"]
         )
@@ -751,6 +870,8 @@ def compare_fixed_candidate_frames(
         }
     return {
         "fixed_confidence_threshold": threshold,
+        "first_threshold": threshold,
+        "second_threshold": resolved_second_threshold,
         "development_folds": list(development_folds),
         "periods": periods,
         "fold_wins": {

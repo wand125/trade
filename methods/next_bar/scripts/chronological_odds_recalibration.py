@@ -17,9 +17,15 @@ def main() -> int:
     parser.add_argument("--predictions-dir", type=Path, action="append", required=True)
     parser.add_argument("--timeframe", type=int, default=15)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--bootstrap-iterations", type=int, default=0)
+    parser.add_argument("--random-seed", type=int, default=42)
     args = parser.parse_args()
     report = run_chronological_correctness_recalibration(
-        args.predictions_dir, args.timeframe, args.output_dir
+        args.predictions_dir,
+        args.timeframe,
+        args.output_dir,
+        args.bootstrap_iterations,
+        args.random_seed,
     )
     print(json.dumps(report["combined"], ensure_ascii=False, indent=2))
     return 0

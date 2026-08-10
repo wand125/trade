@@ -1,0 +1,165 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_confidence_accuracy_specialist_transition_guard_blend",
+  "target_timeframe_minutes": 1,
+  "direction_source": "baseline HGB direction preserved by the five-model Disagreement predictions",
+  "confidence_candidate": {
+    "mode": "fixed_average_of_disagreement_and_guarded_transition_confidence",
+    "base_confidence": "five-model equal-mean Disagreement confidence",
+    "contributor_confidence": "baseline 75% + hierarchical direction-transition Bayes 25% direction-preserving confidence",
+    "base_weight": 0.5,
+    "contributor_weight": 0.5,
+    "subgroup_abstention_guard": {
+      "predicted_direction": "up",
+      "volatility_regime": "low",
+      "abstain_confidence": 0.5,
+      "selection_source": "development folds test2020-test2023 only"
+    },
+    "fixed_confidence_threshold": 0.515,
+    "threshold_source": "fixed M1 comparison threshold shared by TCN and Disagreement",
+    "weight_grid_source": "maximum development selection score over the fixed recorded grid; confirmation was audit only",
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "preserve_baseline_direction": true,
+    "loss_multiplier": 1.0,
+    "role": "accuracy-specialist confidence challenger"
+  },
+  "transition_model": {
+    "feature_set": "direction_transition_state",
+    "model_type": "transition_bayes",
+    "state": "current direction x capped run length x reversal-rate bucket x volatility state",
+    "encoded_state_slots": 135,
+    "structurally_reachable_states": 81,
+    "state_prior_strength": 64.0,
+    "parent_prior_strength": 256.0,
+    "baseline_weight": 0.75,
+    "candidate_weight": 0.25,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false
+  },
+  "experiments": {
+    "transition_oos": "experiments/next_bar/walk_forward_transition_bayes_m1_fixed_001",
+    "transition_direction_blend": "experiments/next_bar/transition_bayes_m1_blend_fixed_001",
+    "transition_confidence": "experiments/next_bar/transition_bayes_m1_confidence_fixed_001",
+    "guarded_transition_confidence": "experiments/next_bar/transition_bayes_m1_up_low_guard_fixed_001",
+    "final_confidence_blend": "experiments/next_bar/disagreement_transition_guard_confidence_m1_fixed_001",
+    "baseline_comparison": "experiments/next_bar/disagreement_transition_guard_vs_baseline_m1_candidate_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/disagreement_transition_guard_vs_baseline_m1_confidence_bootstrap.json",
+    "tcn_comparison": "experiments/next_bar/disagreement_transition_guard_vs_tcn_m1_candidate_analysis.json",
+    "tcn_bootstrap": "experiments/next_bar/disagreement_transition_guard_vs_tcn_m1_confidence_bootstrap.json",
+    "disagreement_comparison": "experiments/next_bar/disagreement_transition_guard_vs_disagreement_m1_candidate_analysis.json",
+    "disagreement_bootstrap": "experiments/next_bar/disagreement_transition_guard_vs_disagreement_m1_confidence_bootstrap.json",
+    "confidence_reliability": "experiments/next_bar/disagreement_transition_guard_vs_disagreement_m1_confidence_reliability.json",
+    "transition_subgroups": "experiments/next_bar/transition_bayes_m1_confidence_subgroups.json",
+    "candidate_registry": "experiments/next_bar/m1_candidate_registry_transition_guard_001.json"
+  },
+  "evidence": {
+    "oos_rows": 2183717,
+    "direction": {
+      "agreement_with_baseline": 1.0,
+      "direction_accuracy_unchanged": true
+    },
+    "confidence_0515": {
+      "development": {
+        "coverage": 0.2168665704102643,
+        "accuracy": 0.5242488502106799,
+        "selection_score": 0.010446527909734694
+      },
+      "confirmation": {
+        "coverage": 0.07023603505642359,
+        "accuracy": 0.5335604425256341,
+        "selection_score": 0.007829499580556456
+      },
+      "all": {
+        "coverage": 0.16017826485758,
+        "accuracy": 0.5258273677469524,
+        "selection_score": 0.009674301454009623
+      },
+      "accuracy_wins_vs_baseline": 7,
+      "selection_score_wins_vs_baseline": 7,
+      "accuracy_wins_vs_tcn": 7,
+      "selection_score_wins_vs_tcn": 6,
+      "accuracy_wins_vs_disagreement": 7,
+      "selection_score_wins_vs_disagreement": 2
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline": {
+      "all_accuracy_delta_ci95": [
+        0.00436760354310696,
+        0.006270181832288174
+      ],
+      "all_selection_score_delta_ci95": [
+        0.0004643792087167334,
+        0.001242795723866113
+      ],
+      "all_brier_delta_ci95": [
+        -0.00002637165798149363,
+        -0.00001647766652054378
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.00005294105473739319,
+        -0.00003305408220374839
+      ]
+    },
+    "paired_utc_day_bootstrap_20000_vs_tcn": {
+      "all_accuracy_delta_ci95": [
+        0.0019358132068599543,
+        0.0036518185273757124
+      ],
+      "all_selection_score_delta_ci95": [
+        -0.000024731214150436588,
+        0.0006691784654619325
+      ],
+      "all_brier_delta_ci95": [
+        -0.000009565506668319373,
+        -0.0000032821427938423162
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.0000191836875762158,
+        -0.000006589745982552025
+      ]
+    },
+    "against_disagreement_0515": {
+      "all_accuracy_delta": 0.002738369862168355,
+      "all_coverage_delta": -0.03878112411086235,
+      "all_selection_score_delta": 0.00003804065964350088,
+      "all_accuracy_delta_ci95": [
+        0.0019274618132703758,
+        0.003577755012775503
+      ],
+      "all_selection_score_delta_ci95": [
+        -0.00029351113478344617,
+        0.0003724123600065287
+      ]
+    },
+    "calibration_limits": {
+      "confirmation_mean_confidence_0515": 0.5195392789630042,
+      "confirmation_accuracy_0515": 0.5335604425256341,
+      "confirmation_underconfidence": 0.014021163562629835,
+      "confirmation_locally_consistent": false,
+      "confirmation_055_rows": 39,
+      "confirmation_055_edge_confirmed": false
+    }
+  },
+  "fresh_forward_gates": {
+    "require_accuracy_not_below_disagreement_at_0515": true,
+    "require_selection_score_not_below_tcn_at_0515": true,
+    "require_brier_not_above_disagreement": true,
+    "require_log_loss_not_above_disagreement": true,
+    "monitor_fixed_predicted_direction_x_volatility_regime_cells": true,
+    "do_not_change_guard_weight_or_threshold_on_historical_oos": true,
+    "require_runtime_confidence_parity_before_operational_promotion": true,
+    "require_local_confidence_consistency_before_odds_authorization": true
+  },
+  "promotion": {
+    "historical_registry_broad_role_champion": true,
+    "supersede_tcn_accuracy_specialist_research_role": true,
+    "replace_disagreement_balanced_confidence_candidate": false,
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_accuracy_specialist_confidence_candidate": true,
+    "odds_runtime_authorized": false,
+    "reason": "The development-selected up-low abstention and fixed 50/50 confidence blend preserve baseline direction, beat baseline accuracy and selection score in all seven folds, and beat the prior TCN accuracy specialist in accuracy 7/7 and selection score 6/7. Disagreement retains more coverage and its selection-score difference from the blend is statistically unresolved, so it remains the balanced candidate. Confirmation confidence is materially underconfident and the highest lane is sparse, so fair odds and trading policy are not authorized."
+  }
+}
