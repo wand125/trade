@@ -340,6 +340,21 @@ uv run python methods/next_bar/scripts/cross_timeframe_meta.py \
 
 M15 targetとM5/M1 contextが別artifactにある場合は `--target-predictions-dir` と `--context-predictions-dir` を使う。Full Path M15へ既存M5/M1を追加した検証では、固定25% metaは方向accuracyを6/6 fold悪化させ、0.53〜0.55のaccuracy/coverageも同時改善しなかった。小weight感度の点推定最大は時系列weight選択で再現しなかったため、split-source経路は再現専用とし、Full Path 0.53 confidenceを維持する。
 
+target時間足を変更する場合は `--target-timeframe`、同時刻contextは `--context-timeframes`、直近の確定済みcontextは `--asof-context-timeframes` で明示する。M1 targetへM5/M15を最大14分のbackward as-ofで追加した固定25% metaは、未来不参照で評価行の97.98%を保持したが、全方向accuracy -0.012pt、0.51 selection scoreも全期間で僅かに悪化した。M15係数の符号と年別改善も安定しないため再現専用とし、context subset、age、weight、閾値を同じ履歴で再探索しない。
+
+```bash
+uv run python methods/next_bar/scripts/cross_timeframe_meta.py \
+  --predictions-dir experiments/next_bar/context_confirmation_001 \
+  --predictions-dir experiments/next_bar/walk_forward_001 \
+  --output-dir experiments/next_bar/cross_timeframe_meta_m1_asof_m5_m15_001 \
+  --target-timeframe 1 \
+  --context-timeframes '' \
+  --asof-context-timeframes 5,15 \
+  --asof-max-age-minutes 14 \
+  --regularization-c 0.10 \
+  --meta-weight 0.25
+```
+
 発行済みの最新M30予測を最大15分だけ保持して追加する場合:
 
 ```bash

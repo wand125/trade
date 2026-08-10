@@ -363,14 +363,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         action="append",
         default=[],
-        help="M15 target-model OOS directories when target and context are stored separately.",
+        help="Target-model OOS directories when target and context are stored separately.",
     )
     parser.add_argument(
         "--context-predictions-dir",
         type=Path,
         action="append",
         default=[],
-        help="M1/M5/M30 context-model OOS directories when stored separately.",
+        help="Context-model OOS directories when target and context are stored separately.",
     )
     parser.add_argument("--target-timeframe", type=int, default=15)
     parser.add_argument(

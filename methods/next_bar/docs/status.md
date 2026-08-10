@@ -264,6 +264,9 @@
 - Full Pathをexpanding履歴と固定1095日履歴で別学習し、両edgeの1σ下限をtemporal uncertainty confidenceとする実験を行った。recent Full Path単体はaccuracy 51.291%でexpandingに7/7 fold負けた。
 - temporal overlayはFull Path方向を維持し、0.515 accuracyを全7foldで上げたがcoverageを全体55.658%から29.091%へ半減させ、scoreを0.01924から0.01801へ下げた。Brier/log loss/ECEも各2/7しか改善しなかった。
 - 既存異種disagreement 0.515にもdevelopment/confirmation/all scoreが全て負けた。window/penalty/weightを再探索せず再現専用とし、Full Path 0.53 championと異種disagreement shadowを維持する。
+- cross-timeframe metaを任意target/context時間足へ一般化し、target自身のcontext再利用、duplicate、exact/as-of重複を停止した。M1 targetへ確定済みM5/M15を最大14分のbackward as-ofで結合し、評価元の97.979%、1,801,567行を未来不参照で保持した。
+- 固定25% metaはM1方向accuracyを50.6443%から50.6322%へ下げ、純-218件、p=0.3095。方向は1/6 fold、Brier/log lossは各3/6しか改善せず、M15係数も正負に揺れた。
+- development選択0.51はconfirmation accuracyを+0.088pt上げたがcoverageを2.070pt下げ、developmentと全期間のselection scoreは悪化した。accuracy/score改善は各2/6 foldのため再現専用とし、config/registry/latestは発行しない。
 
 ## ベースライン評価
 
@@ -341,3 +344,4 @@
 66. Intrabar Path Signatureは再現専用とする。signature level、時間/価格path定義、特徴subset、blend weight、0.53以外の閾値を同じ履歴で再探索せず、Full Path 0.53 selective championを維持する。
 67. Volatility Stateは再現専用とする。rolling window、jump/variance定義、特徴subset、blend weight、0.525以外の閾値を同じ履歴で再探索せず、既存方向候補と0.525 confidence候補を維持する。
 68. Full Path temporal uncertaintyは再現専用とする。training window、window数、uncertainty penalty、モデルweight、0.515以外の閾値を同じ履歴で再探索せず、expanding Full Path 0.53と既存異種disagreement shadowを維持する。
+69. M1 × M5/M15 as-of metaは再現専用とする。context subset、最大age、regularization、blend weight、0.51以外の閾値を同じ履歴で再探索せず、次のM1候補は確定済みmicrostructure/regime特徴を独立に加工して評価する。
