@@ -1111,6 +1111,99 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_intrabar_full_path_volatility_shape_union_is_stationary_and_runs_latest(self):
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 15)
+        features, feature_columns = build_feature_frame(
+            bars, 15, "intrabar_full_path_volatility_shape"
+        )
+        union_columns = [
+            name
+            for name in feature_columns
+            if name.startswith("intrabar_full_path_level_")
+            or name
+            in {
+                "intrabar_range_concentration",
+                "intrabar_range_top3_fraction",
+                "intrabar_range_dispersion",
+                "intrabar_range_center_of_mass",
+                "intrabar_early_range_fraction",
+                "intrabar_late_range_fraction",
+                "intrabar_range_late_minus_early",
+                "intrabar_variance_concentration",
+                "intrabar_variance_top3_fraction",
+                "intrabar_variance_center_of_mass",
+                "intrabar_early_variance_fraction",
+                "intrabar_late_variance_fraction",
+                "intrabar_variance_late_minus_early",
+                "intrabar_range_variance_concentration_gap",
+            }
+        ]
+
+        self.assertEqual(len(union_columns), 25)
+        self.assertEqual(
+            len([name for name in feature_columns if name.startswith("intrabar_")]),
+            52,
+        )
+        self.assertEqual(len(feature_columns), 90)
+        self.assertTrue(np.isfinite(features[union_columns]).to_numpy().all())
+        validate_stationary_feature_set(feature_columns)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 15),
+            15,
+            "intrabar_full_path_volatility_shape",
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            features[union_columns],
+            scaled_features[union_columns],
+            rtol=1e-10,
+            atol=1e-10,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 15),
+            15,
+            "intrabar_full_path_volatility_shape",
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            features.loc[:3, feature_columns],
+            changed_features.loc[:3, feature_columns],
+        )
+
+        flat_source = m1_frame(30)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_bars = resample_complete_bars(flat_source, 15)
+        self.assertTrue(np.isfinite(flat_bars[union_columns]).to_numpy().all())
+        self.assertTrue(flat_bars[union_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(15,),
+            feature_set="intrabar_full_path_volatility_shape",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(
+            report["config"]["feature_set"],
+            "intrabar_full_path_volatility_shape",
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_intrabar_signed_variation_is_stationary_causal_and_finite(self):
         source = m1_frame(5000)
         bars = resample_complete_bars(source, 15)

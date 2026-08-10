@@ -44,6 +44,7 @@ FEATURE_SETS = (
     "intrabar_structure",
     "intrabar_profile",
     "intrabar_full_path",
+    "intrabar_full_path_volatility_shape",
     "intrabar_pressure",
     "intrabar_volatility_shape",
     "intrabar_frequency_shape",
@@ -2137,6 +2138,7 @@ def build_feature_frame(
         "intrabar_structure",
         "intrabar_profile",
         "intrabar_full_path",
+        "intrabar_full_path_volatility_shape",
         "intrabar_pressure",
         "intrabar_volatility_shape",
         "intrabar_frequency_shape",
@@ -2167,6 +2169,7 @@ def build_feature_frame(
         "intrabar_structure",
         "intrabar_profile",
         "intrabar_full_path",
+        "intrabar_full_path_volatility_shape",
         "intrabar_pressure",
         "intrabar_volatility_shape",
         "intrabar_frequency_shape",
@@ -2209,6 +2212,7 @@ def build_feature_frame(
     if feature_set in (
         "intrabar_profile",
         "intrabar_full_path",
+        "intrabar_full_path_volatility_shape",
         "intrabar_pressure",
         "intrabar_volatility_shape",
         "intrabar_frequency_shape",
@@ -2241,7 +2245,10 @@ def build_feature_frame(
         for column in profile_columns:
             add(column, bars[column].to_numpy(dtype="float64"))
 
-    if feature_set == "intrabar_full_path":
+    if feature_set in (
+        "intrabar_full_path",
+        "intrabar_full_path_volatility_shape",
+    ):
         full_path_columns = tuple(
             f"intrabar_full_path_level_{grid_point:02d}"
             for grid_point in INTRABAR_FULL_PATH_GRID_POINTS
@@ -2306,6 +2313,7 @@ def build_feature_frame(
 
     if feature_set in (
         "intrabar_volatility_shape",
+        "intrabar_full_path_volatility_shape",
         "intrabar_frequency_shape",
         "intrabar_ordinal_shape",
         "intrabar_signed_variation",
