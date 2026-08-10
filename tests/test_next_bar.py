@@ -643,6 +643,19 @@ class NextBarTests(unittest.TestCase):
             changed_frame.loc[:199, persistence_columns],
         )
 
+        flat_source = m1_frame(200)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "path_persistence"
+        )
+        self.assertTrue(
+            np.isfinite(flat_frame.loc[100:, persistence_columns]).all().all()
+        )
+        self.assertTrue(
+            flat_frame.loc[100:, persistence_columns].eq(0).all().all()
+        )
+
         config = TrainConfig(
             timeframes=(1,),
             feature_set="path_persistence",

@@ -2112,7 +2112,7 @@ def build_feature_frame(
             ).sum().replace(0, np.nan)
             add(
                 f"signed_efficiency_{window}",
-                np.log(close / close.shift(window)) / path_length,
+                (np.log(close / close.shift(window)) / path_length).fillna(0.0),
             )
 
         for window in (10, 20):
@@ -2120,7 +2120,7 @@ def build_feature_frame(
                 f"return_autocorrelation_{window}",
                 log_return_1.rolling(window, min_periods=window).corr(
                     log_return_1.shift(1)
-                ),
+                ).fillna(0.0),
             )
 
         direction = np.sign(log_return_1).astype("float64")
@@ -2139,33 +2139,47 @@ def build_feature_frame(
             ).var()
             add(
                 f"variance_ratio_{aggregation}_50",
-                aggregated_variance
-                / (aggregation * one_step_variance).replace(0, np.nan),
+                (
+                    aggregated_variance
+                    / (aggregation * one_step_variance).replace(0, np.nan)
+                )
+                .replace([np.inf, -np.inf], np.nan)
+                .fillna(0.0),
             )
 
         previous_up = direction.shift(1).gt(0)
         previous_down = direction.shift(1).lt(0)
+        previous_up_count = (
+            previous_up.astype("float64")
+            .rolling(20, min_periods=20)
+            .sum()
+            .replace(0, np.nan)
+        )
+        previous_down_count = (
+            previous_down.astype("float64")
+            .rolling(20, min_periods=20)
+            .sum()
+            .replace(0, np.nan)
+        )
         add(
             "up_persistence_20",
-            (previous_up & direction.gt(0))
-            .astype("float64")
-            .rolling(20, min_periods=20)
-            .sum()
-            / previous_up.astype("float64")
-            .rolling(20, min_periods=20)
-            .sum()
-            .replace(0, np.nan),
+            (
+                (previous_up & direction.gt(0))
+                .astype("float64")
+                .rolling(20, min_periods=20)
+                .sum()
+                / previous_up_count
+            ).fillna(0.0),
         )
         add(
             "down_persistence_20",
-            (previous_down & direction.lt(0))
-            .astype("float64")
-            .rolling(20, min_periods=20)
-            .sum()
-            / previous_down.astype("float64")
-            .rolling(20, min_periods=20)
-            .sum()
-            .replace(0, np.nan),
+            (
+                (previous_down & direction.lt(0))
+                .astype("float64")
+                .rolling(20, min_periods=20)
+                .sum()
+                / previous_down_count
+            ).fillna(0.0),
         )
         direction_group = direction.ne(direction.shift(1)).cumsum()
         signed_streak = (

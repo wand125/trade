@@ -13,6 +13,9 @@ input int InpBarsToSend = 60;
 input bool InpSendMultiTimeframes = true;
 input int InpHigherTimeframeBars = 40;
 input int InpSwingTimeframeBars = 120;   // H1/H4/D1 用。120本で H1=5日 / H4=20日 / D1=半年
+// H1/H4/D1 は 120 本ずつあり、毎回送るとペイロードの大半を占める。
+// 日足は1日1回しか変わらないので、送信間隔を上げるときはここで間引く。
+input int InpSwingTimeframeEverySeconds = 60;
 input int InpMaxHistoryHours = 168;
 input bool InpSendAccountInfo = true;
 input bool InpSendDealHistory = true;
@@ -43,6 +46,11 @@ input int InpCodexMaxPendingOrders = 4;
 input string InpCodexAllowedSymbol = "";
 
 CTrade Trade;
+
+// 間引いた上位足は、送らない回でも前回の JSON を使い回す。
+// そうしないと受け手から H1/H4/D1 が消え、スイングの判断ができなくなる。
+string CachedSwingTimeframesJson = "";
+datetime LastSwingTimeframeTime = 0;
 datetime LastRequestTime = 0;
 datetime LastTimerRequestTime = 0;
 string CurrentHistoryRequestId = "";
@@ -275,9 +283,17 @@ string BuildSnapshotJson()
       json += ",\"M15\":" + BuildTimeframeJson(PERIOD_M15, InpHigherTimeframeBars, digits);
       json += ",\"M30\":" + BuildTimeframeJson(PERIOD_M30, InpHigherTimeframeBars, digits);
       // スイング判断には日単位の地図が要る。M30までだと20時間しか見えない。
-      json += ",\"H1\":" + BuildTimeframeJson(PERIOD_H1, InpSwingTimeframeBars, digits);
-      json += ",\"H4\":" + BuildTimeframeJson(PERIOD_H4, InpSwingTimeframeBars, digits);
-      json += ",\"D1\":" + BuildTimeframeJson(PERIOD_D1, InpSwingTimeframeBars, digits);
+      datetime nowSwing = TimeLocal();
+      if(CachedSwingTimeframesJson == ""
+         || nowSwing - LastSwingTimeframeTime >= InpSwingTimeframeEverySeconds)
+      {
+         CachedSwingTimeframesJson =
+              ",\"H1\":" + BuildTimeframeJson(PERIOD_H1, InpSwingTimeframeBars, digits)
+            + ",\"H4\":" + BuildTimeframeJson(PERIOD_H4, InpSwingTimeframeBars, digits)
+            + ",\"D1\":" + BuildTimeframeJson(PERIOD_D1, InpSwingTimeframeBars, digits);
+         LastSwingTimeframeTime = nowSwing;
+      }
+      json += CachedSwingTimeframesJson;
       json += "}";
    }
    if(InpSendAccountInfo)
