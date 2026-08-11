@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-11 17:14 JST
+更新日時: 2026-08-11 17:44 JST
 
 ## 現在の状態
 
@@ -493,6 +493,10 @@
 - 方向維持0.53はbaseline比development accuracy/scoreと3期間proper scoreを改善したが、confirmation scoreは僅かに反転した。all accuracy 54.4998%とmean confidence 54.6705%は局所整合した。
 - 各role championとの固定閾値比較はProfile 0.515にaccuracy/score各1/7、Signed-body Quantile 0.525に0/7、Full Path 0.53に3/7、Structure 0.55に1/7だった。Full Path比confirmation accuracyとall proper scoreのbootstrap区間も明確に劣った。
 - Full Pathとの固定50/50 confidence平均はparent比score 2/7対5/7。Follow-through 0.55はall accuracy 55.4375%対mean confidence 56.5524%でWilson上限を超えて過信した。M15ではconfig・registry・authoritative予測・fair odds・policyを変更しない。
+- 同じDirectional Follow-through教師重みをM1へ固定移植し、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0で2,183,717 OOS行とartifact latest推論を確認した。
+- 単体はbaseline比+10/+636/+646件、通常25%方向blendは+301/+175/+476件でaccuracy/Brier/log lossを7/7fold改善した。しかし通常blendはPath/Shiftにaccuracy各2/7、Directional-Clarityに0/7・1 tieで、Clarity比all accuracy bootstrap区間も劣った。
+- 方向維持0.515はbaseline比development/confirmation/allのaccuracy・coverage・score・proper scoreを日次bootstrapで改善し、accuracy/score 6/7、Brier/log loss 7/7foldだった。ただしTransition guardにaccuracy 0/7、score 1/7、Disagreementに0/7、Distribution Shiftにscore 2/7だった。
+- Transition guardとの固定50/50 confidence平均はparent比accuracy 0/7、score 2/7。Follow 0.55はall 18,075件・54.8769%でも1.3288pt過信、confirmation 119件でedge未確認、0.575はconfirmation 0件だった。M1ではconfig・registry・authoritative予測・fair odds・policyを変更しない。
 
 ## ベースライン評価
 
@@ -623,3 +627,4 @@
 119. M30 Directional Follow-through sample weightingは次足body/range×方向側close到達度、0.5〜1.5・平均1のtrain weight、baseline 38特徴、HGB/Platt、全教師、expanding、標準損失1.0を固定し、式・parameter・blend weight・0.55・subgroupを履歴内再探索しない。単体/通常25%方向は再現専用、Haar親との固定50/50平均も方向候補へ追加しない。固定平均0.55だけをparallel confidence shadowへ採用し、fresh Pressure + AR head-to-head、confirmation score、固定セル整合、full runtime parityまでauthoritative confidence・fair odds・policyを変更しない。
 120. M5 Directional Follow-through固定移植はM30と同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・0.55を履歴内再探索しない。単体/通常方向、0.515 broad、Pressure/Profileとの固定50/50平均は再現専用。方向維持0.55だけをparallel high-confidence shadowへ採用し、fresh Profile 0.55 head-to-head、global/local calibration、full runtime parityまでPressure方向、Profile broad confidence、authoritative confidence・fair odds・policyを変更しない。
 121. M15 Directional Follow-through固定移植は同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・閾値を履歴内再探索しない。単体/通常方向、方向維持confidence、Pressure/Full Pathとの固定50/50平均を再現専用とし、Directional-Clarity方向とProfile/Quantile/Full Path/Structure confidenceを維持する。M15 config・registry・authoritative予測・fair odds・policyを変更しない。
+122. M1 Directional Follow-through固定移植は同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・閾値・subgroupを履歴内再探索しない。baseline改善は教師品質加工の感度として保存するが、方向はPath/Distribution Shift/Directional-Clarity、confidenceはTransition guard/Disagreement/Distribution Shiftを維持する。単体/通常/confidence/固定平均を再現専用とし、config・registry・authoritative予測・fair odds・policyを変更しない。
