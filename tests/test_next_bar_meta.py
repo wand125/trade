@@ -76,6 +76,27 @@ class NextBarMetaTests(unittest.TestCase):
         self.assertEqual(result["predicted_direction"].tolist(), ["up", "down"])
         self.assertTrue(result["correct"].all())
 
+    def test_meta_confidence_blend_preserves_target_direction(self):
+        target = predictions(15, [0.51, 0.49])
+        frame, _ = build_cross_timeframe_frame(
+            target,
+            {5: predictions(5, [0.55, 0.45]), 1: predictions(1, [0.52, 0.48])},
+            CrossTimeframeMetaConfig(),
+        )
+
+        unrestricted = apply_meta_blend(frame, np.array([0.10, 0.90]), 0.25)
+        preserved = apply_meta_blend(
+            frame,
+            np.array([0.10, 0.90]),
+            0.25,
+            preserve_target_direction=True,
+        )
+
+        self.assertEqual(unrestricted["predicted_direction"].tolist(), ["down", "up"])
+        self.assertEqual(preserved["predicted_direction"].tolist(), ["up", "down"])
+        self.assertTrue(preserved["meta_preserve_target_direction"].all())
+        self.assertTrue((preserved["confidence"] > 0.5).all())
+
     def test_asof_context_uses_only_latest_non_future_prediction(self):
         target = predictions(15, [0.60, 0.40])
         target["decision_timestamp"] = pd.to_datetime(
@@ -167,11 +188,13 @@ class NextBarMetaTests(unittest.TestCase):
                 "",
                 "--asof-context-timeframes",
                 "5,15",
+                "--preserve-target-direction",
             ]
         )
         self.assertEqual(args.target_timeframe, 1)
         self.assertEqual(args.context_timeframes, "")
         self.assertEqual(args.asof_context_timeframes, "5,15")
+        self.assertTrue(args.preserve_target_direction)
 
 
 if __name__ == "__main__":

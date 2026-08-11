@@ -10,6 +10,7 @@ import pandas as pd
 from scipy.stats import binomtest
 
 from trade_data.next_bar import evaluate_probabilities, wilson_accuracy_lower_bound
+from trade_data.next_bar_registry import read_prediction_sets as read_registered_prediction_sets
 
 
 DEFAULT_THRESHOLDS = (0.515, 0.52, 0.525, 0.53, 0.54, 0.55, 0.60)
@@ -17,24 +18,7 @@ DEFAULT_DEVELOPMENT_FOLDS = ("test2020", "test2021", "test2022", "test2023")
 
 
 def read_prediction_sets(directories: Sequence[Path], timeframe: int) -> pd.DataFrame:
-    if not directories:
-        raise ValueError("at least one prediction directory is required")
-    filename = f"m{timeframe}_walk_forward_predictions.parquet"
-    frames = []
-    for directory in directories:
-        path = directory / filename
-        if not path.exists():
-            raise FileNotFoundError(path)
-        frames.append(pd.read_parquet(path))
-    output = pd.concat(frames, ignore_index=True)
-    keys = ["fold", "timestamp"]
-    required = {*keys, "target_up", "probability_up", "confidence", "correct"}
-    missing = sorted(required - set(output.columns))
-    if missing:
-        raise ValueError(f"predictions are missing columns: {', '.join(missing)}")
-    if output.duplicated(keys).any():
-        raise ValueError("prediction sets contain duplicate fold/timestamp rows")
-    return output.sort_values(keys).reset_index(drop=True)
+    return read_registered_prediction_sets(directories, timeframe)
 
 
 def assert_aligned(reference: pd.DataFrame, candidate: pd.DataFrame, name: str) -> None:

@@ -54,6 +54,8 @@ WindowsでState Correctness対象5 testと保存artifactのlatest推論を確認
 
 ## 運用
 
+> 2026-08-11 23:09 JST追記: 画像生成との同時利用をさらに確認したため、GPU運用はreport 00132のCPU-default・exclusive-window方式へ強化した。以下のGPU例は履歴記録であり、現在の実行条件には使わない。
+
 CPU研究は次のwrapperを必ず通す。
 
 ```bash

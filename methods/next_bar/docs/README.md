@@ -26,6 +26,21 @@ train           calibration             test
 
 リポジトリルートから実行する。
 
+新規学習のcanonical環境は共有Windows/WSL2である。画像生成・ローカルAIを優先するため、通常のCPU研究は低優先度wrapperを通す。標準で8 thread、available memory 16GiB、load 8をgateし、GPUをprocessから隠す。busy時のexit 75は失敗ではなく延期として扱う。
+
+```bash
+methods/next_bar/scripts/run_low_priority_worker.sh COMMAND [ARG ...]
+```
+
+GPUは画像生成を止めた専用時間帯だけ使う。明示enable、idle gate、exclusive windowの3指定に加え、開始時GPU使用量2,048MB以下・utilization 10%以下を要求する。
+
+```bash
+TRADE_ENABLE_GPU=1 \
+TRADE_REQUIRE_IDLE_GPU=1 \
+TRADE_GPU_EXCLUSIVE_WINDOW=1 \
+methods/next_bar/scripts/run_low_priority_worker.sh COMMAND [ARG ...]
+```
+
 ```bash
 uv run python methods/next_bar/scripts/run.py train-evaluate \
   --input data/processed/histdata/xauusd/xauusd_m1.parquet \

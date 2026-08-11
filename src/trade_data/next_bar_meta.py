@@ -13,6 +13,7 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from trade_data.next_bar import context_diagnostics, evaluate_probabilities
+from trade_data.next_bar_ensemble import blend_probability_values
 from trade_data.next_bar_overlay import read_prediction_sets
 
 
@@ -37,6 +38,7 @@ class CrossTimeframeMetaConfig:
     asof_max_age_minutes: int = 15
     regularization_c: float = 0.10
     meta_weight: float = 0.25
+    preserve_target_direction: bool = False
     random_seed: int = 42
 
 
@@ -142,14 +144,17 @@ def apply_meta_blend(
     frame: pd.DataFrame,
     meta_probability: np.ndarray,
     meta_weight: float,
+    preserve_target_direction: bool = False,
 ) -> pd.DataFrame:
     if not 0 <= meta_weight <= 1:
         raise ValueError("meta_weight must be between 0 and 1")
     output = frame.copy()
     output["meta_probability_up"] = np.asarray(meta_probability, dtype="float64")
-    output["probability_up"] = (
-        (1 - meta_weight) * output["target_probability_up"]
-        + meta_weight * output["meta_probability_up"]
+    output["probability_up"] = blend_probability_values(
+        output["target_probability_up"].to_numpy(dtype="float64"),
+        output["meta_probability_up"].to_numpy(dtype="float64"),
+        meta_weight,
+        preserve_target_direction,
     )
     output["predicted_up"] = output["probability_up"].ge(0.5).astype("int8")
     output["predicted_direction"] = np.where(
@@ -160,6 +165,7 @@ def apply_meta_blend(
     )
     output["correct"] = output["predicted_up"].eq(output["target_up"].astype("int8"))
     output["meta_weight"] = meta_weight
+    output["meta_preserve_target_direction"] = preserve_target_direction
     return output
 
 
@@ -237,7 +243,12 @@ def run_cross_timeframe_meta(
         )
         model.fit(train[feature_columns], train["target_up"].astype("int8"))
         meta_probability = model.predict_proba(test[feature_columns])[:, 1]
-        predicted = apply_meta_blend(test, meta_probability, config.meta_weight)
+        predicted = apply_meta_blend(
+            test,
+            meta_probability,
+            config.meta_weight,
+            config.preserve_target_direction,
+        )
         baseline_metrics = _metric_set(predicted, "target_probability_up")
         meta_metrics = _metric_set(predicted, "meta_probability_up")
         blend_metrics = _metric_set(predicted, "probability_up")
@@ -382,6 +393,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--regularization-c", type=float, default=0.10)
     parser.add_argument("--meta-weight", type=float, default=0.25)
     parser.add_argument(
+        "--preserve-target-direction",
+        action="store_true",
+        help="Use the meta model only for confidence strength and keep target direction.",
+    )
+    parser.add_argument(
         "--asof-context-timeframes",
         default="",
         help="Comma-separated context timeframes joined from the latest prediction at or before the target decision.",
@@ -415,6 +431,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             asof_max_age_minutes=args.asof_max_age_minutes,
             regularization_c=args.regularization_c,
             meta_weight=args.meta_weight,
+            preserve_target_direction=args.preserve_target_direction,
         ),
         target_prediction_dirs=args.target_predictions_dir,
         context_prediction_dirs=args.context_predictions_dir,
