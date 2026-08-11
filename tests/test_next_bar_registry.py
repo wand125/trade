@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from methods.next_bar.scripts.compare_fixed_candidates import (
+    build_parser as build_fixed_candidate_comparison_parser,
+)
 from trade_data.next_bar_registry import (
     _rank_roles,
     align_prediction_subset,
@@ -25,6 +28,33 @@ from trade_data.next_bar_registry import (
 
 
 class NextBarRegistryTests(unittest.TestCase):
+    def test_fixed_candidate_comparison_cli_accepts_split_prediction_sets(self):
+        args = build_fixed_candidate_comparison_parser().parse_args(
+            [
+                "--first-dir",
+                "first_early",
+                "--first-dir",
+                "first_late",
+                "--first-name",
+                "first",
+                "--second-dir",
+                "second_early",
+                "--second-dir",
+                "second_late",
+                "--second-name",
+                "second",
+                "--threshold",
+                "0.55",
+                "--output",
+                "comparison.json",
+            ]
+        )
+
+        self.assertEqual(args.first_dir, [Path("first_early"), Path("first_late")])
+        self.assertEqual(
+            args.second_dir, [Path("second_early"), Path("second_late")]
+        )
+
     def test_pairwise_confidence_complementarity_uses_exclusive_development_edge(self):
         reference = pd.DataFrame(
             {

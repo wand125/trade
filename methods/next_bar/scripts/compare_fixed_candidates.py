@@ -22,9 +22,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Compare two aligned next-bar candidates at fixed thresholds."
     )
-    parser.add_argument("--first-dir", type=Path, required=True)
+    parser.add_argument(
+        "--first-dir",
+        type=Path,
+        action="append",
+        required=True,
+        help="Repeat for non-overlapping chronological first-candidate prediction sets.",
+    )
     parser.add_argument("--first-name", required=True)
-    parser.add_argument("--second-dir", type=Path, required=True)
+    parser.add_argument(
+        "--second-dir",
+        type=Path,
+        action="append",
+        required=True,
+        help="Repeat for non-overlapping chronological second-candidate prediction sets.",
+    )
     parser.add_argument("--second-name", required=True)
     parser.add_argument("--threshold", type=float, required=True)
     parser.add_argument(
@@ -51,8 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     report = compare_fixed_candidate_frames(
-        read_prediction_sets([args.first_dir], args.timeframe),
-        read_prediction_sets([args.second_dir], args.timeframe),
+        read_prediction_sets(args.first_dir, args.timeframe),
+        read_prediction_sets(args.second_dir, args.timeframe),
         args.threshold,
         args.first_name,
         args.second_name,
