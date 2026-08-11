@@ -950,6 +950,27 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "distribution_shift")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_distribution_shift_features_transfer_to_m5(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "distribution_shift"
+        )
+        shift_columns = [
+            name
+            for name in feature_columns
+            if name.startswith("distribution_shift_")
+        ]
+
+        self.assertEqual(len(shift_columns), 16)
+        self.assertEqual(len(feature_columns), 54)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertGreater(len(frame[shift_columns].dropna()), 0)
+        self.assertTrue(np.isfinite(frame[shift_columns].dropna()).all().all())
+
     def test_rolling_distribution_shape_is_exact_stationary_causal_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
