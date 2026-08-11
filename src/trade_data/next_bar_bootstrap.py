@@ -9,6 +9,7 @@ import pandas as pd
 
 from trade_data.next_bar_registry import (
     DEFAULT_DEVELOPMENT_FOLDS,
+    _selection_mask,
     assert_aligned,
     read_prediction_sets,
 )
@@ -38,6 +39,8 @@ def _daily_aggregates(
     second: pd.DataFrame,
     first_threshold: float,
     second_threshold: float,
+    first_selection_column: str | None = None,
+    second_selection_column: str | None = None,
 ) -> pd.DataFrame:
     assert_aligned(second, first, "first")
     timestamp = pd.to_datetime(first["timestamp"], utc=True)
@@ -48,8 +51,12 @@ def _daily_aggregates(
     second_probability = np.clip(
         second["probability_up"].to_numpy(dtype="float64"), 1e-12, 1 - 1e-12
     )
-    first_selected = first["confidence"].ge(first_threshold).to_numpy(dtype="int64")
-    second_selected = second["confidence"].ge(second_threshold).to_numpy(dtype="int64")
+    first_selected = _selection_mask(
+        first, first_threshold, first_selection_column
+    ).to_numpy(dtype="int64")
+    second_selected = _selection_mask(
+        second, second_threshold, second_selection_column
+    ).to_numpy(dtype="int64")
     first_correct = first["correct"].to_numpy(dtype="int64")
     second_correct = second["correct"].to_numpy(dtype="int64")
     source = pd.DataFrame(
@@ -164,6 +171,8 @@ def paired_daily_block_bootstrap(
     random_seed: int = 42,
     development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
     second_threshold: float | None = None,
+    first_selection_column: str | None = None,
+    second_selection_column: str | None = None,
 ) -> dict[str, object]:
     if second_threshold is None:
         second_threshold = threshold
@@ -188,6 +197,8 @@ def paired_daily_block_bootstrap(
             second.loc[mask].reset_index(drop=True),
             threshold,
             second_threshold,
+            first_selection_column,
+            second_selection_column,
         )
         if daily.empty:
             continue
@@ -219,6 +230,8 @@ def paired_daily_block_bootstrap(
         "method": "paired nonparametric UTC-day block bootstrap",
         "first_threshold": threshold,
         "second_threshold": second_threshold,
+        "first_selection_column": first_selection_column,
+        "second_selection_column": second_selection_column,
         "iterations": iterations,
         "random_seed": random_seed,
         "development_folds": list(development_folds),
@@ -238,6 +251,8 @@ def run_paired_daily_block_bootstrap(
     random_seed: int,
     output: Path,
     second_threshold: float | None = None,
+    first_selection_column: str | None = None,
+    second_selection_column: str | None = None,
 ) -> dict[str, object]:
     report = paired_daily_block_bootstrap(
         read_prediction_sets(first_dirs, timeframe),
@@ -246,6 +261,8 @@ def run_paired_daily_block_bootstrap(
         iterations,
         random_seed,
         second_threshold=second_threshold,
+        first_selection_column=first_selection_column,
+        second_selection_column=second_selection_column,
     )
     report["first_name"] = first_name
     report["second_name"] = second_name

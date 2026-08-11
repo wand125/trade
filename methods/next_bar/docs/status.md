@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-11 17:44 JST
+更新日時: 2026-08-11 18:00 JST
 
 ## 現在の状態
 
@@ -497,6 +497,10 @@
 - 単体はbaseline比+10/+636/+646件、通常25%方向blendは+301/+175/+476件でaccuracy/Brier/log lossを7/7fold改善した。しかし通常blendはPath/Shiftにaccuracy各2/7、Directional-Clarityに0/7・1 tieで、Clarity比all accuracy bootstrap区間も劣った。
 - 方向維持0.515はbaseline比development/confirmation/allのaccuracy・coverage・score・proper scoreを日次bootstrapで改善し、accuracy/score 6/7、Brier/log loss 7/7foldだった。ただしTransition guardにaccuracy 0/7、score 1/7、Disagreementに0/7、Distribution Shiftにscore 2/7だった。
 - Transition guardとの固定50/50 confidence平均はparent比accuracy 0/7、score 2/7。Follow 0.55はall 18,075件・54.8769%でも1.3288pt過信、confirmation 119件でedge未確認、0.575はconfirmation 0件だった。M1ではconfig・registry・authoritative予測・fair odds・policyを変更しない。
+- M1 Transition guard 0.515とDistribution Shift 0.51を、確率を混ぜずfirst/second/union/intersectionの固定採用集合として比較した。全2,183,717行のkey・方向を整列し、各source confidenceの局所整合と明示boolean採用列の日次bootstrapも追加した。
+- guard集合はall 349,784行中349,101行がShiftと共通で99.80%以上包含された。guard-onlyは683行・52.1230%だがWilson下限48.3751%、confirmationは23行・43.4783%で、独立した追加edgeを確認できなかった。
+- union−Shiftとintersection−guardの日次bootstrapはdevelopment/confirmation/allのaccuracy・selection scoreが全て0跨ぎで、確定したのは最大0.0313ptのcoverage増減だけだった。development目的関数首位も既存guardのままである。
+- developmentではguard confidenceが集合内実績に整合したが、confirmationはguard laneでmean 51.9539%に対し実績53.3560%、Shift laneで51.5327%に対し51.8985%となり期間間で過信から過小評価へ移った。集合演算は新しい各行oddsを定義しないためunion/intersectionを再現専用とし、既存3 confidence役割、config・registry・fair odds・policyを変更しない。
 
 ## ベースライン評価
 
@@ -628,3 +632,4 @@
 120. M5 Directional Follow-through固定移植はM30と同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・0.55を履歴内再探索しない。単体/通常方向、0.515 broad、Pressure/Profileとの固定50/50平均は再現専用。方向維持0.55だけをparallel high-confidence shadowへ採用し、fresh Profile 0.55 head-to-head、global/local calibration、full runtime parityまでPressure方向、Profile broad confidence、authoritative confidence・fair odds・policyを変更しない。
 121. M15 Directional Follow-through固定移植は同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・閾値を履歴内再探索しない。単体/通常方向、方向維持confidence、Pressure/Full Pathとの固定50/50平均を再現専用とし、Directional-Clarity方向とProfile/Quantile/Full Path/Structure confidenceを維持する。M15 config・registry・authoritative予測・fair odds・policyを変更しない。
 122. M1 Directional Follow-through固定移植は同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・閾値・subgroupを履歴内再探索しない。baseline改善は教師品質加工の感度として保存するが、方向はPath/Distribution Shift/Directional-Clarity、confidenceはTransition guard/Disagreement/Distribution Shiftを維持する。単体/通常/confidence/固定平均を再現専用とし、config・registry・authoritative予測・fair odds・policyを変更しない。
+123. M1 Transition guard 0.515とDistribution Shift 0.51の固定採用集合union/intersectionは再現専用とする。親の確率・confidenceを混ぜずboolean集合だけを比較したが、guardの99.80%以上がShiftに含まれ、accuracy・selection scoreのbootstrap増分と新しいfair oddsを得られなかった。閾値、source順、集合固有校正を履歴内再探索せず、Transition guard accuracy specialist、Distribution Shift ultra-broad、Disagreement balanced challengerを独立維持する。

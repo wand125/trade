@@ -27,6 +27,14 @@ def main() -> int:
     parser.add_argument("--timeframe", type=int, default=15)
     parser.add_argument("--iterations", type=int, default=2_000)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--first-selection-column",
+        help="Optional boolean column used instead of thresholding first confidence.",
+    )
+    parser.add_argument(
+        "--second-selection-column",
+        help="Optional boolean column used instead of thresholding second confidence.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     report = run_paired_daily_block_bootstrap(
@@ -40,6 +48,8 @@ def main() -> int:
         args.random_seed,
         args.output,
         args.second_threshold,
+        args.first_selection_column,
+        args.second_selection_column,
     )
     print(json.dumps(report["periods"], ensure_ascii=False, indent=2))
     return 0

@@ -177,6 +177,245 @@ def blend_confidence_frames(
     return output
 
 
+def _selection_mask(
+    frame: pd.DataFrame,
+    threshold: float,
+    selection_column: str | None = None,
+) -> pd.Series:
+    if not 0.5 <= threshold < 1:
+        raise ValueError("threshold must be between 0.5 inclusive and 1")
+    if selection_column is None:
+        if "confidence" not in frame:
+            raise ValueError("predictions are missing confidence")
+        return frame["confidence"].ge(threshold)
+    if selection_column not in frame:
+        raise ValueError(f"predictions are missing selection column: {selection_column}")
+    values = frame[selection_column]
+    if values.isna().any() or not values.isin([True, False]).all():
+        raise ValueError("selection column must contain only finite booleans")
+    return values.astype("bool")
+
+
+def selection_mask_metrics(
+    frame: pd.DataFrame, selected: pd.Series | np.ndarray
+) -> dict[str, float | int | None]:
+    resolved = pd.Series(selected, index=frame.index)
+    if len(resolved) != len(frame) or resolved.isna().any():
+        raise ValueError("selection mask must align with predictions")
+    if not resolved.isin([True, False]).all():
+        raise ValueError("selection mask must contain only booleans")
+    chosen = frame.loc[resolved.astype("bool")]
+    coverage = len(chosen) / len(frame) if len(frame) else 0.0
+    if chosen.empty:
+        return {
+            "rows": 0,
+            "coverage": coverage,
+            "accuracy": None,
+            "wilson_lower": None,
+            "selection_score": None,
+        }
+    successes = int(chosen["correct"].sum())
+    lower = wilson_accuracy_lower_bound(successes, len(chosen))
+    return {
+        "rows": len(chosen),
+        "coverage": coverage,
+        "accuracy": float(successes / len(chosen)),
+        "wilson_lower": lower,
+        "selection_score": float(np.sqrt(coverage) * (lower - 0.5)),
+    }
+
+
+def selection_source_reliability(
+    frame: pd.DataFrame, selected: pd.Series | np.ndarray
+) -> dict[str, object]:
+    """Audit each source's stated odds inside one fixed selection set."""
+    resolved = pd.Series(selected, index=frame.index)
+    if len(resolved) != len(frame) or resolved.isna().any():
+        raise ValueError("selection mask must align with predictions")
+    if not resolved.isin([True, False]).all():
+        raise ValueError("selection mask must contain only booleans")
+    chosen = frame.loc[resolved.astype("bool")]
+    output: dict[str, object] = {}
+    for source in ("first", "second"):
+        column = f"{source}_source_confidence"
+        if column not in chosen:
+            raise ValueError(f"predictions are missing source confidence: {column}")
+        source_frame = chosen[["correct", column]].rename(
+            columns={column: "confidence"}
+        )
+        output[source] = reliability_metrics(source_frame)
+    return output
+
+
+def combine_confidence_selection_frames(
+    first: pd.DataFrame,
+    second: pd.DataFrame,
+    first_threshold: float,
+    second_threshold: float,
+    operator: str,
+) -> pd.DataFrame:
+    """Combine fixed selection sets while preserving the first probability/confidence."""
+    if operator not in {"first", "second", "union", "intersection"}:
+        raise ValueError("selection operator must be first, second, union, or intersection")
+    assert_aligned(first, second, "selection contributor")
+    first_correct = first["correct"].to_numpy(dtype="bool")
+    second_correct = second["correct"].to_numpy(dtype="bool")
+    if not np.array_equal(first_correct, second_correct):
+        raise ValueError("selection candidates must preserve the same direction")
+    first_selected = _selection_mask(first, first_threshold)
+    second_selected = _selection_mask(second, second_threshold)
+    masks = {
+        "first": first_selected,
+        "second": second_selected,
+        "union": first_selected | second_selected,
+        "intersection": first_selected & second_selected,
+    }
+    output = first.copy()
+    output["first_source_confidence"] = first["confidence"].to_numpy(dtype="float64")
+    output["second_source_confidence"] = second["confidence"].to_numpy(dtype="float64")
+    output["first_source_selected"] = first_selected.to_numpy(dtype="bool")
+    output["second_source_selected"] = second_selected.to_numpy(dtype="bool")
+    output["confidence_selection_eligible"] = masks[operator].to_numpy(dtype="bool")
+    output["confidence_selection_operator"] = operator
+    output["first_source_threshold"] = first_threshold
+    output["second_source_threshold"] = second_threshold
+    return output
+
+
+def compare_confidence_selection_operators(
+    first: pd.DataFrame,
+    second: pd.DataFrame,
+    first_threshold: float,
+    second_threshold: float,
+    first_name: str = "first",
+    second_name: str = "second",
+    development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
+) -> dict[str, object]:
+    """Compare fixed union/intersection sets without inventing synthetic odds."""
+    combined = {
+        operator: combine_confidence_selection_frames(
+            first, second, first_threshold, second_threshold, operator
+        )
+        for operator in ("first", "second", "union", "intersection")
+    }
+    periods: dict[str, object] = {}
+    for period, period_mask in _period_masks(first, development_folds).items():
+        period_frames = {
+            operator: frame.loc[period_mask]
+            for operator, frame in combined.items()
+        }
+        first_selected = period_frames["first"]["confidence_selection_eligible"]
+        second_selected = period_frames["second"]["confidence_selection_eligible"]
+        segment_masks = {
+            "both": first_selected & second_selected,
+            "first_only": first_selected & ~second_selected,
+            "second_only": second_selected & ~first_selected,
+            "neither": ~first_selected & ~second_selected,
+        }
+        periods[period] = {
+            "operators": {
+                operator: {
+                    **selection_mask_metrics(
+                        frame, frame["confidence_selection_eligible"]
+                    ),
+                    "source_reliability": selection_source_reliability(
+                        frame, frame["confidence_selection_eligible"]
+                    ),
+                }
+                for operator, frame in period_frames.items()
+            },
+            "segments": {
+                segment: {
+                    **selection_mask_metrics(period_frames["first"], mask),
+                    "source_reliability": selection_source_reliability(
+                        period_frames["first"], mask
+                    ),
+                }
+                for segment, mask in segment_masks.items()
+            },
+        }
+    development_scores = {
+        operator: metrics["selection_score"]
+        for operator, metrics in periods["development"]["operators"].items()
+    }
+    selected_operator = max(
+        development_scores,
+        key=lambda operator: (
+            float("-inf")
+            if development_scores[operator] is None
+            else float(development_scores[operator])
+        ),
+    )
+    composite_scores = {
+        operator: development_scores[operator]
+        for operator in ("union", "intersection")
+    }
+    selected_composite = max(
+        composite_scores,
+        key=lambda operator: (
+            float("-inf")
+            if composite_scores[operator] is None
+            else float(composite_scores[operator])
+        ),
+    )
+    folds: dict[str, object] = {}
+    for fold in first["fold"].drop_duplicates():
+        fold_mask = first["fold"].eq(fold)
+        folds[str(fold)] = {
+            operator: selection_mask_metrics(
+                frame.loc[fold_mask],
+                frame.loc[fold_mask, "confidence_selection_eligible"],
+            )
+            for operator, frame in combined.items()
+        }
+
+    def fold_wins(candidate: str, parent: str, metric: str) -> dict[str, int]:
+        candidate_wins = 0
+        parent_wins = 0
+        ties = 0
+        for fold_metrics in folds.values():
+            candidate_value = fold_metrics[candidate][metric]
+            parent_value = fold_metrics[parent][metric]
+            if candidate_value is None and parent_value is None:
+                ties += 1
+            elif parent_value is None or (
+                candidate_value is not None and candidate_value > parent_value
+            ):
+                candidate_wins += 1
+            elif candidate_value is None or parent_value > candidate_value:
+                parent_wins += 1
+            else:
+                ties += 1
+        return {candidate: candidate_wins, parent: parent_wins, "ties": ties}
+
+    return {
+        "format_version": 1,
+        "first_name": first_name,
+        "second_name": second_name,
+        "first_threshold": first_threshold,
+        "second_threshold": second_threshold,
+        "development_folds": list(development_folds),
+        "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+        "confirmation_usage": "audit only",
+        "development_selected_operator": selected_operator,
+        "development_selected_composite": selected_composite,
+        "periods": periods,
+        "folds": folds,
+        "fold_wins": {
+            "union_vs_second_accuracy": fold_wins("union", "second", "accuracy"),
+            "union_vs_second_selection_score": fold_wins(
+                "union", "second", "selection_score"
+            ),
+            "intersection_vs_first_accuracy": fold_wins(
+                "intersection", "first", "accuracy"
+            ),
+            "intersection_vs_first_selection_score": fold_wins(
+                "intersection", "first", "selection_score"
+            ),
+        },
+    }
+
+
 def assert_aligned(
     reference: pd.DataFrame, candidate: pd.DataFrame, candidate_id: str
 ) -> None:

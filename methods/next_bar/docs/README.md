@@ -338,6 +338,10 @@ uv run python methods/next_bar/scripts/compare_fixed_candidates.py \
 
 期間別の確率品質・lane指標に加え、選択集合のJaccard、片側だけが選んだ行数、fold別accuracy/selection score勝敗を出力する。ProfileはStructureへscore 7/7、accuracy 6/7 foldで勝ち、同じ広coverage閾値での増分効果を確認した。
 
+異なる固定閾値のconfidence候補を、確率や信頼度を合成せず採用集合だけでunion/intersectionする場合は `methods/next_bar/scripts/confidence_selection_operators.py` を使う。出力はfirstの方向確率・confidenceを保持し、両source confidence、両sourceの採否、最終boolean採用列を別々に保存する。M1 Transition guard 0.515とDistribution Shift 0.51ではguard集合の99.80%以上がShiftに含まれ、union/intersectionのaccuracy・selection score差は20,000回の日次bootstrapで未確定だった。集合内のsource confidenceも期間間で過信から過小評価へ移ったため、合成集合は再現専用とし、fair odds・policyへ使わない。
+
+明示boolean採用列をbootstrapする場合は `bootstrap_fixed_candidates.py` の `--first-selection-column` / `--second-selection-column` を使う。集合演算後のconfidenceを閾値判定し直さず、保存済み採否をそのままUTC日単位で比較する。
+
 2つのconfidence候補を固定した非重複帯・累積閾値で比較し、信頼度をオッズとして監査する:
 
 ```bash

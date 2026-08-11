@@ -10,6 +10,8 @@ from trade_data.next_bar_registry import (
     align_prediction_subset,
     apply_confidence_exclusion_guard,
     blend_confidence_frames,
+    combine_confidence_selection_frames,
+    compare_confidence_selection_operators,
     compare_confidence_reliability_frames,
     compare_fixed_candidate_frames,
     confidence_reliability_profile,
@@ -22,6 +24,45 @@ from trade_data.next_bar_registry import (
 
 
 class NextBarRegistryTests(unittest.TestCase):
+    def test_confidence_selection_operators_preserve_odds_and_combine_sets(self):
+        first = pd.DataFrame(
+            {
+                "fold": ["test2020"] * 4,
+                "timestamp": pd.date_range("2020-01-01", periods=4, freq="min", tz="UTC"),
+                "target_up": [1, 0, 1, 0],
+                "probability_up": [0.56, 0.44, 0.52, 0.48],
+                "confidence": [0.52, 0.52, 0.51, 0.51],
+                "correct": [True, True, True, True],
+            }
+        )
+        second = first.copy()
+        second["probability_up"] = [0.57, 0.43, 0.53, 0.47]
+        second["confidence"] = [0.52, 0.50, 0.52, 0.50]
+
+        union = combine_confidence_selection_frames(first, second, 0.515, 0.515, "union")
+        intersection = combine_confidence_selection_frames(
+            first, second, 0.515, 0.515, "intersection"
+        )
+        report = compare_confidence_selection_operators(
+            first, second, 0.515, 0.515
+        )
+
+        self.assertEqual(union["confidence_selection_eligible"].tolist(), [True, True, True, False])
+        self.assertEqual(intersection["confidence_selection_eligible"].tolist(), [True, False, False, False])
+        self.assertEqual(union["probability_up"].tolist(), first["probability_up"].tolist())
+        self.assertEqual(report["periods"]["development"]["segments"]["both"]["rows"], 1)
+        both_reliability = report["periods"]["development"]["segments"]["both"][
+            "source_reliability"
+        ]
+        self.assertEqual(both_reliability["first"]["mean_confidence"], 0.52)
+        self.assertEqual(both_reliability["second"]["mean_confidence"], 0.52)
+        self.assertIn("intersection_vs_first_accuracy", report["fold_wins"])
+
+        mismatched = second.copy()
+        mismatched.loc[0, "correct"] = False
+        with self.assertRaisesRegex(ValueError, "same direction"):
+            combine_confidence_selection_frames(first, mismatched, 0.515, 0.515, "union")
+
     def test_prediction_subset_uses_exact_reference_order_and_target(self):
         predictions = pd.DataFrame(
             {

@@ -91,6 +91,33 @@ class NextBarBootstrapTests(unittest.TestCase):
             report["periods"]["all"]["metrics"]["brier_score"]["available"]
         )
 
+    def test_daily_bootstrap_accepts_explicit_boolean_selection_sets(self):
+        first, second = prediction_frames()
+        first["selected"] = first["correct"]
+        report = paired_daily_block_bootstrap(
+            first,
+            second,
+            0.99,
+            iterations=100,
+            random_seed=7,
+            second_threshold=0.53,
+            first_selection_column="selected",
+        )
+
+        accuracy = report["periods"]["all"]["metrics"]["lane_accuracy"]
+        self.assertGreater(accuracy["delta_first_minus_second"], 0)
+        self.assertEqual(report["first_selection_column"], "selected")
+
+        first["selected"] = "invalid"
+        with self.assertRaisesRegex(ValueError, "booleans"):
+            paired_daily_block_bootstrap(
+                first,
+                second,
+                0.99,
+                iterations=100,
+                first_selection_column="selected",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
