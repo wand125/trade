@@ -1,0 +1,141 @@
+{
+  "format_version": 1,
+  "status": "windows_canonical_forward_candidate_distribution_shift_coverage",
+  "target_timeframe_minutes": 30,
+  "canonical_training_platform": "Windows/WSL2 x86 Linux",
+  "direction_source": "baseline HGB",
+  "feature_candidate": {
+    "feature_set": "distribution_shift",
+    "baseline_feature_count": 38,
+    "additional_feature_count": 16,
+    "total_feature_count": 54,
+    "windows": {
+      "recent": 8,
+      "reference": 64,
+      "rank": 128
+    },
+    "raw_price_levels_used_as_model_features": false,
+    "future_rows_used_as_model_features": false
+  },
+  "training": {
+    "model_type": "hgb",
+    "max_iter": 200,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 100,
+    "l2_regularization": 1.0,
+    "max_train_rows": 750000,
+    "probability_calibration": "platt",
+    "train_weighting": "uniform",
+    "train_target_filter": "all",
+    "random_seed": 42,
+    "expanding_training": true,
+    "loss_multiplier": 1.0
+  },
+  "confidence_candidate": {
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.52,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "role": "parallel M30 coverage-aware confidence challenger"
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/baseline_m30_windows_canonical_001",
+    "candidate_oos": "experiments/next_bar/distribution_shift_m30_windows_canonical_001",
+    "direction_blend": "experiments/next_bar/distribution_shift_m30_direction_blend_windows_canonical_001",
+    "confidence_blend": "experiments/next_bar/distribution_shift_m30_confidence_blend_windows_canonical_001",
+    "analysis": "experiments/next_bar/distribution_shift_m30_windows_candidate_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/distribution_shift_m30_confidence_vs_baseline_windows_bootstrap_20000.json",
+    "pressure_oos": "experiments/next_bar/intrabar_pressure_m30_windows_canonical_001",
+    "pressure_blend": "experiments/next_bar/intrabar_pressure_m30_confidence_blend_windows_canonical_001",
+    "pressure_comparison": "experiments/next_bar/distribution_shift_m30_vs_pressure_052_windows_comparison.json",
+    "pressure_bootstrap": "experiments/next_bar/distribution_shift_m30_vs_pressure_052_windows_bootstrap_20000.json",
+    "profile_oos": "experiments/next_bar/intrabar_profile_m30_windows_canonical_001",
+    "profile_blend": "experiments/next_bar/intrabar_profile_m30_confidence_blend_windows_canonical_001",
+    "profile_comparison": "experiments/next_bar/distribution_shift_m30_vs_profile_052_windows_comparison.json",
+    "profile_bootstrap": "experiments/next_bar/distribution_shift_m30_vs_profile_052_windows_bootstrap_20000.json",
+    "reliability": "experiments/next_bar/distribution_shift_m30_vs_pressure_windows_reliability.json"
+  },
+  "evidence": {
+    "rows": 71260,
+    "confidence_052": {
+      "development": {
+        "coverage": 0.40227986880433036,
+        "accuracy": 0.5338958891612977,
+        "mean_confidence": 0.5380333489579726,
+        "selection_score": 0.016811846675767465
+      },
+      "confirmation": {
+        "coverage": 0.33787643252232386,
+        "accuracy": 0.5347742349668307,
+        "mean_confidence": 0.5339989640816578,
+        "selection_score": 0.014328033896771133
+      },
+      "all": {
+        "coverage": 0.3772803817008139,
+        "accuracy": 0.5342012274502511,
+        "mean_confidence": 0.5366308806278987,
+        "selection_score": 0.017342171394681746
+      }
+    },
+    "against_windows_baseline": {
+      "accuracy_improved_folds": 5,
+      "selection_score_improved_folds": 4,
+      "brier_improved_folds": 6,
+      "log_loss_improved_folds": 6,
+      "ece_improved_folds": 6,
+      "all_accuracy_delta_points": 0.2625350545124583,
+      "all_accuracy_bootstrap_95_points": [0.050520, 0.477064],
+      "all_selection_score_delta": 0.00141942343340732,
+      "all_selection_score_bootstrap_95": [0.000111946, 0.002744600],
+      "all_brier_delta": -0.000026605824808151324,
+      "all_brier_bootstrap_95": [-0.0000508395, -0.00000255056],
+      "all_log_loss_delta": -0.00005390209659950074,
+      "all_log_loss_bootstrap_95": [-0.000102587, -0.00000547039]
+    },
+    "against_windows_pressure_052": {
+      "accuracy_wins": 4,
+      "selection_score_wins": 5,
+      "all_accuracy_delta_points": 0.07850128631504694,
+      "all_accuracy_bootstrap_95_points": [-0.175209, 0.327645],
+      "all_coverage_delta_points": 0.4785293292169479,
+      "all_coverage_bootstrap_95_points": [0.254128, 0.702774],
+      "all_selection_score_delta": 0.0006130999694818687,
+      "all_selection_score_bootstrap_95": [-0.000943442, 0.002136850],
+      "replace_pressure": false
+    },
+    "against_windows_profile_052": {
+      "accuracy_wins": 4,
+      "selection_score_wins": 5,
+      "all_accuracy_delta_points": 0.029815762004758994,
+      "all_accuracy_bootstrap_95_points": [-0.209172, 0.266128],
+      "all_coverage_delta_points": 0.2890822340724075,
+      "all_coverage_bootstrap_95_points": [0.101392, 0.476278],
+      "all_selection_score_delta": 0.0002632047065919546,
+      "all_selection_score_bootstrap_95": [-0.001199572, 0.001710195]
+    },
+    "rejected_variants": {
+      "standalone_direction_net_fixes_all": -17,
+      "normal_direction_blend_net_fixes_all": 4,
+      "normal_direction_blend_mcnemar_exact_p": 0.9527757435284863,
+      "confidence_055_score_wins_against_pressure": 3,
+      "confidence_055_score_losses_against_pressure": 4,
+      "equal_shift_pressure_052": "rejected because development and all selection score were below Shift alone"
+    }
+  },
+  "promotion": {
+    "emit_as_parallel_coverage_challenger": true,
+    "replace_pressure_confidence_candidate": false,
+    "replace_pressure_ar_precision_shadow": false,
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_paper_or_live_policy": false,
+    "requirements": [
+      "verify latest inference parity",
+      "pass a fresh head-to-head accuracy and selection-score gate against Pressure",
+      "pass fresh global and local calibration gates"
+    ]
+  }
+}
