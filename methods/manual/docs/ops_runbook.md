@@ -124,6 +124,14 @@ python3 -u methods/manual/scripts/runtime_watch.py --interval 12 --digest-minute
 
 **銘柄別ファイル(2026-08-07 追加)**: ブリッジが `runtime/latest_snapshot_<銘柄>.json` / `latest_context_<銘柄>.md` / `latest_account_<銘柄>.md` を書き出すようになった。**価格や1分足を見るときは銘柄別ファイルを使うこと**(共有の `latest_snapshot.json` は2つのEAが交互に上書きするため、片方の銘柄のバーが失われる)。watcher も銘柄別ファイルを優先して読む。**この変更を反映するには watcher の再起動が必要**
 
+**委任条件の機械判定(2026-08-11 追加、P38。作戦16の検知9分遅延への対策)**: 数値化された委任条件は watcher が足の確定ごとに機械判定し、成立の瞬間に `DELEGATION_MET` を出す。**検知遅延はEA送信30秒+watcher周期12秒=最悪45秒前後**(LLMの能動確認は不要になる)。
+
+1. 相談セッションが委任条件を `runtime/delegation_rules.json` に書く(形式: `[{"id":"op16-close","symbol":"XAUUSD-m","timeframe":"M5","op":"below","threshold":4395.0,"count":2,"note":"作戦16 決済委任"}]`)。「終値N本連続で閾値未満/超」の状態判定・確定足のみ・履歴では発火しない
+2. **有効化の前に必ず事前検証する**: `python3 methods/manual/scripts/runtime_watch.py --rules runtime/delegation_rules.json --rules-test` — 当日の実バー全体にルールを再生し、**すべての発火点を列挙**する。意図しない時刻に発火していたら条件を直してから渡す(2026-08-11 本人指示「なるべく誤検知されないように最初からできるといいですね」)
+3. watcher 起動時に `--rules runtime/delegation_rules.json` を付ける。ファイルは変更を自動再読込(`RULES_LOADED` が出る)。**ルール追加・削除のための watcher 再起動は不要**
+4. `DELEGATION_MET <id>` が出たら、campaign.md の該当委任の**発注/決済コマンドを即実行**(判定は済んでいる — 再判定で時間を使わない。価格の直前再取得のみ行う)。`DELEGATION_CLEARED` は状態解消の通知
+5. 注意: **ルール有効化の時点で条件が既に成立している場合、起動直後に発火する**(仕様。成立中の委任を受けたら即実行が正しいため)
+
 3. 起動したら本人に「運用セッション稼働開始」を報告。**相談セッション側のMonitor停止を本人経由で確認**(二重執行防止 — 両セッションが同時にルール執行すると決済・修正が二重になる)
 
 ## 日次の経済指標確認(2026-08-06 追加、本人指示)

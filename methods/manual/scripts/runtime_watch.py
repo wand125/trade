@@ -34,7 +34,78 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Semicolon list of 'YYYY-MM-DDTHH:MM|label' (local time) to warn about at T-60min and T-10min",
     )
+    p.add_argument(
+        "--rules",
+        default="",
+        help="Path to a JSON list of delegation conditions, evaluated on confirmed bars "
+             "(e.g. runtime/delegation_rules.json). Emits DELEGATION_MET on false->true edges.",
+    )
+    p.add_argument(
+        "--rules-test",
+        action="store_true",
+        help="One-shot: replay --rules against the bars in current snapshots, print every "
+             "firing point, then exit. Use to verify a condition BEFORE delegating it.",
+    )
     return p.parse_args()
+
+
+TF_MINUTES = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 60, "H4": 240, "D1": 1440}
+
+
+def _parse_server_ts(text: str) -> float | None:
+    for fmt in ("%Y.%m.%d %H:%M:%S", "%Y.%m.%d %H:%M"):
+        try:
+            return time.mktime(time.strptime(text, fmt))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def confirmed_bars(bars: list, server_time: str, tf_minutes: int) -> list:
+    """確定済みバーのみ返す(形成中の最終バーを、サーバー時刻との比較で落とす)。"""
+    server_ts = _parse_server_ts(server_time or "")
+    if server_ts is None:
+        return bars[:-1]  # サーバー時刻が読めなければ最終バーを形成中とみなす
+    out = []
+    for b in bars:
+        ts = _parse_server_ts(b.get("time", ""))
+        if ts is not None and ts + tf_minutes * 60 <= server_ts:
+            out.append(b)
+    return out
+
+
+def eval_rule(rule: dict, snapshot: dict) -> tuple[bool, str]:
+    """1ルールを評価し (成立しているか, 判定詳細) を返す。状態判定(直近N本のみ)。"""
+    tf_name = rule.get("timeframe", "M5")
+    tfs = snapshot.get("timeframes") or {}
+    tf = tfs.get(tf_name)
+    bars = tf.get("bars") if isinstance(tf, dict) else tf
+    if not isinstance(bars, list) or not bars:
+        return False, "no bars"
+    conf = confirmed_bars(bars, snapshot.get("server_time", ""), TF_MINUTES.get(tf_name, 5))
+    n = int(rule.get("count", 2))
+    if len(conf) < n:
+        return False, f"confirmed bars {len(conf)} < {n}"
+    closes = [b.get("close") for b in conf[-n:]]
+    times = [b.get("time", "")[-5:] for b in conf[-n:]]
+    thr = float(rule["threshold"])
+    if any(not isinstance(c, (int, float)) for c in closes):
+        return False, "bad closes"
+    if rule.get("op") == "above":
+        ok = all(c > thr for c in closes)
+    else:
+        ok = all(c < thr for c in closes)
+    detail = " ".join(f"{t}={c:g}" for t, c in zip(times, closes))
+    return ok, detail
+
+
+def load_rules(path: Path) -> list[dict]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return [r for r in data if isinstance(r, dict) and r.get("id") and r.get("symbol")] \
+            if isinstance(data, list) else []
+    except (OSError, json.JSONDecodeError, ValueError):
+        return []
 
 
 def read_json(path: Path) -> dict:
@@ -99,9 +170,68 @@ def emit(msg: str) -> None:
     print(f"{stamp} {msg}", flush=True)
 
 
+def backtest_rule(rule: dict, snapshot: dict) -> list[str]:
+    """ルールをスナップショット内の確定バー全体に対して再生し、発火点(false->true縁)を列挙する。
+    委任条件を渡す前の検証(誤検知チェック)に使う。"""
+    tf_name = rule.get("timeframe", "M5")
+    tfs = snapshot.get("timeframes") or {}
+    tf = tfs.get(tf_name)
+    bars = tf.get("bars") if isinstance(tf, dict) else tf
+    if not isinstance(bars, list) or not bars:
+        return ["no bars"]
+    conf = confirmed_bars(bars, snapshot.get("server_time", ""), TF_MINUTES.get(tf_name, 5))
+    n = int(rule.get("count", 2))
+    thr = float(rule["threshold"])
+    above = rule.get("op") == "above"
+    fired: list[str] = []
+    prev = False
+    for i in range(n, len(conf) + 1):
+        closes = [b.get("close") for b in conf[i - n:i]]
+        if any(not isinstance(c, (int, float)) for c in closes):
+            continue
+        ok = all(c > thr for c in closes) if above else all(c < thr for c in closes)
+        if ok and not prev:
+            t = conf[i - 1].get("time", "?")
+            detail = " ".join(f"{b.get('time','')[-5:]}={b.get('close'):g}" for b in conf[i - n:i])
+            fired.append(f"発火 {t} 足の確定時点: {detail}")
+        elif not ok and prev:
+            t = conf[i - 1].get("time", "?")
+            fired.append(f"解除 {t}")
+        prev = ok
+    if not fired:
+        fired.append("この期間に発火なし")
+    fired.append(f"(検証範囲: {conf[0].get('time','?')} 〜 {conf[-1].get('time','?')}、確定{len(conf)}本、現在の状態: {'成立' if prev else '未成立'})")
+    return fired
+
+
+def run_rules_test(state_dir: Path, rules_path: Path) -> None:
+    rules = load_rules(rules_path)
+    if not rules:
+        print(f"no valid rules in {rules_path}")
+        return
+    for rule in rules:
+        sym = rule["symbol"]
+        snap = read_json(state_dir / f"latest_snapshot_{sym}.json")
+        op_txt = "超" if rule.get("op") == "above" else "未満"
+        print(f"--- rule {rule['id']}: {sym} {rule.get('timeframe','M5')}終値{rule.get('count',2)}本連続 "
+              f"{rule['threshold']}{op_txt} {rule.get('note','')}")
+        for line in backtest_rule(rule, snap):
+            print("  " + line)
+
+
 def main() -> None:
     args = parse_args()
     state_dir = Path(args.state_dir)
+    if args.rules_test:
+        if not args.rules:
+            print("--rules-test requires --rules <path>")
+            sys.exit(1)
+        run_rules_test(state_dir, Path(args.rules))
+        return
+    rules_path = Path(args.rules) if args.rules else None
+    rules: list[dict] = []
+    rules_mtime: float = 0.0
+    rule_state: dict[str, bool] = {}
     levels: list[tuple[str, float]] = []
     if args.levels:
         for entry in args.levels.split(","):
@@ -161,6 +291,28 @@ def main() -> None:
                 if key not in warned and 0 < remaining <= lead_min * 60:
                     emit(f"[watch] EVENT_WARN {label} まで約{int(remaining/60)}分")
                     warned.add(key)
+        # 委任条件ルール: ファイル変更を検知して再読込し、確定バーの状態判定で
+        # false->true の縁のみ DELEGATION_MET を出す(過去に成立して戻った履歴では発火しない)。
+        if rules_path is not None and rules_path.exists():
+            m = rules_path.stat().st_mtime
+            if m != rules_mtime:
+                rules = load_rules(rules_path)
+                rules_mtime = m
+                emit(f"[watch] RULES_LOADED {len(rules)}件: " + ", ".join(r["id"] for r in rules))
+        for rule in rules:
+            rsnap = read_json(state_dir / f"latest_snapshot_{rule['symbol']}.json")
+            ok, detail = eval_rule(rule, rsnap)
+            rid = rule["id"]
+            prev_ok = rule_state.get(rid, False)
+            if ok and not prev_ok:
+                emit(f"[watch] DELEGATION_MET {rid} {rule['symbol']} "
+                     f"{rule.get('timeframe','M5')}終値{rule.get('count',2)}本が"
+                     f"{rule['threshold']}{'超' if rule.get('op')=='above' else '未満'}: "
+                     f"{detail} ({rule.get('note','')})")
+            elif not ok and prev_ok:
+                emit(f"[watch] DELEGATION_CLEARED {rid} 条件が解消: {detail}")
+            rule_state[rid] = ok
+
         snap = read_json(state_dir / "latest_snapshot.json")
         acct = read_account(state_dir / "latest_account.md")
 
