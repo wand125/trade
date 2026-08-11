@@ -1,0 +1,156 @@
+{
+  "format_version": 1,
+  "status": "forward_shadow_state_correctness_up_nonlow_high_confidence",
+  "target_timeframe_minutes": 1,
+  "state_correctness_component": {
+    "direction_source": "baseline HGB OOS direction",
+    "direction_is_preserved": true,
+    "correctness_target": "whether the baseline direction was correct",
+    "feature_set": "distribution_shift",
+    "market_state_feature_count": 54,
+    "reference_state_features": [
+      "reference confidence",
+      "reference aligned edge",
+      "reference predicted-up flag"
+    ],
+    "total_feature_count": 57,
+    "raw_price_levels_used_as_features": false,
+    "model_type": "hist_gradient_boosting_classifier",
+    "max_iter": 100,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 15,
+    "min_samples_leaf": 50,
+    "l2_regularization": 2.0,
+    "max_train_rows": 750000,
+    "calibration": "latest chronological 20 percent of prior OOS with Platt",
+    "train_history": "only prior OOS folds",
+    "random_seed": 42,
+    "loss_multiplier": 1.0
+  },
+  "confidence_shadow": {
+    "fixed_confidence_threshold": 0.55,
+    "allowed_directions": [
+      "up"
+    ],
+    "allowed_volatility_regimes": [
+      "normal",
+      "high"
+    ],
+    "selection_rule_source": "fixed 0.55 grid and six fixed direction-by-volatility cells; keep only development cells with Wilson95 lower above 0.50 and local consistency",
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "role": "M1 sparse precision challenger",
+    "probability_and_fair_odds_are_authoritative": false
+  },
+  "experiments": {
+    "predictions": "experiments/next_bar/state_correctness_up_nonlow_m1_fixed_001",
+    "reference_oos": "experiments/next_bar/walk_forward_baseline_m1_current_001",
+    "state_correctness_oos": "experiments/next_bar/state_correctness_m1_fixed_001",
+    "fixed_precision_selection": "experiments/next_bar/state_correctness_up_nonlow_m1_fixed_001",
+    "fixed_subgroups": "experiments/next_bar/state_correctness_m1_fixed_001/reliability_subgroups_excluding_fallback.json",
+    "precision_reliability": "experiments/next_bar/state_correctness_up_nonlow_m1_fixed_001/reliability_excluding_fallback.json",
+    "transition_guard_comparison": "experiments/next_bar/state_correctness_up_nonlow_055_vs_transition_guard_055_m1_analysis.json",
+    "transition_guard_bootstrap": "experiments/next_bar/state_correctness_up_nonlow_055_vs_transition_guard_055_m1_bootstrap.json",
+    "disagreement_comparison": "experiments/next_bar/state_correctness_up_nonlow_055_vs_disagreement_055_m1_analysis.json",
+    "disagreement_bootstrap": "experiments/next_bar/state_correctness_up_nonlow_055_vs_disagreement_055_m1_bootstrap.json",
+    "distribution_shift_comparison": "experiments/next_bar/state_correctness_up_nonlow_055_vs_distribution_shift_051_m1_analysis.json",
+    "distribution_shift_bootstrap": "experiments/next_bar/state_correctness_up_nonlow_055_vs_distribution_shift_051_m1_bootstrap.json",
+    "latest_runtime_output": "experiments/next_bar/state_correctness_m1_latest_prediction.json"
+  },
+  "evidence": {
+    "evaluation_rows_excluding_test2020_fallback": 1838693,
+    "development_folds": [
+      "test2021",
+      "test2022",
+      "test2023"
+    ],
+    "confirmation_folds": [
+      "test2024",
+      "test2025",
+      "test2026_partial"
+    ],
+    "development": {
+      "selected_rows": 1552,
+      "coverage": 0.0015606553948196698,
+      "accuracy": 0.5618556701030928,
+      "wilson_lower": 0.5370480705740692,
+      "selection_score": 0.0014635888904659265,
+      "mean_confidence": 0.558461633453627,
+      "calibration_gap_actual_minus_mean": 0.0033940366494658036,
+      "locally_consistent": true
+    },
+    "confirmation": {
+      "selected_rows": 2063,
+      "coverage": 0.0024436208230133884,
+      "accuracy": 0.58167716917111,
+      "wilson_lower": 0.5602581565028881,
+      "selection_score": 0.002978741044492918,
+      "mean_confidence": 0.5623380846548989,
+      "calibration_gap_actual_minus_mean": 0.019339084516211136,
+      "locally_consistent": true,
+      "fold_accuracies": {
+        "test2024": 0.5852272727272727,
+        "test2025": 0.5880361173814899,
+        "test2026_partial": 0.5754245754245755
+      }
+    },
+    "all_nested": {
+      "selected_rows": 3615,
+      "coverage": 0.0019660704641829823,
+      "accuracy": 0.5731673582295989,
+      "wilson_lower": 0.55697410982494,
+      "selection_score": 0.0025262544286791585,
+      "mean_confidence": 0.5606738378321122,
+      "calibration_gap_actual_minus_mean": 0.012493520397486635,
+      "locally_consistent": true
+    },
+    "paired_daily_bootstrap_20000_all": {
+      "vs_transition_guard_accuracy_delta_ci95": [
+        0.007025909440157769,
+        0.05638762159888697
+      ],
+      "vs_transition_guard_selection_score_delta_ci95": [
+        0.0009549802730530698,
+        0.0027780420348434724
+      ],
+      "vs_disagreement_accuracy_delta_ci95": [
+        0.013603261436091594,
+        0.0551200380151529
+      ],
+      "vs_disagreement_selection_score_delta_ci95": [
+        0.0006526748595898921,
+        0.0024489380408146593
+      ],
+      "vs_distribution_shift_accuracy_delta_ci95": [
+        0.04085133158270897,
+        0.07403793088159864
+      ],
+      "vs_distribution_shift_selection_score_delta_ci95": [
+        -0.006576620849738402,
+        -0.004566928571514939
+      ]
+    },
+    "proper_score_caveat": "State correctness Brier and log loss do not significantly improve the existing 0.55 candidates; this is a selection lane, not an authoritative full-distribution probability replacement.",
+    "main_development_selected_threshold": 0.505,
+    "main_threshold_decision": "rejected because it lost accuracy and selection score to Distribution Shift 0.51 in confirmation and all nested periods",
+    "latest_runtime": {
+      "runtime_tail_m1_bars": 4096,
+      "feature_tail_parity_tested": true,
+      "direction_preserved": true,
+      "odds_valid": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_or_live_policy": false,
+    "emit_as_parallel_high_confidence_shadow": true,
+    "require_fresh_selected_rows": 1000,
+    "require_fresh_wilson_lower_above_half": true,
+    "require_fresh_accuracy_and_selection_score_not_below_existing_precision_candidates": true,
+    "require_fresh_global_and_fixed_cell_calibration": true,
+    "require_fresh_probability_quality_not_worse": true,
+    "reason": "The development-only fixed-cell guard converted an unstable 0.55 tail into a sparse precision lane that reproduced in all three confirmation folds and beat existing 0.55 candidates in aggregate paired bootstrap. Coverage remains about 0.2 percent, the subgroup choice has multiple-testing risk, and proper-score superiority is absent, so only a non-authoritative forward shadow is issued."
+  }
+}

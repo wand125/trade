@@ -318,6 +318,35 @@ class NextBarRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing"):
             confidence_reliability_subgroups(frame, ("missing_group",))
 
+    def test_reliability_subgroups_exclude_folds_from_every_period(self):
+        timestamps = pd.date_range("2020-01-01", periods=6, freq="15min", tz="UTC")
+        frame = pd.DataFrame(
+            {
+                "fold": ["fallback"] * 2 + ["development"] * 2 + ["confirmation"] * 2,
+                "timestamp": timestamps,
+                "target_up": [1, 0, 1, 0, 1, 0],
+                "probability_up": [0.56, 0.44, 0.56, 0.44, 0.56, 0.44],
+                "confidence": [0.56] * 6,
+                "correct": [True] * 6,
+                "predicted_direction": ["up", "down"] * 3,
+                "volatility_regime": ["high", "low"] * 3,
+            }
+        )
+
+        report = confidence_reliability_subgroups(
+            frame,
+            ("predicted_direction", "volatility_regime"),
+            development_folds=("development",),
+            edges=(0.5, 1.0),
+            thresholds=(0.55,),
+            excluded_folds=("fallback",),
+        )
+
+        self.assertEqual(report["excluded_folds"], ["fallback"])
+        self.assertEqual(report["periods"]["development"]["rows"], 2)
+        self.assertEqual(report["periods"]["confirmation"]["rows"], 2)
+        self.assertEqual(report["periods"]["all"]["rows"], 4)
+
     def test_fixed_candidate_comparison_reports_periods_and_fold_wins(self):
         timestamps = pd.date_range("2020-01-01", periods=4, freq="15min", tz="UTC")
         first = pd.DataFrame(
@@ -370,6 +399,18 @@ class NextBarRegistryTests(unittest.TestCase):
         self.assertLess(
             unequal["periods"]["all"]["second"]["lane"]["coverage"], 1.0
         )
+
+        excluded = compare_fixed_candidate_frames(
+            first,
+            second,
+            0.5,
+            "first",
+            "second",
+            excluded_folds=("test2020",),
+        )
+        self.assertEqual(excluded["excluded_folds"], ["test2020"])
+        self.assertEqual(excluded["periods"]["all"]["first"]["lane"]["rows"], 2)
+        self.assertNotIn("test2020", excluded["fold_comparison"])
 
     def test_confidence_roles_have_stable_boundaries(self):
         self.assertEqual(confidence_role(0.515), "broad")

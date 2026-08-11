@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-11 18:11 JST
+更新日時: 2026-08-11 21:16 JST
 
 ## 現在の状態
 
@@ -638,3 +638,4 @@
 122. M1 Directional Follow-through固定移植は同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・閾値・subgroupを履歴内再探索しない。baseline改善は教師品質加工の感度として保存するが、方向はPath/Distribution Shift/Directional-Clarity、confidenceはTransition guard/Disagreement/Distribution Shiftを維持する。単体/通常/confidence/固定平均を再現専用とし、config・registry・authoritative予測・fair odds・policyを変更しない。
 123. M1 Transition guard 0.515とDistribution Shift 0.51の固定採用集合union/intersectionは再現専用とする。親の確率・confidenceを混ぜずboolean集合だけを比較したが、guardの99.80%以上がShiftに含まれ、accuracy・selection scoreのbootstrap増分と新しいfair oddsを得られなかった。閾値、source順、集合固有校正を履歴内再探索せず、Transition guard accuracy specialist、Distribution Shift ultra-broad、Disagreement balanced challengerを独立維持する。
 124. M1正式confidence 4候補の全6 pair補完性監査は再現専用とする。developmentで両exclusive Wilson edgeとunion目的関数改善を要求するとDisagreement 0.515 + Distribution Shift 0.51だけが選ばれたが、confirmationのDisagreement-onlyは386行・48.1865%へ反転しunion scoreも親を下回った。同じ候補のpair、集合演算、閾値、source順、集合固有校正を履歴内再探索せず、異なる加工情報から独立した次候補を作る。
+125. M1 State Correctnessはbaseline方向の正否を過去OOSだけからDistribution Shift市場状態54列+reference状態3列のHGB/Plattで学ぶ。development主目的で選んだ0.505はDistribution Shift 0.51へconfirmation/allで明確に劣るため棄却する。事前固定0.55の6セル監査からdevelopment Wilson edgeと局所整合を満たしたup×normal/highだけを固定precision forward shadowへ採用する。confirmation 2,063件・58.1677%、all 3,615件・57.3167%で、既存Transition guard/Disagreement 0.55へのall accuracy・score bootstrap改善を確認した。coverage 0.1966%、セル選択の多重比較、全行proper-score非優位が残るためauthoritative方向/confidence・fair odds・paper/live policyは変更せず、完全未使用1,000件以上とruntime固定条件で昇格を再評価する。損失倍率は標準1.0のみとする。

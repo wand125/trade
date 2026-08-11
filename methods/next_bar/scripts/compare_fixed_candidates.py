@@ -38,6 +38,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=comma_strings,
         default=DEFAULT_DEVELOPMENT_FOLDS,
     )
+    parser.add_argument(
+        "--exclude-folds",
+        type=comma_strings,
+        default=(),
+        help="Optional folds excluded before all period and fold metrics.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     return parser
 
@@ -52,6 +58,7 @@ def main() -> int:
         args.second_name,
         args.development_folds,
         args.second_threshold,
+        args.exclude_folds,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(report, indent=2, ensure_ascii=False) + "\n"

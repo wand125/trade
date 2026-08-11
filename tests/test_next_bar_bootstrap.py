@@ -70,6 +70,18 @@ class NextBarBootstrapTests(unittest.TestCase):
         ]
         self.assertLess(different_coverage["delta_first_minus_second"], 0)
 
+        excluded = paired_daily_block_bootstrap(
+            first,
+            second,
+            0.53,
+            iterations=100,
+            random_seed=7,
+            excluded_folds=("test2020",),
+        )
+        self.assertEqual(excluded["excluded_folds"], ["test2020"])
+        self.assertEqual(excluded["periods"]["all"]["rows"], 40)
+        self.assertNotIn("development", excluded["periods"])
+
     def test_daily_bootstrap_rejects_misaligned_predictions(self):
         first, second = prediction_frames()
         second.loc[0, "timestamp"] += pd.Timedelta(minutes=1)

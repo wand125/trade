@@ -786,6 +786,7 @@ def confidence_reliability_subgroups(
     development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
     edges: Sequence[float] = DEFAULT_RELIABILITY_EDGES,
     thresholds: Sequence[float] = DEFAULT_RELIABILITY_THRESHOLDS,
+    excluded_folds: Sequence[str] = (),
 ) -> dict[str, object]:
     """Audit fixed reliability profiles within predeclared categorical groups."""
     resolved_edges, resolved_thresholds = _validate_reliability_grid(edges, thresholds)
@@ -797,6 +798,9 @@ def confidence_reliability_subgroups(
         raise ValueError(
             f"reliability subgroup columns are missing: {', '.join(missing)}"
         )
+    excluded = {str(fold) for fold in excluded_folds}
+    if excluded:
+        frame = frame.loc[~frame["fold"].astype(str).isin(excluded)].copy()
 
     periods: dict[str, object] = {}
     for period, mask in _period_masks(frame, development_folds).items():
@@ -833,6 +837,7 @@ def confidence_reliability_subgroups(
     return {
         "format_version": 1,
         "development_folds": list(development_folds),
+        "excluded_folds": sorted(excluded),
         "group_columns": list(resolved_groups),
         "fixed_band_edges": list(resolved_edges),
         "fixed_cumulative_thresholds": list(resolved_thresholds),
@@ -1172,6 +1177,7 @@ def compare_fixed_candidate_frames(
     second_name: str = "second",
     development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
     second_threshold: float | None = None,
+    excluded_folds: Sequence[str] = (),
 ) -> dict[str, object]:
     if not 0.5 <= threshold < 1:
         raise ValueError("threshold must be between 0.5 inclusive and 1")
@@ -1183,11 +1189,20 @@ def compare_fixed_candidate_frames(
             "second_threshold must be between 0.5 inclusive and 1"
         )
     assert_aligned(first, second, second_name)
+    excluded = {str(fold) for fold in excluded_folds}
+    if excluded:
+        included = ~first["fold"].astype(str).isin(excluded)
+        first = first.loc[included].reset_index(drop=True)
+        second = second.loc[included].reset_index(drop=True)
+        if first.empty:
+            raise ValueError("excluded_folds removed every prediction row")
     masks = _period_masks(first, development_folds)
     periods: dict[str, object] = {}
     for period, mask in masks.items():
         first_period = first.loc[mask]
         second_period = second.loc[mask]
+        if first_period.empty:
+            continue
         first_selected = first_period["confidence"].ge(threshold)
         second_selected = second_period["confidence"].ge(
             resolved_second_threshold
@@ -1263,6 +1278,7 @@ def compare_fixed_candidate_frames(
         "fixed_confidence_threshold": threshold,
         "first_threshold": threshold,
         "second_threshold": resolved_second_threshold,
+        "excluded_folds": sorted(excluded),
         "development_folds": list(development_folds),
         "periods": periods,
         "fold_wins": {

@@ -8,6 +8,13 @@ from pathlib import Path
 from trade_data.next_bar_bootstrap import run_paired_daily_block_bootstrap
 
 
+def comma_strings(value: str) -> tuple[str, ...]:
+    output = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not output:
+        raise argparse.ArgumentTypeError("value must contain at least one item")
+    return output
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Compare fixed confidence candidates with paired UTC-day bootstrap."
@@ -35,6 +42,12 @@ def main() -> int:
         "--second-selection-column",
         help="Optional boolean column used instead of thresholding second confidence.",
     )
+    parser.add_argument(
+        "--exclude-folds",
+        type=comma_strings,
+        default=(),
+        help="Optional folds excluded before all bootstrap periods.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     report = run_paired_daily_block_bootstrap(
@@ -50,6 +63,7 @@ def main() -> int:
         args.second_threshold,
         args.first_selection_column,
         args.second_selection_column,
+        args.exclude_folds,
     )
     print(json.dumps(report["periods"], ensure_ascii=False, indent=2))
     return 0

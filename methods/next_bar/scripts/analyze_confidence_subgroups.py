@@ -52,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=comma_strings,
         default=DEFAULT_DEVELOPMENT_FOLDS,
     )
+    parser.add_argument(
+        "--exclude-folds",
+        type=comma_strings,
+        default=(),
+        help="Comma-separated folds omitted from every period.",
+    )
     parser.add_argument("--band-edges", type=comma_floats, default=DEFAULT_RELIABILITY_EDGES)
     parser.add_argument(
         "--thresholds", type=comma_floats, default=DEFAULT_RELIABILITY_THRESHOLDS
@@ -75,6 +81,7 @@ def main() -> int:
         args.development_folds,
         args.band_edges,
         args.thresholds,
+        args.exclude_folds,
     )
     report["confidence_column"] = args.confidence_column
     args.output.parent.mkdir(parents=True, exist_ok=True)

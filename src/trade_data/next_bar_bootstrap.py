@@ -173,6 +173,7 @@ def paired_daily_block_bootstrap(
     second_threshold: float | None = None,
     first_selection_column: str | None = None,
     second_selection_column: str | None = None,
+    excluded_folds: Sequence[str] = (),
 ) -> dict[str, object]:
     if second_threshold is None:
         second_threshold = threshold
@@ -183,6 +184,13 @@ def paired_daily_block_bootstrap(
     if iterations < 100:
         raise ValueError("iterations must be at least 100")
     assert_aligned(first, second, "second")
+    excluded = {str(fold) for fold in excluded_folds}
+    if excluded:
+        included = ~first["fold"].astype(str).isin(excluded)
+        first = first.loc[included].reset_index(drop=True)
+        second = second.loc[included].reset_index(drop=True)
+        if first.empty:
+            raise ValueError("excluded_folds removed every prediction row")
     development = first["fold"].astype(str).isin(set(development_folds))
     period_masks = {
         "development": development,
@@ -232,6 +240,7 @@ def paired_daily_block_bootstrap(
         "second_threshold": second_threshold,
         "first_selection_column": first_selection_column,
         "second_selection_column": second_selection_column,
+        "excluded_folds": sorted(excluded),
         "iterations": iterations,
         "random_seed": random_seed,
         "development_folds": list(development_folds),
@@ -253,6 +262,7 @@ def run_paired_daily_block_bootstrap(
     second_threshold: float | None = None,
     first_selection_column: str | None = None,
     second_selection_column: str | None = None,
+    excluded_folds: Sequence[str] = (),
 ) -> dict[str, object]:
     report = paired_daily_block_bootstrap(
         read_prediction_sets(first_dirs, timeframe),
@@ -263,6 +273,7 @@ def run_paired_daily_block_bootstrap(
         second_threshold=second_threshold,
         first_selection_column=first_selection_column,
         second_selection_column=second_selection_column,
+        excluded_folds=excluded_folds,
     )
     report["first_name"] = first_name
     report["second_name"] = second_name
