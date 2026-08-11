@@ -61,3 +61,38 @@
 `/private/tmp/claude-501/-Users-HHosono-Files-0-Group-trade/c53470bc-6ad5-4ea8-aeb8-b0134effd785/scratchpad/settle_watch.py`
 
 発動条件と撤廃条件A〜Eを20秒周期で判定し、状態遷移の瞬間だけ `ARMED` / `CALM` / `KILL-A`〜`KILL-E` を出力する。**このパスはセッション固有のscratchpadなので、消えていたら campaign.md の条件表から作り直すか、条件を手で判定する**。
+
+## 作戦13: USDJPY 箱の上抜け買い(**失効理由: 2026-08-11 09:42 無効化条件④成立により撤去、未約定・約定ゼロ・損益ゼロ**)
+
+全文は `archive/campaign_closed.md` の「作戦13」節。作戦11は2026-08-11に置き換えで終了(未エントリー)。
+
+### 委任されていたもの(失効)
+
+| 対象 | 委任 |
+|---|---|
+| 159.40 buy_stop の設置 | 確認なしで実行してよい(実行済み、order 90204917) |
+| 159.80 到達での決済 | 確認なしで実行してよい |
+| 口先介入・実弾介入の観測時の撤退 | 確認なしで実行してよい |
+| CPI前(8/12 21:30)の注文撤去 | 確認なしで実行してよい |
+| 増ロット・ナンピン・SLの引き下げ | 委任外(いかなる場合も) |
+
+### 発注内容(実行済み)
+
+```
+python3 src/bridge/create_trade_command.py buy_stop --symbol USDJPY-m \
+  --volume 40 --price 159.40 --sl 159.14 --tp 159.75 \
+  --expires-in-seconds 150 --reason "campaign13 box breakout" --live --confirm LIVE
+```
+
+### 監視していた水準
+
+| 水準 | 意味 |
+|---|---|
+| 159.40 | buy_stop の約定 |
+| 159.14 | SL(サーバー側で自動執行) |
+| 159.75 | TP(サーバー側で自動執行) |
+| 159.80 | 撤退ライン |
+
+### 経過
+
+08:58・09:40にUSDJPY-mが159.14を2度下抜け(159.125→159.089)、箱下限159.16へ戻りきれず。無効化条件④「箱を下抜けて戻れない」が成立し、相談セッションが本人承認のもと09:42にcancel(pending order deleted、retcode 10009)。約定ゼロ・損益ゼロ。
