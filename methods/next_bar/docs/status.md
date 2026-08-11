@@ -467,6 +467,11 @@
 - 通常blendはall Brier/log lossの日次bootstrap区間を改善したが、accuracy差-0.0617ptの95%区間は-0.1889〜+0.0645ptだった。aggregate確率平滑化だけを方向edgeと解釈せず、劣る親モデルとの追加方向平均も行わない。
 - 方向維持XGBoost 0.515はbaseline比all coverage +0.4757pt、accuracy +0.0021pt、score +0.000122で、proper scoreも改善した。しかしconfirmation accuracy -0.0656pt、score -0.000313へ反転し、Pressure 0.52にはaccuracy 0/7、score 3/7だった。0.55もPressure + ARにaccuracy 1/7、score 2/7で負けた。
 - PressureとXGBoostの固定50/50 confidence平均は0.52でPressureにaccuracy 2/7、score 3/7。0.55はall coverage +0.1558ptでもaccuracy -0.0512pt、confirmation score -0.000495で、objective差区間はいずれも0を跨いだ。M30 config・registry・authoritative予測・fair odds・policyを変更しない。
+- M1固定のDirectional-Clarity sample weightingを、次足body/rangeから作る0.5〜1.5・平均1のtrain weight、baseline 38特徴、HGB/Platt、全教師、標準損失1.0のままM30へ移植した。未来足情報はtrain weightだけへ使い、71,260 OOS行整列とlatest推論を確認した。
+- Clarity単体はbaseline比development +66件、confirmation +77件、all +143件、accuracy 4/7fold。通常25% blendは+27/+5/+32件、accuracy 4/7fold、Brier/log loss 6/7foldだった。単体all accuracy差+0.2007ptの日次区間は-0.0673〜+0.4725ptで未確定だった。
+- Clarity単体は現行Haar入り方向候補よりdevelopment -23件、confirmation +34件、all +11件、年別3/7対4/7。固定50/50方向平均はbaseline比+106/+54/+160件、5/7foldでdevelopment/all proper score区間も改善したが、親比は+17/+11/+28件、3/7foldで直接差区間を確定できなかった。新しい方向候補へ追加しない。
+- 方向維持Clarity 0.51はbaseline比all coverage +0.8855pt、accuracy +0.0572pt、score +0.000601でもconfirmation accuracy/scoreが反転した。Pressure 0.52にはaccuracy 0/7、score 1/7で、broad confidenceへ使わない。
+- Clarity 0.55はPressure + ARにall score +0.000014、confirmation score +0.000840でもdevelopment score -0.000320、年別accuracy 3/7、score 4/7で差区間は0を跨いだ。Pressureとの固定50/50平均はall score +0.000129でもconfirmation score -0.000571、年別accuracy/score各2/7だった。config・registry・authoritative予測・fair odds・policyを変更しない。
 
 ## ベースライン評価
 
@@ -592,3 +597,4 @@
 114. M30 Session Relative固定移植は曜日×UTC時刻、prior 32/min 12、5列、HGB/Platt、expanding、uniform sample、標準損失1.0を固定し、window・group粒度・最低本数・clip・weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.52、Pressureとの固定50/50 confidence平均を再現専用とする。baseline proper-score改善はperiodic regime感度として保存するが、Haar入り方向、Pressure 0.52、Pressure + AR 0.55の既存役割を置換せず、config・registry・authoritative予測・fair odds・policyを増やさない。
 115. M30 Volatility State固定移植はvol-of-vol・加速度・range状態・圧縮・jump・OHLC分散balanceの11列、HGB/Platt、expanding、uniform sample、標準損失1.0を固定し、window・jump定義・variance estimator・feature・weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.515/0.55、Pressureとの固定50/50 confidence平均を再現専用とする。aggregate proper-score改善は変動状態感度として保存するが、Haar入り方向、Pressure 0.52、Pressure + AR 0.55の既存役割を置換せず、config・registry・authoritative予測・fair odds・policyを増やさない。
 116. M30 XGBoost固定移植はbaseline加工38特徴、300 trees、depth 4、learning rate 0.03、min child weight 20、row/column 0.8、L2 5、hist、Platt、expanding、uniform sample、標準損失1.0を固定し、tree parameter・feature・weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.515/0.55、Pressureとの固定50/50 confidence平均を再現専用とする。aggregate proper-score改善とcoverage感度は保存するが、確認期間の目的反転を優先し、Haar入り方向、Pressure 0.52、Pressure + AR 0.55の既存役割を置換せず、config・registry・authoritative予測・fair odds・policyを増やさない。
+117. M30 Directional-Clarity sample weighting固定移植は0.5〜1.5・平均1のtrain weight、baseline 38特徴、HGB/Platt、全教師、expanding、標準損失1.0を固定し、weight式・feature・blend weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.51/0.55、Pressureとの固定confidence平均を再現専用とする。Haar入り候補との固定50/50方向平均はbaseline感度として保存するが、親への年別3/7・不確定な増分を優先し、新candidateを発行しない。現行Haar方向、Pressure 0.52、Pressure + AR 0.55を維持し、config・registry・authoritative予測・fair odds・policyを増やさない。
