@@ -462,6 +462,11 @@
 - 通常25%方向blendはall Brier/log lossの日次bootstrap区間を改善したが、accuracy差区間-0.1384〜+0.1211ptは0を跨いだ。aggregate確率平滑化だけを方向edgeと解釈しない。
 - 方向維持Volatility 0.515はbaseline比all accuracy・coverage・scoreを下げ、年別3/7対4/7。Pressure 0.52にはaccuracy 0/7、score 3/7で、0.55もPressure + ARにaccuracy 2/7、score 1/7だった。
 - PressureとVolatilityの固定50/50 confidence平均は0.52でPressureにaccuracy/score 2/7。0.55は年別accuracy 5/7でもall accuracy・coverage・scoreをPressure + ARより下げ、日次bootstrapもcoverage低下だけを確定した。M30 config・registry・authoritative予測・fair odds・policyを変更しない。
+- baseline加工38特徴をXGBoost 300 trees、depth 4、learning rate 0.03、min child weight 20、row/column 0.8、L2 5、hist、Platt、標準損失1.0の固定仕様でM30へ移植した。71,260 OOS行を完全整列し、最終fold artifactのlatest推論を確認した。
+- XGBoost単体はbaseline比development -35件、confirmation +10件、all -25件、accuracy 3/7fold。通常25% blendは-35/-9/-44件、accuracy 3/7foldで、単体もHaar入り方向候補にaccuracy 1/7対6/7だったため方向用途へ採用しない。
+- 通常blendはall Brier/log lossの日次bootstrap区間を改善したが、accuracy差-0.0617ptの95%区間は-0.1889〜+0.0645ptだった。aggregate確率平滑化だけを方向edgeと解釈せず、劣る親モデルとの追加方向平均も行わない。
+- 方向維持XGBoost 0.515はbaseline比all coverage +0.4757pt、accuracy +0.0021pt、score +0.000122で、proper scoreも改善した。しかしconfirmation accuracy -0.0656pt、score -0.000313へ反転し、Pressure 0.52にはaccuracy 0/7、score 3/7だった。0.55もPressure + ARにaccuracy 1/7、score 2/7で負けた。
+- PressureとXGBoostの固定50/50 confidence平均は0.52でPressureにaccuracy 2/7、score 3/7。0.55はall coverage +0.1558ptでもaccuracy -0.0512pt、confirmation score -0.000495で、objective差区間はいずれも0を跨いだ。M30 config・registry・authoritative予測・fair odds・policyを変更しない。
 
 ## ベースライン評価
 
@@ -586,3 +591,4 @@
 113. M30 Path Persistence固定移植は5/10/20/50本、14列、HGB/Platt、expanding、uniform sample、標準損失1.0を固定し、window・feature・parameter・weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.52、Pressureとの固定50/50 confidence平均を再現専用とする。baseline proper-score改善は確率平滑化感度として保存するが、Haar入り方向、Pressure 0.52、Pressure + AR 0.55の既存役割を置換せず、config・registry・authoritative予測・fair odds・policyを増やさない。
 114. M30 Session Relative固定移植は曜日×UTC時刻、prior 32/min 12、5列、HGB/Platt、expanding、uniform sample、標準損失1.0を固定し、window・group粒度・最低本数・clip・weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.52、Pressureとの固定50/50 confidence平均を再現専用とする。baseline proper-score改善はperiodic regime感度として保存するが、Haar入り方向、Pressure 0.52、Pressure + AR 0.55の既存役割を置換せず、config・registry・authoritative予測・fair odds・policyを増やさない。
 115. M30 Volatility State固定移植はvol-of-vol・加速度・range状態・圧縮・jump・OHLC分散balanceの11列、HGB/Platt、expanding、uniform sample、標準損失1.0を固定し、window・jump定義・variance estimator・feature・weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.515/0.55、Pressureとの固定50/50 confidence平均を再現専用とする。aggregate proper-score改善は変動状態感度として保存するが、Haar入り方向、Pressure 0.52、Pressure + AR 0.55の既存役割を置換せず、config・registry・authoritative予測・fair odds・policyを増やさない。
+116. M30 XGBoost固定移植はbaseline加工38特徴、300 trees、depth 4、learning rate 0.03、min child weight 20、row/column 0.8、L2 5、hist、Platt、expanding、uniform sample、標準損失1.0を固定し、tree parameter・feature・weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.515/0.55、Pressureとの固定50/50 confidence平均を再現専用とする。aggregate proper-score改善とcoverage感度は保存するが、確認期間の目的反転を優先し、Haar入り方向、Pressure 0.52、Pressure + AR 0.55の既存役割を置換せず、config・registry・authoritative予測・fair odds・policyを増やさない。
