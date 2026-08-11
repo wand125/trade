@@ -538,11 +538,14 @@ def analyze_state_correctness(
 
 def run_state_correctness(
     input_path: Path,
-    reference_dir: Path,
+    reference_dirs: Sequence[Path],
     output_dir: Path,
     config: StateCorrectnessConfig,
 ) -> dict[str, object]:
-    reference = read_prediction_sets([reference_dir], config.timeframe)
+    resolved_reference_dirs = tuple(Path(path) for path in reference_dirs)
+    if not resolved_reference_dirs:
+        raise ValueError("at least one reference prediction directory is required")
+    reference = read_prediction_sets(resolved_reference_dirs, config.timeframe)
     m1_bars = pd.read_parquet(input_path)
     frame, feature_columns = build_state_correctness_frame(reference, m1_bars, config)
     predictions, fold_reports, models = chronological_state_correctness_predictions(
@@ -583,7 +586,7 @@ def run_state_correctness(
         "created_at": created_at,
         "config": asdict(config),
         "input_path": str(input_path),
-        "reference_dir": str(reference_dir),
+        "reference_dirs": [str(path) for path in resolved_reference_dirs],
         "feature_columns": list(feature_columns),
         "rows": len(predictions),
         "folds": fold_reports,
@@ -593,7 +596,10 @@ def run_state_correctness(
         "format_version": 1,
         "created_at": created_at,
         "kind": "next_bar_chronological_state_correctness",
-        "sources": {"input": str(input_path), "reference": str(reference_dir)},
+        "sources": {
+            "input": str(input_path),
+            "reference": [str(path) for path in resolved_reference_dirs],
+        },
         "timeframes": {
             f"M{config.timeframe}": {
                 "minutes": config.timeframe,
@@ -619,7 +625,13 @@ def build_parser() -> argparse.ArgumentParser:
         description="Learn baseline-direction correctness from prior OOS market state."
     )
     parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--reference-dir", type=Path, required=True)
+    parser.add_argument(
+        "--reference-dir",
+        type=Path,
+        action="append",
+        required=True,
+        help="Repeat for non-overlapping chronological reference prediction sets.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--timeframe", type=int, default=1)
     return parser

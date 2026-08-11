@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -9,6 +11,7 @@ from trade_data.next_bar_state_correctness import (
     build_latest_state_correctness_prediction,
     build_state_correctness_frame,
     chronological_state_correctness_predictions,
+    run_state_correctness,
 )
 
 
@@ -212,6 +215,48 @@ class NextBarStateCorrectnessTests(unittest.TestCase):
             rtol=1e-7,
             atol=1e-12,
         )
+
+    def test_run_accepts_nonoverlapping_reference_directories(self):
+        bars = source_bars()
+        reference = reference_predictions(bars)
+        fold_names = (
+            "test2020",
+            "test2021",
+            "test2022",
+            "test2023",
+            "test2024",
+            "test2025",
+            "test2026_partial",
+        )
+        for fold, indices in zip(fold_names, np.array_split(reference.index, 7)):
+            reference.loc[indices, "fold"] = fold
+        config = StateCorrectnessConfig(max_iter=2, min_samples_leaf=5)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            input_path = root / "m1.parquet"
+            bars.to_parquet(input_path, index=False)
+            reference_dirs = []
+            for fold in fold_names:
+                directory = root / fold
+                directory.mkdir()
+                reference.loc[reference["fold"].eq(fold)].to_parquet(
+                    directory / "m1_walk_forward_predictions.parquet", index=False
+                )
+                reference_dirs.append(directory)
+
+            with self.assertRaisesRegex(ValueError, "confirmation"):
+                run_state_correctness(
+                    input_path, reference_dirs[:2], root / "incomplete", config
+                )
+
+            report = run_state_correctness(
+                input_path,
+                reference_dirs,
+                root / "complete",
+                config,
+            )
+
+        self.assertEqual(len(report["reference_dirs"]), 7)
 
 
 if __name__ == "__main__":
