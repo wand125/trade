@@ -1,0 +1,167 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_pressure_ordinal_motif_equal",
+  "target_timeframe_minutes": 30,
+  "feature_candidate": {
+    "feature_set": "rolling_ordinal_motif",
+    "parent_feature_set": "baseline",
+    "additional_feature_count": 18,
+    "motif_length": 3,
+    "motifs": [
+      "012",
+      "021",
+      "102",
+      "120",
+      "201",
+      "210"
+    ],
+    "rolling_windows": [
+      32,
+      128
+    ],
+    "per_window_features": "six motif fractions, normalized entropy, and current-motif frequency",
+    "cross_window_features": "short-minus-long entropy and current-motif-frequency deltas",
+    "tie_rule": "lexicographic by return then position",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false,
+    "future_rows_used": false,
+    "flat_or_gapped_window_value": 0.0
+  },
+  "direction_candidate": {
+    "baseline_model": "baseline HGB",
+    "pressure_model": "HGB with intrabar_pressure features",
+    "ordinal_motif_model": "HGB with baseline plus 18 rolling ordinal motif features",
+    "baseline_weight": 0.75,
+    "pressure_weight": 0.125,
+    "ordinal_motif_weight": 0.125,
+    "construction": "fixed 50/50 mean of the existing baseline75/pressure25 blend and the baseline75/ordinal25 blend",
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "loss_multiplier": 1.0,
+    "role": "M30 processed-feature diversity and probability-quality direction challenger",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos_early": "experiments/next_bar/context_confirmation_m30_001",
+    "baseline_oos_late": "experiments/next_bar/walk_forward_001",
+    "ordinal_motif_oos": "experiments/next_bar/walk_forward_rolling_ordinal_motif_m15_m30_fixed_001",
+    "ordinal_motif_direction_blend": "experiments/next_bar/rolling_ordinal_motif_m30_blend_fixed_001",
+    "pressure_direction_blend": "experiments/next_bar/ensemble_intrabar_pressure_m30_25_001",
+    "equal_direction_blend": "experiments/next_bar/pressure_ordinal_motif_equal_m30_direction_fixed_001",
+    "candidate_analysis": "experiments/next_bar/rolling_ordinal_motif_m30_candidate_analysis.json",
+    "versus_baseline_bootstrap": "experiments/next_bar/pressure_ordinal_motif_equal_vs_baseline_m30_direction_bootstrap.json",
+    "versus_pressure_comparison": "experiments/next_bar/pressure_ordinal_motif_equal_vs_pressure_m30_direction_fixed.json",
+    "versus_pressure_bootstrap": "experiments/next_bar/pressure_ordinal_motif_equal_vs_pressure_m30_direction_bootstrap.json",
+    "rejected_confidence_equal_blend": "experiments/next_bar/pressure_ordinal_motif_equal_m30_confidence_fixed_001"
+  },
+  "evidence": {
+    "rows": 71260,
+    "development_folds": [
+      "test2020",
+      "test2021",
+      "test2022",
+      "test2023"
+    ],
+    "confirmation_folds": [
+      "test2024",
+      "test2025",
+      "test2026_partial"
+    ],
+    "direction_blend": {
+      "development": {
+        "baseline_accuracy": 0.519897245349664,
+        "candidate_accuracy": 0.520218353631964,
+        "baseline_brier": 0.2494629970066175,
+        "candidate_brier": 0.2494160617024546
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5152019088246991,
+        "candidate_accuracy": 0.5160334044322331,
+        "baseline_brier": 0.249552859569506,
+        "candidate_brier": 0.24953327691643654
+      },
+      "all": {
+        "baseline_accuracy": 0.5180746561886052,
+        "candidate_accuracy": 0.5185938815604827,
+        "baseline_brier": 0.24949787896496803,
+        "candidate_brier": 0.2494615611416063,
+        "baseline_log_loss": 0.6921425331377644,
+        "candidate_log_loss": 0.6920692478769064,
+        "baseline_ece": 0.0016084233771449642,
+        "candidate_ece": 0.0006578833513466919,
+        "net_correct_improvement": 37
+      },
+      "fold_stability_vs_baseline": {
+        "accuracy_improved_folds": 5,
+        "brier_improved_folds": 6,
+        "log_loss_improved_folds": 6,
+        "evaluated_folds": 7
+      }
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline": {
+      "all_accuracy_delta_ci95": [
+        -0.0007360019891787334,
+        0.001758946196325078
+      ],
+      "all_brier_delta_ci95": [
+        -0.000055936290470311874,
+        -0.000016161160536726233
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.00011274123850141538,
+        -0.000032797667271780586
+      ]
+    },
+    "against_existing_pressure_direction_blend": {
+      "development_pressure_accuracy": 0.5189568568086425,
+      "development_candidate_accuracy": 0.520218353631964,
+      "confirmation_pressure_accuracy": 0.5148765409782726,
+      "confirmation_candidate_accuracy": 0.5160334044322331,
+      "all_pressure_accuracy": 0.5173730002806624,
+      "all_candidate_accuracy": 0.5185938815604827,
+      "all_net_correct_improvement": 87,
+      "accuracy_improved_folds": 6,
+      "evaluated_folds": 7,
+      "all_accuracy_delta_ci95": [
+        0.00007098825132958176,
+        0.0023594531932728878
+      ],
+      "all_brier_delta_ci95": [
+        -0.000008694172016288082,
+        0.00002208035110660143
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.000017287013540764893,
+        0.000044507087748488485
+      ]
+    },
+    "fixed_subgroups_vs_pressure": {
+      "accuracy_improved_predicted_directions": 2,
+      "evaluated_predicted_directions": 2,
+      "accuracy_improved_volatility_regimes": 3,
+      "evaluated_volatility_regimes": 3,
+      "subgroup_filter_created": false
+    },
+    "confidence_not_adopted": {
+      "threshold": 0.55,
+      "ordinal_motif_development_accuracy": 0.5609555189456342,
+      "ordinal_motif_confirmation_accuracy": 0.5489021956087824,
+      "pressure_confirmation_accuracy": 0.5559440559440559,
+      "equal_mix_confirmation_accuracy": 0.5457481162540366,
+      "reason": "The development tail did not preserve its accuracy advantage against Pressure in confirmation, and the fixed equal confidence mix reduced confirmation accuracy and selection score."
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_direction_candidate": true,
+    "require_runtime_artifact_parity_before_use": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "reason": "The fixed equal direction blend improved development and confirmation point accuracy and proper scores, beat the existing Pressure direction blend in 6/7 folds with a positive all-period daily-bootstrap accuracy interval, and improved baseline Brier/log loss with fully negative intervals. Its accuracy advantage over the authoritative baseline is not yet statistically established and no runtime parity artifact has been issued, so it remains a fixed parallel forward candidate."
+  }
+}

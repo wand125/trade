@@ -1,0 +1,132 @@
+{
+  "format_version": 1,
+  "status": "forward_shadow_pressure_rolling_ar_equal_confidence",
+  "target_timeframe_minutes": 30,
+  "direction_source": "baseline HGB",
+  "feature_candidate": {
+    "feature_set": "rolling_autoregressive_state",
+    "parent_feature_set": "baseline",
+    "additional_feature_count": 15,
+    "autoregressive_order": 3,
+    "rolling_windows": [
+      32,
+      128
+    ],
+    "ridge_strength": "0.05 * trace(XTX) / 3",
+    "per_window_features": "three clipped AR coefficients, normalized one-step forecast, fitted energy, and prior-model innovation",
+    "cross_window_features": "short-minus-long forecast, fitted-energy, and innovation deltas",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false,
+    "future_rows_used": false,
+    "flat_or_gapped_window_value": 0.0
+  },
+  "confidence_shadow": {
+    "pressure_source": "baseline-direction-preserving 75/25 Intrabar Pressure confidence",
+    "rolling_ar_source": "baseline-direction-preserving 75/25 Rolling AR State confidence",
+    "pressure_confidence_weight": 0.5,
+    "rolling_ar_confidence_weight": 0.5,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.55,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "loss_multiplier": 1.0,
+    "role": "M30 high-precision confidence-selection challenger",
+    "probability_and_fair_odds_are_authoritative": false
+  },
+  "experiments": {
+    "candidate_oos": "experiments/next_bar/walk_forward_rolling_autoregressive_state_m15_m30_fixed_001",
+    "rolling_ar_normal_blend": "experiments/next_bar/rolling_autoregressive_state_m30_blend_fixed_001",
+    "rolling_ar_confidence_blend": "experiments/next_bar/rolling_autoregressive_state_m30_confidence_blend_fixed_001",
+    "pressure_confidence_source": "experiments/next_bar/intrabar_pressure_m30_confidence_blend_001",
+    "equal_confidence_shadow": "experiments/next_bar/pressure_rolling_autoregressive_state_equal_m30_confidence_fixed_001",
+    "candidate_analysis": "experiments/next_bar/rolling_autoregressive_state_m30_candidate_analysis.json",
+    "fixed_055_comparison": "experiments/next_bar/pressure_rolling_autoregressive_state_equal_vs_pressure_m30_fixed_055.json",
+    "fixed_055_bootstrap": "experiments/next_bar/pressure_rolling_autoregressive_state_equal_vs_pressure_m30_fixed_055_bootstrap.json",
+    "rejected_direction_equal_blend": "experiments/next_bar/pressure_ordinal_motif_ar_equal_m30_direction_fixed_001"
+  },
+  "evidence": {
+    "rows": 71260,
+    "development_folds": [
+      "test2020",
+      "test2021",
+      "test2022",
+      "test2023"
+    ],
+    "confirmation_folds": [
+      "test2024",
+      "test2025",
+      "test2026_partial"
+    ],
+    "confidence_055_against_pressure": {
+      "development": {
+        "pressure_rows": 3398,
+        "shadow_rows": 3505,
+        "pressure_accuracy": 0.5609181871689229,
+        "shadow_accuracy": 0.5617689015691869,
+        "pressure_coverage": 0.07793756737539852,
+        "shadow_coverage": 0.08039175210440606,
+        "pressure_selection_score": 0.01233166200404622,
+        "shadow_selection_score": 0.012839493767220543
+      },
+      "confirmation": {
+        "pressure_rows": 858,
+        "shadow_rows": 907,
+        "pressure_accuracy": 0.5559440559440559,
+        "shadow_accuracy": 0.5600882028665931,
+        "pressure_coverage": 0.03101840135931456,
+        "shadow_coverage": 0.0327898485231915,
+        "pressure_selection_score": 0.003966472029907285,
+        "shadow_selection_score": 0.004997335719626916
+      },
+      "all": {
+        "pressure_rows": 4256,
+        "shadow_rows": 4412,
+        "pressure_accuracy": 0.5599154135338346,
+        "shadow_accuracy": 0.5614233907524931,
+        "pressure_coverage": 0.05972495088408644,
+        "shadow_coverage": 0.06191411731686781,
+        "pressure_selection_score": 0.010986250816593879,
+        "shadow_selection_score": 0.011628616962140197
+      },
+      "fold_accuracy_wins": "4/7",
+      "fold_selection_score_wins": "6/7"
+    },
+    "paired_utc_day_bootstrap_20000": {
+      "all_accuracy_delta_ci95": [
+        -0.0037244120653084746,
+        0.006814359132564598
+      ],
+      "all_coverage_delta_ci95": [
+        0.001527435661766719,
+        0.0028375345877317396
+      ],
+      "all_selection_score_delta_ci95": [
+        -0.0006540796790569484,
+        0.0019585952704271963
+      ],
+      "probability_shadow_selection_score_better": 0.83785,
+      "confirmation_selection_score_delta_ci95": [
+        -0.0010168768284272332,
+        0.0030829530146717745
+      ]
+    },
+    "rejected_direction": {
+      "current_pressure_ordinal_accuracy": 0.5185938815604827,
+      "rolling_ar_normal_accuracy": 0.5182570867246702,
+      "fixed_equal_accuracy": 0.5184956497333707,
+      "reason": "The fixed direction average reduced all-period accuracy versus the current Pressure plus Ordinal Motif candidate."
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_confidence_shadow": true,
+    "require_runtime_artifact_parity_before_use": true,
+    "require_fresh_forward_accuracy_not_below_pressure": true,
+    "require_fresh_forward_selection_score_not_below_pressure": true,
+    "require_fresh_forward_coverage_not_below_pressure": true,
+    "reason": "The fixed equal confidence selector improved development and confirmation point accuracy, coverage, and selection score, with selection-score wins in 6/7 folds. Daily bootstrap established the coverage increase but the accuracy and selection-score intervals crossed zero, so it remains a non-authoritative fresh-period shadow and does not define fair odds."
+  }
+}

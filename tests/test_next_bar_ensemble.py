@@ -19,6 +19,11 @@ from trade_data.next_bar_stacking import (
     build_stacking_frame,
     chronological_stack_predictions,
 )
+from trade_data.next_bar_pairwise_gate import (
+    PairwiseCorrectnessGateConfig,
+    build_pairwise_gate_frame,
+    chronological_pairwise_gate_predictions,
+)
 
 
 def prediction_frame(probabilities: list[float]) -> pd.DataFrame:
@@ -43,6 +48,69 @@ def prediction_frame(probabilities: list[float]) -> pd.DataFrame:
 
 
 class NextBarEnsembleTests(unittest.TestCase):
+
+    @staticmethod
+    def pairwise_source(probabilities: list[float], candidate: list[float]) -> pd.DataFrame:
+        frame = prediction_frame(probabilities)
+        frame["baseline_probability_up"] = [0.51 if value >= 0.5 else 0.49 for value in probabilities]
+        frame["candidate_probability_up"] = candidate
+        frame["volatility_20"] = np.linspace(0.001, 0.002, len(frame))
+        frame["body_ratio"] = np.linspace(-0.5, 0.5, len(frame))
+        frame["next_bar_body"] = np.linspace(-1.0, 1.0, len(frame))
+        frame["predicted_up"] = frame["probability_up"].ge(0.5).astype("int8")
+        frame["correct"] = frame["predicted_up"].eq(frame["target_up"])
+        return frame
+
+    def test_pairwise_gate_uses_only_prior_oos_disagreements(self):
+        path = self.pairwise_source(
+            [0.60, 0.40, 0.60, 0.40, 0.60, 0.40],
+            [0.65, 0.35, 0.65, 0.35, 0.65, 0.35],
+        )
+        shift = self.pairwise_source(
+            [0.40, 0.60, 0.40, 0.60, 0.40, 0.60],
+            [0.35, 0.65, 0.35, 0.65, 0.35, 0.65],
+        )
+        shift["baseline_probability_up"] = path["baseline_probability_up"]
+        folds = ["test2020", "test2020", "test2021", "test2021", "test2022", "test2022"]
+        path["fold"] = folds
+        shift["fold"] = folds
+        frame = build_pairwise_gate_frame(path, shift)
+
+        first_result, first_reports, _ = chronological_pairwise_gate_predictions(
+            frame, PairwiseCorrectnessGateConfig()
+        )
+        altered = frame.copy()
+        altered.loc[altered["fold"].eq("test2022"), "target_up"] = 1 - altered.loc[
+            altered["fold"].eq("test2022"), "target_up"
+        ]
+        altered["path_correct"] = altered["path_predicted_up"].eq(
+            altered["target_up"].astype("int8")
+        )
+        second_result, _, _ = chronological_pairwise_gate_predictions(
+            altered, PairwiseCorrectnessGateConfig()
+        )
+
+        first_fold = first_result.loc[first_result["fold"].eq("test2020")]
+        np.testing.assert_allclose(
+            first_fold["probability_up"], first_fold["path_probability_up"]
+        )
+        self.assertEqual(first_reports[0]["train_folds"], [])
+        self.assertEqual(first_reports[1]["train_folds"], ["test2020"])
+        self.assertEqual(first_reports[2]["train_folds"], ["test2020", "test2021"])
+        final_mask = first_result["fold"].eq("test2022")
+        np.testing.assert_allclose(
+            first_result.loc[final_mask, "gate_probability_path_correct"],
+            second_result.loc[final_mask, "gate_probability_path_correct"],
+        )
+
+    def test_pairwise_gate_rejects_misaligned_targets(self):
+        path = self.pairwise_source([0.60, 0.40], [0.65, 0.35])
+        shift = self.pairwise_source([0.40, 0.60], [0.35, 0.65])
+        shift["baseline_probability_up"] = path["baseline_probability_up"]
+        shift.loc[0, "target_up"] = 1 - shift.loc[0, "target_up"]
+
+        with self.assertRaisesRegex(ValueError, "target_up"):
+            build_pairwise_gate_frame(path, shift)
 
     def test_oos_and_runtime_share_identical_probability_blend(self):
         baseline = prediction_frame([0.51, 0.49])
@@ -359,6 +427,10 @@ class NextBarEnsembleTests(unittest.TestCase):
 
         self.assertAlmostEqual(result.loc[0, "probability_up"], 0.55)
         self.assertAlmostEqual(result.loc[1, "probability_up"], 0.45)
+        np.testing.assert_allclose(
+            result["probability_down"], 1 - result["probability_up"]
+        )
+        np.testing.assert_allclose(result["class_confidence"], result["confidence"])
         self.assertEqual(result["predicted_direction"].tolist(), ["up", "down"])
         self.assertEqual(result["correct"].tolist(), [True, True])
 

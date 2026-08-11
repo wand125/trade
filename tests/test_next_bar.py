@@ -1022,6 +1022,644 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_rolling_spectral_state_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "rolling_spectral_state"
+        )
+        spectral_columns = [
+            name for name in feature_columns if name.startswith("rolling_spectral_")
+        ]
+        self.assertEqual(len(spectral_columns), 12)
+        self.assertEqual(len(feature_columns), 50)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertTrue(np.isfinite(frame[spectral_columns]).all().all())
+        self.assertTrue(
+            frame[spectral_columns].to_numpy(dtype="float64").min() >= -1.0
+        )
+        self.assertTrue(
+            frame[spectral_columns].to_numpy(dtype="float64").max() <= 1.0
+        )
+
+        returns = np.log(
+            bars["close"].to_numpy(dtype="float64")
+            / bars["close"].shift(1).to_numpy(dtype="float64")
+        )[-64:]
+        centered = returns - returns.mean()
+        transform = np.fft.fft(centered)
+        denominator = 64 * np.sum(centered * centered)
+        fractions = 2 * np.abs(transform) ** 2 / denominator
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["rolling_spectral_low_fraction_64"]),
+            float(fractions[1:3].sum()),
+            places=11,
+        )
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["rolling_spectral_mid_fraction_64"]),
+            float(fractions[3:7].sum()),
+            places=11,
+        )
+        for frequency in (1, 2, 4, 8):
+            normalization = np.sqrt(2.0 / denominator)
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"rolling_spectral_cos_k{frequency}_64"]),
+                float(transform[frequency].real * normalization),
+                places=11,
+            )
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"rolling_spectral_sin_k{frequency}_64"]),
+                float(transform[frequency].imag * normalization),
+                places=11,
+            )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1), 1, "rolling_spectral_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[spectral_columns],
+            scaled_frame[spectral_columns],
+            rtol=1e-7,
+            atol=1e-9,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 300, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1), 1, "rolling_spectral_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:299, spectral_columns],
+            changed_frame.loc[:299, spectral_columns],
+        )
+
+        flat_source = m1_frame(200)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "rolling_spectral_state"
+        )
+        self.assertTrue(flat_frame[spectral_columns].eq(0).all().all())
+
+        gapped = bars.iloc[:200].copy()
+        gapped.loc[gapped.index >= 100, "timestamp"] += pd.Timedelta(minutes=10)
+        gapped_frame, _ = build_feature_frame(gapped, 1, "rolling_spectral_state")
+        self.assertTrue(
+            gapped_frame.loc[100:163, spectral_columns].eq(0).all().all()
+        )
+
+        config = TrainConfig(
+            timeframes=(1,),
+            feature_set="rolling_spectral_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "rolling_spectral_state")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_rolling_ordinal_motif_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "rolling_ordinal_motif"
+        )
+        ordinal_columns = [
+            name for name in feature_columns if name.startswith("rolling_ordinal_")
+        ]
+        self.assertEqual(len(ordinal_columns), 18)
+        self.assertEqual(len(feature_columns), 56)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertTrue(np.isfinite(frame[ordinal_columns]).all().all())
+        values = frame[ordinal_columns].to_numpy(dtype="float64")
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        returns = np.log(
+            bars["close"].to_numpy(dtype="float64")
+            / bars["close"].shift(1).to_numpy(dtype="float64")
+        )
+
+        def ordinal_pattern(end: int) -> str:
+            sample = returns[end - 2 : end + 1]
+            ordered = sorted(range(3), key=lambda position: (sample[position], position))
+            ranks = [0, 0, 0]
+            for rank, position in enumerate(ordered):
+                ranks[position] = rank
+            return "".join(str(rank) for rank in ranks)
+
+        patterns = ("012", "021", "102", "120", "201", "210")
+        target = len(bars) - 1
+        expected_entropy = {}
+        expected_current_frequency = {}
+        for window in (32, 128):
+            observed = [
+                ordinal_pattern(end)
+                for end in range(target - window + 1, target + 1)
+            ]
+            fractions = {
+                pattern: observed.count(pattern) / window for pattern in patterns
+            }
+            for pattern, fraction in fractions.items():
+                self.assertAlmostEqual(
+                    float(
+                        frame.iloc[-1][
+                            f"rolling_ordinal_{pattern}_fraction_{window}"
+                        ]
+                    ),
+                    fraction,
+                    places=12,
+                )
+            entropy = -sum(
+                fraction * np.log(fraction)
+                for fraction in fractions.values()
+                if fraction > 0
+            ) / np.log(6)
+            current_frequency = fractions[observed[-1]]
+            expected_entropy[window] = entropy
+            expected_current_frequency[window] = current_frequency
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"rolling_ordinal_entropy_{window}"]),
+                entropy,
+                places=12,
+            )
+            self.assertAlmostEqual(
+                float(
+                    frame.iloc[-1][
+                        f"rolling_ordinal_current_frequency_{window}"
+                    ]
+                ),
+                current_frequency,
+                places=12,
+            )
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["rolling_ordinal_entropy_short_long_delta"]),
+            expected_entropy[32] - expected_entropy[128],
+            places=12,
+        )
+        self.assertAlmostEqual(
+            float(
+                frame.iloc[-1][
+                    "rolling_ordinal_current_frequency_short_long_delta"
+                ]
+            ),
+            expected_current_frequency[32] - expected_current_frequency[128],
+            places=12,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1), 1, "rolling_ordinal_motif"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[ordinal_columns],
+            scaled_frame[ordinal_columns],
+            rtol=1e-7,
+            atol=1e-9,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 300, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1), 1, "rolling_ordinal_motif"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:299, ordinal_columns],
+            changed_frame.loc[:299, ordinal_columns],
+        )
+
+        flat_source = m1_frame(200)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "rolling_ordinal_motif"
+        )
+        self.assertTrue(flat_frame[ordinal_columns].eq(0).all().all())
+
+        gapped = bars.iloc[:500].copy()
+        gapped.loc[gapped.index >= 300, "timestamp"] += pd.Timedelta(minutes=10)
+        gapped_frame, _ = build_feature_frame(gapped, 1, "rolling_ordinal_motif")
+        self.assertTrue(gapped_frame.loc[300, ordinal_columns].eq(0).all())
+
+        config = TrainConfig(
+            timeframes=(1,),
+            feature_set="rolling_ordinal_motif",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "rolling_ordinal_motif")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_rolling_autoregressive_state_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "rolling_autoregressive_state"
+        )
+        ar_columns = [
+            name for name in feature_columns if name.startswith("rolling_ar_")
+        ]
+        self.assertEqual(len(ar_columns), 15)
+        self.assertEqual(len(feature_columns), 53)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        values = frame[ar_columns].to_numpy(dtype="float64")
+        self.assertTrue(np.isfinite(values).all())
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        returns = np.log(
+            bars["close"].to_numpy(dtype="float64")
+            / bars["close"].shift(1).to_numpy(dtype="float64")
+        )
+
+        def fit_ar(end: int, window: int) -> tuple[np.ndarray, float, float]:
+            endpoints = np.arange(end - window + 1, end + 1)
+            target = returns[endpoints]
+            design = np.column_stack(
+                [returns[endpoints - lag] for lag in (1, 2, 3)]
+            )
+            xtx = design.T @ design
+            xty = design.T @ target
+            ridge = 0.05 * np.trace(xtx) / 3.0
+            coefficients = np.linalg.solve(xtx + ridge * np.eye(3), xty)
+            rms = float(np.sqrt(np.mean(target * target)))
+            explained = (
+                2.0 * coefficients @ xty
+                - coefficients @ xtx @ coefficients
+            )
+            fit_energy = float(np.clip(explained / (target @ target), -1, 1))
+            return coefficients, rms, fit_energy
+
+        target = len(bars) - 1
+        expected_forecasts = {}
+        expected_fit_energies = {}
+        expected_innovations = {}
+        for window in (32, 128):
+            coefficients, rms, fit_energy = fit_ar(target, window)
+            next_design = returns[[target, target - 1, target - 2]]
+            forecast = float(
+                np.clip(coefficients @ next_design / rms, -3, 3) / 3.0
+            )
+            prior_coefficients, prior_rms, _ = fit_ar(target - 1, window)
+            current_design = returns[[target - 1, target - 2, target - 3]]
+            innovation = float(
+                np.clip(
+                    (returns[target] - prior_coefficients @ current_design)
+                    / prior_rms,
+                    -3,
+                    3,
+                )
+                / 3.0
+            )
+            for lag, coefficient in enumerate(coefficients, start=1):
+                self.assertAlmostEqual(
+                    float(
+                        frame.iloc[-1][
+                            f"rolling_ar_lag{lag}_coefficient_{window}"
+                        ]
+                    ),
+                    float(np.clip(coefficient, -2, 2) / 2.0),
+                    places=10,
+                )
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"rolling_ar_forecast_{window}"]),
+                forecast,
+                places=10,
+            )
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"rolling_ar_fit_energy_{window}"]),
+                fit_energy,
+                places=10,
+            )
+            self.assertAlmostEqual(
+                float(
+                    frame.iloc[-1][
+                        f"rolling_ar_latest_innovation_{window}"
+                    ]
+                ),
+                innovation,
+                places=10,
+            )
+            expected_forecasts[window] = forecast
+            expected_fit_energies[window] = fit_energy
+            expected_innovations[window] = innovation
+
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["rolling_ar_forecast_short_long_delta"]),
+            expected_forecasts[32] - expected_forecasts[128],
+            places=10,
+        )
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["rolling_ar_fit_energy_short_long_delta"]),
+            expected_fit_energies[32] - expected_fit_energies[128],
+            places=10,
+        )
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["rolling_ar_innovation_short_long_delta"]),
+            expected_innovations[32] - expected_innovations[128],
+            places=10,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1),
+            1,
+            "rolling_autoregressive_state",
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[ar_columns],
+            scaled_frame[ar_columns],
+            rtol=1e-7,
+            atol=1e-9,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 300, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1),
+            1,
+            "rolling_autoregressive_state",
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:299, ar_columns],
+            changed_frame.loc[:299, ar_columns],
+        )
+
+        flat_source = m1_frame(200)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1),
+            1,
+            "rolling_autoregressive_state",
+        )
+        self.assertTrue(flat_frame[ar_columns].eq(0).all().all())
+
+        gapped = bars.iloc[:500].copy()
+        gapped.loc[gapped.index >= 300, "timestamp"] += pd.Timedelta(minutes=10)
+        gapped_frame, _ = build_feature_frame(
+            gapped,
+            1,
+            "rolling_autoregressive_state",
+        )
+        self.assertTrue(gapped_frame.loc[300, ar_columns].eq(0).all())
+
+        config = TrainConfig(
+            timeframes=(1,),
+            feature_set="rolling_autoregressive_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(
+            report["config"]["feature_set"],
+            "rolling_autoregressive_state",
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_rolling_transition_memory_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "rolling_transition_memory"
+        )
+        transition_columns = [
+            name for name in feature_columns if name.startswith("transition_memory_")
+        ]
+        self.assertEqual(len(transition_columns), 9)
+        self.assertEqual(len(feature_columns), 47)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        values = frame[transition_columns].to_numpy(dtype="float64")
+        self.assertTrue(np.isfinite(values).all())
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        raw_return = np.log(
+            bars["close"].to_numpy(dtype="float64")
+            / bars["close"].shift(1).to_numpy(dtype="float64")
+        )
+        candle_range = bars["high"] - bars["low"]
+        body_fraction = (
+            (bars["close"] - bars["open"]).abs()
+            / candle_range.replace(0, np.nan)
+        ).fillna(0.0).to_numpy()
+        close_location = (
+            (bars["close"] - bars["low"])
+            / candle_range.replace(0, np.nan)
+        ).fillna(0.5).to_numpy()
+        previous_close = bars["close"].shift(1)
+        true_range = pd.concat(
+            [
+                candle_range,
+                (bars["high"] - previous_close).abs(),
+                (bars["low"] - previous_close).abs(),
+            ],
+            axis=1,
+        ).max(axis=1)
+        prior_median = true_range.rolling(20, min_periods=5).median().shift(1).to_numpy()
+        state = (
+            (raw_return > 0).astype("int8") * 8
+            + (np.abs(body_fraction) >= 0.5).astype("int8") * 4
+            + (close_location >= 0.5).astype("int8") * 2
+            + (np.isfinite(prior_median) & (true_range.to_numpy() >= prior_median)).astype("int8")
+        )
+        valid = np.isfinite(raw_return) & (np.abs(raw_return) > 1e-15)
+        target_row = len(bars) - 1
+        probabilities = {}
+        for window in (32, 128):
+            prior_rows = np.arange(max(0, target_row - window), target_row)
+            transition_rows = prior_rows[
+                valid[prior_rows]
+                & valid[prior_rows + 1]
+            ]
+            global_count = len(transition_rows)
+            global_up = int((raw_return[transition_rows + 1] > 0).sum())
+            global_probability = (global_up + 1.0) / (global_count + 2.0)
+            matching = transition_rows[state[transition_rows] == state[target_row]]
+            matching_up = int((raw_return[matching + 1] > 0).sum())
+            probability = (matching_up + 8.0 * global_probability) / (
+                len(matching) + 8.0
+            )
+            probabilities[window] = probability
+            expected_reversal = (
+                1.0 - probability if raw_return[target_row] > 0 else probability
+            )
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"transition_memory_up_edge_{window}"]),
+                2.0 * probability - 1.0,
+                places=12,
+            )
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"transition_memory_support_fraction_{window}"]),
+                len(matching) / window,
+                places=12,
+            )
+            self.assertAlmostEqual(
+                float(
+                    frame.iloc[-1][
+                        f"transition_memory_local_global_delta_{window}"
+                    ]
+                ),
+                probability - global_probability,
+                places=12,
+            )
+            self.assertAlmostEqual(
+                float(frame.iloc[-1][f"transition_memory_reversal_edge_{window}"]),
+                2.0 * expected_reversal - 1.0,
+                places=12,
+            )
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["transition_memory_short_long_delta"]),
+            probabilities[32] - probabilities[128],
+            places=12,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1), 1, "rolling_transition_memory"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[transition_columns],
+            scaled_frame[transition_columns],
+            rtol=1e-7,
+            atol=1e-9,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 300, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1), 1, "rolling_transition_memory"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:299, transition_columns],
+            changed_frame.loc[:299, transition_columns],
+        )
+
+        gapped = bars.iloc[:400].copy()
+        gapped.loc[gapped.index >= 300, "timestamp"] += pd.Timedelta(minutes=10)
+        gapped_frame, _ = build_feature_frame(gapped, 1, "rolling_transition_memory")
+        self.assertTrue(gapped_frame.loc[300, transition_columns].eq(0).all())
+
+        m5_bars = resample_complete_bars(source, 5)
+        m5_frame, m5_feature_columns = build_feature_frame(
+            m5_bars, 5, "rolling_transition_memory"
+        )
+        m5_transition_columns = [
+            name
+            for name in m5_feature_columns
+            if name.startswith("transition_memory_")
+        ]
+        self.assertEqual(m5_feature_columns, feature_columns)
+        self.assertEqual(m5_transition_columns, transition_columns)
+        self.assertTrue(
+            np.isfinite(m5_frame[m5_transition_columns].to_numpy()).all()
+        )
+
+        gapped_m5 = m5_bars.copy()
+        gapped_m5.loc[gapped_m5.index >= 300, "timestamp"] += pd.Timedelta(
+            minutes=10
+        )
+        gapped_m5_frame, _ = build_feature_frame(
+            gapped_m5, 5, "rolling_transition_memory"
+        )
+        self.assertTrue(
+            gapped_m5_frame.loc[300, m5_transition_columns].eq(0).all()
+        )
+
+        for timeframe in (15, 30):
+            higher_bars = resample_complete_bars(source, timeframe)
+            higher_frame, higher_feature_columns = build_feature_frame(
+                higher_bars, timeframe, "rolling_transition_memory"
+            )
+            higher_transition_columns = [
+                name
+                for name in higher_feature_columns
+                if name.startswith("transition_memory_")
+            ]
+            self.assertEqual(higher_feature_columns, feature_columns)
+            self.assertEqual(higher_transition_columns, transition_columns)
+            self.assertGreater(len(higher_frame), 0)
+            self.assertTrue(
+                np.isfinite(
+                    higher_frame[higher_transition_columns].to_numpy()
+                ).all()
+            )
+
+        flat_source = m1_frame(200)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "rolling_transition_memory"
+        )
+        self.assertTrue(flat_frame[transition_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(1, 5),
+            feature_set="rolling_transition_memory",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(
+            report["config"]["feature_set"], "rolling_transition_memory"
+        )
+        self.assertEqual(set(latest["timeframe"]), {"M1", "M5"})
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_rolling_full_path_is_exact_stationary_causal_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)

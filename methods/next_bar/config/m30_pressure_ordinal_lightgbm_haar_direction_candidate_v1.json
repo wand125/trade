@@ -1,0 +1,197 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_pressure_ordinal_lightgbm_haar_equal",
+  "target_timeframe_minutes": 30,
+  "haar_component": {
+    "feature_set": "haar_multiscale",
+    "baseline_feature_count": 38,
+    "added_feature_count": 12,
+    "windows": [4, 8, 16, 32],
+    "series_per_window": [
+      "volatility_standardized_return_half_difference",
+      "absolute_return_composition_half_difference",
+      "direction_mean_half_difference"
+    ],
+    "model_type": "hgb",
+    "max_iter": 200,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 100,
+    "l2_regularization": 1.0,
+    "probability_calibration": "platt",
+    "train_window": "expanding",
+    "train_weighting": "uniform",
+    "train_target_filter": "all",
+    "random_seed": 42,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false,
+    "parameter_search_performed": false
+  },
+  "direction_candidate": {
+    "construction": "fixed 50/50 mean of the existing baseline75/Pressure6.25/Ordinal6.25/LightGBM12.5 co-challenger and standalone Haar Multiscale HGB",
+    "effective_baseline_hgb_weight": 0.375,
+    "effective_pressure_hgb_weight": 0.03125,
+    "effective_ordinal_motif_hgb_weight": 0.03125,
+    "effective_lightgbm_weight": 0.0625,
+    "effective_haar_multiscale_hgb_weight": 0.5,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "loss_multiplier": 1.0,
+    "role": "M30 fixed multiscale plus processed-feature heterogeneous direction co-challenger",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/baseline_m30_complete_001",
+    "haar_oos": "experiments/next_bar/walk_forward_haar_multiscale_m30_fixed_001",
+    "haar_normal_blend": "experiments/next_bar/haar_multiscale_m30_blend_fixed_001",
+    "haar_confidence_blend": "experiments/next_bar/haar_multiscale_m30_confidence_fixed_001",
+    "haar_analysis": "experiments/next_bar/haar_multiscale_m30_candidate_analysis.json",
+    "parent_direction_candidate": "experiments/next_bar/pressure_ordinal_lightgbm_equal_m30_direction_fixed_001",
+    "equal_direction_candidate": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_m30_direction_fixed_001",
+    "baseline_comparison": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_vs_baseline_m30_direction_fixed_05.json",
+    "baseline_bootstrap": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_vs_baseline_m30_direction_bootstrap.json",
+    "parent_comparison": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_vs_current_m30_direction_fixed_05.json",
+    "parent_bootstrap": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_vs_current_m30_direction_bootstrap.json",
+    "haar_comparison": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_vs_haar_m30_direction_fixed_05.json",
+    "haar_bootstrap": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_vs_haar_m30_direction_bootstrap.json",
+    "rejected_confidence_052": "experiments/next_bar/haar_vs_pressure_m30_confidence_fixed_052.json",
+    "rejected_confidence_055": "experiments/next_bar/pressure_ordinal_lightgbm_haar_equal_vs_pressure_ar_m30_confidence_fixed_055.json",
+    "latest_haar_artifact_prediction": "experiments/next_bar/haar_multiscale_m30_latest_prediction.json"
+  },
+  "evidence": {
+    "rows": 71260,
+    "development_folds": [
+      "test2020",
+      "test2021",
+      "test2022",
+      "test2023"
+    ],
+    "confirmation_folds": [
+      "test2024",
+      "test2025",
+      "test2026_partial"
+    ],
+    "standalone_haar": {
+      "development_accuracy": 0.52173214981995,
+      "confirmation_accuracy": 0.5166841401250859,
+      "all_accuracy": 0.5197726634858265,
+      "all_brier": 0.24947018980439903,
+      "all_log_loss": 0.6920865962186739,
+      "all_ece": 0.00045224812178176093,
+      "net_correct_vs_baseline": 121,
+      "accuracy_improved_folds_vs_baseline": 5,
+      "brier_improved_folds_vs_baseline": 3,
+      "log_loss_improved_folds_vs_baseline": 3
+    },
+    "haar_25_percent_blend": {
+      "development_accuracy": 0.520814697584807,
+      "confirmation_accuracy": 0.5156357326199342,
+      "all_accuracy": 0.5188043783328655,
+      "all_brier": 0.24945897268315304,
+      "all_log_loss": 0.6920643516082936,
+      "all_ece": 0.000617041325744047,
+      "net_correct_vs_baseline": 52,
+      "accuracy_improved_folds_vs_baseline": 5,
+      "brier_improved_folds_vs_baseline": 5,
+      "log_loss_improved_folds_vs_baseline": 5,
+      "reason_not_promoted": "The fixed blend was one aggregate correct prediction below the existing co-challenger and materially weaker in confirmation accuracy."
+    },
+    "equal_direction_candidate": {
+      "development": {
+        "baseline_accuracy": 0.519897245349664,
+        "parent_accuracy": 0.5202642262437212,
+        "haar_accuracy": 0.52173214981995,
+        "candidate_accuracy": 0.5219385765728571
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5152019088246991,
+        "parent_accuracy": 0.5165395321933408,
+        "haar_accuracy": 0.5166841401250859,
+        "candidate_accuracy": 0.5167564440909584
+      },
+      "all": {
+        "baseline_accuracy": 0.5180746561886052,
+        "parent_accuracy": 0.5188184114510244,
+        "haar_accuracy": 0.5197726634858265,
+        "candidate_accuracy": 0.519927027785574,
+        "candidate_brier": 0.24942747596539408,
+        "candidate_log_loss": 0.6920008460465833,
+        "candidate_ece": 0.0007292363941985142,
+        "net_correct_vs_baseline": 132,
+        "net_correct_vs_parent": 79,
+        "net_correct_vs_haar": 11
+      },
+      "accuracy_fold_wins_vs_baseline": "6/7",
+      "accuracy_fold_wins_vs_parent": "5/7",
+      "accuracy_fold_wins_vs_haar": "4/7"
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline": {
+      "all_accuracy_delta_ci95": [
+        -0.00022376077629275568,
+        0.003928144080915496
+      ],
+      "all_probability_candidate_more_accurate": 0.95925,
+      "all_brier_delta_ci95": [
+        -0.00012372164952184557,
+        -0.00001846734132653648
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.00024876191961357985,
+        -0.00003718402710364834
+      ]
+    },
+    "paired_utc_day_bootstrap_20000_vs_parent": {
+      "all_accuracy_delta_ci95": [
+        -0.0008359838769299022,
+        0.003015778157784883
+      ],
+      "all_probability_candidate_more_accurate": 0.8677,
+      "all_brier_delta_ci95": [
+        -0.0000757152194908954,
+        0.000013427309853171435
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.00015211279204277727,
+        0.000027152972323371547
+      ]
+    },
+    "rejected_confidence": {
+      "development_selected_threshold": 0.515,
+      "selected_development_score": 0.017229650029181094,
+      "baseline_development_score": 0.01796839398209352,
+      "selected_confirmation_score": 0.014658555625776398,
+      "baseline_confirmation_score": 0.015814974943304288,
+      "haar_052_accuracy_wins_vs_pressure": "1/7",
+      "haar_052_score_wins_vs_pressure": "2/7",
+      "equal_055_all_rows": 4453,
+      "equal_055_all_coverage": 0.062489475161380856,
+      "equal_055_all_accuracy": 0.5632158095665843,
+      "equal_055_all_score": 0.012148845938875994,
+      "equal_055_accuracy_wins_vs_pressure_ar": "3/7",
+      "equal_055_score_wins_vs_pressure_ar": "3/7",
+      "reason": "Haar confidence was below baseline at the development-selected threshold and below Pressure at 0.52. The equal direction candidate improved the aggregate 0.55 point estimate but lost confirmation selection score and fold stability to the existing Pressure plus AR shadow."
+    },
+    "latest_haar_artifact": {
+      "decision_timestamp": "2026-06-01T04:30:00.000Z",
+      "predicted_direction": "up",
+      "probability_up": 0.5263537325,
+      "artifact_prediction_succeeded": true,
+      "odds_valid": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_parent_pressure_ordinal_lightgbm_candidate": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_direction_co_challenger": true,
+    "require_full_runtime_ensemble_parity_before_use": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "require_fresh_head_to_head_accuracy_not_below_parent": true,
+    "reason": "The fixed equal candidate improved development, confirmation, and aggregate accuracy against the baseline, parent, and standalone Haar point estimates; it won 6/7 folds against baseline and 5/7 against the parent, while baseline Brier and log-loss improvement was supported by daily bootstrap. Accuracy intervals and direct parent proper-score intervals crossed zero, and full runtime parity is not issued, so it remains a parallel co-challenger."
+  }
+}

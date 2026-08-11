@@ -1,0 +1,173 @@
+{
+  "format_version": 1,
+  "status": "forward_candidate_direction_pressure_ordinal_lightgbm_equal",
+  "target_timeframe_minutes": 30,
+  "learner_candidate": {
+    "feature_set": "baseline",
+    "feature_count": 38,
+    "model_type": "lightgbm",
+    "boosting_type": "gbdt",
+    "num_leaves": 31,
+    "estimators": 300,
+    "learning_rate": 0.03,
+    "min_child_samples": 100,
+    "row_sample": 0.8,
+    "column_sample": 0.8,
+    "l2": 5.0,
+    "random_seed": 42,
+    "deterministic": true,
+    "force_column_wise": true,
+    "probability_calibration": "platt",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false,
+    "parameter_search_performed": false
+  },
+  "direction_candidate": {
+    "construction": "fixed 50/50 mean of the existing baseline75/Pressure12.5/Ordinal12.5 candidate and baseline75/LightGBM25 blend",
+    "effective_baseline_weight": 0.75,
+    "effective_pressure_weight": 0.0625,
+    "effective_ordinal_motif_weight": 0.0625,
+    "effective_lightgbm_weight": 0.125,
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "loss_multiplier": 1.0,
+    "role": "M30 heterogeneous-learner plus processed-feature direction co-challenger",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos_early": "experiments/next_bar/context_confirmation_m30_001",
+    "baseline_oos_late": "experiments/next_bar/walk_forward_001",
+    "lightgbm_oos": "experiments/next_bar/walk_forward_lightgbm_m30_fixed_001",
+    "lightgbm_direction_blend": "experiments/next_bar/lightgbm_m30_blend_fixed_001",
+    "lightgbm_confidence_blend": "experiments/next_bar/lightgbm_m30_confidence_blend_fixed_001",
+    "parent_direction_candidate": "experiments/next_bar/pressure_ordinal_motif_equal_m30_direction_fixed_001",
+    "equal_direction_candidate": "experiments/next_bar/pressure_ordinal_lightgbm_equal_m30_direction_fixed_001",
+    "candidate_analysis": "experiments/next_bar/lightgbm_m30_candidate_analysis.json",
+    "parent_comparison": "experiments/next_bar/pressure_ordinal_lightgbm_equal_vs_pressure_ordinal_m30_direction_fixed_05.json",
+    "parent_bootstrap": "experiments/next_bar/pressure_ordinal_lightgbm_equal_vs_pressure_ordinal_m30_direction_bootstrap.json",
+    "baseline_bootstrap": "experiments/next_bar/pressure_ordinal_lightgbm_equal_vs_baseline_m30_direction_bootstrap.json",
+    "latest_single_artifact_prediction": "experiments/next_bar/lightgbm_m30_latest_prediction.json",
+    "rejected_three_way_confidence": "experiments/next_bar/pressure_ar_lightgbm_equal_m30_confidence_fixed_001"
+  },
+  "evidence": {
+    "rows": 71260,
+    "development_folds": [
+      "test2020",
+      "test2021",
+      "test2022",
+      "test2023"
+    ],
+    "confirmation_folds": [
+      "test2024",
+      "test2025",
+      "test2026_partial"
+    ],
+    "standalone_lightgbm": {
+      "development_accuracy": 0.5199431179614211,
+      "confirmation_accuracy": 0.5174433317667474,
+      "all_accuracy": 0.5189727757507718,
+      "all_brier": 0.24945453958591407,
+      "all_log_loss": 0.6920545080778756,
+      "net_correct_vs_baseline": 64
+    },
+    "lightgbm_25_percent_blend": {
+      "development_accuracy": 0.519736691208514,
+      "confirmation_accuracy": 0.5167925960738946,
+      "all_accuracy": 0.5185938815604827,
+      "all_brier": 0.24946013965581637,
+      "all_log_loss": 0.6920664069596182,
+      "accuracy_improved_folds_vs_baseline": 4,
+      "brier_improved_folds_vs_baseline": 6,
+      "log_loss_improved_folds_vs_baseline": 6
+    },
+    "equal_direction_candidate": {
+      "development": {
+        "baseline_accuracy": 0.519897245349664,
+        "parent_accuracy": 0.520218353631964,
+        "candidate_accuracy": 0.5202642262437212
+      },
+      "confirmation": {
+        "baseline_accuracy": 0.5152019088246991,
+        "parent_accuracy": 0.5160334044322331,
+        "candidate_accuracy": 0.5165395321933408
+      },
+      "all": {
+        "baseline_accuracy": 0.5180746561886052,
+        "parent_accuracy": 0.5185938815604827,
+        "candidate_accuracy": 0.5188184114510244,
+        "baseline_brier": 0.24949787896496803,
+        "parent_brier": 0.2494615611416063,
+        "candidate_brier": 0.24945863265845,
+        "baseline_log_loss": 0.6921425331377644,
+        "parent_log_loss": 0.6920692478769064,
+        "candidate_log_loss": 0.6920633688701614,
+        "candidate_ece": 0.0006533072550213664,
+        "net_correct_vs_baseline": 53,
+        "net_correct_vs_parent": 16
+      },
+      "fold_accuracy_wins_vs_parent": "5/7"
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline": {
+      "all_accuracy_delta_ci95": [
+        -0.00047446986259678804,
+        0.0019749321534704182
+      ],
+      "all_probability_candidate_more_accurate": 0.8851,
+      "all_brier_delta_ci95": [
+        -0.00005756468170249468,
+        -0.000021044777509009897
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.0001160429381811684,
+        -0.0000424828513106601
+      ]
+    },
+    "paired_utc_day_bootstrap_20000_vs_parent": {
+      "all_accuracy_delta_ci95": [
+        -0.0007428448230017981,
+        0.0011771994194115527
+      ],
+      "all_probability_candidate_more_accurate": 0.67155,
+      "all_brier_delta_ci95": [
+        -0.000014163143157767955,
+        0.00000818735759614622
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.00002848947526120082,
+        0.00001644106267426336
+      ]
+    },
+    "rejected_confidence": {
+      "development_selected_threshold": 0.515,
+      "selected_confirmation_accuracy": 0.5312346286276439,
+      "baseline_confirmation_accuracy": 0.5329771247286692,
+      "fixed_055_accuracy_wins_vs_pressure_ar_shadow": "2/7",
+      "fixed_055_score_wins_vs_pressure_ar_shadow": "3/7",
+      "three_way_equal_accuracy_wins_vs_pressure_ar_shadow": "2/7",
+      "three_way_equal_score_wins_vs_pressure_ar_shadow": "2/7",
+      "reason": "The development-selected broad lane reversed in confirmation, and neither LightGBM 0.55 nor the fixed three-way confidence average improved the existing Pressure plus AR shadow."
+    },
+    "latest_single_artifact": {
+      "decision_timestamp": "2026-06-01T04:30:00.000Z",
+      "predicted_direction": "up",
+      "probability_up": 0.524700306,
+      "artifact_prediction_succeeded": true,
+      "odds_valid": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_parent_pressure_ordinal_candidate": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_direction_co_challenger": true,
+    "require_runtime_ensemble_parity_before_use": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "require_fresh_head_to_head_accuracy_not_below_parent": true,
+    "reason": "The fixed equal direction average improved baseline development, confirmation, all-period accuracy, and proper scores; it also beat the current parent candidate in 5/7 folds with higher point accuracy and slightly better aggregate proper scores. Accuracy superiority over baseline and the parent was not established by daily bootstrap, and full runtime ensemble parity is not issued, so it remains a parallel co-challenger."
+  }
+}

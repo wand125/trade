@@ -1,0 +1,163 @@
+{
+  "format_version": 1,
+  "status": "forward_challenger_direction_extra_trees_standalone",
+  "target_timeframe_minutes": 30,
+  "learner_candidate": {
+    "feature_set": "baseline",
+    "feature_count": 38,
+    "model_type": "extra_trees",
+    "estimators": 200,
+    "max_depth": 12,
+    "min_samples_leaf": 50,
+    "max_features": 0.75,
+    "random_seed": 42,
+    "probability_calibration": "platt",
+    "train_window": "expanding",
+    "train_weighting": "uniform",
+    "train_target_filter": "all",
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false,
+    "parameter_search_performed": false
+  },
+  "direction_candidate": {
+    "construction": "standalone fixed Extra Trees probability",
+    "preserve_baseline_direction": false,
+    "direction_rule": "probability_up >= 0.5",
+    "loss_multiplier": 1.0,
+    "role": "M30 heterogeneous-learner probability-quality direction challenger",
+    "confidence_is_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos_early": "experiments/next_bar/context_confirmation_m30_001",
+    "baseline_oos_late": "experiments/next_bar/walk_forward_001",
+    "extra_trees_oos": "experiments/next_bar/walk_forward_extra_trees_m30_fixed_001",
+    "normal_direction_blend": "experiments/next_bar/extra_trees_m30_blend_fixed_001",
+    "confidence_blend": "experiments/next_bar/extra_trees_m30_confidence_blend_fixed_001",
+    "candidate_analysis": "experiments/next_bar/extra_trees_m30_candidate_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/extra_trees_single_vs_baseline_m30_direction_bootstrap.json",
+    "current_cochallenger_comparison": "experiments/next_bar/extra_trees_single_vs_pressure_ordinal_lightgbm_m30_direction_fixed_05.json",
+    "current_cochallenger_bootstrap": "experiments/next_bar/extra_trees_single_vs_pressure_ordinal_lightgbm_m30_direction_bootstrap.json",
+    "rejected_equal_direction_average": "experiments/next_bar/pressure_ordinal_lightgbm_extra_trees_equal_m30_direction_fixed_001",
+    "rejected_equal_direction_comparison": "experiments/next_bar/pressure_ordinal_lightgbm_extra_equal_vs_current_m30_direction_fixed_05.json",
+    "rejected_confidence_comparison": "experiments/next_bar/extra_trees_vs_pressure_ar_equal_m30_fixed_055.json",
+    "latest_single_artifact_prediction": "experiments/next_bar/extra_trees_m30_latest_prediction.json"
+  },
+  "evidence": {
+    "rows": 71260,
+    "development_folds": [
+      "test2020",
+      "test2021",
+      "test2022",
+      "test2023"
+    ],
+    "confirmation_folds": [
+      "test2024",
+      "test2025",
+      "test2026_partial"
+    ],
+    "standalone_extra_trees": {
+      "development_accuracy": 0.5207688249730499,
+      "confirmation_accuracy": 0.516431076244532,
+      "all_accuracy": 0.5190850406960427,
+      "all_balanced_accuracy": 0.5189040514196375,
+      "all_brier": 0.24938622987517367,
+      "all_log_loss": 0.6919190296883085,
+      "all_ece": 0.0020226973569461987,
+      "net_correct_vs_baseline": 72,
+      "accuracy_improved_folds_vs_baseline": 4,
+      "brier_improved_folds_vs_baseline": 5,
+      "log_loss_improved_folds_vs_baseline": 5
+    },
+    "normal_25_percent_blend": {
+      "development_accuracy": 0.5212504873964999,
+      "confirmation_accuracy": 0.515346516756444,
+      "all_accuracy": 0.518958742632613,
+      "all_brier": 0.24943251608104997,
+      "all_log_loss": 0.6920111670619309,
+      "all_ece": 0.0005832060078273154,
+      "net_correct_vs_baseline": 63,
+      "accuracy_improved_folds_vs_baseline": 4,
+      "brier_improved_folds_vs_baseline": 6,
+      "log_loss_improved_folds_vs_baseline": 6,
+      "reason_not_promoted": "Confirmation accuracy improved by only four correct rows over baseline and was lower than both the standalone learner and the current co-challenger."
+    },
+    "head_to_head_vs_current_cochallenger": {
+      "current_construction": "baseline75 + Pressure6.25 + Ordinal6.25 + LightGBM12.5",
+      "development_accuracy_delta": 0.0005045987293287,
+      "confirmation_accuracy_delta": -0.0001084559488088,
+      "all_accuracy_delta": 0.0002666292450183,
+      "all_net_correct": 19,
+      "fold_accuracy_wins": "4/7",
+      "all_accuracy_delta_ci95": [
+        -0.0025886497846863143,
+        0.00305693011590981
+      ],
+      "all_probability_extra_trees_more_accurate": 0.5705,
+      "all_brier_delta_ci95": [
+        -0.00016801117109086215,
+        0.00002371402246128109
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.0003364729177596115,
+        0.000049242954565142724
+      ]
+    },
+    "paired_utc_day_bootstrap_20000_vs_baseline": {
+      "all_accuracy_delta_ci95": [
+        -0.0019220483057168752,
+        0.003957833325680336
+      ],
+      "all_probability_extra_trees_more_accurate": 0.7454,
+      "all_brier_delta_ci95": [
+        -0.00021966565849231777,
+        -0.0000025884637211144446
+      ],
+      "all_log_loss_delta_ci95": [
+        -0.00044086419374730624,
+        -0.0000041839455436982216
+      ]
+    },
+    "rejected_confidence": {
+      "development_selected_threshold": 0.515,
+      "development_candidate_accuracy": 0.5323000781453503,
+      "confirmation_candidate_accuracy": 0.5323245060949979,
+      "confirmation_baseline_accuracy": 0.5329771247286692,
+      "fixed_055_all_rows": 4642,
+      "fixed_055_all_coverage": 0.06514173449340444,
+      "fixed_055_all_accuracy": 0.5579491598448945,
+      "fixed_055_accuracy_wins_vs_pressure_ar_shadow": "3/7",
+      "fixed_055_score_wins_vs_pressure_ar_shadow": "3/7",
+      "reason": "The development-selected broad lane reversed in confirmation, while the fixed 0.55 lane lost aggregate accuracy and selection score to the existing Pressure plus AR shadow."
+    },
+    "rejected_equal_direction_average": {
+      "construction": "fixed 50/50 mean of the current co-challenger and the Extra Trees 25% blend",
+      "development_accuracy": 0.5207000160554142,
+      "confirmation_accuracy": 0.515888796500488,
+      "all_accuracy": 0.5188324445691833,
+      "all_net_correct_vs_current": 1,
+      "fold_accuracy_wins_vs_current": "2/7",
+      "reason": "One aggregate correct prediction did not justify a fourth model component, and confirmation accuracy and fold stability deteriorated."
+    },
+    "latest_single_artifact": {
+      "decision_timestamp": "2026-06-01T04:30:00.000Z",
+      "predicted_direction": "up",
+      "probability_up": 0.5278750826,
+      "artifact_prediction_succeeded": true,
+      "odds_valid": false
+    }
+  },
+  "promotion": {
+    "replace_authoritative_direction": false,
+    "replace_current_pressure_ordinal_lightgbm_cochallenger": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_trading_policy": false,
+    "emit_as_parallel_standalone_direction_challenger": true,
+    "require_fresh_forward_accuracy_not_below_baseline": true,
+    "require_fresh_forward_brier_not_above_baseline": true,
+    "require_fresh_forward_log_loss_not_above_baseline": true,
+    "require_fresh_head_to_head_accuracy_not_below_current_cochallenger": true,
+    "reason": "The fixed standalone learner improved baseline point accuracy in development, confirmation, and aggregate data, and aggregate daily bootstrap supported Brier and log-loss improvement. Its accuracy interval crossed zero, ECE worsened, and direct improvement over the current co-challenger was not established, so it remains a parallel probability-quality challenger rather than a replacement or odds source."
+  }
+}

@@ -44,6 +44,10 @@ FEATURE_SETS = (
     "bar_breakout_rejection",
     "distribution_shift",
     "rolling_distribution_shape",
+    "rolling_spectral_state",
+    "rolling_ordinal_motif",
+    "rolling_autoregressive_state",
+    "rolling_transition_memory",
     "rolling_full_path",
     "change_point_state",
     "shock_recovery_state",
@@ -75,6 +79,22 @@ SHOCK_REFERENCE_WINDOW = 64
 SHOCK_Z_THRESHOLD = 2.0
 SHOCK_TRACKING_BARS = 16
 SHOCK_RESPONSE_CAP = 3.0
+ROLLING_SPECTRAL_WINDOW = 64
+ROLLING_SPECTRAL_PHASE_FREQUENCIES = (1, 2, 4, 8)
+ROLLING_ORDINAL_WINDOWS = (32, 128)
+ROLLING_ORDINAL_PATTERNS = {
+    "012": 5,
+    "021": 7,
+    "102": 11,
+    "120": 15,
+    "201": 19,
+    "210": 21,
+}
+ROLLING_AR_WINDOWS = (32, 128)
+ROLLING_AR_LAGS = 3
+ROLLING_AR_RIDGE_STRENGTH = 0.05
+ROLLING_TRANSITION_WINDOWS = (32, 128)
+ROLLING_TRANSITION_PRIOR_STRENGTH = 8.0
 MODEL_TYPES = (
     "hgb",
     "mlp",
@@ -2132,6 +2152,570 @@ def _causal_shock_recovery_state(
     }
 
 
+def _rolling_sum_array(values: np.ndarray, window: int) -> np.ndarray:
+    if window <= 0:
+        raise ValueError("rolling sum window must be positive")
+    raw = np.asarray(values)
+    output = np.full(len(raw), np.nan, dtype=np.result_type(raw.dtype, "float64"))
+    if len(raw) < window:
+        return output
+    cumulative = np.concatenate(
+        [np.zeros(1, dtype=output.dtype), np.cumsum(raw, dtype=output.dtype)]
+    )
+    output[window - 1 :] = cumulative[window:] - cumulative[:-window]
+    return output
+
+
+def rolling_spectral_state(
+    returns: pd.Series,
+    timestamps: pd.Series,
+    timeframe_minutes: int,
+    window: int = ROLLING_SPECTRAL_WINDOW,
+) -> dict[str, pd.Series]:
+    """Fixed-window causal DFT state with gap-safe, scale-free components."""
+    if timeframe_minutes <= 0:
+        raise ValueError("timeframe_minutes must be positive")
+    if window < 16:
+        raise ValueError("rolling spectral window must be at least 16")
+
+    raw = returns.to_numpy(dtype="float64")
+    finite = np.isfinite(raw)
+    values = np.where(finite, raw, 0.0)
+    rows = len(values)
+    row_number = np.arange(rows, dtype="float64")
+    count = _rolling_sum_array(finite.astype("float64"), window)
+    rolling_sum = _rolling_sum_array(values, window)
+    rolling_square_sum = _rolling_sum_array(values * values, window)
+    centered_energy = rolling_square_sum - rolling_sum * rolling_sum / window
+    centered_energy = np.maximum(centered_energy, 0.0)
+    denominator = window * centered_energy
+
+    timestamp = pd.to_datetime(timestamps, utc=True)
+    expected_delta = pd.Timedelta(minutes=timeframe_minutes)
+    gap_event = timestamp.diff().ne(expected_delta).to_numpy(dtype="float64")
+    if rows:
+        gap_event[0] = 0.0
+    # A return at the first row after a gap crosses that gap, so invalidate
+    # every window containing the marked return itself.
+    gap_count = _rolling_sum_array(gap_event, window)
+    valid = (
+        np.equal(count, window)
+        & np.equal(gap_count, 0.0)
+        & np.isfinite(denominator)
+        & (denominator > 0)
+    )
+
+    low_fraction = np.zeros(rows, dtype="float64")
+    mid_fraction = np.zeros(rows, dtype="float64")
+    phase_components: dict[str, np.ndarray] = {}
+    frequencies = sorted(set(range(1, 7)) | set(ROLLING_SPECTRAL_PHASE_FREQUENCIES))
+    for frequency in frequencies:
+        angular_frequency = 2.0 * np.pi * frequency / window
+        modulation = np.exp(-1j * angular_frequency * row_number)
+        absolute_sum = _rolling_sum_array(values * modulation, window)
+        window_start = row_number - window + 1
+        coefficient = absolute_sum * np.exp(
+            1j * angular_frequency * window_start
+        )
+        energy_fraction = np.zeros(rows, dtype="float64")
+        energy_fraction[valid] = (
+            2.0 * np.abs(coefficient[valid]) ** 2 / denominator[valid]
+        )
+        energy_fraction = np.clip(energy_fraction, 0.0, 1.0)
+        if frequency <= 2:
+            low_fraction += energy_fraction
+        elif frequency <= 6:
+            mid_fraction += energy_fraction
+        if frequency in ROLLING_SPECTRAL_PHASE_FREQUENCIES:
+            normalization = np.zeros(rows, dtype="float64")
+            normalization[valid] = np.sqrt(2.0 / denominator[valid])
+            cosine_component = np.zeros(rows, dtype="float64")
+            sine_component = np.zeros(rows, dtype="float64")
+            cosine_component[valid] = coefficient.real[valid] * normalization[valid]
+            sine_component[valid] = coefficient.imag[valid] * normalization[valid]
+            phase_components[f"rolling_spectral_cos_k{frequency}_64"] = (
+                np.clip(cosine_component, -1.0, 1.0)
+            )
+            phase_components[f"rolling_spectral_sin_k{frequency}_64"] = (
+                np.clip(sine_component, -1.0, 1.0)
+            )
+
+    low_fraction = np.clip(low_fraction, 0.0, 1.0)
+    mid_fraction = np.clip(mid_fraction, 0.0, 1.0)
+    high_fraction = np.where(
+        valid,
+        np.clip(1.0 - low_fraction - mid_fraction, 0.0, 1.0),
+        0.0,
+    )
+    output = {
+        "rolling_spectral_low_fraction_64": low_fraction,
+        "rolling_spectral_mid_fraction_64": mid_fraction,
+        "rolling_spectral_high_fraction_64": high_fraction,
+        "rolling_spectral_low_high_balance_64": low_fraction - high_fraction,
+        **phase_components,
+    }
+    return {
+        name: pd.Series(values, index=returns.index, dtype="float64")
+        for name, values in output.items()
+    }
+
+
+def _prior_window_sums(
+    values: np.ndarray,
+    windows: Sequence[int],
+) -> dict[int, np.ndarray]:
+    raw = np.asarray(values, dtype="float64")
+    if any(window <= 0 for window in windows):
+        raise ValueError("prior windows must be positive")
+    cumulative = np.concatenate(
+        [np.zeros(1, dtype="float64"), np.cumsum(raw, dtype="float64")]
+    )
+    positions = np.arange(len(raw), dtype="int64")
+    return {
+        window: cumulative[positions]
+        - cumulative[np.maximum(positions - window, 0)]
+        for window in windows
+    }
+
+
+def rolling_ordinal_motif(
+    returns: pd.Series,
+    timestamps: pd.Series,
+    timeframe_minutes: int,
+    windows: Sequence[int] = ROLLING_ORDINAL_WINDOWS,
+) -> dict[str, pd.Series]:
+    """Gap-safe ordinal distributions of completed-bar three-return motifs."""
+    if timeframe_minutes <= 0:
+        raise ValueError("timeframe_minutes must be positive")
+    normalized_windows = tuple(int(window) for window in windows)
+    if not normalized_windows or any(window < 8 for window in normalized_windows):
+        raise ValueError("rolling ordinal windows must be at least 8")
+
+    raw = returns.to_numpy(dtype="float64")
+    rows = len(raw)
+    if len(timestamps) != rows:
+        raise ValueError("rolling ordinal inputs must have identical lengths")
+    finite = np.isfinite(raw)
+    values = np.where(finite, raw, 0.0)
+    timestamp = pd.to_datetime(timestamps, utc=True)
+    expected_delta = pd.Timedelta(minutes=timeframe_minutes)
+    contiguous = timestamp.diff().eq(expected_delta).to_numpy(dtype="bool")
+    if rows:
+        contiguous[0] = False
+
+    return_0 = np.roll(values, 2)
+    return_1 = np.roll(values, 1)
+    return_2 = values
+    valid_0 = np.roll(finite, 2)
+    valid_1 = np.roll(finite, 1)
+    contiguous_1 = np.roll(contiguous, 1)
+    if rows:
+        return_0[:2] = 0.0
+        return_1[0] = 0.0
+        valid_0[:2] = False
+        valid_1[0] = False
+        contiguous_1[0] = False
+    motif_valid = finite & valid_0 & valid_1 & contiguous & contiguous_1
+
+    # Lexicographic (return, position) ranks keep tied observations in one of
+    # six mutually exclusive patterns without a scale-dependent epsilon.
+    rank_0 = (return_1 < return_0).astype("int8") + (
+        return_2 < return_0
+    ).astype("int8")
+    rank_1 = (return_0 <= return_1).astype("int8") + (
+        return_2 < return_1
+    ).astype("int8")
+    rank_2 = (return_0 <= return_2).astype("int8") + (
+        return_1 <= return_2
+    ).astype("int8")
+    motif_code = rank_0 * 9 + rank_1 * 3 + rank_2
+    pattern_masks = {
+        pattern: motif_valid & (motif_code == code)
+        for pattern, code in ROLLING_ORDINAL_PATTERNS.items()
+    }
+
+    gap_event = timestamp.diff().ne(expected_delta).to_numpy(dtype="float64")
+    if rows:
+        gap_event[0] = 0.0
+    outputs: dict[str, np.ndarray] = {}
+    entropies: dict[int, np.ndarray] = {}
+    current_frequencies: dict[int, np.ndarray] = {}
+    for window in normalized_windows:
+        motif_count = _rolling_sum_array(
+            motif_valid.astype("float64"), window
+        )
+        return_window = window + 2
+        return_count = _rolling_sum_array(finite.astype("float64"), return_window)
+        return_sum = _rolling_sum_array(values, return_window)
+        return_square_sum = _rolling_sum_array(values * values, return_window)
+        centered_energy = return_square_sum - return_sum * return_sum / return_window
+        gap_count = _rolling_sum_array(gap_event, return_window)
+        valid = (
+            np.equal(motif_count, window)
+            & np.equal(return_count, return_window)
+            & np.equal(gap_count, 0.0)
+            & np.isfinite(centered_energy)
+            & (centered_energy > np.finfo("float64").eps)
+        )
+
+        fractions: dict[str, np.ndarray] = {}
+        for pattern, pattern_mask in pattern_masks.items():
+            pattern_count = _rolling_sum_array(
+                pattern_mask.astype("float64"), window
+            )
+            fraction = np.zeros(rows, dtype="float64")
+            fraction[valid] = pattern_count[valid] / window
+            fractions[pattern] = fraction
+            outputs[f"rolling_ordinal_{pattern}_fraction_{window}"] = fraction
+
+        probabilities = np.column_stack(list(fractions.values()))
+        entropy_terms = np.where(
+            probabilities > 0,
+            probabilities * np.log(np.where(probabilities > 0, probabilities, 1.0)),
+            0.0,
+        )
+        entropy = np.zeros(rows, dtype="float64")
+        entropy[valid] = -entropy_terms[valid].sum(axis=1) / np.log(
+            len(ROLLING_ORDINAL_PATTERNS)
+        )
+        current_frequency = np.zeros(rows, dtype="float64")
+        for pattern, code in ROLLING_ORDINAL_PATTERNS.items():
+            current = valid & motif_valid & (motif_code == code)
+            current_frequency[current] = fractions[pattern][current]
+        outputs[f"rolling_ordinal_entropy_{window}"] = entropy
+        outputs[f"rolling_ordinal_current_frequency_{window}"] = current_frequency
+        entropies[window] = entropy
+        current_frequencies[window] = current_frequency
+
+    short_window = min(normalized_windows)
+    long_window = max(normalized_windows)
+    outputs["rolling_ordinal_entropy_short_long_delta"] = (
+        entropies[short_window] - entropies[long_window]
+    )
+    outputs["rolling_ordinal_current_frequency_short_long_delta"] = (
+        current_frequencies[short_window] - current_frequencies[long_window]
+    )
+    return {
+        name: pd.Series(np.clip(values, -1.0, 1.0), index=returns.index)
+        for name, values in outputs.items()
+    }
+
+
+def rolling_autoregressive_state(
+    returns: pd.Series,
+    timestamps: pd.Series,
+    timeframe_minutes: int,
+    windows: Sequence[int] = ROLLING_AR_WINDOWS,
+    ridge_strength: float = ROLLING_AR_RIDGE_STRENGTH,
+) -> dict[str, pd.Series]:
+    """Causal scale-free local AR(3) state and prior-model innovation."""
+    if timeframe_minutes <= 0:
+        raise ValueError("timeframe_minutes must be positive")
+    normalized_windows = tuple(int(window) for window in windows)
+    if not normalized_windows or any(window < 8 for window in normalized_windows):
+        raise ValueError("rolling autoregressive windows must be at least 8")
+    if ridge_strength <= 0:
+        raise ValueError("rolling autoregressive ridge strength must be positive")
+
+    raw = returns.to_numpy(dtype="float64")
+    rows = len(raw)
+    if len(timestamps) != rows:
+        raise ValueError("rolling autoregressive inputs must have identical lengths")
+    finite = np.isfinite(raw)
+    values = np.where(finite, raw, 0.0)
+    timestamp = pd.to_datetime(timestamps, utc=True)
+    expected_delta = pd.Timedelta(minutes=timeframe_minutes)
+    contiguous = timestamp.diff().eq(expected_delta).to_numpy(dtype="bool")
+    if rows:
+        contiguous[0] = False
+
+    lagged_values: list[np.ndarray] = []
+    lagged_finite: list[np.ndarray] = []
+    for lag in range(1, ROLLING_AR_LAGS + 1):
+        lag_values = np.roll(values, lag)
+        lag_finite = np.roll(finite, lag)
+        lag_values[:lag] = 0.0
+        lag_finite[:lag] = False
+        lagged_values.append(lag_values)
+        lagged_finite.append(lag_finite)
+
+    sample_valid = finite.copy()
+    for lag_finite in lagged_finite:
+        sample_valid &= lag_finite
+    for offset in range(ROLLING_AR_LAGS):
+        transition_valid = np.roll(contiguous, offset)
+        if offset:
+            transition_valid[:offset] = False
+        sample_valid &= transition_valid
+    if rows:
+        sample_valid[:ROLLING_AR_LAGS] = False
+
+    design = np.column_stack(lagged_values)
+    safe_design = np.where(sample_valid[:, None], design, 0.0)
+    safe_target = np.where(sample_valid, values, 0.0)
+    outputs: dict[str, np.ndarray] = {}
+    forecasts: dict[int, np.ndarray] = {}
+    fit_energies: dict[int, np.ndarray] = {}
+    innovations: dict[int, np.ndarray] = {}
+
+    for window in normalized_windows:
+        sample_count = _rolling_sum_array(sample_valid.astype("float64"), window)
+        target_sum = _rolling_sum_array(safe_target, window)
+        target_square_sum = _rolling_sum_array(safe_target * safe_target, window)
+        centered_target_energy = (
+            target_square_sum - target_sum * target_sum / window
+        )
+
+        xtx = np.zeros((rows, ROLLING_AR_LAGS, ROLLING_AR_LAGS), dtype="float64")
+        xty = np.zeros((rows, ROLLING_AR_LAGS), dtype="float64")
+        for left in range(ROLLING_AR_LAGS):
+            xty[:, left] = _rolling_sum_array(
+                safe_design[:, left] * safe_target,
+                window,
+            )
+            for right in range(left, ROLLING_AR_LAGS):
+                product_sum = _rolling_sum_array(
+                    safe_design[:, left] * safe_design[:, right],
+                    window,
+                )
+                xtx[:, left, right] = product_sum
+                xtx[:, right, left] = product_sum
+
+        trace = np.trace(xtx, axis1=1, axis2=2)
+        valid = (
+            np.equal(sample_count, window)
+            & np.isfinite(centered_target_energy)
+            & (centered_target_energy > np.finfo("float64").eps)
+            & np.isfinite(trace)
+            & (trace > np.finfo("float64").eps)
+        )
+        coefficients = np.zeros((rows, ROLLING_AR_LAGS), dtype="float64")
+        if valid.any():
+            regularized = xtx[valid].copy()
+            ridge = ridge_strength * trace[valid] / ROLLING_AR_LAGS
+            diagonal = np.arange(ROLLING_AR_LAGS)
+            regularized[:, diagonal, diagonal] += ridge[:, None]
+            coefficients[valid] = np.linalg.solve(regularized, xty[valid])
+
+        target_rms = np.zeros(rows, dtype="float64")
+        target_rms[valid] = np.sqrt(target_square_sum[valid] / window)
+        next_design = np.column_stack([values, *lagged_values[:2]])
+        raw_forecast = np.einsum("ij,ij->i", coefficients, next_design)
+        forecast = np.zeros(rows, dtype="float64")
+        forecast[valid] = np.clip(
+            raw_forecast[valid] / target_rms[valid],
+            -3.0,
+            3.0,
+        ) / 3.0
+
+        fitted_energy = np.zeros(rows, dtype="float64")
+        if valid.any():
+            coefficient_valid = coefficients[valid]
+            explained = (
+                2.0 * np.einsum("ij,ij->i", coefficient_valid, xty[valid])
+                - np.einsum(
+                    "ij,ijk,ik->i",
+                    coefficient_valid,
+                    xtx[valid],
+                    coefficient_valid,
+                )
+            )
+            fitted_energy[valid] = np.clip(
+                explained / target_square_sum[valid],
+                -1.0,
+                1.0,
+            )
+
+        previous_coefficients = np.roll(coefficients, 1, axis=0)
+        previous_valid = np.roll(valid, 1)
+        previous_rms = np.roll(target_rms, 1)
+        if rows:
+            previous_coefficients[0] = 0.0
+            previous_valid[0] = False
+            previous_rms[0] = 0.0
+        current_prior_forecast = np.einsum(
+            "ij,ij->i",
+            previous_coefficients,
+            design,
+        )
+        innovation_valid = (
+            sample_valid
+            & previous_valid
+            & np.isfinite(previous_rms)
+            & (previous_rms > np.finfo("float64").eps)
+        )
+        innovation = np.zeros(rows, dtype="float64")
+        innovation[innovation_valid] = np.clip(
+            (
+                values[innovation_valid]
+                - current_prior_forecast[innovation_valid]
+            )
+            / previous_rms[innovation_valid],
+            -3.0,
+            3.0,
+        ) / 3.0
+
+        for lag in range(ROLLING_AR_LAGS):
+            outputs[f"rolling_ar_lag{lag + 1}_coefficient_{window}"] = (
+                np.clip(coefficients[:, lag], -2.0, 2.0) / 2.0
+            )
+        outputs[f"rolling_ar_forecast_{window}"] = forecast
+        outputs[f"rolling_ar_fit_energy_{window}"] = fitted_energy
+        outputs[f"rolling_ar_latest_innovation_{window}"] = innovation
+        forecasts[window] = forecast
+        fit_energies[window] = fitted_energy
+        innovations[window] = innovation
+
+    short_window = min(normalized_windows)
+    long_window = max(normalized_windows)
+    outputs["rolling_ar_forecast_short_long_delta"] = (
+        forecasts[short_window] - forecasts[long_window]
+    )
+    outputs["rolling_ar_fit_energy_short_long_delta"] = (
+        fit_energies[short_window] - fit_energies[long_window]
+    )
+    outputs["rolling_ar_innovation_short_long_delta"] = (
+        innovations[short_window] - innovations[long_window]
+    )
+    return {
+        name: pd.Series(np.clip(values, -1.0, 1.0), index=returns.index)
+        for name, values in outputs.items()
+    }
+
+
+def rolling_transition_memory(
+    returns: pd.Series,
+    body_fraction: pd.Series,
+    close_location: pd.Series,
+    true_range: pd.Series,
+    timestamps: pd.Series,
+    timeframe_minutes: int,
+    windows: Sequence[int] = ROLLING_TRANSITION_WINDOWS,
+    prior_strength: float = ROLLING_TRANSITION_PRIOR_STRENGTH,
+) -> dict[str, pd.Series]:
+    """Causal local transition memory over fixed stationary candle states."""
+    if timeframe_minutes <= 0:
+        raise ValueError("timeframe_minutes must be positive")
+    normalized_windows = tuple(int(window) for window in windows)
+    if not normalized_windows or any(window <= 0 for window in normalized_windows):
+        raise ValueError("transition memory windows must be positive")
+    if prior_strength <= 0:
+        raise ValueError("transition memory prior strength must be positive")
+
+    raw_return = returns.to_numpy(dtype="float64")
+    raw_body = body_fraction.to_numpy(dtype="float64")
+    raw_close_location = close_location.to_numpy(dtype="float64")
+    raw_range = true_range.to_numpy(dtype="float64")
+    rows = len(raw_return)
+    if not (
+        len(raw_body) == rows
+        and len(raw_close_location) == rows
+        and len(raw_range) == rows
+        and len(timestamps) == rows
+    ):
+        raise ValueError("transition memory inputs must have identical lengths")
+
+    timestamp = pd.to_datetime(timestamps, utc=True)
+    expected_delta = pd.Timedelta(minutes=timeframe_minutes)
+    contiguous = timestamp.diff().eq(expected_delta).to_numpy(dtype="bool")
+    if rows:
+        contiguous[0] = False
+    finite = (
+        np.isfinite(raw_return)
+        & np.isfinite(raw_body)
+        & np.isfinite(raw_close_location)
+        & np.isfinite(raw_range)
+    )
+    state_valid = contiguous & finite & (np.abs(raw_return) > 1e-15)
+
+    body_bit = np.abs(np.nan_to_num(raw_body, nan=0.0)) >= 0.5
+    close_bit = np.nan_to_num(raw_close_location, nan=0.5) >= 0.5
+    range_series = pd.Series(raw_range, index=true_range.index, dtype="float64")
+    prior_range_median = (
+        range_series.rolling(20, min_periods=5).median().shift(1).to_numpy()
+    )
+    range_bit = np.isfinite(prior_range_median) & (raw_range >= prior_range_median)
+    up_bit = raw_return > 0
+    state = (
+        up_bit.astype("int8") * 8
+        + body_bit.astype("int8") * 4
+        + close_bit.astype("int8") * 2
+        + range_bit.astype("int8")
+    )
+
+    transition_valid = np.zeros(rows, dtype="bool")
+    transition_up = np.zeros(rows, dtype="bool")
+    if rows > 1:
+        transition_valid[:-1] = state_valid[:-1] & state_valid[1:]
+        transition_up[:-1] = raw_return[1:] > 0
+
+    global_counts = _prior_window_sums(
+        transition_valid.astype("float64"), normalized_windows
+    )
+    global_ups = _prior_window_sums(
+        (transition_valid & transition_up).astype("float64"), normalized_windows
+    )
+    selected_counts = {
+        window: np.zeros(rows, dtype="float64") for window in normalized_windows
+    }
+    selected_ups = {
+        window: np.zeros(rows, dtype="float64") for window in normalized_windows
+    }
+    for state_value in range(16):
+        current_mask = state_valid & (state == state_value)
+        historical_mask = transition_valid & (state == state_value)
+        count_sums = _prior_window_sums(
+            historical_mask.astype("float64"), normalized_windows
+        )
+        up_sums = _prior_window_sums(
+            (historical_mask & transition_up).astype("float64"),
+            normalized_windows,
+        )
+        for window in normalized_windows:
+            selected_counts[window][current_mask] = count_sums[window][current_mask]
+            selected_ups[window][current_mask] = up_sums[window][current_mask]
+
+    probabilities: dict[int, np.ndarray] = {}
+    output: dict[str, np.ndarray] = {}
+    for window in normalized_windows:
+        global_probability = (global_ups[window] + 1.0) / (
+            global_counts[window] + 2.0
+        )
+        probability = np.full(rows, 0.5, dtype="float64")
+        posterior = (
+            selected_ups[window] + prior_strength * global_probability
+        ) / (selected_counts[window] + prior_strength)
+        probability[state_valid] = posterior[state_valid]
+        probabilities[window] = probability
+        reversal_probability = np.where(up_bit, 1.0 - probability, probability)
+        output[f"transition_memory_up_edge_{window}"] = np.where(
+            state_valid, 2.0 * probability - 1.0, 0.0
+        )
+        output[f"transition_memory_support_fraction_{window}"] = np.where(
+            state_valid,
+            np.clip(selected_counts[window] / window, 0.0, 1.0),
+            0.0,
+        )
+        output[f"transition_memory_local_global_delta_{window}"] = np.where(
+            state_valid, probability - global_probability, 0.0
+        )
+        output[f"transition_memory_reversal_edge_{window}"] = np.where(
+            state_valid, 2.0 * reversal_probability - 1.0, 0.0
+        )
+
+    short_window = min(normalized_windows)
+    long_window = max(normalized_windows)
+    output["transition_memory_short_long_delta"] = np.where(
+        state_valid,
+        probabilities[short_window] - probabilities[long_window],
+        0.0,
+    )
+    return {
+        name: pd.Series(np.clip(values, -1.0, 1.0), index=returns.index)
+        for name, values in output.items()
+    }
+
+
 def build_feature_frame(
     bars: pd.DataFrame,
     timeframe_minutes: int,
@@ -2165,7 +2749,8 @@ def build_feature_frame(
     add("range_ratio", (high - low) / scale)
     add("upper_wick_ratio", (high - pd.concat([open_, close], axis=1).max(axis=1)) / scale)
     add("lower_wick_ratio", (pd.concat([open_, close], axis=1).min(axis=1) - low) / scale)
-    add("close_location", (close - low) / (high - low).replace(0, np.nan))
+    close_location = (close - low) / (high - low).replace(0, np.nan)
+    add("close_location", close_location)
     add("rsi_14", _rsi(close, 14) / 100.0)
 
     previous_close = close.shift(1)
@@ -2853,6 +3438,46 @@ def build_feature_frame(
                 ).std(),
             ),
         )
+
+    if feature_set == "rolling_spectral_state":
+        spectral_features = rolling_spectral_state(
+            log_return_1,
+            result["timestamp"],
+            timeframe_minutes,
+        )
+        for feature_name, values in spectral_features.items():
+            add(feature_name, values)
+
+    if feature_set == "rolling_ordinal_motif":
+        ordinal_features = rolling_ordinal_motif(
+            log_return_1,
+            result["timestamp"],
+            timeframe_minutes,
+        )
+        for feature_name, values in ordinal_features.items():
+            add(feature_name, values)
+
+    if feature_set == "rolling_autoregressive_state":
+        autoregressive_features = rolling_autoregressive_state(
+            log_return_1,
+            result["timestamp"],
+            timeframe_minutes,
+        )
+        for feature_name, values in autoregressive_features.items():
+            add(feature_name, values)
+
+    if feature_set == "rolling_transition_memory":
+        candle_range = (high - low).replace(0, np.nan)
+        transition_features = rolling_transition_memory(
+            log_return_1,
+            ((close - open_).abs() / candle_range).fillna(0.0),
+            close_location.fillna(0.5),
+            true_range,
+            result["timestamp"],
+            timeframe_minutes,
+        )
+        for feature_name, values in transition_features.items():
+            add(feature_name, values)
 
     if feature_set == "rolling_distribution_shape":
         distribution_window = 64

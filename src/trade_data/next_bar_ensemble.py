@@ -126,13 +126,15 @@ def blend_prediction_frames(
         candidate_weight,
         preserve_baseline_direction,
     )
+    output["probability_down"] = 1 - output["probability_up"]
     output["predicted_up"] = output["probability_up"].ge(0.5).astype("int8")
     output["predicted_direction"] = np.where(
         output["predicted_up"].eq(1), "up", "down"
     )
     output["confidence"] = np.maximum(
-        output["probability_up"], 1 - output["probability_up"]
+        output["probability_up"], output["probability_down"]
     )
+    output["class_confidence"] = output["confidence"]
     output["correct"] = output["predicted_up"].eq(output["target_up"].astype("int8"))
     output["ensemble_candidate_weight"] = candidate_weight
     output["ensemble_preserve_baseline_direction"] = preserve_baseline_direction
