@@ -5,6 +5,7 @@ import pandas as pd
 
 from trade_data.next_bar_odds_recalibration import (
     chronological_correctness_recalibration,
+    prequential_hierarchical_beta_recalibration,
 )
 
 
@@ -32,6 +33,72 @@ def prediction_frame() -> pd.DataFrame:
 
 
 class NextBarOddsRecalibrationTests(unittest.TestCase):
+    def test_prequential_beta_uses_only_resolved_past_outcomes(self):
+        timestamp = pd.date_range("2020-01-01", periods=12, freq="min", tz="UTC")
+        source = pd.DataFrame(
+            {
+                "fold": ["test2020"] * 6 + ["test2021"] * 6,
+                "timestamp": timestamp,
+                "decision_timestamp": timestamp + pd.Timedelta(minutes=1),
+                "target_timestamp": timestamp + pd.Timedelta(minutes=2),
+                "confidence": [0.6] * 12,
+                "correct": [True, True, False, True, False, True] * 2,
+                "predicted_direction": ["up", "down"] * 6,
+                "volatility_regime": ["normal"] * 12,
+                "predicted_up": [True, False] * 6,
+            }
+        )
+        calibrated, report = prequential_hierarchical_beta_recalibration(
+            source,
+            global_prior_strength=8,
+            band_prior_strength=4,
+            cell_prior_strength=2,
+        )
+
+        self.assertAlmostEqual(calibrated.loc[0, "adaptive_confidence"], 0.6)
+        self.assertEqual(calibrated.loc[0, "adaptive_global_support"], 0)
+        self.assertEqual(calibrated.loc[1, "adaptive_global_support"], 1)
+        self.assertGreater(calibrated.loc[1, "adaptive_confidence"], 0.6)
+        self.assertTrue(calibrated["adaptive_confidence"].between(0, 1).all())
+        self.assertTrue(
+            calibrated["adaptive_confidence_lower"]
+            .le(calibrated["adaptive_confidence"])
+            .all()
+        )
+        self.assertEqual(
+            report["fixed_specification"]["hierarchy"],
+            "global -> raw confidence band -> predicted direction x volatility regime",
+        )
+        self.assertIn("0.5", report["adaptive_lower_bound_lanes"]["development"])
+
+        changed = source.copy()
+        changed.loc[changed.index >= 6, "correct"] = ~changed.loc[
+            changed.index >= 6, "correct"
+        ]
+        changed_calibrated, _ = prequential_hierarchical_beta_recalibration(
+            changed,
+            global_prior_strength=8,
+            band_prior_strength=4,
+            cell_prior_strength=2,
+        )
+        np.testing.assert_allclose(
+            calibrated.loc[:6, "adaptive_confidence"],
+            changed_calibrated.loc[:6, "adaptive_confidence"],
+        )
+        self.assertEqual(
+            calibrated["predicted_up"].tolist(), source["predicted_up"].tolist()
+        )
+
+    def test_prequential_beta_rejects_unresolved_or_invalid_inputs(self):
+        source = prediction_frame().assign(
+            decision_timestamp=lambda frame: frame["timestamp"] + pd.Timedelta(minutes=1),
+            target_timestamp=lambda frame: frame["timestamp"] + pd.Timedelta(minutes=1),
+            predicted_direction="up",
+            volatility_regime="normal",
+        )
+        with self.assertRaisesRegex(ValueError, "target_timestamp"):
+            prequential_hierarchical_beta_recalibration(source)
+
     def test_recalibration_is_chronological_and_preserves_predictions(self):
         source = prediction_frame()
         calibrated, report = chronological_correctness_recalibration(source)

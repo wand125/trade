@@ -362,6 +362,17 @@
 - 直近15完成M1足のjoint range内で、最初のopenから11時点のclose位置を表すRolling Full Pathを実装した。全49特徴でscale不変、未来不参照、flat有限0、式一致、2,183,717 OOS行整列、artifact latest経路を確認した。volume 6,025,170行は全0のため除外した。
 - Full Path単体はbaseline比all +199件で不採用。通常25% blendはconfirmation +389件・日次accuracy区間改善、all +419件・Brier/log loss 6/7foldだったが、all accuracy区間は0を跨ぎ、既存Pathがdevelopment/allで有意に上回ったため方向候補へ追加しない。
 - 方向維持0.515はall 52.1157% / coverage 21.1262% / score 0.009062でもconfirmation scoreが反転した。Disagreementはall accuracy 52.309% / score 0.009636、accuracy・score各6/7fold、3期間の日次bootstrapでも優位だった。confirmation 0.55は146件でedge未確認のため再現専用として棄却し、config・registry・odds・policyを発行しない。
+- 現Transition guard × Disagreement championへ、各decisionまでに解決済みの直近90日だけを使うprequential hierarchical Beta correctness校正を実装した。global→固定confidence band→方向×volatilityを8,192/4,096/2,048で縮約し、未来correct非参照、方向不変、有限確率、2,183,717行・重複/欠損0を確認した。
+- adaptive 0.515はall coverageを16.018%→17.799%へ広げたが、accuracyを52.583%→52.380%、scoreを0.009674→0.009376へ下げた。all accuracy差の日次区間は-0.3398〜-0.0675pt、Brier/log loss悪化区間も確定し、accuracy 1/7、score 3/7foldだった。
+- confirmation 0.515もcoverage +5.028ptに対しaccuracy -0.828ptで悪化が確定し、0.55以上は0件。down-low/down-normal/up-lowの局所edgeも解消しないため再現専用として棄却し、raw champion、fair odds非認可、config・registry・policyを維持する。
+- 直前64本で標準化したreturn/range innovationを、drift 0.25、alarm 5、score cap 20の正負CUSUMへ逐次蓄積するM1 Change-Point Stateを実装した。score/balance/alarm方向/ageの固定10列を追加し、scale不変、未来不参照、flat有限0、timestamp gap reset、48特徴artifact latest、2,183,717 OOS行整列を確認した。
+- 単体はbaseline比all -460件。通常25%方向blendはall +265件、Brier/log loss 6/7foldでもaccuracy日次区間はdevelopment/confirmation/all全て0跨ぎだった。既存Pathがdevelopment/allで有意に上回りaccuracy・score各6/7fold勝ちのため方向候補へ追加しない。
+- 方向維持0.515はbaseline比all accuracy 52.1185% / coverage 21.1789% / score 0.009087で、accuracy・proper scoreの3期間日次区間を改善した。ただしDisagreementはall accuracy +0.1904pt・score +0.000549、championはaccuracy +0.4642pt・score +0.000587、Distribution Shiftはcoverage +14.434pt・score +0.000715で、各役割の既存候補が優位だった。
+- Change-Pointはall 0.55以上17,806件・55.0432%でもmean confidence 56.2125%と過信し、confirmationは170件だけだった。固定6セルのdown-low/down-normal/up-lowもedge未確認のため再現専用として棄却し、config・registry・odds・policyを発行しない。
+- 直前64本で標準化したreturn/rangeの固定2σ event後を16本追跡し、shock方向/超過量/age、return response、最大continuation/reversal、range状態、同時eventの12列へ加工するM1 Shock / Recovery Stateを実装した。scale不変、未来不参照、flat有限0、gap reset、response式、50特徴artifact latest、2,183,717 OOS行整列を確認した。
+- 単体はbaseline比all +598件でもp=0.201、Brier/log loss 2/7foldで不採用。通常25% blendはall +413件、accuracy/Brier/log loss 7/7foldでproper scoreの3期間日次区間も改善したが、accuracy区間はdevelopment/confirmation/all全て0を跨いだ。
+- 既存Distribution Shift通常25%はShockよりaccuracy・score各6/7fold、Brier/log lossは3期間bootstrapで優位だった。方向維持0.51もShockのall 51.6585% / 36.1699% / 0.009312に対し、Shiftは51.7536% / 35.6128% / 0.009802、score 7/7foldで上回った。
+- Shockのall 0.55以上は17,586件・54.7765%でもmean confidence 56.2100%と過信し、confirmation 0.55は156件、0.575以上0件だった。固定0.51も4/6セルだけedge確認のため再現専用として棄却し、config・registry・odds・policyを発行しない。
 
 ## ベースライン評価
 
@@ -464,3 +475,6 @@
 91. M1 Distribution Shift × LightGBMは再現専用とする。54特徴、31 leaves、300 trees、learning rate 0.03、min child 100、row/column sample 0.8、L2 5、25% weight、0.51を同じ履歴で再探索しない。親HGB Distribution Shiftを維持し、僅かなcoverage増加やaggregate proper-scoreだけを理由にconfig・registry・odds・policyを増やさない。
 92. M1 Rolling Distribution Shapeは再現専用とする。64本、10/25/50/75/90%分位、9列、HGB、25% weight、0.51を同じ履歴で再探索しない。確認期間でobjectiveが反転したため、単体のconfirmation点精度や高閾値の疎なaccuracyを理由にconfig・registry・odds・policyを増やさず、既存Distribution Shiftを維持する。
 93. M1 Rolling Full Pathは再現専用とする。15本、11採取点、joint range正規化、HGB、25% weight、0.515を同じ履歴で再探索しない。confirmation方向改善だけを理由に候補を増やさず、既存Path/Distribution Shift方向、Transition guard/Disagreement/Distribution Shift confidenceを維持し、config・registry・odds・policyを発行しない。
+94. M1 champion prequential hierarchical Beta oddsは再現専用とする。90日、8,192/4,096/2,048 prior、固定band、方向×volatility階層、posterior下限、0.515を同じ履歴で再探索しない。ECE局所改善だけを理由に採用せず、元Transition guard × Disagreement confidenceを維持し、fresh global/local整合までfair oddsを認可しない。
+95. M1 Change-Point Stateは再現専用とする。64本reference、drift 0.25、alarm 5、score cap 20、age cap 64、return/rangeの10列、HGB、25% weight、0.515を同じ履歴で再探索しない。baseline confidence改善は保存するが、Path/Distribution Shift方向とTransition guard/Disagreement/Distribution Shift confidenceの既存役割を置換せず、疎な高信頼度tailを理由にconfig・registry・odds・policyを増やさない。
+96. M1 Shock / Recovery Stateは再現専用とする。64本reference、2σ、16本追跡、response cap 3、return/rangeの12列、HGB、25% weight、0.51を同じ履歴で再探索しない。baseline proper-score改善は保存するが、既存Distribution Shiftの方向・ultra-broad confidence役割を置換せず、高信頼度tailや確認期間の単体点精度を理由にconfig・registry・odds・policyを増やさない。

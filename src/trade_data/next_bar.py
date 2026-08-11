@@ -45,6 +45,8 @@ FEATURE_SETS = (
     "distribution_shift",
     "rolling_distribution_shape",
     "rolling_full_path",
+    "change_point_state",
+    "shock_recovery_state",
     "sequence_manual",
     "tcn_sequence",
     "intrabar_manual",
@@ -64,6 +66,15 @@ FEATURE_SETS = (
 )
 CONFIDENCE_MODELS = ("class_probability", "side_platt", "context_hgb")
 PROBABILITY_CALIBRATIONS = ("platt", "isotonic", "beta", "temperature")
+CHANGE_POINT_REFERENCE_WINDOW = 64
+CHANGE_POINT_DRIFT = 0.25
+CHANGE_POINT_ALARM_THRESHOLD = 5.0
+CHANGE_POINT_SCORE_CAP = 20.0
+CHANGE_POINT_AGE_CAP = 64
+SHOCK_REFERENCE_WINDOW = 64
+SHOCK_Z_THRESHOLD = 2.0
+SHOCK_TRACKING_BARS = 16
+SHOCK_RESPONSE_CAP = 3.0
 MODEL_TYPES = (
     "hgb",
     "mlp",
@@ -97,7 +108,13 @@ INTRABAR_PATH_SIGNATURE_COLUMNS = (
     "intrabar_path_time_time_price_bracket",
     "intrabar_path_price_time_price_bracket",
 )
-TRAIN_WEIGHTING_MODES = ("uniform", "body_atr", "directional_clarity")
+TRAIN_WEIGHTING_MODES = (
+    "uniform",
+    "body_atr",
+    "directional_clarity",
+    "recency_half_life_730d",
+)
+RECENCY_WEIGHT_HALF_LIFE_DAYS = 730.0
 TRAIN_TARGET_FILTERS = (
     "all",
     "body_atr_upper_half",
@@ -1875,6 +1892,246 @@ def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return 100.0 - (100.0 / (1.0 + relative_strength))
 
 
+def _causal_change_point_state(
+    values: pd.Series,
+    timestamps: pd.Series,
+    timeframe_minutes: int,
+) -> dict[str, pd.Series]:
+    prior_mean = values.shift(1).rolling(
+        CHANGE_POINT_REFERENCE_WINDOW,
+        min_periods=CHANGE_POINT_REFERENCE_WINDOW,
+    ).mean()
+    prior_std = values.shift(1).rolling(
+        CHANGE_POINT_REFERENCE_WINDOW,
+        min_periods=CHANGE_POINT_REFERENCE_WINDOW,
+    ).std()
+    innovation = (
+        (values - prior_mean) / prior_std.replace(0, np.nan)
+    ).replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-5.0, 5.0)
+    gap_units = pd.to_datetime(timestamps, utc=True).diff() / pd.Timedelta(
+        minutes=timeframe_minutes
+    )
+
+    positive = np.zeros(len(values), dtype="float64")
+    negative = np.zeros(len(values), dtype="float64")
+    alarm_direction = np.zeros(len(values), dtype="float64")
+    alarm_age = np.zeros(len(values), dtype="float64")
+    positive_score = 0.0
+    negative_score = 0.0
+    previous_alarm = 0.0
+    active_age = 0
+    innovations = innovation.to_numpy(dtype="float64")
+    gaps = gap_units.to_numpy(dtype="float64")
+    for row, value in enumerate(innovations):
+        if row and (not np.isfinite(gaps[row]) or gaps[row] > 1.0):
+            positive_score = 0.0
+            negative_score = 0.0
+            previous_alarm = 0.0
+            active_age = 0
+        positive_score = min(
+            CHANGE_POINT_SCORE_CAP,
+            max(0.0, positive_score + value - CHANGE_POINT_DRIFT),
+        )
+        negative_score = min(
+            CHANGE_POINT_SCORE_CAP,
+            max(0.0, negative_score - value - CHANGE_POINT_DRIFT),
+        )
+        if (
+            positive_score >= CHANGE_POINT_ALARM_THRESHOLD
+            and positive_score > negative_score
+        ):
+            current_alarm = 1.0
+        elif (
+            negative_score >= CHANGE_POINT_ALARM_THRESHOLD
+            and negative_score > positive_score
+        ):
+            current_alarm = -1.0
+        else:
+            current_alarm = 0.0
+        if current_alarm:
+            active_age = active_age + 1 if current_alarm == previous_alarm else 1
+        else:
+            active_age = 0
+        positive[row] = positive_score / CHANGE_POINT_SCORE_CAP
+        negative[row] = negative_score / CHANGE_POINT_SCORE_CAP
+        alarm_direction[row] = current_alarm
+        alarm_age[row] = min(active_age, CHANGE_POINT_AGE_CAP) / CHANGE_POINT_AGE_CAP
+        previous_alarm = current_alarm
+
+    index = values.index
+    denominator = positive + negative
+    balance = np.divide(
+        positive - negative,
+        denominator,
+        out=np.zeros_like(denominator),
+        where=denominator > 0,
+    )
+    return {
+        "positive": pd.Series(positive, index=index),
+        "negative": pd.Series(negative, index=index),
+        "balance": pd.Series(balance, index=index),
+        "alarm_direction": pd.Series(alarm_direction, index=index),
+        "alarm_age": pd.Series(alarm_age, index=index),
+    }
+
+
+def _causal_shock_recovery_state(
+    returns: pd.Series,
+    ranges: pd.Series,
+    timestamps: pd.Series,
+    timeframe_minutes: int,
+) -> dict[str, pd.Series]:
+    def prior_innovation(values: pd.Series) -> pd.Series:
+        prior_mean = values.shift(1).rolling(
+            SHOCK_REFERENCE_WINDOW,
+            min_periods=SHOCK_REFERENCE_WINDOW,
+        ).mean()
+        prior_std = values.shift(1).rolling(
+            SHOCK_REFERENCE_WINDOW,
+            min_periods=SHOCK_REFERENCE_WINDOW,
+        ).std()
+        return (
+            (values - prior_mean) / prior_std.replace(0, np.nan)
+        ).replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-5.0, 5.0)
+
+    return_innovation = prior_innovation(returns)
+    range_innovation = prior_innovation(ranges)
+    gap_units = pd.to_datetime(timestamps, utc=True).diff() / pd.Timedelta(
+        minutes=timeframe_minutes
+    )
+
+    row_count = len(returns)
+    return_direction = np.zeros(row_count, dtype="float64")
+    return_excess = np.zeros(row_count, dtype="float64")
+    return_age = np.zeros(row_count, dtype="float64")
+    return_response = np.zeros(row_count, dtype="float64")
+    return_max_continuation = np.zeros(row_count, dtype="float64")
+    return_max_reversal = np.zeros(row_count, dtype="float64")
+    range_direction = np.zeros(row_count, dtype="float64")
+    range_excess = np.zeros(row_count, dtype="float64")
+    range_age = np.zeros(row_count, dtype="float64")
+    joint_event = np.zeros(row_count, dtype="float64")
+
+    active_return_direction = 0.0
+    active_return_excess = 0.0
+    active_return_age = 0
+    active_return_scale = 1.0
+    cumulative_after_shock = 0.0
+    maximum_continuation = 0.0
+    maximum_reversal = 0.0
+    active_range_direction = 0.0
+    active_range_excess = 0.0
+    active_range_age = 0
+
+    return_values = returns.to_numpy(dtype="float64")
+    return_innovations = return_innovation.to_numpy(dtype="float64")
+    range_innovations = range_innovation.to_numpy(dtype="float64")
+    gaps = gap_units.to_numpy(dtype="float64")
+    for row, (return_value, return_z, range_z) in enumerate(
+        zip(return_values, return_innovations, range_innovations, strict=True)
+    ):
+        if row and (not np.isfinite(gaps[row]) or gaps[row] > 1.0):
+            active_return_direction = 0.0
+            active_return_excess = 0.0
+            active_return_age = 0
+            active_return_scale = 1.0
+            cumulative_after_shock = 0.0
+            maximum_continuation = 0.0
+            maximum_reversal = 0.0
+            active_range_direction = 0.0
+            active_range_excess = 0.0
+            active_range_age = 0
+
+        is_return_shock = abs(return_z) >= SHOCK_Z_THRESHOLD
+        is_range_shock = abs(range_z) >= SHOCK_Z_THRESHOLD
+        if is_return_shock:
+            active_return_direction = float(np.sign(return_z))
+            active_return_excess = min(
+                abs(return_z) - SHOCK_Z_THRESHOLD,
+                SHOCK_RESPONSE_CAP,
+            ) / SHOCK_RESPONSE_CAP
+            active_return_age = 0
+            active_return_scale = max(abs(return_value), np.finfo("float64").eps)
+            cumulative_after_shock = 0.0
+            maximum_continuation = 0.0
+            maximum_reversal = 0.0
+        elif active_return_direction:
+            active_return_age += 1
+            if active_return_age <= SHOCK_TRACKING_BARS:
+                cumulative_after_shock += return_value
+                signed_response = (
+                    active_return_direction
+                    * cumulative_after_shock
+                    / active_return_scale
+                )
+                maximum_continuation = max(maximum_continuation, signed_response)
+                maximum_reversal = max(maximum_reversal, -signed_response)
+            else:
+                active_return_direction = 0.0
+                active_return_excess = 0.0
+                active_return_age = 0
+                cumulative_after_shock = 0.0
+                maximum_continuation = 0.0
+                maximum_reversal = 0.0
+
+        if is_range_shock:
+            active_range_direction = float(np.sign(range_z))
+            active_range_excess = min(
+                abs(range_z) - SHOCK_Z_THRESHOLD,
+                SHOCK_RESPONSE_CAP,
+            ) / SHOCK_RESPONSE_CAP
+            active_range_age = 0
+        elif active_range_direction:
+            active_range_age += 1
+            if active_range_age > SHOCK_TRACKING_BARS:
+                active_range_direction = 0.0
+                active_range_excess = 0.0
+                active_range_age = 0
+
+        return_direction[row] = active_return_direction
+        return_excess[row] = active_return_excess
+        return_age[row] = active_return_age / SHOCK_TRACKING_BARS
+        if active_return_direction:
+            signed_response = (
+                active_return_direction
+                * cumulative_after_shock
+                / active_return_scale
+            )
+            return_response[row] = np.clip(
+                signed_response,
+                -SHOCK_RESPONSE_CAP,
+                SHOCK_RESPONSE_CAP,
+            ) / SHOCK_RESPONSE_CAP
+            return_max_continuation[row] = min(
+                maximum_continuation,
+                SHOCK_RESPONSE_CAP,
+            ) / SHOCK_RESPONSE_CAP
+            return_max_reversal[row] = min(
+                maximum_reversal,
+                SHOCK_RESPONSE_CAP,
+            ) / SHOCK_RESPONSE_CAP
+        range_direction[row] = active_range_direction
+        range_excess[row] = active_range_excess
+        range_age[row] = active_range_age / SHOCK_TRACKING_BARS
+        joint_event[row] = float(is_return_shock and is_range_shock)
+
+    index = returns.index
+    return {
+        "return_innovation": return_innovation / 5.0,
+        "range_innovation": range_innovation / 5.0,
+        "return_direction": pd.Series(return_direction, index=index),
+        "return_excess": pd.Series(return_excess, index=index),
+        "return_age": pd.Series(return_age, index=index),
+        "return_response": pd.Series(return_response, index=index),
+        "return_max_continuation": pd.Series(return_max_continuation, index=index),
+        "return_max_reversal": pd.Series(return_max_reversal, index=index),
+        "range_direction": pd.Series(range_direction, index=index),
+        "range_excess": pd.Series(range_excess, index=index),
+        "range_age": pd.Series(range_age, index=index),
+        "joint_event": pd.Series(joint_event, index=index),
+    }
+
+
 def build_feature_frame(
     bars: pd.DataFrame,
     timeframe_minutes: int,
@@ -2687,6 +2944,39 @@ def build_feature_frame(
                     / path_range.replace(0, np.nan)
                 ).fillna(0.0).clip(-1, 1),
             )
+
+    if feature_set == "change_point_state":
+        change_channels = {
+            "return": log_return_1,
+            "range": np.log(high / low.replace(0, np.nan))
+            .replace([np.inf, -np.inf], np.nan)
+            .fillna(0.0)
+            .clip(lower=0.0),
+        }
+        for channel_name, channel in change_channels.items():
+            states = _causal_change_point_state(
+                channel,
+                result["timestamp"],
+                timeframe_minutes,
+            )
+            for state_name, state in states.items():
+                add(
+                    f"change_point_{channel_name}_{state_name}_64",
+                    state,
+                )
+
+    if feature_set == "shock_recovery_state":
+        shock_states = _causal_shock_recovery_state(
+            log_return_1,
+            np.log(high / low.replace(0, np.nan))
+            .replace([np.inf, -np.inf], np.nan)
+            .fillna(0.0)
+            .clip(lower=0.0),
+            result["timestamp"],
+            timeframe_minutes,
+        )
+        for state_name, state in shock_states.items():
+            add(f"shock_{state_name}", state)
 
     if feature_set == "session_relative":
         session_hour = result["timestamp"].dt.dayofweek * 24 + result["timestamp"].dt.hour
@@ -4104,8 +4394,26 @@ def training_sample_weights(
 ) -> np.ndarray | None:
     if mode == "uniform":
         return None
-    if mode not in {"body_atr", "directional_clarity"}:
+    if mode not in {
+        "body_atr",
+        "directional_clarity",
+        "recency_half_life_730d",
+    }:
         raise ValueError(f"unknown train_weighting: {mode}")
+    if mode == "recency_half_life_730d":
+        column = "decision_timestamp"
+        if column not in train:
+            raise ValueError(f"training data is missing {column}")
+        timestamps = pd.to_datetime(train[column], utc=True, errors="coerce")
+        if timestamps.isna().any():
+            raise ValueError("decision_timestamp must be finite for recency weighting")
+        age_days = (
+            (timestamps.max() - timestamps) / pd.Timedelta(days=1)
+        ).to_numpy(dtype="float64")
+        if not np.isfinite(age_days).all() or np.any(age_days < 0):
+            raise ValueError("training age must be finite and non-negative")
+        raw_weight = np.exp2(-age_days / RECENCY_WEIGHT_HALF_LIFE_DAYS)
+        return raw_weight / raw_weight.mean()
     if mode == "directional_clarity":
         column = "next_bar_directional_clarity"
         if column not in train:

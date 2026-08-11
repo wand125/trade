@@ -12,9 +12,16 @@ import pandas as pd
 from trade_data.next_bar import (
     AdoptionOptimizationConfig,
     BetaCalibrator,
+    CHANGE_POINT_DRIFT,
+    CHANGE_POINT_REFERENCE_WINDOW,
+    CHANGE_POINT_SCORE_CAP,
+    SHOCK_RESPONSE_CAP,
+    SHOCK_TRACKING_BARS,
+    SHOCK_Z_THRESHOLD,
     INTRABAR_FULL_PATH_GRID_POINTS,
     INTRABAR_PATH_SIGNATURE_COLUMNS,
     OddsCalibrationConfig,
+    RECENCY_WEIGHT_HALF_LIFE_DAYS,
     TemperatureCalibrator,
     TrainConfig,
     VolatilityRegimeHGBClassifier,
@@ -138,6 +145,47 @@ class NextBarTests(unittest.TestCase):
         self.assertNotIn(
             "next_bar_directional_clarity",
             manifest["timeframes"]["M1"]["features"],
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_recency_weights_use_only_training_timestamps_and_run_pipeline(self):
+        frame = pd.DataFrame(
+            {
+                "decision_timestamp": pd.to_datetime(
+                    ["2020-01-03", "2022-01-02", "2024-01-02"],
+                    utc=True,
+                )
+            }
+        )
+        weights = training_sample_weights(frame, "recency_half_life_730d")
+
+        assert weights is not None
+        self.assertEqual(RECENCY_WEIGHT_HALF_LIFE_DAYS, 730.0)
+        self.assertAlmostEqual(float(weights.mean()), 1.0)
+        self.assertAlmostEqual(float(weights[2] / weights[1]), 2.0, places=12)
+        self.assertAlmostEqual(float(weights[2] / weights[0]), 4.0, places=12)
+        with self.assertRaisesRegex(ValueError, "decision_timestamp"):
+            training_sample_weights(pd.DataFrame({"other": [1]}), "recency_half_life_730d")
+
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            train_weighting="recency_half_life_730d",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        metrics = report["timeframes"]["M1"]
+        self.assertEqual(metrics["train_weighting"], "recency_half_life_730d")
+        self.assertAlmostEqual(metrics["train_sample_weight"]["mean"], 1.0)
+        self.assertLess(
+            metrics["train_sample_weight"]["minimum"],
+            metrics["train_sample_weight"]["maximum"],
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
@@ -1065,6 +1113,271 @@ class NextBarTests(unittest.TestCase):
             latest = predict_latest(source, output_dir)
 
         self.assertEqual(report["config"]["feature_set"], "rolling_full_path")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_change_point_state_is_stationary_causal_gap_safe_and_runs_latest(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "change_point_state"
+        )
+        state_columns = [
+            f"change_point_{channel}_{state}_64"
+            for channel in ("return", "range")
+            for state in (
+                "positive",
+                "negative",
+                "balance",
+                "alarm_direction",
+                "alarm_age",
+            )
+        ]
+        self.assertTrue(set(state_columns).issubset(feature_columns))
+        self.assertEqual(len(state_columns), 10)
+        self.assertEqual(len(feature_columns), 48)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertTrue(np.isfinite(frame[state_columns]).all().all())
+        for channel in ("return", "range"):
+            self.assertTrue(
+                frame[f"change_point_{channel}_positive_64"].between(0, 1).all()
+            )
+            self.assertTrue(
+                frame[f"change_point_{channel}_negative_64"].between(0, 1).all()
+            )
+            self.assertTrue(
+                frame[f"change_point_{channel}_balance_64"].between(-1, 1).all()
+            )
+            self.assertTrue(
+                frame[f"change_point_{channel}_alarm_direction_64"]
+                .isin([-1, 0, 1])
+                .all()
+            )
+            self.assertTrue(
+                frame[f"change_point_{channel}_alarm_age_64"].between(0, 1).all()
+            )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1), 1, "change_point_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[state_columns],
+            scaled_frame[state_columns],
+            rtol=1e-9,
+            atol=1e-9,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 300, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1), 1, "change_point_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:299, state_columns],
+            changed_frame.loc[:299, state_columns],
+        )
+
+        gapped_bars = bars.copy()
+        gapped_bars.loc[gapped_bars.index >= 300, "timestamp"] += pd.Timedelta(
+            minutes=5
+        )
+        gapped_frame, _ = build_feature_frame(gapped_bars, 1, "change_point_state")
+        returns = np.log(
+            gapped_bars["close"] / gapped_bars["close"].shift(1)
+        )
+        prior = returns.iloc[
+            300 - CHANGE_POINT_REFERENCE_WINDOW : 300
+        ]
+        innovation = float(
+            np.clip(
+                (returns.iloc[300] - prior.mean()) / prior.std(),
+                -5.0,
+                5.0,
+            )
+        )
+        self.assertAlmostEqual(
+            float(gapped_frame.loc[300, "change_point_return_positive_64"]),
+            max(0.0, innovation - CHANGE_POINT_DRIFT) / CHANGE_POINT_SCORE_CAP,
+            places=12,
+        )
+        self.assertAlmostEqual(
+            float(gapped_frame.loc[300, "change_point_return_negative_64"]),
+            max(0.0, -innovation - CHANGE_POINT_DRIFT) / CHANGE_POINT_SCORE_CAP,
+            places=12,
+        )
+
+        flat_source = m1_frame(200)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "change_point_state"
+        )
+        self.assertTrue(flat_frame.loc[100:, state_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(1,),
+            feature_set="change_point_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "change_point_state")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
+    def test_shock_recovery_state_is_stationary_causal_gap_safe_and_runs_latest(self):
+        source = m1_frame(1800)
+        for column in ("open", "high", "low", "close"):
+            source.loc[source.index >= 300, column] *= 1.02
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "shock_recovery_state"
+        )
+        state_columns = [
+            "shock_return_innovation",
+            "shock_range_innovation",
+            "shock_return_direction",
+            "shock_return_excess",
+            "shock_return_age",
+            "shock_return_response",
+            "shock_return_max_continuation",
+            "shock_return_max_reversal",
+            "shock_range_direction",
+            "shock_range_excess",
+            "shock_range_age",
+            "shock_joint_event",
+        ]
+        self.assertTrue(set(state_columns).issubset(feature_columns))
+        self.assertEqual(len(state_columns), 12)
+        self.assertEqual(len(feature_columns), 50)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertTrue(np.isfinite(frame[state_columns]).all().all())
+        for column in (
+            "shock_return_innovation",
+            "shock_range_innovation",
+            "shock_return_response",
+        ):
+            self.assertTrue(frame[column].between(-1, 1).all())
+        for column in (
+            "shock_return_excess",
+            "shock_return_age",
+            "shock_return_max_continuation",
+            "shock_return_max_reversal",
+            "shock_range_excess",
+            "shock_range_age",
+            "shock_joint_event",
+        ):
+            self.assertTrue(frame[column].between(0, 1).all())
+        for column in ("shock_return_direction", "shock_range_direction"):
+            self.assertTrue(frame[column].isin([-1, 0, 1]).all())
+
+        self.assertGreaterEqual(
+            abs(float(frame.loc[300, "shock_return_innovation"])) * 5.0,
+            SHOCK_Z_THRESHOLD,
+        )
+        shock_direction = float(frame.loc[300, "shock_return_direction"])
+        self.assertEqual(
+            shock_direction,
+            float(np.sign(frame.loc[300, "shock_return_innovation"])),
+        )
+        self.assertEqual(float(frame.loc[300, "shock_return_age"]), 0.0)
+        self.assertEqual(float(frame.loc[300, "shock_return_response"]), 0.0)
+        self.assertLess(
+            abs(float(frame.loc[301, "shock_return_innovation"])) * 5.0,
+            SHOCK_Z_THRESHOLD,
+        )
+        event_return = float(np.log(bars.loc[300, "close"] / bars.loc[299, "close"]))
+        next_return = float(np.log(bars.loc[301, "close"] / bars.loc[300, "close"]))
+        expected_response = float(np.clip(
+            shock_direction * next_return / abs(event_return),
+            -SHOCK_RESPONSE_CAP,
+            SHOCK_RESPONSE_CAP,
+        ) / SHOCK_RESPONSE_CAP)
+        self.assertEqual(float(frame.loc[301, "shock_return_direction"]), shock_direction)
+        self.assertAlmostEqual(
+            float(frame.loc[301, "shock_return_age"]),
+            1.0 / SHOCK_TRACKING_BARS,
+            places=12,
+        )
+        self.assertAlmostEqual(
+            float(frame.loc[301, "shock_return_response"]),
+            expected_response,
+            places=12,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1), 1, "shock_recovery_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[state_columns],
+            scaled_frame[state_columns],
+            rtol=1e-9,
+            atol=1e-9,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 900, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1), 1, "shock_recovery_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:899, state_columns],
+            changed_frame.loc[:899, state_columns],
+        )
+
+        gapped_bars = bars.copy()
+        gapped_bars.loc[gapped_bars.index >= 301, "timestamp"] += pd.Timedelta(
+            minutes=5
+        )
+        gapped_frame, _ = build_feature_frame(
+            gapped_bars, 1, "shock_recovery_state"
+        )
+        self.assertEqual(float(gapped_frame.loc[301, "shock_return_direction"]), 0.0)
+        self.assertEqual(float(gapped_frame.loc[301, "shock_return_age"]), 0.0)
+        self.assertEqual(float(gapped_frame.loc[301, "shock_return_response"]), 0.0)
+
+        flat_source = m1_frame(200)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "shock_recovery_state"
+        )
+        self.assertTrue(flat_frame.loc[100:, state_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(1,),
+            feature_set="shock_recovery_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "shock_recovery_state")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
     def test_path_persistence_features_are_stationary_causal_and_run_latest(self):
