@@ -1,0 +1,120 @@
+{
+  "format_version": 1,
+  "status": "windows_canonical_forward_candidate_broad_distribution_shift",
+  "target_timeframe_minutes": 15,
+  "canonical_training_platform": "Windows/WSL2 x86 Linux",
+  "direction_source": "baseline HGB",
+  "feature_candidate": {
+    "feature_set": "distribution_shift",
+    "baseline_feature_count": 38,
+    "additional_feature_count": 16,
+    "total_feature_count": 54,
+    "windows": {
+      "recent": 8,
+      "reference": 64,
+      "rank": 128
+    },
+    "raw_price_levels_used_as_model_features": false,
+    "future_rows_used_as_model_features": false
+  },
+  "training": {
+    "model_type": "hgb",
+    "max_iter": 200,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 100,
+    "l2_regularization": 1.0,
+    "max_train_rows": 750000,
+    "probability_calibration": "platt",
+    "train_weighting": "uniform",
+    "train_target_filter": "all",
+    "random_seed": 42,
+    "expanding_training": true,
+    "loss_multiplier": 1.0
+  },
+  "confidence_candidate": {
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.515,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/baseline_m15_windows_canonical_001",
+    "candidate_oos": "experiments/next_bar/distribution_shift_m15_windows_canonical_001",
+    "direction_preserving_blend": "experiments/next_bar/distribution_shift_m15_confidence_blend_windows_canonical_001",
+    "analysis": "experiments/next_bar/distribution_shift_m15_windows_candidate_analysis.json",
+    "profile_oos": "experiments/next_bar/intrabar_profile_m15_windows_canonical_001",
+    "profile_blend": "experiments/next_bar/intrabar_profile_m15_confidence_blend_windows_canonical_001",
+    "profile_comparison": "experiments/next_bar/distribution_shift_m15_vs_profile_windows_comparison.json",
+    "profile_bootstrap": "experiments/next_bar/distribution_shift_m15_vs_profile_windows_bootstrap_20000.json"
+  },
+  "evidence": {
+    "rows": 145140,
+    "confidence_0515": {
+      "development": {
+        "coverage": 0.5735549992703434,
+        "accuracy": 0.5320389869652014,
+        "selection_score": 0.020985828113586468
+      },
+      "confirmation": {
+        "coverage": 0.4981715040048522,
+        "accuracy": 0.5262121320633102,
+        "selection_score": 0.014365135207219392
+      },
+      "all": {
+        "coverage": 0.5444398511781728,
+        "accuracy": 0.5299797519615287,
+        "selection_score": 0.01955216043304181
+      }
+    },
+    "against_windows_baseline": {
+      "accuracy_improved_folds": 6,
+      "selection_score_improved_folds": 5,
+      "brier_improved_folds": 6,
+      "log_loss_improved_folds": 6,
+      "ece_improved_folds": 5,
+      "all_accuracy_delta_points": 0.08791565368969677,
+      "all_accuracy_bootstrap_95_points": [-0.008360, 0.184292],
+      "all_selection_score_delta": 0.0005465929487435175,
+      "all_selection_score_bootstrap_95": [-0.00016638, 0.00125915]
+    },
+    "against_windows_profile_0515": {
+      "accuracy_wins": 7,
+      "selection_score_wins": 7,
+      "development_accuracy_delta_points": 0.16119983884330748,
+      "development_accuracy_bootstrap_95_points": [0.022126, 0.303132],
+      "confirmation_accuracy_delta_points": 0.07561782572401698,
+      "confirmation_accuracy_bootstrap_95_points": [-0.107137, 0.255483],
+      "all_accuracy_delta_points": 0.1299288323928005,
+      "all_accuracy_bootstrap_95_points": [0.019346, 0.241333],
+      "all_selection_score_delta": 0.0007168451105510308,
+      "all_selection_score_bootstrap_95": [-0.00010386, 0.00153992],
+      "all_brier_delta": -0.000022960094536256248,
+      "all_brier_bootstrap_95": [-0.0000364284, -0.00000912088],
+      "all_log_loss_delta": -0.00004624041772505194,
+      "all_log_loss_bootstrap_95": [-0.0000733291, -0.0000184246]
+    },
+    "high_confidence_055": {
+      "profile_accuracy_wins": 2,
+      "distribution_shift_accuracy_wins": 5,
+      "profile_selection_score_wins": 3,
+      "distribution_shift_selection_score_wins": 4,
+      "decision": "insufficient to challenge the existing precision role"
+    }
+  },
+  "promotion": {
+    "emit_as_windows_canonical_broad_forward_candidate": true,
+    "replace_legacy_profile_broad_role_after_same_platform_registry_rebuild": true,
+    "update_mixed_platform_registry_now": false,
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_fair_odds": false,
+    "replace_paper_or_live_policy": false,
+    "requirements": [
+      "rebuild the full M15 registry on one canonical platform before registry activation",
+      "verify latest inference parity",
+      "pass fresh global and local calibration gates"
+    ]
+  }
+}
