@@ -104,7 +104,7 @@ HEARTBEAT_REQUIRED_FIELDS: tuple[str, ...] = (
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Periodically refresh MT5 AI Bridge status files.")
     parser.add_argument("--state-dir", default="runtime")
-    parser.add_argument("--base-url", default="http://127.0.0.1:8765")
+    parser.add_argument("--base-url", default=os.environ.get("BRIDGE_BASE_URL", "http://127.0.0.1:8765"))
     parser.add_argument("--http-timeout-seconds", type=float, default=3.0)
     parser.add_argument("--max-snapshot-age-seconds", type=int, default=300)
     parser.add_argument("--max-history-request-pending-seconds", type=int, default=180)

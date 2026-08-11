@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -21,7 +22,7 @@ from analysis.market_data import TIME_FORMAT
 DEFAULT_OUTPUT_JSON = "runtime/latest_bridge_status.json"
 DEFAULT_OUTPUT_MD = "runtime/latest_bridge_status.md"
 DEFAULT_STATE_DIR = "runtime"
-DEFAULT_BASE_URL = "http://127.0.0.1:8765"
+DEFAULT_BASE_URL = os.environ.get("BRIDGE_BASE_URL", "http://127.0.0.1:8765")
 DEFAULT_HTTP_TIMEOUT_SECONDS = 3.0
 DEFAULT_MAX_SNAPSHOT_AGE_SECONDS = 5 * 60
 DEFAULT_MAX_HISTORY_REQUEST_PENDING_SECONDS = 180
