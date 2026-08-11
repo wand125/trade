@@ -38429,6 +38429,7 @@ class AnalysisTests(unittest.TestCase):
                 root / "latest_mt5_manual_operator_packet_with_optimization.json"
             )
             manual_auto_collect_watch = root / "latest_mt5_manual_auto_collect_watch.json"
+            bridge_recovery_plan = root / "latest_bridge_recovery_plan.json"
             tester_run.write_text(
                 json.dumps(
                     {
@@ -39384,6 +39385,16 @@ class AnalysisTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            bridge_recovery_plan.write_text(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "status": "needs_ea_restart",
+                        "ready_for_mt5_validation": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             with patch("analysis.mt5_tester_status.discover_running_terminal_processes", return_value=[]):
                 status = mt5_tester_status(
@@ -39399,6 +39410,7 @@ class AnalysisTests(unittest.TestCase):
                     manual_collect_with_optimization_path=manual_collect_with_optimization,
                     manual_operator_packet_with_optimization_path=manual_operator_packet_with_optimization,
                     manual_auto_collect_watch_path=manual_auto_collect_watch,
+                    bridge_recovery_plan_path=bridge_recovery_plan,
                     status_watch_heartbeat_path=None,
                     max_artifact_age_seconds=999999,
                 )
@@ -39419,6 +39431,7 @@ class AnalysisTests(unittest.TestCase):
                     manual_collect_with_optimization_path=manual_collect_with_optimization,
                     manual_operator_packet_with_optimization_path=manual_operator_packet_with_optimization,
                     manual_auto_collect_watch_path=manual_auto_collect_watch,
+                    bridge_recovery_plan_path=bridge_recovery_plan,
                     status_watch_heartbeat_path=None,
                     max_artifact_age_seconds=999999,
                 )
