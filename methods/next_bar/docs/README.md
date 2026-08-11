@@ -496,6 +496,8 @@ CatBoostの再現には `--model-type catboost` を使う。Ordered boosting、s
 
 LightGBMの再現には `--model-type lightgbm` を使う。leaf-wise GBDT、31 leaves、300 trees、learning rate 0.03、min child 100、row/column sample 0.8、L2 5を固定し、後続Platt校正を共通にする。M15方向と0.525 confidenceは既存候補に負けるため再現専用。一方、同じ仕様を加工済みbaseline特徴へ適用したM1 standaloneはconfirmation +663件・p=0.0185、全体+938件・p=0.0395で、日次bootstrapも両期間のaccuracy改善を支持した。Pathとは全体4件差、年別4/7、直接差区間0跨ぎのため `config/m1_lightgbm_direction_challenger_v1.json` の異種学習器accuracy co-challengerに固定する。通常25% blendはaccuracy/Brier/log loss 7/7fold改善したが単体より点精度が低く既存proper-score候補も超えないため追加configを発行しない。M1 confidence 0.515はTCNよりaccuracyがbootstrapで明確に低いため使わない。M30への同仕様固定移植では単体がbaseline比+64件、通常25% blendが+37件となった。通常blendと既存Pressure + Ordinal Motif方向候補の固定50/50平均はbaseline比development +16件、confirmation +37件、all +53件、parent比5/7fold・+16件で、baseline Brier/log loss差の日次区間も改善側だった。`config/m30_pressure_ordinal_lightgbm_direction_candidate_v1.json` のparallel co-challengerに固定するがaccuracy差区間は0を跨ぐためauthoritative方向やparent候補を置換しない。M30 confidence 0.515/0.55とPressure・AR・LightGBMの3等分は既存confidence候補を超えず使わない。
 
+次足body/rangeと方向側close到達度の積を教師品質として使う場合は `--train-weighting directional_follow_through` を指定する。raw weightは0.5〜1.5、sampled train内平均1で、未来OHLCは解決済みtrain sample weightだけへ使う。M5固定移植では単体と通常25%方向blendが既存Pressure方向候補を超えず、0.515 broad confidenceもProfileよりaccuracy・proper scoreが弱かった。一方、baseline方向維持25% confidenceの固定0.55はProfile比でall coverage 5.4333%→5.8368%、accuracy 55.8828%→56.1597%、selection score 0.012243→0.013413となり、score 7/7fold、all日次bootstrapも3指標の改善を支持した。confirmationは1,277件と疎いため `config/m5_directional_follow_through_high_confidence_shadow_v1.json` の非権威parallel shadowに限定し、Profile 0.515、fair odds、policyは変更しない。
+
 registry候補を各評価年より前のOOS scoreだけで選ぶ安定性監査は次で再現できる:
 
 ```bash

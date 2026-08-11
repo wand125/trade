@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-11 15:17 JST
+更新日時: 2026-08-11 16:59 JST
 
 ## 現在の状態
 
@@ -483,6 +483,11 @@
 - Haar親との固定50/50平均は親比+3/-3/0件、accuracy 4/7foldで方向増分はなかったが、Brier/log lossの日次区間をdevelopment/confirmation/allで改善した。この確率を固定0.55だけで高信頼度監査した。
 - 固定平均0.55はPressure + AR比all coverage 7.0937%対6.1914%、accuracy 56.6568%対56.1423%、score 0.014079対0.011629、accuracy 4/7、score 6/7fold。日次bootstrapはdevelopment/all score、all coverage・proper score改善を支持した。confirmation scoreは0.004971対0.004997で同等域だった。
 - 0.55 all accuracy 56.6568%とmean confidence 56.6480%は整合したが、confirmationのup-low/up-normalが疎く不安定である。同履歴から除外guardを作らず、`m30_haar_directional_follow_through_confidence_shadow_v1.json` のparallel forward shadowに限定する。authoritative confidence、Pressure + AR、fair odds、policyは変更しない。
+- M30で固定したDirectional Follow-through教師重みを、式、baseline 38特徴、HGB/Platt、25% blend、標準損失1.0のままM5へ移植した。439,881 OOS行を既存baseline・Pressure・Profileと完全整列し、artifact latest推論を確認した。
+- 単体はbaseline比-162/+105/-57件、通常25%方向blendは+4/+47/+51件だった。通常blendは現行Pressure方向候補に-115/+30/-85件、accuracy 1/7対6/7で、proper scoreも劣るため方向候補へ追加しない。
+- 方向維持0.515はProfileよりall coverage +2.3456ptでもaccuracy -0.0597pt、confirmation score -0.000010、all score差の日次区間0跨ぎ、Brier/log loss悪化だった。Profile broad confidenceを維持し、固定50/50 confidence平均も使わない。
+- 固定0.55はProfile比all coverage 5.8368%対5.4333%、accuracy 56.1597%対55.8828%、score 0.013413対0.012243、score 7/7foldだった。日次bootstrapはall accuracy・coverage・score改善を支持し、追加3,391件も56.9154%正解だった。
+- 0.55のmean confidence 56.3320%は実測56.1597%と局所整合したが、confirmationは1,277件でruntime parityも未達である。`m5_directional_follow_through_high_confidence_shadow_v1.json` のparallel shadowに限定し、Pressure方向、Profile 0.515、authoritative confidence、fair odds、policyを変更しない。
 
 ## ベースライン評価
 
@@ -611,3 +616,4 @@
 117. M30 Directional-Clarity sample weighting固定移植は0.5〜1.5・平均1のtrain weight、baseline 38特徴、HGB/Platt、全教師、expanding、標準損失1.0を固定し、weight式・feature・blend weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.51/0.55、Pressureとの固定confidence平均を再現専用とする。Haar入り候補との固定50/50方向平均はbaseline感度として保存するが、親への年別3/7・不確定な増分を優先し、新candidateを発行しない。現行Haar方向、Pressure 0.52、Pressure + AR 0.55を維持し、config・registry・authoritative予測・fair odds・policyを増やさない。
 118. M30 Body/ATR sample weighting固定移植は0.5〜2.0・平均1のtrain weight、baseline 38特徴、HGB/Platt、全教師、expanding、標準損失1.0を固定し、weight式・feature・blend weight・閾値を履歴内再探索しない。単体/通常25%方向、方向維持0.515/0.55、Pressureとの固定confidence平均を再現専用とする。M30では方向悪化、confirmation confidence反転、Directional-Clarityへのproper score劣後を優先し、新candidateを発行しない。M15 0.54候補は時間足独立で維持し、現行Haar方向、Pressure 0.52、Pressure + AR 0.55、config・registry・authoritative予測・fair odds・policyを変更しない。
 119. M30 Directional Follow-through sample weightingは次足body/range×方向側close到達度、0.5〜1.5・平均1のtrain weight、baseline 38特徴、HGB/Platt、全教師、expanding、標準損失1.0を固定し、式・parameter・blend weight・0.55・subgroupを履歴内再探索しない。単体/通常25%方向は再現専用、Haar親との固定50/50平均も方向候補へ追加しない。固定平均0.55だけをparallel confidence shadowへ採用し、fresh Pressure + AR head-to-head、confirmation score、固定セル整合、full runtime parityまでauthoritative confidence・fair odds・policyを変更しない。
+120. M5 Directional Follow-through固定移植はM30と同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・0.55を履歴内再探索しない。単体/通常方向、0.515 broad、Pressure/Profileとの固定50/50平均は再現専用。方向維持0.55だけをparallel high-confidence shadowへ採用し、fresh Profile 0.55 head-to-head、global/local calibration、full runtime parityまでPressure方向、Profile broad confidence、authoritative confidence・fair odds・policyを変更しない。
