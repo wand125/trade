@@ -132,6 +132,7 @@ TRAIN_WEIGHTING_MODES = (
     "uniform",
     "body_atr",
     "directional_clarity",
+    "directional_follow_through",
     "recency_half_life_730d",
 )
 RECENCY_WEIGHT_HALF_LIFE_DAYS = 730.0
@@ -4111,6 +4112,17 @@ def build_labeled_dataset(
     frame["next_bar_directional_clarity"] = (
         next_body.abs() / next_range.replace(0, np.nan)
     ).clip(lower=0.0, upper=1.0)
+    next_close_location = (
+        (frame["close"].shift(-1) - frame["low"].shift(-1))
+        / next_range.replace(0, np.nan)
+    ).clip(lower=0.0, upper=1.0)
+    direction_aligned_close_location = next_close_location.where(
+        next_body > 0,
+        1.0 - next_close_location,
+    )
+    frame["next_bar_directional_follow_through"] = (
+        frame["next_bar_directional_clarity"] * direction_aligned_close_location
+    ).clip(lower=0.0, upper=1.0)
     frame["target_up"] = np.where(consecutive & ~flat, (next_body > 0).astype("float64"), np.nan)
     non_finite_features = ~np.isfinite(frame[feature_columns].to_numpy(dtype="float64")).all(axis=1)
     diagnostics = {
@@ -5022,6 +5034,7 @@ def training_sample_weights(
     if mode not in {
         "body_atr",
         "directional_clarity",
+        "directional_follow_through",
         "recency_half_life_730d",
     }:
         raise ValueError(f"unknown train_weighting: {mode}")
@@ -5039,16 +5052,18 @@ def training_sample_weights(
             raise ValueError("training age must be finite and non-negative")
         raw_weight = np.exp2(-age_days / RECENCY_WEIGHT_HALF_LIFE_DAYS)
         return raw_weight / raw_weight.mean()
-    if mode == "directional_clarity":
-        column = "next_bar_directional_clarity"
+    if mode in {"directional_clarity", "directional_follow_through"}:
+        column = (
+            "next_bar_directional_clarity"
+            if mode == "directional_clarity"
+            else "next_bar_directional_follow_through"
+        )
         if column not in train:
             raise ValueError(f"training data is missing {column}")
-        clarity = train[column].to_numpy(dtype="float64")
-        if not np.isfinite(clarity).all() or np.any((clarity < 0) | (clarity > 1)):
-            raise ValueError(
-                "next_bar_directional_clarity must be finite and within [0, 1]"
-            )
-        raw_weight = 0.5 + clarity
+        quality = train[column].to_numpy(dtype="float64")
+        if not np.isfinite(quality).all() or np.any((quality < 0) | (quality > 1)):
+            raise ValueError(f"{column} must be finite and within [0, 1]")
+        raw_weight = 0.5 + quality
         return raw_weight / raw_weight.mean()
     if "next_bar_body_atr" not in train:
         raise ValueError("training data is missing next_bar_body_atr")

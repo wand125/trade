@@ -148,6 +148,41 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_directional_follow_through_weights_are_bounded_and_run_pipeline(self):
+        frame = pd.DataFrame(
+            {"next_bar_directional_follow_through": [0.0, 0.25, 0.5, 1.0]}
+        )
+        weights = training_sample_weights(frame, "directional_follow_through")
+
+        assert weights is not None
+        self.assertAlmostEqual(float(weights.mean()), 1.0)
+        self.assertAlmostEqual(float(weights[-1] / weights[0]), 3.0)
+
+        source = m1_frame(1800)
+        config = TrainConfig(
+            timeframes=(1,),
+            train_weighting="directional_follow_through",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+            manifest = json.loads(
+                (output_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+
+        metrics = report["timeframes"]["M1"]
+        self.assertEqual(metrics["train_weighting"], "directional_follow_through")
+        self.assertAlmostEqual(metrics["train_sample_weight"]["mean"], 1.0)
+        self.assertNotIn(
+            "next_bar_directional_follow_through",
+            manifest["timeframes"]["M1"]["features"],
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_recency_weights_use_only_training_timestamps_and_run_pipeline(self):
         frame = pd.DataFrame(
             {
@@ -3569,6 +3604,19 @@ class NextBarTests(unittest.TestCase):
             row["next_bar_directional_clarity"],
             abs(following["close"] - following["open"])
             / (following["high"] - following["low"]),
+        )
+        close_location = (following["close"] - following["low"]) / (
+            following["high"] - following["low"]
+        )
+        direction_aligned_close_location = (
+            close_location
+            if following["close"] > following["open"]
+            else 1.0 - close_location
+        )
+        self.assertAlmostEqual(
+            row["next_bar_directional_follow_through"],
+            row["next_bar_directional_clarity"]
+            * direction_aligned_close_location,
         )
         self.assertGreater(diagnostics["excluded_feature_warmup_or_nonfinite"], 0)
 
