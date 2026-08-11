@@ -498,6 +498,8 @@ LightGBMの再現には `--model-type lightgbm` を使う。leaf-wise GBDT、31 
 
 次足body/rangeと方向側close到達度の積を教師品質として使う場合は `--train-weighting directional_follow_through` を指定する。raw weightは0.5〜1.5、sampled train内平均1で、未来OHLCは解決済みtrain sample weightだけへ使う。M5固定移植では単体と通常25%方向blendが既存Pressure方向候補を超えず、0.515 broad confidenceもProfileよりaccuracy・proper scoreが弱かった。一方、baseline方向維持25% confidenceの固定0.55はProfile比でall coverage 5.4333%→5.8368%、accuracy 55.8828%→56.1597%、selection score 0.012243→0.013413となり、score 7/7fold、all日次bootstrapも3指標の改善を支持した。confirmationは1,277件と疎いため `config/m5_directional_follow_through_high_confidence_shadow_v1.json` の非権威parallel shadowに限定し、Profile 0.515、fair odds、policyは変更しない。
 
+同じDirectional Follow-throughをM15へ固定移植すると、単体はbaseline比-79件、通常25%方向blendは-54件で、既存Pressure方向候補にも-141件だった。方向維持confidenceは0.53でbaselineのproper scoreを7/7fold改善したが、Full Pathにconfirmation accuracy -0.4173pt、all accuracy -0.1675pt、score -0.000654となり、Profile 0.515、Signed-body Quantile 0.525、Structure 0.55にも各roleで敗れた。Full Pathとの固定50/50 confidence平均も親を上積みせず、0.55はallで1.1149pt過信したため、M15では再現専用としconfig・registry・odds・policyを変更しない。
+
 registry候補を各評価年より前のOOS scoreだけで選ぶ安定性監査は次で再現できる:
 
 ```bash
