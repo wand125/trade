@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-11 18:00 JST
+更新日時: 2026-08-11 18:11 JST
 
 ## 現在の状態
 
@@ -501,6 +501,10 @@
 - guard集合はall 349,784行中349,101行がShiftと共通で99.80%以上包含された。guard-onlyは683行・52.1230%だがWilson下限48.3751%、confirmationは23行・43.4783%で、独立した追加edgeを確認できなかった。
 - union−Shiftとintersection−guardの日次bootstrapはdevelopment/confirmation/allのaccuracy・selection scoreが全て0跨ぎで、確定したのは最大0.0313ptのcoverage増減だけだった。development目的関数首位も既存guardのままである。
 - developmentではguard confidenceが集合内実績に整合したが、confirmationはguard laneでmean 51.9539%に対し実績53.3560%、Shift laneで51.5327%に対し51.8985%となり期間間で過信から過小評価へ移った。集合演算は新しい各行oddsを定義しないためunion/intersectionを再現専用とし、既存3 confidence役割、config・registry・fair odds・policyを変更しない。
+- 正式configを持つM1 confidence 4候補、TCN 0.515、Disagreement 0.515、Transition guard 0.515、Distribution Shift 0.51の全6 pairを固定採用集合で一括監査した。developmentではunionが両親の目的関数を上回り、両exclusive集合のWilson下限が50%超の場合だけ選択し、confirmationを選択へ使わない。
+- development gateを通ったのはDisagreement + Shiftだけで、union scoreは良い親より+0.0000454、Disagreement-only 6,079行・51.6203%・Wilson下限50.3634%、Shift-only 224,632行・50.9683%・下限50.7615%だった。
+- confirmationではDisagreement-onlyが386行・48.1865%・Wilson下限43.2442%へ反転し、union scoreはShift 0.008142に対し0.008116へ低下した。他5 pairはdevelopmentで棄却済みである。
+- 20,000回日次bootstrapではunion−Shiftのdevelopment/confirmation/all score差が全て0跨ぎで、coverage増加だけが確定した。union−Disagreementは3期間でaccuracy低下が確定しscoreは未確定。source confidenceもdevelopment過信からconfirmation過小へ反転したため、全pairを再現専用とし既存候補・fair odds・policyを変更しない。
 
 ## ベースライン評価
 
@@ -633,3 +637,4 @@
 121. M15 Directional Follow-through固定移植は同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・閾値を履歴内再探索しない。単体/通常方向、方向維持confidence、Pressure/Full Pathとの固定50/50平均を再現専用とし、Directional-Clarity方向とProfile/Quantile/Full Path/Structure confidenceを維持する。M15 config・registry・authoritative予測・fair odds・policyを変更しない。
 122. M1 Directional Follow-through固定移植は同じ教師品質式、0.5〜1.5・平均1、baseline 38特徴、HGB/Platt、全教師、expanding、通常/方向維持25%、標準損失1.0を固定し、式・parameter・blend weight・閾値・subgroupを履歴内再探索しない。baseline改善は教師品質加工の感度として保存するが、方向はPath/Distribution Shift/Directional-Clarity、confidenceはTransition guard/Disagreement/Distribution Shiftを維持する。単体/通常/confidence/固定平均を再現専用とし、config・registry・authoritative予測・fair odds・policyを変更しない。
 123. M1 Transition guard 0.515とDistribution Shift 0.51の固定採用集合union/intersectionは再現専用とする。親の確率・confidenceを混ぜずboolean集合だけを比較したが、guardの99.80%以上がShiftに含まれ、accuracy・selection scoreのbootstrap増分と新しいfair oddsを得られなかった。閾値、source順、集合固有校正を履歴内再探索せず、Transition guard accuracy specialist、Distribution Shift ultra-broad、Disagreement balanced challengerを独立維持する。
+124. M1正式confidence 4候補の全6 pair補完性監査は再現専用とする。developmentで両exclusive Wilson edgeとunion目的関数改善を要求するとDisagreement 0.515 + Distribution Shift 0.51だけが選ばれたが、confirmationのDisagreement-onlyは386行・48.1865%へ反転しunion scoreも親を下回った。同じ候補のpair、集合演算、閾値、source順、集合固有校正を履歴内再探索せず、異なる加工情報から独立した次候補を作る。

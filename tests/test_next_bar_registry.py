@@ -19,11 +19,56 @@ from trade_data.next_bar_registry import (
     confidence_role,
     discover_candidate_specs,
     lane_metrics,
+    pairwise_confidence_complementarity,
     read_prediction_sets,
 )
 
 
 class NextBarRegistryTests(unittest.TestCase):
+    def test_pairwise_confidence_complementarity_uses_exclusive_development_edge(self):
+        reference = pd.DataFrame(
+            {
+                "fold": ["test2020"] * 4,
+                "timestamp": pd.date_range(
+                    "2020-01-01", periods=4, freq="min", tz="UTC"
+                ),
+                "target_up": [1, 0, 1, 0],
+                "probability_up": [0.56, 0.44, 0.56, 0.44],
+                "confidence": [0.52, 0.52, 0.50, 0.50],
+                "correct": [True, True, True, True],
+            }
+        )
+        second = reference.copy()
+        second["confidence"] = [0.50, 0.52, 0.52, 0.50]
+        third = reference.copy()
+        third["confidence"] = [0.50, 0.50, 0.52, 0.52]
+
+        report = pairwise_confidence_complementarity(
+            {
+                "first": (reference, 0.515),
+                "second": (second, 0.515),
+                "third": (third, 0.515),
+            }
+        )
+
+        pair = next(
+            item
+            for item in report["pairs"]
+            if item["first_name"] == "first" and item["second_name"] == "second"
+        )
+        self.assertEqual(pair["periods"]["development"]["operators"]["union"]["rows"], 3)
+        self.assertEqual(pair["periods"]["development"]["segments"]["both"]["rows"], 1)
+        self.assertFalse(pair["development_screen"]["passed"])
+        self.assertFalse(pair["confirmation_audit"]["passed"])
+        self.assertIsNone(report["development_selected_pair"])
+
+        mismatched = third.copy()
+        mismatched.loc[0, "correct"] = False
+        with self.assertRaisesRegex(ValueError, "same direction"):
+            pairwise_confidence_complementarity(
+                {"first": (reference, 0.515), "mismatch": (mismatched, 0.515)}
+            )
+
     def test_confidence_selection_operators_preserve_odds_and_combine_sets(self):
         first = pd.DataFrame(
             {

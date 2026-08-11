@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -413,6 +414,157 @@ def compare_confidence_selection_operators(
                 "intersection", "first", "selection_score"
             ),
         },
+    }
+
+
+def pairwise_confidence_complementarity(
+    candidates: Mapping[str, tuple[pd.DataFrame, float]],
+    development_folds: Sequence[str] = DEFAULT_DEVELOPMENT_FOLDS,
+) -> dict[str, object]:
+    """Screen fixed candidate selection sets using development evidence only."""
+    if len(candidates) < 2:
+        raise ValueError("at least two confidence candidates are required")
+    names = list(candidates)
+    reference = candidates[names[0]][0]
+    masks: dict[str, pd.Series] = {}
+    thresholds: dict[str, float] = {}
+    for name, (frame, threshold) in candidates.items():
+        assert_aligned(reference, frame, name)
+        if not np.array_equal(
+            reference["correct"].to_numpy(dtype="bool"),
+            frame["correct"].to_numpy(dtype="bool"),
+        ):
+            raise ValueError("confidence candidates must preserve the same direction")
+        thresholds[name] = float(threshold)
+        masks[name] = _selection_mask(frame, threshold)
+
+    period_masks = _period_masks(reference, development_folds)
+    pairs: list[dict[str, object]] = []
+
+    def score_or_negative_infinity(value: object) -> float:
+        return float("-inf") if value is None else float(value)
+
+    for first_name, second_name in combinations(names, 2):
+        first_selected = masks[first_name]
+        second_selected = masks[second_name]
+        operators = {
+            "first": first_selected,
+            "second": second_selected,
+            "union": first_selected | second_selected,
+            "intersection": first_selected & second_selected,
+        }
+        segments = {
+            "both": first_selected & second_selected,
+            "first_only": first_selected & ~second_selected,
+            "second_only": second_selected & ~first_selected,
+            "neither": ~first_selected & ~second_selected,
+        }
+        periods: dict[str, object] = {}
+        for period, period_mask in period_masks.items():
+            period_frame = reference.loc[period_mask]
+            operator_metrics = {
+                operator: selection_mask_metrics(
+                    period_frame, selected.loc[period_mask]
+                )
+                for operator, selected in operators.items()
+            }
+            segment_metrics = {
+                segment: selection_mask_metrics(
+                    period_frame, selected.loc[period_mask]
+                )
+                for segment, selected in segments.items()
+            }
+            both_rows = segment_metrics["both"]["rows"]
+            union_rows = operator_metrics["union"]["rows"]
+            periods[period] = {
+                "operators": operator_metrics,
+                "segments": segment_metrics,
+                "jaccard": (
+                    float(both_rows / union_rows) if union_rows else None
+                ),
+            }
+
+        def screen_period(period: str) -> dict[str, object]:
+            period_operators = periods[period]["operators"]
+            period_segments = periods[period]["segments"]
+            parent_score = max(
+                score_or_negative_infinity(
+                    period_operators["first"]["selection_score"]
+                ),
+                score_or_negative_infinity(
+                    period_operators["second"]["selection_score"]
+                ),
+            )
+            union_score = period_operators["union"]["selection_score"]
+            union_gain = (
+                None if union_score is None else float(union_score) - parent_score
+            )
+            exclusive_edges = {
+                segment: bool(
+                    period_segments[segment]["wilson_lower"] is not None
+                    and float(period_segments[segment]["wilson_lower"]) > 0.5
+                )
+                for segment in ("first_only", "second_only")
+            }
+            return {
+                "union_score_gain_over_better_parent": union_gain,
+                "exclusive_edge_confirmed": exclusive_edges,
+                "passed": bool(
+                    union_gain is not None
+                    and union_gain > 0
+                    and all(exclusive_edges.values())
+                ),
+            }
+
+        development_screen = screen_period("development")
+        confirmation_audit = screen_period("confirmation")
+        pairs.append(
+            {
+                "first_name": first_name,
+                "second_name": second_name,
+                "first_threshold": thresholds[first_name],
+                "second_threshold": thresholds[second_name],
+                "periods": periods,
+                "development_screen": development_screen,
+                "confirmation_audit": confirmation_audit,
+            }
+        )
+
+    ranked_pairs = sorted(
+        pairs,
+        key=lambda pair: (
+            bool(pair["development_screen"]["passed"]),
+            score_or_negative_infinity(
+                pair["development_screen"]["union_score_gain_over_better_parent"]
+            ),
+        ),
+        reverse=True,
+    )
+    eligible_pairs = [
+        pair for pair in ranked_pairs if pair["development_screen"]["passed"]
+    ]
+    return {
+        "format_version": 1,
+        "development_folds": list(development_folds),
+        "confirmation_usage": "audit only; never used for pair selection",
+        "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+        "eligibility": {
+            "union_score_gain_over_better_parent": "> 0 on development",
+            "first_only_wilson_lower": "> 0.5 on development",
+            "second_only_wilson_lower": "> 0.5 on development",
+        },
+        "candidates": {
+            name: {"threshold": thresholds[name]} for name in names
+        },
+        "development_selected_pair": (
+            {
+                "first_name": eligible_pairs[0]["first_name"],
+                "second_name": eligible_pairs[0]["second_name"],
+            }
+            if eligible_pairs
+            else None
+        ),
+        "pairs": ranked_pairs,
     }
 
 

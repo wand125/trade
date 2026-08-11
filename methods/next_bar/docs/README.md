@@ -342,6 +342,8 @@ uv run python methods/next_bar/scripts/compare_fixed_candidates.py \
 
 明示boolean採用列をbootstrapする場合は `bootstrap_fixed_candidates.py` の `--first-selection-column` / `--second-selection-column` を使う。集合演算後のconfidenceを閾値判定し直さず、保存済み採否をそのままUTC日単位で比較する。
 
+3本以上の固定confidence候補から補完的なpairをdevelopment限定で探す場合は `methods/next_bar/scripts/pairwise_confidence_complementarity.py` を使う。各 `--candidate NAME THRESHOLD PREDICTION_DIR` の固定採用集合を全pair比較し、union目的関数が両親を上回り、両exclusive集合のWilson下限が50%超の場合だけ選択する。confirmationは同じgateの監査にしか使わない。M1の正式4候補・全6組ではDisagreement 0.515 + Distribution Shift 0.51だけがdevelopmentを通ったが、confirmationのDisagreement-onlyが386行・48.19%へ反転しunion scoreもShiftを下回った。20,000回bootstrapでもscore増分は未確定のため、全pairを再現専用とする。
+
 2つのconfidence候補を固定した非重複帯・累積閾値で比較し、信頼度をオッズとして監査する:
 
 ```bash
