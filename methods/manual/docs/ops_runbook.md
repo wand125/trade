@@ -2,7 +2,7 @@
 
 軽量モデルの別セッションが、トレードの定期監視・報告・委任済み執行を担うための手順書。**相談・議論・分析はこのセッションの仕事ではない** — 求められたら「相談セッションで」と案内する。
 
-最終更新: **2026-08-13 00:2X JST(Windows環境で新運用セッション稼働開始。現役ゼロ・委任ゼロ、watcher task `byxspt3oh`)**
+最終更新: **2026-08-13 01:4X JST(運用セッション交代。現役ゼロ・委任ゼロ、watcher task `ba3lmrcif`)**
 
 ## 監視停止中(2026-08-08 06:3X〜)
 
@@ -57,7 +57,9 @@
 - **2026-08-13 00:2X JST: Windows環境(WSL2、`/mnt/c/Users/user1/trade`)で新しい運用セッションが稼働開始**。起動手順を実施: ①ブリッジhealth — `127.0.0.1:8765` は無応答、`$BRIDGE_BASE_URL`(`http://172.25.64.1:8765`)経由でOK(8/11記録と同じ挙動)。②`runtime/latest_account.md` — 残高374,232円、ポジション・注文ゼロ、ファイル更新00:17 JST(現在時刻と一致、鮮度良好)。`latest_account.md` に「## Pending Orders」節あり(P40のブリッジ側変更が反映済みの可能性が高いが、EAのF7コンパイル完了は未確認)。③campaign.md — 現役作戦の節なし(委任ゼロと整合)。`runtime/delegation_rules.json` は空(`[]`)。Mac側旧運用セッションのMonitor停止は引き継ぎ指示で確認済み(二重執行防止)。CPI(8/12)は発表済みのため外し、PPI(8/13 21:30)・小売売上高(8/14 21:30)のEVENT_WARNのみ・水準なし・rules指定なしで新task `byxspt3oh` を起動(旧task `bkfjr90f6` はMac側で停止済み)。今の watcher は P40 の ORDER_NEW/GONE 検知コードを含むリポジトリ現行版で起動している
 - **2026-08-12 12:0X頃 JST: P40(未約定注文の可視化)を相談セッションから通知(commit 9db5272)**。本人がMT5画面から直接置いた指値がこれまで運用セッションから見えなかった盲点への対策。EA(accountブロックにorders配列追加)・ブリッジ(`latest_account*.md`に「## Pending Orders」節追加)・watcher(ORDER_NEW/ORDER_GONE検知)の3点セット。**保留事項**: EAは配備済みだが本人のF7コンパイル待ち、ブリッジはコード変更済みだがWindows側の再起動が必要。**両方完了後にwatcherの再起動が必要**(ORDER検知の反映に必須)。それまでは現行構成のままでよいと確認済み。F7後は`InpPollCodexTradeCommands`false化の再発に注意(相談セッションがdry-run 1本で確認予定)。運用セッションはF7・ブリッジ再起動の完了報告を待ってwatcherを再起動する
 
-## 現在の状態(2026-08-13 00:2X JST 更新)
+- **2026-08-13 01:4X JST: 新しい運用セッション(WSL2、`/mnt/c/Users/user1/trade`)へ交代**。起動手順を実施: ①ブリッジhealth — `127.0.0.1:8765` は無応答(exit 7)、`http://172.25.64.1:8765/health` でOK(`{"ok":true,...}`。このシェルでは `$BRIDGE_BASE_URL` 未設定のため直接指定で確認)。②`runtime/latest_account.md` — 残高374,232円、ポジション・注文ゼロ、ファイル更新01:35:19 JST(現在時刻01:35:23と数秒差、鮮度良好)。③campaign.md — 現役作戦の節なし(委任ゼロと整合)。`runtime/delegation_rules.json` は空(`[]`)。二重執行防止の確認: `ps aux` で `runtime_watch` プロセスなし(前セッションの task `byxspt3oh` は生存していない)、Mac側Monitor停止は引き継ぎ指示で確認済み。水準なし・rulesなし・指標警報(PPI 8/13 21:30・小売売上高 8/14 21:30)のみで新task `ba3lmrcif` を起動
+
+## 現在の状態(2026-08-13 01:4X JST 更新)
 
 - 口座: Titan FX 9181575。残高 **374,232円**
 - **ポジション・注文・委任すべてゼロ。現役の作戦なし**
