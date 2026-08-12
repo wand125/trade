@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-12 11:37 JST
+更新日時: 2026-08-12 12:11 JST
 
 ## 現在の状態
 
@@ -511,6 +511,8 @@
 134. Variance Ratio案は既存Path Persistenceのvariance ratio・自己相関・方向持続性と重複するため実装前に中止し、独立なEWMA Asymmetry Stateへ切り替えた。半減期4/16/64のreturn innovation・drift/volatility、cross-scale volatility balance、上下energy balance、lagged-return×current-variance leverage momentの固定12特徴を追加し、[-1,1]境界、scale不変、未来不参照、gap reset、flat全0、50全特徴のraw OHLC排除、厳密式、train/latestをテストした。M5 Windows canonical 439,881 OOS行で単体方向はbaseline比-8件、通常25%方向blendは+21件・p=0.81931のため方向用途は不採用。方向維持25% confidenceのdevelopment固定0.515はbaseline比accuracy 5/7、score 6/7、Brier/log loss 7/7fold、confirmation accuracy +0.11681ptのbootstrap区間+0.01697〜+0.21539pt、score +0.000681の区間+0.000069〜+0.001283、all Brier/log lossも改善側だった。Profile 0.515とはall accuracy +0.01266pt、score +0.000080で区間0跨ぎ、confirmationは-0.03279pt。固定50/50もconfirmationを下げるため置換・stackせず、`m5_ewma_asymmetry_confidence_candidate_v1.json` のWindows canonical parallel broad候補として採用する。confirmation 0.515はmean confidence 52.48282%と実測52.48281%が整合したが、down-normalは4,297件・50.6633%・Wilson下限49.1685%でedge未確認。同履歴からfilterを作らず、0.55も最新229件・47.5983%のため不採用。Profile 0.515、Follow-through 0.55、authoritative confidence・fair odds・policyを維持する。共有高負荷処理を停止せず、単独8 thread・nice/I/O低優先度・CPU only・標準損失1.0で実行した。
 
 135. M5採用EWMA Asymmetryを定義・半減期・HGB/Platt・25% weight・閾値grid・標準損失1.0のままM15へ固定移植した。Windows canonical 145,140 OOS行で単体方向はbaseline比-87件、通常25%方向blendは-10件・p=0.87712のため不採用。方向維持0.515はbaseline比accuracy 5/7、score 4/7、Brier/log loss 6/7foldで、development/confirmation/allのaccuracy・score点値とconfirmation/all proper scoreを改善したが、accuracy・scoreの20,000回日次bootstrap区間は全て0跨ぎだった。Profile 0.515にはaccuracy 6/7、score 5/7、all accuracy差+0.11016ptの区間+0.00129〜+0.21871pt、proper scoreも改善した。一方、現行Distribution Shift 0.515にall accuracy -0.01977pt、score -0.000134、Brier +0.00000519、log loss +0.00001044と全主指標で点劣後し、直接bootstrapは全て未確定だった。confirmation 0.515は27,746件・52.62741%、mean 52.88087%で整合したがdown-low/down-normalはWilson edge未確認、0.55もShiftを超えない。新candidateを発行せず再現専用とし、Shift 0.515、既存precision候補、authoritative confidence・fair odds・policyを維持する。同履歴でhalf-life・clip・subset・weight・閾値を再探索しない。Windows workerは単独8 thread・nice/I/O低優先度・CPU onlyで、画像生成等を停止していない。
+
+136. 同じEWMA Asymmetryを定義・半減期・HGB/Platt・25% weight・閾値grid・標準損失1.0のままM30へ固定移植した。Windows canonical 71,260 OOS行で単体方向はbaseline比+39/+31/+70件、accuracy 5/7foldだったが、3期間のaccuracy・Brier・log loss日次bootstrap区間は全て0跨ぎ、confirmation proper scoreが悪化した。通常25% blendは+38/-3/+35件・accuracy 3/7foldで方向用途へ採用しない。方向維持0.52はdevelopmentのaccuracy/scoreを改善したがconfirmationでaccuracy -0.16687pt、score -0.000921へ反転し、baseline比accuracy/score各3/7foldだった。現行Distribution Shift 0.52にはaccuracy/score各1/7、all accuracy -0.16588pt、score -0.000956。coverageだけconfirmation/allで増加確定でも精度低下を伴い、新roleにしない。Shiftとの固定50/50も各1/7、0.55/0.575もShiftを超えず不採用。runtime artifactの設定一致とlatest推論を通したがconfig・registry・authoritative方向/confidence・fair odds・policyを変更しない。Pressure 0.52、Shift 0.52、Pressure + AR 0.55を維持し、同じ履歴でhalf-life・clip・subset・weight・閾値を再探索しない。Windows workerは単独8 thread・nice/I/O低優先度・CPU onlyで、画像生成等を停止していない。
 
 ## ベースライン評価
 
