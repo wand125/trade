@@ -506,6 +506,8 @@
 - confirmationではDisagreement-onlyが386行・48.1865%・Wilson下限43.2442%へ反転し、union scoreはShift 0.008142に対し0.008116へ低下した。他5 pairはdevelopmentで棄却済みである。
 - 20,000回日次bootstrapではunion−Shiftのdevelopment/confirmation/all score差が全て0跨ぎで、coverage増加だけが確定した。union−Disagreementは3期間でaccuracy低下が確定しscoreは未確定。source confidenceもdevelopment過信からconfirmation過小へ反転したため、全pairを再現専用とし既存候補・fair odds・policyを変更しない。
 
+133. 流動性摩擦をOHLC水準ではなくCorwin–Schultz実効spread、Roll自己共分散spread、Parkinson range/close energy、prior-only near-zero return率の固定10特徴へ加工した。0〜1境界、scale不変、未来不参照、gap reset、flat全0、48全特徴のraw OHLC排除、train/latestをテストした。M5 Windows canonicalの439,881 OOS行で単体はbaseline比-291件、通常25%方向blendは-33件で方向用途を不採用。方向維持25% confidenceのdevelopment固定0.515はbaseline比accuracy/score各6/7fold、all accuracy +0.04833pt、score +0.000278だが、20,000回日次bootstrap区間はaccuracy -0.00254〜+0.09915pt、score -0.000083〜+0.000639で未確定。Profileに対しdevelopment score +0.000347がconfirmation -0.000639へ反転し、all Brier/log lossは95%区間で有意に悪化した。Profileとの固定50/50 confidence平均もconfirmation 3/3、全体で5/7fold負けた。0.55はProfile比all accuracy/scoreが低く、特徴実装とWindows成果物は再現用に保存するがconfig・registryに採用しない。Profile 0.515、Follow-through 0.55 shadow、authoritative confidence・fair odds・policyを維持し、window・特徴subset・weight・閾値を同じ履歴で再探索しない。共有高負荷処理を停止せず、単独8 thread・nice/I/O低優先度・CPU only・標準損失1.0で実行した。
+
 ## ベースライン評価
 
 2025-01-01〜2026-06-01 の test では、校正後 accuracy は M1 50.89%、M5 51.32%、M15 51.86%、M30 51.65%。balanced accuracy は 50.75%〜51.27%であり、現時点の方向エッジは小さい。

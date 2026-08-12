@@ -1013,6 +1013,113 @@ class NextBarTests(unittest.TestCase):
         self.assertGreater(len(frame[shift_columns].dropna()), 0)
         self.assertTrue(np.isfinite(frame[shift_columns].dropna()).all().all())
 
+    def test_liquidity_friction_is_stationary_causal_bounded_and_runs_latest(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "liquidity_friction"
+        )
+        liquidity_columns = [
+            name for name in feature_columns if name.startswith("liquidity_")
+        ]
+
+        self.assertEqual(len(liquidity_columns), 10)
+        self.assertEqual(len(feature_columns), 48)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        finite = frame[liquidity_columns].dropna()
+        self.assertGreater(len(finite), 0)
+        self.assertTrue(np.isfinite(finite).all().all())
+        self.assertGreaterEqual(float(finite.to_numpy().min()), 0.0)
+        self.assertLessEqual(float(finite.to_numpy().max()), 1.0)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1), 1, "liquidity_friction"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[liquidity_columns],
+            scaled_frame[liquidity_columns],
+            rtol=1e-8,
+            atol=1e-10,
+            equal_nan=True,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 300, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1), 1, "liquidity_friction"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:299, liquidity_columns],
+            changed_frame.loc[:299, liquidity_columns],
+        )
+
+        target = len(bars) - 1
+        log_range = np.log(bars["high"] / bars["low"])
+        beta = log_range.iloc[target] ** 2 + log_range.iloc[target - 1] ** 2
+        pair_high = max(bars.loc[target, "high"], bars.loc[target - 1, "high"])
+        pair_low = min(bars.loc[target, "low"], bars.loc[target - 1, "low"])
+        gamma = np.log(pair_high / pair_low) ** 2
+        denominator = 3.0 - 2.0 * np.sqrt(2.0)
+        alpha = max(
+            0.0,
+            (np.sqrt(2.0 * beta) - np.sqrt(beta)) / denominator
+            - np.sqrt(gamma / denominator),
+        )
+        alpha = min(alpha, 10.0)
+        expected_spread = 2.0 * np.expm1(alpha) / (2.0 + np.expm1(alpha))
+        self.assertAlmostEqual(
+            float(frame.loc[target, "liquidity_corwin_schultz_spread_pair"]),
+            expected_spread,
+            places=12,
+        )
+
+        flat_source = m1_frame(400)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "liquidity_friction"
+        )
+        self.assertTrue(
+            np.isfinite(flat_frame.loc[220:, liquidity_columns]).all().all()
+        )
+        self.assertTrue(flat_frame.loc[220:, liquidity_columns].eq(0).all().all())
+
+        gapped = bars.copy()
+        gapped.loc[gapped.index >= 300, "timestamp"] += pd.Timedelta(minutes=5)
+        gapped_frame, _ = build_feature_frame(gapped, 1, "liquidity_friction")
+        self.assertEqual(
+            float(
+                gapped_frame.loc[
+                    300, "liquidity_corwin_schultz_spread_pair"
+                ]
+            ),
+            0.0,
+        )
+
+        config = TrainConfig(
+            timeframes=(1,),
+            feature_set="liquidity_friction",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "liquidity_friction")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_rolling_distribution_shape_is_exact_stationary_causal_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)

@@ -442,6 +442,8 @@ as-of contextはtarget判定時刻以前だけを検索し、最大ageを超え�
 
 M15 class confidence 0.54以上かつM15/M5/M1の方向が同時刻で一致する条件は、`config/m15_cross_tf_agreement_shadow_v1.json` に固定した。確認期間の高信頼accuracyとselection scoreは改善したが、全期間のselection scoreと売買cost余力が十分でないためshadow専用である。
 
+OHLCの履歴数値をそのまま入れず、実効spreadと価格変化の摩擦へ加工する場合は `--feature-set liquidity_friction` を使う。Corwin–Schultzの2本実効spread proxyと8/32本集約、Rollの負の自己共分散spreadと平均log rangeの32/128本比、Parkinson range energyとclose-return energyの16/64本比、prior-only medianに対するnear-zero returnの32/128本率を固定10列にする。全列は0〜1、scale不変、未来不参照、gapの隣接pairをreset、flat全0をテストした。M5 Windows canonicalではbaseline方向を維持した25% confidence blendの固定0.515がbaselineを点値で6/7fold改善したが、95%日次bootstrap区間は0跨ぎだった。既存Profileに対し開発期間の小幅改善が確認期間で反転し、全期間Brier/log lossも有意に悪化。固定50/50 confidence平均もProfileに2/7foldしか勝てないため再現専用とし、Profile 0.515、Follow-through 0.55 shadow、config・registry・authoritative confidence・fair odds・policyを変更しない。
+
 ## 主評価指標
 
 - accuracy と balanced accuracy

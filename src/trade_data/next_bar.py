@@ -43,6 +43,7 @@ FEATURE_SETS = (
     "candle_pressure_state",
     "bar_breakout_rejection",
     "distribution_shift",
+    "liquidity_friction",
     "rolling_distribution_shape",
     "rolling_spectral_state",
     "rolling_ordinal_motif",
@@ -3439,6 +3440,91 @@ def build_feature_frame(
                 ).std(),
             ),
         )
+
+    if feature_set == "liquidity_friction":
+        continuous = result["timestamp"].diff().eq(
+            pd.Timedelta(minutes=timeframe_minutes)
+        )
+        continuous_return = log_return_1.where(continuous, 0.0)
+        log_range = np.log(high / low.replace(0, np.nan)).clip(lower=0.0)
+
+        # Corwin-Schultz converts two adjacent completed high-low ranges into
+        # a dimensionless effective-spread proxy.  A gap cannot form a pair.
+        beta = log_range.pow(2) + log_range.shift(1).pow(2)
+        pair_high = pd.concat([high, high.shift(1)], axis=1).max(axis=1)
+        pair_low = pd.concat([low, low.shift(1)], axis=1).min(axis=1)
+        gamma = np.log(pair_high / pair_low.replace(0, np.nan)).pow(2)
+        corwin_denominator = 3.0 - 2.0 * np.sqrt(2.0)
+        alpha = (
+            (np.sqrt(2.0 * beta) - np.sqrt(beta)) / corwin_denominator
+            - np.sqrt(gamma / corwin_denominator)
+        ).clip(lower=0.0, upper=10.0)
+        alpha = alpha.where(continuous, 0.0).fillna(0.0)
+        alpha_exponential = np.expm1(alpha)
+        corwin_spread = (
+            2.0 * alpha_exponential / (2.0 + alpha_exponential)
+        ).clip(0.0, 1.0)
+        add("liquidity_corwin_schultz_spread_pair", corwin_spread)
+        add(
+            "liquidity_corwin_schultz_mean_8",
+            corwin_spread.rolling(8, min_periods=8).mean(),
+        )
+        add(
+            "liquidity_corwin_schultz_mean_32",
+            corwin_spread.rolling(32, min_periods=32).mean(),
+        )
+        add(
+            "liquidity_corwin_schultz_p90_32",
+            corwin_spread.rolling(32, min_periods=32).quantile(0.90),
+        )
+
+        def bounded_positive_fraction(
+            numerator: pd.Series, denominator_component: pd.Series
+        ) -> pd.Series:
+            denominator = numerator + denominator_component
+            output = numerator / denominator.replace(0, np.nan)
+            return output.mask(denominator.eq(0), 0.0).clip(0.0, 1.0)
+
+        for window in (32, 128):
+            return_covariance = continuous_return.rolling(
+                window, min_periods=window
+            ).cov(continuous_return.shift(1))
+            roll_spread = 2.0 * np.sqrt((-return_covariance).clip(lower=0.0))
+            average_range = log_range.rolling(
+                window, min_periods=window
+            ).mean()
+            add(
+                f"liquidity_roll_spread_fraction_{window}",
+                bounded_positive_fraction(roll_spread, average_range),
+            )
+
+        parkinson_variance = log_range.pow(2) / (4.0 * np.log(2.0))
+        close_variance = continuous_return.pow(2)
+        for window in (16, 64):
+            range_energy = parkinson_variance.rolling(
+                window, min_periods=window
+            ).mean()
+            close_energy = close_variance.rolling(
+                window, min_periods=window
+            ).mean()
+            add(
+                f"liquidity_range_noise_fraction_{window}",
+                bounded_positive_fraction(range_energy, close_energy),
+            )
+
+        prior_absolute_return_median = continuous_return.abs().shift(1).rolling(
+            64, min_periods=64
+        ).median()
+        near_zero = (
+            continuous_return.abs().le(0.10 * prior_absolute_return_median)
+            & prior_absolute_return_median.gt(0)
+            & continuous
+        ).astype("float64")
+        for window in (32, 128):
+            add(
+                f"liquidity_near_zero_fraction_{window}",
+                near_zero.rolling(window, min_periods=window).mean(),
+            )
 
     if feature_set == "rolling_spectral_state":
         spectral_features = rolling_spectral_state(
