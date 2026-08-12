@@ -2396,6 +2396,82 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "change_point_state")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_change_point_state_transfers_to_m5_without_scale_or_future_leakage(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "change_point_state"
+        )
+        state_columns = [
+            f"change_point_{channel}_{state}_64"
+            for channel in ("return", "range")
+            for state in (
+                "positive",
+                "negative",
+                "balance",
+                "alarm_direction",
+                "alarm_age",
+            )
+        ]
+
+        self.assertEqual(len(feature_columns), 48)
+        self.assertEqual(
+            {name for name in feature_columns if name.startswith("change_point_")},
+            set(state_columns),
+        )
+        self.assertEqual(len(state_columns), 10)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        values = frame[state_columns].to_numpy(dtype="float64")
+        self.assertTrue(np.isfinite(values).all())
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "change_point_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[state_columns],
+            scaled_frame[state_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 3000, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "change_point_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:499, state_columns],
+            changed_frame.loc[:499, state_columns],
+        )
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="change_point_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "change_point_state")
+        self.assertEqual(latest["timeframe"].tolist(), ["M5"])
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_shock_recovery_state_is_stationary_causal_gap_safe_and_runs_latest(self):
         source = m1_frame(1800)
         for column in ("open", "high", "low", "close"):
