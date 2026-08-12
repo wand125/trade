@@ -2639,6 +2639,39 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "haar_multiscale")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_haar_multiscale_features_transfer_to_m5(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(bars, 5, "haar_multiscale")
+        haar_columns = [name for name in feature_columns if name.startswith("haar_")]
+
+        self.assertEqual(len(feature_columns), 50)
+        self.assertEqual(len(haar_columns), 12)
+        for window in (4, 8, 16, 32):
+            self.assertIn(f"haar_return_detail_{window}", haar_columns)
+            self.assertIn(f"haar_absolute_detail_{window}", haar_columns)
+            self.assertIn(f"haar_direction_detail_{window}", haar_columns)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse({"open", "high", "low", "close"}.intersection(feature_columns))
+        usable = frame[haar_columns].dropna()
+        self.assertGreater(len(usable), 0)
+        self.assertTrue(np.isfinite(usable).all().all())
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "haar_multiscale"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[haar_columns],
+            scaled_frame[haar_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
     def test_session_relative_features_use_prior_stationary_rows_and_run_latest(self):
         source = m1_frame(2400)
         bars = resample_complete_bars(source, 1)
