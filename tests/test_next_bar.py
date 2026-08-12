@@ -1217,6 +1217,31 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "ewma_asymmetry_state")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_ewma_asymmetry_state_features_transfer_to_m15(self):
+        source = m1_frame(3600)
+        bars = resample_complete_bars(source, 15)
+        frame, feature_columns = build_feature_frame(
+            bars, 15, "ewma_asymmetry_state"
+        )
+        ewma_columns = [
+            name for name in feature_columns if name.startswith("ewma_")
+        ]
+
+        self.assertEqual(len(ewma_columns), 12)
+        self.assertEqual(len(feature_columns), 50)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertGreater(len(frame[ewma_columns].dropna()), 0)
+        self.assertTrue(np.isfinite(frame[ewma_columns].dropna()).all().all())
+        self.assertGreaterEqual(
+            float(frame[ewma_columns].dropna().to_numpy().min()), -1.0
+        )
+        self.assertLessEqual(
+            float(frame[ewma_columns].dropna().to_numpy().max()), 1.0
+        )
+
     def test_rolling_distribution_shape_is_exact_stationary_causal_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
