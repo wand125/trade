@@ -2539,6 +2539,85 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "shock_recovery_state")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_shock_recovery_state_transfers_to_m5_without_scale_or_future_leakage(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "shock_recovery_state"
+        )
+        state_columns = [
+            name for name in feature_columns if name.startswith("shock_")
+        ]
+        expected_state_columns = {
+            "shock_return_innovation",
+            "shock_range_innovation",
+            "shock_return_direction",
+            "shock_return_excess",
+            "shock_return_age",
+            "shock_return_response",
+            "shock_return_max_continuation",
+            "shock_return_max_reversal",
+            "shock_range_direction",
+            "shock_range_excess",
+            "shock_range_age",
+            "shock_joint_event",
+        }
+
+        self.assertEqual(len(feature_columns), 50)
+        self.assertEqual(set(state_columns), expected_state_columns)
+        self.assertEqual(len(state_columns), 12)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        values = frame[state_columns].to_numpy(dtype="float64")
+        self.assertTrue(np.isfinite(values).all())
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "shock_recovery_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[state_columns],
+            scaled_frame[state_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 3000, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "shock_recovery_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:499, state_columns],
+            changed_frame.loc[:499, state_columns],
+        )
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="shock_recovery_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "shock_recovery_state")
+        self.assertEqual(latest["timeframe"].tolist(), ["M5"])
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_path_persistence_features_are_stationary_causal_and_run_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
