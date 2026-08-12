@@ -1914,6 +1914,71 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_rolling_autoregressive_state_transfers_to_m5_without_scale_or_future_leakage(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "rolling_autoregressive_state"
+        )
+        ar_columns = [
+            name for name in feature_columns if name.startswith("rolling_ar_")
+        ]
+        expected_ar_columns = {
+            *(
+                f"rolling_ar_lag{lag}_coefficient_{window}"
+                for window in (32, 128)
+                for lag in (1, 2, 3)
+            ),
+            *(f"rolling_ar_forecast_{window}" for window in (32, 128)),
+            *(f"rolling_ar_fit_energy_{window}" for window in (32, 128)),
+            *(
+                f"rolling_ar_latest_innovation_{window}"
+                for window in (32, 128)
+            ),
+            "rolling_ar_forecast_short_long_delta",
+            "rolling_ar_fit_energy_short_long_delta",
+            "rolling_ar_innovation_short_long_delta",
+        }
+
+        self.assertEqual(len(feature_columns), 53)
+        self.assertEqual(set(ar_columns), expected_ar_columns)
+        self.assertEqual(len(ar_columns), 15)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        values = frame[ar_columns].to_numpy(dtype="float64")
+        self.assertTrue(np.isfinite(values).all())
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "rolling_autoregressive_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[ar_columns],
+            scaled_frame[ar_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 3000, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "rolling_autoregressive_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:499, ar_columns],
+            changed_frame.loc[:499, ar_columns],
+        )
+
     def test_rolling_transition_memory_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
