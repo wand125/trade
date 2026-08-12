@@ -1671,6 +1671,69 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "rolling_ordinal_motif")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_rolling_ordinal_motif_transfers_to_m5_without_scale_or_future_leakage(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "rolling_ordinal_motif"
+        )
+        ordinal_columns = [
+            name for name in feature_columns if name.startswith("rolling_ordinal_")
+        ]
+        expected_ordinal_columns = {
+            *(
+                f"rolling_ordinal_{pattern}_fraction_{window}"
+                for window in (32, 128)
+                for pattern in ("012", "021", "102", "120", "201", "210")
+            ),
+            *(f"rolling_ordinal_entropy_{window}" for window in (32, 128)),
+            *(
+                f"rolling_ordinal_current_frequency_{window}"
+                for window in (32, 128)
+            ),
+            "rolling_ordinal_entropy_short_long_delta",
+            "rolling_ordinal_current_frequency_short_long_delta",
+        }
+
+        self.assertEqual(len(feature_columns), 56)
+        self.assertEqual(set(ordinal_columns), expected_ordinal_columns)
+        self.assertEqual(len(ordinal_columns), 18)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        values = frame[ordinal_columns].to_numpy(dtype="float64")
+        self.assertTrue(np.isfinite(values).all())
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "rolling_ordinal_motif"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[ordinal_columns],
+            scaled_frame[ordinal_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 3000, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "rolling_ordinal_motif"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:499, ordinal_columns],
+            changed_frame.loc[:499, ordinal_columns],
+        )
+
     def test_rolling_autoregressive_state_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
