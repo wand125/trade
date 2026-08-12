@@ -2744,6 +2744,37 @@ class NextBarTests(unittest.TestCase):
         self.assertTrue(np.isfinite(flat_frame.loc[100:, tcn_columns]).all().all())
         self.assertTrue(flat_frame.loc[100:, tcn_columns].eq(0).all().all())
 
+    def test_tcn_sequence_features_transfer_to_m5(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(bars, 5, "tcn_sequence")
+        tcn_columns = [name for name in feature_columns if name.startswith("tcn_")]
+
+        self.assertEqual(len(feature_columns), 118)
+        self.assertEqual(len(tcn_columns), 80)
+        self.assertIn("tcn_return_atr_lag_0", tcn_columns)
+        self.assertIn("tcn_wick_balance_atr_lag_15", tcn_columns)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse({"open", "high", "low", "close"}.intersection(feature_columns))
+        usable = frame[tcn_columns].dropna()
+        self.assertGreater(len(usable), 0)
+        self.assertTrue(np.isfinite(usable).all().all())
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "tcn_sequence"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[tcn_columns],
+            scaled_frame[tcn_columns],
+            rtol=1e-9,
+            atol=1e-9,
+            equal_nan=True,
+        )
+
     def test_intrabar_manual_features_are_processed_and_causal(self):
         source = m1_frame(1500)
         bars = resample_complete_bars(source, 15)
