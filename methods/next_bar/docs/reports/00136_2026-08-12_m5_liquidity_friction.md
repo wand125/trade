@@ -29,7 +29,7 @@ Profile 0.515 broad confidence、Directional Follow-through 0.55 high-confidence
 - baseline 75% + candidate 25%、開発期間の事前固定grid 0.51/0.515/0.525/0.535/0.55
 - 候補とbaseline/Profileはfold・timestamp・targetが完全一致、duplicate 0、NaN 0
 
-最大化する選択指標は `coverage * max(Wilson accuracy lower - 0.5, 0)` で、高信頼帯の精度だけでなくカバレッジを同時に評価した。閾値はdevelopmentで選び、confirmationで選び直していない。
+最大化する選択指標は `sqrt(coverage) * (Wilson accuracy lower - 0.5)` で、高信頼帯の精度だけでなくカバレッジを同時に評価した。閾値はdevelopmentで選び、confirmationで選び直していない。
 
 ## 方向結果
 

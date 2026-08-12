@@ -1,0 +1,147 @@
+{
+  "format_version": 1,
+  "status": "windows_canonical_parallel_broad_ewma_asymmetry",
+  "target_timeframe_minutes": 5,
+  "canonical_training_platform": "Windows/WSL2 x86 Linux",
+  "direction_source": "baseline HGB",
+  "feature_candidate": {
+    "feature_set": "ewma_asymmetry_state",
+    "baseline_feature_count": 38,
+    "additional_feature_count": 12,
+    "total_feature_count": 50,
+    "half_lives": [4, 16, 64],
+    "feature_groups": {
+      "standardized_return_innovation": 3,
+      "drift_to_volatility": 3,
+      "cross_scale_volatility_balance": 2,
+      "signed_energy_balance": 2,
+      "lagged_return_variance_leverage_moment": 2
+    },
+    "bounded_range": [-1.0, 1.0],
+    "gap_resets_ewma_state": true,
+    "raw_price_levels_used_as_model_features": false,
+    "future_rows_used_as_model_features": false
+  },
+  "training": {
+    "model_type": "hgb",
+    "max_iter": 200,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 100,
+    "l2_regularization": 1.0,
+    "max_train_rows": 750000,
+    "probability_calibration": "platt",
+    "train_weighting": "uniform",
+    "train_target_filter": "all",
+    "random_seed": 42,
+    "expanding_training": true,
+    "loss_multiplier": 1.0
+  },
+  "confidence_candidate": {
+    "candidate_weight": 0.25,
+    "baseline_weight": 0.75,
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.515,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)"
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/baseline_m5_windows_canonical_001",
+    "candidate_oos": "experiments/next_bar/ewma_asymmetry_state_m5_windows_canonical_001",
+    "direction_blend": "experiments/next_bar/ewma_asymmetry_state_m5_direction_blend_windows_canonical_001",
+    "direction_preserving_blend": "experiments/next_bar/ewma_asymmetry_state_m5_confidence_blend_windows_canonical_001",
+    "analysis": "experiments/next_bar/ewma_asymmetry_state_m5_windows_candidate_analysis.json",
+    "baseline_bootstrap": "experiments/next_bar/ewma_asymmetry_state_m5_vs_baseline_0515_windows_bootstrap_20000.json",
+    "profile_comparison": "experiments/next_bar/ewma_asymmetry_state_m5_vs_profile_0515_windows_comparison.json",
+    "profile_bootstrap": "experiments/next_bar/ewma_asymmetry_state_m5_vs_profile_0515_windows_bootstrap_20000.json",
+    "profile_equal_blend": "experiments/next_bar/ewma_profile_equal_m5_confidence_windows_canonical_001",
+    "reliability": "experiments/next_bar/ewma_asymmetry_state_m5_vs_profile_reliability_windows.json",
+    "subgroup_reliability": "experiments/next_bar/ewma_asymmetry_state_m5_confidence_subgroups_windows.json",
+    "latest_prediction": "experiments/next_bar/ewma_asymmetry_state_m5_latest_prediction_windows.json"
+  },
+  "evidence": {
+    "rows": 439881,
+    "confidence_0515": {
+      "development": {
+        "rows": 158222,
+        "coverage": 0.5850323534849325,
+        "accuracy": 0.5277837468872849,
+        "selection_score": 0.019369044985783616
+      },
+      "confirmation": {
+        "rows": 63396,
+        "coverage": 0.37417001611275386,
+        "accuracy": 0.5248280648621364,
+        "mean_confidence": 0.5248281581170177,
+        "selection_score": 0.012808439597572,
+        "locally_consistent": true,
+        "edge_confirmed": true
+      },
+      "all": {
+        "rows": 221618,
+        "coverage": 0.5038135313868978,
+        "accuracy": 0.5269382450883954,
+        "selection_score": 0.01764494072090695
+      }
+    },
+    "against_windows_baseline": {
+      "accuracy_improved_folds": 5,
+      "selection_score_improved_folds": 6,
+      "brier_improved_folds": 7,
+      "log_loss_improved_folds": 7,
+      "ece_improved_folds": 4,
+      "confirmation_accuracy_delta_points": 0.11680654901390364,
+      "confirmation_accuracy_bootstrap_95_points": [0.0169748166109876, 0.2153923939298972],
+      "confirmation_selection_score_delta": 0.0006807486997069973,
+      "confirmation_selection_score_bootstrap_95": [0.00006891730452428382, 0.0012825431746960531],
+      "all_accuracy_delta_points": 0.04982115709564194,
+      "all_accuracy_bootstrap_95_points": [-0.00010858891700216124, 0.10000573663747985],
+      "all_brier_delta": -0.00000814046301989002,
+      "all_brier_bootstrap_95": [-0.00001334436218373077, -0.0000029419123105743655],
+      "all_log_loss_delta": -0.000016315460462767994,
+      "all_log_loss_bootstrap_95": [-0.00002676510035191093, -0.000005870248007866513]
+    },
+    "against_windows_profile_0515": {
+      "accuracy_wins": 4,
+      "selection_score_wins": 3,
+      "development_accuracy_delta_points": 0.030837431845442964,
+      "confirmation_accuracy_delta_points": -0.032787994285388145,
+      "all_accuracy_delta_points": 0.012661168834848802,
+      "all_accuracy_bootstrap_95_points": [-0.04323481533071577, 0.06927475341234213],
+      "all_selection_score_delta": 0.00008018608101703281,
+      "all_selection_score_bootstrap_95": [-0.00031597740687936326, 0.0004798066974473161],
+      "all_brier_delta": 0.000005196173866045539,
+      "all_brier_bootstrap_95": [-0.0000009715038317641143, 0.000011403666622937513],
+      "decision": "statistically equivalent parallel challenger; does not replace Profile"
+    },
+    "rejected_variants": {
+      "standalone_direction_net_fixes": -8,
+      "standalone_direction_mcnemar_p": 0.9682272115094954,
+      "normal_direction_blend_net_fixes": 21,
+      "normal_direction_blend_mcnemar_p": 0.8193053046031884,
+      "profile_equal_confidence_accuracy_wins": 3,
+      "profile_equal_confidence_selection_score_wins": 3,
+      "high_confidence_055_latest_partial_rows": 229,
+      "high_confidence_055_latest_partial_accuracy": 0.4759825327510917
+    },
+    "subgroup_caution": {
+      "confirmation_down_normal_rows": 4297,
+      "confirmation_down_normal_accuracy": 0.5066325343262742,
+      "confirmation_down_normal_wilson_lower": 0.4916846526755239,
+      "edge_confirmed": false,
+      "post_hoc_filter_adopted": false
+    }
+  },
+  "promotion": {
+    "emit_as_windows_canonical_parallel_broad_candidate": true,
+    "replace_profile_broad_candidate": false,
+    "replace_direction_model": false,
+    "replace_authoritative_confidence": false,
+    "replace_fair_odds": false,
+    "replace_paper_or_live_policy": false,
+    "requirements": [
+      "verify fixed 0.515 accuracy, selection score, Brier and log loss on a fully untouched forward period",
+      "recheck local calibration for all six fixed direction by volatility cells",
+      "verify runtime confidence-blend parity before any policy activation"
+    ]
+  }
+}

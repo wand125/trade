@@ -44,6 +44,7 @@ FEATURE_SETS = (
     "bar_breakout_rejection",
     "distribution_shift",
     "liquidity_friction",
+    "ewma_asymmetry_state",
     "rolling_distribution_shape",
     "rolling_spectral_state",
     "rolling_ordinal_motif",
@@ -3524,6 +3525,99 @@ def build_feature_frame(
             add(
                 f"liquidity_near_zero_fraction_{window}",
                 near_zero.rolling(window, min_periods=window).mean(),
+            )
+
+    if feature_set == "ewma_asymmetry_state":
+        continuous = result["timestamp"].diff().eq(
+            pd.Timedelta(minutes=timeframe_minutes)
+        )
+        segment_id = (~continuous).cumsum()
+        continuous_return = log_return_1.where(continuous)
+
+        def segmented_ewm(values: pd.Series, half_life: int) -> pd.Series:
+            return values.groupby(segment_id, group_keys=False).transform(
+                lambda segment: segment.ewm(
+                    halflife=half_life,
+                    adjust=False,
+                    ignore_na=True,
+                    min_periods=half_life,
+                ).mean()
+            )
+
+        def zero_safe_ratio(
+            numerator: pd.Series, denominator: pd.Series
+        ) -> pd.Series:
+            output = numerator / denominator.replace(0, np.nan)
+            return (
+                output.replace([np.inf, -np.inf], np.nan)
+                .fillna(0.0)
+            )
+
+        means: dict[int, pd.Series] = {}
+        energies: dict[int, pd.Series] = {}
+        volatilities: dict[int, pd.Series] = {}
+        for half_life in (4, 16, 64):
+            means[half_life] = segmented_ewm(continuous_return, half_life)
+            energies[half_life] = segmented_ewm(
+                continuous_return.pow(2), half_life
+            ).clip(lower=0.0)
+            volatilities[half_life] = np.sqrt(energies[half_life])
+            prior_volatility = volatilities[half_life].groupby(
+                segment_id
+            ).shift(1)
+            add(
+                f"ewma_return_innovation_hl{half_life}",
+                zero_safe_ratio(continuous_return, prior_volatility)
+                .clip(-5.0, 5.0)
+                / 5.0,
+            )
+            add(
+                f"ewma_drift_volatility_hl{half_life}",
+                zero_safe_ratio(means[half_life], volatilities[half_life])
+                .clip(-3.0, 3.0)
+                / 3.0,
+            )
+
+        for fast_half_life, slow_half_life in ((4, 16), (16, 64)):
+            fast_volatility = volatilities[fast_half_life]
+            slow_volatility = volatilities[slow_half_life]
+            add(
+                f"ewma_volatility_balance_hl{fast_half_life}_hl{slow_half_life}",
+                zero_safe_ratio(
+                    fast_volatility - slow_volatility,
+                    fast_volatility + slow_volatility,
+                ).clip(-1.0, 1.0),
+            )
+
+        lagged_return_variance = (
+            continuous_return.groupby(segment_id).shift(1)
+            * continuous_return.pow(2)
+        )
+        for half_life in (16, 64):
+            upside_energy = segmented_ewm(
+                continuous_return.clip(lower=0.0).pow(2), half_life
+            )
+            downside_energy = segmented_ewm(
+                continuous_return.clip(upper=0.0).pow(2), half_life
+            )
+            add(
+                f"ewma_signed_energy_balance_hl{half_life}",
+                zero_safe_ratio(
+                    upside_energy - downside_energy,
+                    upside_energy + downside_energy,
+                ).clip(-1.0, 1.0),
+            )
+            leverage_moment = segmented_ewm(
+                lagged_return_variance, half_life
+            )
+            add(
+                f"ewma_leverage_moment_hl{half_life}",
+                zero_safe_ratio(
+                    leverage_moment,
+                    energies[half_life].pow(1.5),
+                )
+                .clip(-3.0, 3.0)
+                / 3.0,
             )
 
     if feature_set == "rolling_spectral_state":

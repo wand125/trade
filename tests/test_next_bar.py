@@ -1120,6 +1120,103 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "liquidity_friction")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_ewma_asymmetry_state_is_causal_bounded_gap_safe_and_runs_latest(self):
+        source = m1_frame(1800)
+        bars = resample_complete_bars(source, 1)
+        frame, feature_columns = build_feature_frame(
+            bars, 1, "ewma_asymmetry_state"
+        )
+        ewma_columns = [
+            name for name in feature_columns if name.startswith("ewma_")
+        ]
+
+        self.assertEqual(len(ewma_columns), 12)
+        self.assertEqual(len(feature_columns), 50)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertTrue(np.isfinite(frame[ewma_columns]).all().all())
+        self.assertGreaterEqual(float(frame[ewma_columns].to_numpy().min()), -1.0)
+        self.assertLessEqual(float(frame[ewma_columns].to_numpy().max()), 1.0)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 1), 1, "ewma_asymmetry_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[ewma_columns],
+            scaled_frame[ewma_columns],
+            rtol=1e-8,
+            atol=1e-10,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 300, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 1), 1, "ewma_asymmetry_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:299, ewma_columns],
+            changed_frame.loc[:299, ewma_columns],
+        )
+
+        target = 200
+        returns = np.log(bars["close"] / bars["close"].shift(1))
+        prior_energy = (
+            returns.pow(2)
+            .ewm(
+                halflife=4,
+                adjust=False,
+                ignore_na=True,
+                min_periods=4,
+            )
+            .mean()
+            .iloc[target - 1]
+        )
+        expected_innovation = np.clip(
+            returns.iloc[target] / np.sqrt(prior_energy), -5.0, 5.0
+        ) / 5.0
+        self.assertAlmostEqual(
+            float(frame.loc[target, "ewma_return_innovation_hl4"]),
+            float(expected_innovation),
+            places=12,
+        )
+
+        flat_source = m1_frame(400)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 1), 1, "ewma_asymmetry_state"
+        )
+        self.assertTrue(np.isfinite(flat_frame[ewma_columns]).all().all())
+        self.assertTrue(flat_frame[ewma_columns].eq(0).all().all())
+
+        gapped = bars.copy()
+        gapped.loc[gapped.index >= 300, "timestamp"] += pd.Timedelta(minutes=5)
+        gapped_frame, _ = build_feature_frame(gapped, 1, "ewma_asymmetry_state")
+        self.assertTrue(gapped_frame.loc[300, ewma_columns].eq(0).all())
+
+        config = TrainConfig(
+            timeframes=(1,),
+            feature_set="ewma_asymmetry_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "ewma_asymmetry_state")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_rolling_distribution_shape_is_exact_stationary_causal_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
