@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-12 12:11 JST
+更新日時: 2026-08-12 12:47 JST
 
 ## 現在の状態
 
@@ -513,6 +513,8 @@
 135. M5採用EWMA Asymmetryを定義・半減期・HGB/Platt・25% weight・閾値grid・標準損失1.0のままM15へ固定移植した。Windows canonical 145,140 OOS行で単体方向はbaseline比-87件、通常25%方向blendは-10件・p=0.87712のため不採用。方向維持0.515はbaseline比accuracy 5/7、score 4/7、Brier/log loss 6/7foldで、development/confirmation/allのaccuracy・score点値とconfirmation/all proper scoreを改善したが、accuracy・scoreの20,000回日次bootstrap区間は全て0跨ぎだった。Profile 0.515にはaccuracy 6/7、score 5/7、all accuracy差+0.11016ptの区間+0.00129〜+0.21871pt、proper scoreも改善した。一方、現行Distribution Shift 0.515にall accuracy -0.01977pt、score -0.000134、Brier +0.00000519、log loss +0.00001044と全主指標で点劣後し、直接bootstrapは全て未確定だった。confirmation 0.515は27,746件・52.62741%、mean 52.88087%で整合したがdown-low/down-normalはWilson edge未確認、0.55もShiftを超えない。新candidateを発行せず再現専用とし、Shift 0.515、既存precision候補、authoritative confidence・fair odds・policyを維持する。同履歴でhalf-life・clip・subset・weight・閾値を再探索しない。Windows workerは単独8 thread・nice/I/O低優先度・CPU onlyで、画像生成等を停止していない。
 
 136. 同じEWMA Asymmetryを定義・半減期・HGB/Platt・25% weight・閾値grid・標準損失1.0のままM30へ固定移植した。Windows canonical 71,260 OOS行で単体方向はbaseline比+39/+31/+70件、accuracy 5/7foldだったが、3期間のaccuracy・Brier・log loss日次bootstrap区間は全て0跨ぎ、confirmation proper scoreが悪化した。通常25% blendは+38/-3/+35件・accuracy 3/7foldで方向用途へ採用しない。方向維持0.52はdevelopmentのaccuracy/scoreを改善したがconfirmationでaccuracy -0.16687pt、score -0.000921へ反転し、baseline比accuracy/score各3/7foldだった。現行Distribution Shift 0.52にはaccuracy/score各1/7、all accuracy -0.16588pt、score -0.000956。coverageだけconfirmation/allで増加確定でも精度低下を伴い、新roleにしない。Shiftとの固定50/50も各1/7、0.55/0.575もShiftを超えず不採用。runtime artifactの設定一致とlatest推論を通したがconfig・registry・authoritative方向/confidence・fair odds・policyを変更しない。Pressure 0.52、Shift 0.52、Pressure + AR 0.55を維持し、同じ履歴でhalf-life・clip・subset・weight・閾値を再探索しない。Windows workerは単独8 thread・nice/I/O低優先度・CPU onlyで、画像生成等を停止していない。
+
+137. EWMA Asymmetryを同じ定義・半減期・HGB/Platt・25% weight・閾値grid・標準損失1.0のままM1へ固定移植した。Windows canonicalでbaseline、Shift、Pathを同一2,183,717行・7foldから再学習した。単体方向はbaseline比+343/+278/+621件でもaccuracy区間が0跨ぎ、confirmation proper scoreが有意に悪化。通常25% blendは+283/+69/+352件・proper score 6/7fold改善でもaccuracy区間0跨ぎで、Path 25%にaccuracy 2/7対5/7だった。方向維持0.51はbaselineへaccuracy/score各7/7、proper score各6/7fold、development/confirmation/all accuracyとdevelopment/all scoreの日次区間を改善し、有効な加工感度を確認した。一方、現行Shift 0.51にはaccuracy 2/7、score 1/7、all accuracy -0.05302pt、score -0.000287、Brier +0.00000309、log loss +0.00000620で4指標の日次区間が全て劣後側だった。Shift/EWMA固定50/50もaccuracy 3/7、score 2/7。0.55はconfirmation 153件・Wilson edge未確認、最終fold101件・48.5149%へ崩れた。M1 EWMAを再現専用とし、Path方向、Shift方向/0.51、Transition guard、Disagreementを維持する。全時間足transferを完了し、EWMA採用はM5 0.515固有、M1/M15/M30は各Shift候補を維持する。同履歴でhalf-life・clip・subset・weight・閾値を再探索せず、config・registry・authoritative方向/confidence・fair odds・policyを変更しない。Windows workerは単独8 thread・nice/I/O低優先度・CPU onlyで、画像生成等を停止していない。
 
 ## ベースライン評価
 
