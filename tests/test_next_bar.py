@@ -1484,6 +1484,47 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "rolling_spectral_state")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_rolling_spectral_state_transfers_to_m5(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "rolling_spectral_state"
+        )
+        spectral_columns = [
+            name for name in feature_columns if name.startswith("rolling_spectral_")
+        ]
+
+        self.assertEqual(len(feature_columns), 50)
+        self.assertEqual(len(spectral_columns), 12)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        usable = frame[spectral_columns].dropna()
+        self.assertGreater(len(usable), 0)
+        self.assertTrue(np.isfinite(usable).all().all())
+        self.assertTrue(
+            usable.to_numpy(dtype="float64").min() >= -1.0
+        )
+        self.assertTrue(
+            usable.to_numpy(dtype="float64").max() <= 1.0
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "rolling_spectral_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[spectral_columns],
+            scaled_frame[spectral_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
     def test_rolling_ordinal_motif_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
