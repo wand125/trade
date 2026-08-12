@@ -320,8 +320,59 @@ string BuildAccountJson(const int digits)
    json += StringFormat("\"free_margin\":%s,", DoubleToJson(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2));
    json += StringFormat("\"margin_level\":%s,", DoubleToJson(AccountInfoDouble(ACCOUNT_MARGIN_LEVEL), 2));
    json += "\"positions\":" + BuildPositionsJson(digits) + ",";
+   json += "\"orders\":" + BuildOrdersJson(digits) + ",";
    json += "\"deals\":" + (InpSendDealHistory ? BuildDealsJson(digits) : "[]");
    json += "}";
+   return json;
+}
+
+string OrderTypeToString(const long type)
+{
+   switch((int)type)
+   {
+      case ORDER_TYPE_BUY:             return "buy";
+      case ORDER_TYPE_SELL:            return "sell";
+      case ORDER_TYPE_BUY_LIMIT:       return "buy_limit";
+      case ORDER_TYPE_SELL_LIMIT:      return "sell_limit";
+      case ORDER_TYPE_BUY_STOP:        return "buy_stop";
+      case ORDER_TYPE_SELL_STOP:       return "sell_stop";
+      case ORDER_TYPE_BUY_STOP_LIMIT:  return "buy_stop_limit";
+      case ORDER_TYPE_SELL_STOP_LIMIT: return "sell_stop_limit";
+   }
+   return "unknown";
+}
+
+// 未約定注文(全銘柄)。手動発注の指値/逆指値も監視対象に載せる(P40)。
+string BuildOrdersJson(const int digits)
+{
+   string json = "[";
+   bool first = true;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!first)
+         json += ",";
+      first = false;
+
+      datetime expiration = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
+
+      json += "{";
+      json += StringFormat("\"ticket\":%I64u,", ticket);
+      json += StringFormat("\"symbol\":\"%s\",", JsonEscape(OrderGetString(ORDER_SYMBOL)));
+      json += StringFormat("\"type\":\"%s\",", OrderTypeToString(OrderGetInteger(ORDER_TYPE)));
+      json += StringFormat("\"volume\":%s,", DoubleToJson(OrderGetDouble(ORDER_VOLUME_CURRENT), 2));
+      json += StringFormat("\"price\":%s,", DoubleToJson(OrderGetDouble(ORDER_PRICE_OPEN), digits));
+      json += StringFormat("\"sl\":%s,", DoubleToJson(OrderGetDouble(ORDER_SL), digits));
+      json += StringFormat("\"tp\":%s,", DoubleToJson(OrderGetDouble(ORDER_TP), digits));
+      json += StringFormat("\"magic\":%d,", (int)OrderGetInteger(ORDER_MAGIC));
+      json += StringFormat("\"comment\":\"%s\",", JsonEscape(OrderGetString(ORDER_COMMENT)));
+      json += StringFormat("\"setup_time\":\"%s\",", TimeToString((datetime)OrderGetInteger(ORDER_TIME_SETUP), TIME_DATE|TIME_SECONDS));
+      json += StringFormat("\"expiration\":\"%s\"", expiration > 0 ? TimeToString(expiration, TIME_DATE|TIME_SECONDS) : "");
+      json += "}";
+   }
+   json += "]";
    return json;
 }
 

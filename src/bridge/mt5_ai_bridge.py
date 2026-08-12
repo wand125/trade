@@ -994,6 +994,9 @@ def format_account_context(account_snapshot: dict[str, Any]) -> str:
     positions = account.get("positions")
     if not isinstance(positions, list):
         positions = []
+    orders = account.get("orders")
+    if not isinstance(orders, list):
+        orders = []
     deals = account.get("deals")
     if not isinstance(deals, list):
         deals = []
@@ -1027,6 +1030,24 @@ def format_account_context(account_snapshot: dict[str, Any]) -> str:
                 f"P/L {position.get('profit')} "
                 f"SL {position.get('sl')} TP {position.get('tp')} "
                 f"opened {position.get('open_time')}"
+            )
+    else:
+        lines.append("- None")
+
+    lines.extend(["", "## Pending Orders", ""])
+    if orders:
+        for order in orders:
+            if not isinstance(order, dict):
+                continue
+            expiration = order.get("expiration") or "GTC"
+            lines.append(
+                "- "
+                f"ticket {order.get('ticket')} "
+                f"{order.get('symbol')} {order.get('type')} "
+                f"{order.get('volume')} @ {order.get('price')} "
+                f"SL {order.get('sl')} TP {order.get('tp')} "
+                f"expires {expiration} "
+                f"placed {order.get('setup_time')}"
             )
     else:
         lines.append("- None")

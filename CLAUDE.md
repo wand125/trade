@@ -48,7 +48,7 @@
 `methods/swing_eval/mt5/Experts/AI_Bridge_Advisor.mq5` を編集しただけでは MT5 に反映されない。**MT5 のフォルダへコピーしないと、本人がコンパイルしても古いソースがコンパイルされる**(8/7に実際に発生し、buy_stop の検証が半日遅れた)。
 
 1. リポジトリで編集
-2. **Claude が配備**: `/bin/cp -f methods/swing_eval/mt5/Experts/AI_Bridge_Advisor.mq5 "/Users/HHosono/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts/AI_Bridge_Advisor.mq5"`(`cp` だと上書き確認で止まるため `-f` 必須)
+2. **Claude が配備**(2026-08-12 Windows移行後のパス): `/bin/cp -f methods/swing_eval/mt5/Experts/AI_Bridge_Advisor.mq5 "/mnt/c/Users/user1/AppData/Roaming/MetaQuotes/Terminal/30CF3465B87D17D00E7FD8366A68D7C6/MQL5/Experts/AI_Bridge_Advisor.mq5"`(`cp` だと上書き確認で止まるため `-f` 必須。旧Macパスは無効)
 3. 配備の検証: `ls -la` で .mq5 の更新時刻、`grep -c "<新機能の識別子>"` で内容を確認
 4. **本人に依頼**: MetaEditor で F7 コンパイル → 両チャート(XAUUSD-m / USDJPY-m)で EA 再読み込み。**時間足は M1 のまま**
 5. Claude が dry-run で実機検証

@@ -117,18 +117,37 @@ def read_json(path: Path) -> dict:
 
 
 def read_account(path: Path) -> dict:
-    out = {"balance": None, "equity": None, "positions": None, "tickets": {}, "prices": {}}
+    out = {"balance": None, "equity": None, "positions": None, "tickets": {}, "prices": {},
+           "orders": {}}
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return out
     in_positions = False
+    in_orders = False
     positions = 0
     for line in text.splitlines():
         if line.startswith("- Balance:"):
             out["balance"] = float(line.split(":")[1].strip())
         elif line.startswith("- Equity:"):
             out["equity"] = float(line.split(":")[1].strip())
+        elif line.startswith("## Pending Orders"):
+            in_orders = True
+            in_positions = False
+        elif line.startswith("## ") and in_orders:
+            in_orders = False
+        elif in_orders and line.startswith("- ") and "None" not in line:
+            fields = line[2:].split()
+            # 形式: ticket <t> <symbol> <type> <vol> @ <price> SL <sl> TP <tp> expires <exp> placed <t>
+            if len(fields) >= 7 and fields[0] == "ticket":
+                out["orders"][fields[1]] = {
+                    "symbol": fields[2],
+                    "type": fields[3],
+                    "volume": fields[4],
+                    "price": fields[6] if fields[5] == "@" else "",
+                    "desc": " ".join(fields[2:11]),
+                }
+            continue
         elif line.startswith("## Open Positions"):
             in_positions = True
         elif line.startswith("## ") and in_positions:
@@ -255,6 +274,7 @@ def main() -> None:
     last_balance: float | None = None
     last_positions: int | None = None
     last_tickets: dict | None = None
+    last_orders: dict | None = None
     stale_reported = False
     last_digest = time.time()
     # ダイジェスト区間ごとの値動き。現在値だけでは動いているか止まっているかが分からない。
@@ -398,6 +418,18 @@ def main() -> None:
             if last_positions is not None and pos != last_positions:
                 emit(f"[watch] POSITIONS ポジション数が {last_positions} -> {pos} に変化")
             last_positions = pos
+
+        orders = acct.get("orders") or {}
+        if last_orders is not None:
+            for t, info in orders.items():
+                if t not in last_orders:
+                    emit(f"[watch] ORDER_NEW ticket {t} 未約定注文を検知: {info['desc']}"
+                         f"(CLI経由の記録になければ手動発注 — campaign.mdとの整合を確認)")
+            for t, info in last_orders.items():
+                if t not in orders:
+                    emit(f"[watch] ORDER_GONE ticket {t} {info['symbol']} {info['type']} が消滅"
+                         f"(約定または撤去 — 直後のFILLEDの有無で判別)")
+        last_orders = orders
 
         tickets = acct.get("tickets") or {}
         if last_tickets is not None:
