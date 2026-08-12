@@ -2437,6 +2437,50 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "path_persistence")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_path_persistence_features_transfer_to_m5(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(bars, 5, "path_persistence")
+        persistence_columns = [
+            "signed_efficiency_5",
+            "signed_efficiency_10",
+            "signed_efficiency_20",
+            "signed_efficiency_50",
+            "return_autocorrelation_10",
+            "return_autocorrelation_20",
+            "direction_change_fraction_10",
+            "direction_change_fraction_20",
+            "variance_ratio_2_50",
+            "variance_ratio_5_50",
+            "variance_ratio_10_50",
+            "up_persistence_20",
+            "down_persistence_20",
+            "signed_return_streak_20",
+        ]
+
+        self.assertEqual(len(feature_columns), 52)
+        self.assertTrue(set(persistence_columns).issubset(feature_columns))
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse({"open", "high", "low", "close"}.intersection(feature_columns))
+        usable = frame[persistence_columns].dropna()
+        self.assertGreater(len(usable), 0)
+        self.assertTrue(np.isfinite(usable).all().all())
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "path_persistence"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[persistence_columns],
+            scaled_frame[persistence_columns],
+            rtol=1e-9,
+            atol=1e-9,
+            equal_nan=True,
+        )
+
     def test_direction_transition_state_is_causal_finite_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
