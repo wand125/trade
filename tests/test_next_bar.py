@@ -1374,6 +1374,103 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_rolling_distribution_shape_transfers_to_m5_without_scale_or_future_leakage(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "rolling_distribution_shape"
+        )
+        distribution_columns = [
+            "rolling_return_quantile_10_rms_64",
+            "rolling_return_quantile_25_rms_64",
+            "rolling_return_quantile_50_rms_64",
+            "rolling_return_quantile_75_rms_64",
+            "rolling_return_quantile_90_rms_64",
+            "rolling_return_bowley_skew_64",
+            "rolling_return_tail_skew_64",
+            "rolling_return_central_spread_fraction_64",
+            "rolling_return_l1_l2_concentration_64",
+        ]
+
+        self.assertEqual(len(feature_columns), 47)
+        self.assertEqual(
+            {name for name in feature_columns if name.startswith("rolling_return_")},
+            set(distribution_columns),
+        )
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertTrue(np.isfinite(frame[distribution_columns]).all().all())
+        self.assertTrue(
+            frame["rolling_return_central_spread_fraction_64"].between(0, 1).all()
+        )
+        self.assertTrue(
+            frame["rolling_return_l1_l2_concentration_64"].between(0, 1).all()
+        )
+
+        returns = np.log(
+            bars["close"].to_numpy(dtype="float64")
+            / bars["close"].shift(1).to_numpy(dtype="float64")
+        )[-64:]
+        return_rms = float(np.sqrt(np.mean(returns * returns)))
+        quantiles = np.quantile(returns, [0.10, 0.25, 0.50, 0.75, 0.90])
+        np.testing.assert_allclose(
+            frame.iloc[-1][distribution_columns[:5]].to_numpy(dtype="float64"),
+            quantiles / return_rms,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["rolling_return_l1_l2_concentration_64"]),
+            float(np.mean(np.abs(returns)) / return_rms),
+            places=12,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "rolling_distribution_shape"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[distribution_columns],
+            scaled_frame[distribution_columns],
+            rtol=1e-8,
+            atol=1e-10,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 3000, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "rolling_distribution_shape"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:499, distribution_columns],
+            changed_frame.loc[:499, distribution_columns],
+        )
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="rolling_distribution_shape",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(
+            report["config"]["feature_set"], "rolling_distribution_shape"
+        )
+        self.assertEqual(latest["timeframe"].tolist(), ["M5"])
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_rolling_spectral_state_is_exact_stationary_causal_gap_safe_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
