@@ -3083,6 +3083,119 @@ class NextBarTests(unittest.TestCase):
             atol=0,
         )
 
+    def test_direction_transition_bayes_transfers_to_m5_exactly_and_causally(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "direction_transition_state"
+        )
+        state_columns = [
+            "transition_current_direction",
+            "transition_run_length_bucket",
+            "transition_reversal_fraction_8",
+            "transition_volatility_state_5_20",
+        ]
+
+        self.assertEqual(len(feature_columns), 42)
+        self.assertEqual(
+            {name for name in feature_columns if name.startswith("transition_")},
+            set(state_columns),
+        )
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        self.assertTrue(np.isfinite(frame[state_columns].dropna()).all().all())
+
+        returns = np.log(
+            bars["close"].to_numpy(dtype="float64")
+            / bars["close"].shift(1).to_numpy(dtype="float64")
+        )
+        directions = np.sign(returns)
+        expected_run_length = 0
+        if directions[-1] != 0:
+            expected_run_length = 1
+            for value in directions[-2::-1]:
+                if value != directions[-1] or expected_run_length == 4:
+                    break
+                expected_run_length += 1
+        recent_current = directions[-8:]
+        recent_previous = directions[-9:-1]
+        valid = (recent_current != 0) & (recent_previous != 0)
+        expected_reversal_fraction = float(
+            np.mean(recent_current[valid] != recent_previous[valid])
+        )
+        short_volatility = float(np.std(returns[-5:], ddof=1))
+        long_volatility = float(np.std(returns[-20:], ddof=1))
+        volatility_ratio = short_volatility / long_volatility
+        expected_volatility_state = (
+            -1.0
+            if volatility_ratio < 0.8
+            else 1.0
+            if volatility_ratio > 1.25
+            else 0.0
+        )
+        self.assertEqual(
+            float(frame.iloc[-1]["transition_current_direction"]),
+            float(directions[-1]),
+        )
+        self.assertEqual(
+            float(frame.iloc[-1]["transition_run_length_bucket"]),
+            float(expected_run_length),
+        )
+        self.assertAlmostEqual(
+            float(frame.iloc[-1]["transition_reversal_fraction_8"]),
+            expected_reversal_fraction,
+            places=12,
+        )
+        self.assertEqual(
+            float(frame.iloc[-1]["transition_volatility_state_5_20"]),
+            expected_volatility_state,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "direction_transition_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        pd.testing.assert_frame_equal(
+            frame[state_columns], scaled_frame[state_columns]
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 3000, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "direction_transition_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:499, state_columns],
+            changed_frame.loc[:499, state_columns],
+        )
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="direction_transition_state",
+            model_type="transition_bayes",
+            max_train_rows=1_000,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        diagnostics = report["timeframes"]["M5"]["model_diagnostics"]
+        self.assertEqual(report["config"]["model_type"], "transition_bayes")
+        self.assertEqual(diagnostics["encoded_state_slots"], 135)
+        self.assertEqual(diagnostics["structurally_reachable_states"], 81)
+        self.assertEqual(diagnostics["state_prior_strength"], 64.0)
+        self.assertEqual(diagnostics["parent_prior_strength"], 256.0)
+        self.assertEqual(latest["timeframe"].tolist(), ["M5"])
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_haar_multiscale_features_are_stationary_causal_and_run_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)

@@ -1,0 +1,200 @@
+{
+  "format_version": 1,
+  "status": "windows_canonical_parallel_direction_and_broad_confidence_shadows",
+  "target_timeframe_minutes": 5,
+  "canonical_training_platform": "Windows/WSL2 x86 Linux",
+  "transition_component": {
+    "feature_set": "direction_transition_state",
+    "model_type": "transition_bayes",
+    "baseline_feature_count": 38,
+    "additional_feature_count": 4,
+    "total_feature_count": 42,
+    "state_features": [
+      "current direction {-1,0,1}",
+      "same-direction run length capped at 4",
+      "non-flat reversal fraction over the last 8 transitions",
+      "5-bar / 20-bar volatility state with fixed 0.8 and 1.25 boundaries"
+    ],
+    "encoded_state_slots": 135,
+    "structurally_reachable_states": 81,
+    "state_prior_strength": 64.0,
+    "parent_prior_strength": 256.0,
+    "probability_calibration": "platt",
+    "train_window": "expanding",
+    "max_train_rows": 750000,
+    "train_weighting": "uniform",
+    "train_target_filter": "all",
+    "random_seed": 42,
+    "loss_multiplier": 1.0,
+    "raw_price_levels_used_as_model_features": false,
+    "volume_used": false,
+    "future_rows_used": false,
+    "parameter_search_performed_on_m5": false
+  },
+  "direction_shadow": {
+    "first_source": "baseline 75% + Intrabar Pressure 25% direction blend",
+    "second_source": "baseline 75% + Direction Transition Bayes 25% direction blend",
+    "first_source_weight": 0.5,
+    "second_source_weight": 0.5,
+    "equivalent_probability_weights": {
+      "baseline": 0.75,
+      "intrabar_pressure": 0.125,
+      "direction_transition_bayes": 0.125
+    },
+    "preserve_baseline_direction": false,
+    "role": "M5 direction probability-quality forward shadow",
+    "probability_and_fair_odds_are_authoritative": false
+  },
+  "confidence_shadow": {
+    "first_source": "baseline-direction-preserving 75/25 Intrabar Profile confidence",
+    "second_source": "baseline-direction-preserving 75/25 Direction Transition Bayes confidence",
+    "first_source_weight": 0.5,
+    "second_source_weight": 0.5,
+    "equivalent_probability_weights": {
+      "baseline": 0.75,
+      "intrabar_profile": 0.125,
+      "direction_transition_bayes": 0.125
+    },
+    "preserve_baseline_direction": true,
+    "fixed_confidence_threshold": 0.515,
+    "selection_score": "sqrt(coverage) * (Wilson95Lower(accuracy) - 0.50)",
+    "loss_multiplier": 1.0,
+    "role": "M5 broad-confidence accuracy and proper-quality forward shadow",
+    "probability_and_fair_odds_are_authoritative": false
+  },
+  "experiments": {
+    "baseline_oos": "experiments/next_bar/baseline_m5_windows_canonical_001",
+    "transition_oos": "experiments/next_bar/direction_transition_bayes_m5_windows_canonical_001",
+    "transition_direction_blend": "experiments/next_bar/direction_transition_bayes_m5_direction_blend_windows_canonical_001",
+    "transition_confidence_blend": "experiments/next_bar/direction_transition_bayes_m5_confidence_blend_windows_canonical_001",
+    "pressure_direction_source": "experiments/next_bar/intrabar_pressure_m5_direction_blend_windows_canonical_001",
+    "profile_confidence_source": "experiments/next_bar/intrabar_profile_m5_confidence_blend_windows_canonical_001",
+    "direction_shadow": "experiments/next_bar/pressure_transition_bayes_equal_m5_direction_windows_canonical_001",
+    "confidence_shadow": "experiments/next_bar/profile_transition_bayes_equal_m5_confidence_windows_canonical_001",
+    "analysis": "experiments/next_bar/pressure_profile_transition_bayes_equal_m5_candidate_analysis_windows.json",
+    "direction_baseline_bootstrap": "experiments/next_bar/pressure_transition_bayes_equal_vs_baseline_m5_direction_bootstrap_20000_windows.json",
+    "direction_pressure_bootstrap": "experiments/next_bar/pressure_transition_bayes_equal_vs_pressure_m5_direction_bootstrap_20000_windows.json",
+    "confidence_baseline_bootstrap": "experiments/next_bar/profile_transition_bayes_equal_vs_baseline_m5_0515_bootstrap_20000_windows.json",
+    "confidence_profile_bootstrap": "experiments/next_bar/profile_transition_bayes_equal_vs_profile_m5_0515_bootstrap_20000_windows.json",
+    "confidence_profile_tcn_bootstrap": "experiments/next_bar/profile_transition_bayes_equal_vs_profile_tcn_m5_0515_bootstrap_20000_windows.json",
+    "reliability": "experiments/next_bar/profile_transition_bayes_vs_profile_m5_reliability_windows.json",
+    "subgroup_reliability": "experiments/next_bar/profile_transition_bayes_m5_subgroup_reliability_windows.json",
+    "transition_latest_prediction": "experiments/next_bar/direction_transition_bayes_m5_latest_prediction_windows.json"
+  },
+  "evidence": {
+    "oos_rows": 439881,
+    "development_folds": ["test2020", "test2021", "test2022", "test2023"],
+    "confirmation_folds": ["test2024", "test2025", "test2026_partial"],
+    "transition_standalone": {
+      "all_accuracy": 0.512161243609067,
+      "all_brier_score": 0.24976398911979186,
+      "all_log_loss": 0.6926750758629175,
+      "accuracy_wins_vs_baseline": "0/7",
+      "decision": "reproduction only"
+    },
+    "direction_shadow_vs_baseline": {
+      "development_accuracy": 0.5196598262155666,
+      "confirmation_accuracy": 0.5106208427029292,
+      "all_accuracy": 0.5161782391146696,
+      "net_correct_all": 190,
+      "accuracy_wins": "7/7",
+      "brier_wins": "5/7",
+      "log_loss_wins": "5/7",
+      "all_accuracy_delta_ci95": [-0.00006417676160996034, 0.0009370823830441097],
+      "all_brier_delta_ci95": [-0.000030509514985992136, -0.00001361409260378713],
+      "all_log_loss_delta_ci95": [-0.00006125974037116954, -0.000027148617282143906]
+    },
+    "direction_shadow_vs_pressure": {
+      "accuracy_wins": "5/7",
+      "all_accuracy_delta": 0.00021369415819283422,
+      "all_accuracy_delta_ci95": [-0.00023708663780677984, 0.0006778004875250762],
+      "all_brier_delta_ci95": [-0.000015914522753753686, -0.0000007249352743710158],
+      "all_log_loss_delta_ci95": [-0.0000318933253533743, -0.000001300867539419383],
+      "decision": "parallel probability-quality shadow; do not replace Pressure"
+    },
+    "confidence_shadow_0515": {
+      "development": {
+        "rows": 151362,
+        "coverage": 0.559667221297837,
+        "accuracy": 0.5291354501129742,
+        "selection_score": 0.019914726748755236
+      },
+      "confirmation": {
+        "rows": 59574,
+        "coverage": 0.3516121607025869,
+        "accuracy": 0.5255312720314231,
+        "selection_score": 0.012760620559331548
+      },
+      "all": {
+        "rows": 210936,
+        "coverage": 0.4795296909846072,
+        "accuracy": 0.5281175332802367,
+        "selection_score": 0.017995244205858213
+      },
+      "accuracy_wins_vs_baseline": "7/7",
+      "proper_score_wins_vs_baseline": "5/7",
+      "all_accuracy_delta_ci95_vs_baseline": [0.0009916660048675668, 0.0023706732558551706],
+      "all_selection_score_delta_ci95_vs_baseline": [0.00021285662808509157, 0.0011682853786663069]
+    },
+    "confidence_shadow_vs_profile_0515": {
+      "accuracy_wins": "7/7",
+      "selection_score_wins": "3/7",
+      "all_accuracy_delta_ci95": [0.0006889860455223135, 0.0019293013669885392],
+      "all_selection_score_delta_ci95": [0.0000009247468887514323, 0.0008639009921725586],
+      "all_coverage_delta_ci95": [-0.025477576788731054, -0.02410370971560354],
+      "all_brier_delta_ci95": [-0.00001538169745055884, -0.00000036093969103189195],
+      "all_log_loss_delta_ci95": [-0.00003085862813398399, -0.0000005970215268269571],
+      "confirmation_selection_score_delta_ci95": [-0.0010107877010384855, 0.0004915785081401018]
+    },
+    "confidence_shadow_vs_profile_tcn_0515": {
+      "accuracy_wins": "5/7",
+      "selection_score_wins": "5/7",
+      "all_accuracy_delta_ci95": [0.00023582508139208814, 0.0014099137226589477],
+      "all_selection_score_delta_ci95": [-0.000166279166336803, 0.0006499046380321244],
+      "all_coverage_delta_ci95": [-0.017488348674314452, -0.016188906200225492],
+      "all_brier_delta_ci95": [-0.000015012730042959083, -0.0000025995799744639454],
+      "all_log_loss_delta_ci95": [-0.000030152123769613958, -0.000005225117177504216]
+    },
+    "high_confidence_055": {
+      "all_rows": 18718,
+      "all_coverage": 0.042552,
+      "all_accuracy": 0.5613848,
+      "all_selection_score": 0.011194,
+      "selection_score_wins_vs_follow_through": "0/7",
+      "all_selection_score_delta_ci95": [-0.0026566441657050873, -0.001152318924547536],
+      "decision": "reject; retain Directional Follow-through high-confidence shadow"
+    },
+    "calibration_limits": {
+      "confirmation_accuracy_is_monotone_from_0515_through_055": true,
+      "confirmation_down_normal_rows_0515": 3699,
+      "confirmation_down_normal_accuracy_0515": 0.508516,
+      "confirmation_down_normal_wilson_lower_0515": 0.492404,
+      "subgroup_filter_created": false,
+      "latest_probability_up": 0.5036710893,
+      "latest_odds_valid": false
+    }
+  },
+  "promotion": {
+    "emit_parallel_direction_probability_quality_shadow": true,
+    "emit_parallel_broad_accuracy_quality_shadow": true,
+    "replace_pressure_direction_candidate": false,
+    "replace_profile_broad_confidence": false,
+    "replace_profile_tcn_broad_confidence_shadow": false,
+    "replace_follow_through_high_confidence_shadow": false,
+    "replace_authoritative_direction": false,
+    "replace_authoritative_confidence": false,
+    "replace_authoritative_fair_odds": false,
+    "replace_current_adoption_policy": false,
+    "replace_paper_or_live_policy": false,
+    "odds_runtime_authorized": false,
+    "require_full_runtime_ensemble_parity_before_use": true,
+    "require_fresh_direction_accuracy_not_below_pressure": true,
+    "require_fresh_direction_brier_and_log_loss_not_above_pressure": true,
+    "require_fresh_confidence_accuracy_and_selection_score_not_below_profile_and_profile_tcn": true,
+    "require_fresh_confidence_brier_and_log_loss_not_above_profile_and_profile_tcn": true,
+    "require_fresh_down_normal_wilson_edge": true,
+    "require_fresh_global_and_local_confidence_consistency": true,
+    "do_not_create_post_hoc_subgroup_filters": true,
+    "reason": "The fixed Pressure/Transition direction average improved aggregate proper scores over Pressure while its accuracy increment remains uncertain. The fixed Profile/Transition 0.515 confidence average improved all-period accuracy and proper scores over Profile and Profile/TCN, but costs coverage and does not establish a confirmation selection-score increment over either parent. Both are non-authoritative forward shadows only."
+  }
+}
