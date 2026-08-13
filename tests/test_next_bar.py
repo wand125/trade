@@ -2274,6 +2274,94 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "rolling_full_path")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_rolling_full_path_transfers_to_m5_without_scale_or_future_leakage(self):
+        source = m1_frame(6000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(
+            bars, 5, "rolling_full_path"
+        )
+        path_columns = [
+            f"rolling_full_path_level_{point:02d}"
+            for point in INTRABAR_FULL_PATH_GRID_POINTS
+        ]
+
+        self.assertEqual(len(feature_columns), 49)
+        self.assertEqual(
+            {name for name in feature_columns if name.startswith("rolling_full_path_")},
+            set(path_columns),
+        )
+        self.assertEqual(len(path_columns), 11)
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse(
+            {"open", "high", "low", "close"}.intersection(feature_columns)
+        )
+        values = frame[path_columns].to_numpy(dtype="float64")
+        self.assertTrue(np.isfinite(values).all())
+        self.assertGreaterEqual(values.min(), -1.0)
+        self.assertLessEqual(values.max(), 1.0)
+
+        last_window = bars.iloc[-15:]
+        path_scale = float(last_window["high"].max() - last_window["low"].min())
+        expected = np.array(
+            [
+                (
+                    float(last_window.iloc[point - 1]["close"])
+                    - float(last_window.iloc[0]["open"])
+                )
+                / path_scale
+                for point in INTRABAR_FULL_PATH_GRID_POINTS
+            ]
+        )
+        np.testing.assert_allclose(
+            frame.iloc[-1][path_columns].to_numpy(dtype="float64"),
+            expected,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "rolling_full_path"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[path_columns],
+            scaled_frame[path_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 3000, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "rolling_full_path"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            frame.loc[:499, path_columns],
+            changed_frame.loc[:499, path_columns],
+        )
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="rolling_full_path",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "rolling_full_path")
+        self.assertEqual(latest["timeframe"].tolist(), ["M5"])
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_change_point_state_is_stationary_causal_gap_safe_and_runs_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
