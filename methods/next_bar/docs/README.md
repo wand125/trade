@@ -203,6 +203,8 @@ M15内15本のM1 close経路を順序ごと保持する場合は `--feature-set 
 
 Full Pathの15地点を時間×正規化close経路としてまとめる場合は `--feature-set intrabar_path_signature` を使う。Chen積でlevel 2 signed areaとlevel 3の2 bracket、計3列をFull Pathへ追加する。baseline方向と0.53 confidenceは改善したが、親Full Path 0.53との全期間scoreは実質同値、confirmation scoreは悪化し、直接年別scoreも3/7だった。再現専用とし、signature level・subset・weight・閾値を同じ履歴で再探索しない。
 
+M5ではM15用Full Path 11地点が5地点へ縮退しProfileの4地点と終点情報を再掲するため、そのまま移植しない。`--feature-set intrabar_profile_signature` はM5の完成M1 close 5点から同じChen signature 3列だけをProfileへ追加し、重複を避けた全68特徴にする。方向維持0.525はbaselineを改善したが、同一閾値の親Profileにdevelopment/confirmation/allのaccuracy・coverage・selection score・proper scoreで負け、固定平均もconfirmationで反転した。再現専用とし、Profile/Profile×Transition/Follow-throughの各M5 roleを維持する。
+
 Full Pathの順序とVolatility Shapeの変動集中を同時に使う固定unionは `--feature-set intrabar_full_path_volatility_shape` で再現できる。52 intrabar・全90特徴になる。単体方向はVolatility Shapeに0/7、方向維持0.525 confidenceも親2候補に各3/7、Signed-body Quantileに1/7、Clear-bodyに2/7しか勝てなかった。Brier/log lossは改善したが高信頼帯の主評価関数を上積みできないため再現専用とし、forward configは発行しない。
 
 完成上位足内のM1買い／売り圧力proxyを使う場合は `--feature-set intrabar_pressure` を使う。Intrabar Profileへ、M1 close-locationの平均/分散/序盤/終盤、range-weighted close-location、signed range、wick/body pressure、両者の乖離、方向一致率の11定常特徴を追加する。M15単体とconfidence用途は不採用。baseline 75% + Pressure 25%の通常方向blendはdevelopment/confirmationの両方、accuracy 5/7、Brier/log loss 7/7 foldを改善したため `config/m15_intrabar_pressure_direction_candidate_v1.json` のparallel forward候補に固定した。paired p=0.224なので現行方向モデルは置換しない。

@@ -58,6 +58,7 @@ FEATURE_SETS = (
     "intrabar_manual",
     "intrabar_structure",
     "intrabar_profile",
+    "intrabar_profile_signature",
     "intrabar_full_path",
     "intrabar_path_signature",
     "intrabar_full_path_volatility_shape",
@@ -3931,6 +3932,7 @@ def build_feature_frame(
         "intrabar_manual",
         "intrabar_structure",
         "intrabar_profile",
+        "intrabar_profile_signature",
         "intrabar_full_path",
         "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
@@ -3963,6 +3965,7 @@ def build_feature_frame(
     if feature_set in (
         "intrabar_structure",
         "intrabar_profile",
+        "intrabar_profile_signature",
         "intrabar_full_path",
         "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
@@ -4007,6 +4010,7 @@ def build_feature_frame(
 
     if feature_set in (
         "intrabar_profile",
+        "intrabar_profile_signature",
         "intrabar_full_path",
         "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
@@ -4060,7 +4064,7 @@ def build_feature_frame(
         for column in full_path_columns:
             add(column, bars[column].to_numpy(dtype="float64"))
 
-    if feature_set == "intrabar_path_signature":
+    if feature_set in ("intrabar_profile_signature", "intrabar_path_signature"):
         missing_path_signature = sorted(
             set(INTRABAR_PATH_SIGNATURE_COLUMNS) - set(bars.columns)
         )

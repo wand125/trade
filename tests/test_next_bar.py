@@ -4032,6 +4032,85 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "intrabar_path_signature")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_m5_intrabar_profile_signature_adds_only_compact_order_features(self):
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 5)
+        profile_features, profile_columns = build_feature_frame(
+            bars, 5, "intrabar_profile"
+        )
+        signature_features, signature_columns = build_feature_frame(
+            bars, 5, "intrabar_profile_signature"
+        )
+
+        self.assertEqual(
+            [
+                name
+                for name in signature_columns
+                if name not in INTRABAR_PATH_SIGNATURE_COLUMNS
+            ],
+            profile_columns,
+        )
+        self.assertTrue(
+            set(INTRABAR_PATH_SIGNATURE_COLUMNS).issubset(signature_columns)
+        )
+        self.assertEqual(len(profile_columns), 65)
+        self.assertEqual(len(signature_columns), 68)
+        self.assertFalse(
+            any(name.startswith("intrabar_full_path_level_") for name in signature_columns)
+        )
+        pd.testing.assert_frame_equal(
+            signature_features[profile_columns], profile_features[profile_columns]
+        )
+        self.assertTrue(
+            np.isfinite(
+                signature_features[list(INTRABAR_PATH_SIGNATURE_COLUMNS)]
+            ).all().all()
+        )
+        validate_stationary_feature_set(signature_columns)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "intrabar_profile_signature"
+        )
+        self.assertEqual(signature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            signature_features[list(INTRABAR_PATH_SIGNATURE_COLUMNS)],
+            scaled_features[list(INTRABAR_PATH_SIGNATURE_COLUMNS)],
+            rtol=1e-10,
+            atol=1e-10,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "intrabar_profile_signature"
+        )
+        self.assertEqual(signature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            signature_features.loc[:11, signature_columns],
+            changed_features.loc[:11, signature_columns],
+        )
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="intrabar_profile_signature",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(
+            report["config"]["feature_set"], "intrabar_profile_signature"
+        )
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_intrabar_pressure_features_are_stationary_causal_and_finite(self):
         source = m1_frame(5000)
         bars = resample_complete_bars(source, 15)
