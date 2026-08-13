@@ -699,6 +699,175 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "volatility_state")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_volatility_state_transfers_to_m5_with_exact_causal_formulas(self):
+        source = m1_frame(6_000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(bars, 5, "volatility_state")
+        state_columns = [
+            "volatility_of_volatility_5_20",
+            "volatility_of_volatility_5_50",
+            "volatility_acceleration_5_3",
+            "volatility_acceleration_20_5",
+            "range_coefficient_of_variation_20",
+            "range_autocorrelation_20",
+            "range_median_deviation_20",
+            "range_compression_fraction_5_50",
+            "jump_variation_fraction_20",
+            "parkinson_close_variance_balance_20",
+            "garman_klass_close_variance_balance_20",
+        ]
+
+        self.assertEqual(len(feature_columns), 49)
+        self.assertEqual(
+            [name for name in feature_columns if name in state_columns],
+            state_columns,
+        )
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse({"open", "high", "low", "close"}.intersection(feature_columns))
+        usable = frame[state_columns].dropna()
+        self.assertGreater(len(usable), 0)
+        self.assertTrue(np.isfinite(usable).all().all())
+
+        close = bars["close"].astype("float64")
+        open_ = bars["open"].astype("float64")
+        high = bars["high"].astype("float64")
+        low = bars["low"].astype("float64")
+        returns = np.log(close / close.shift(1))
+        volatility_5 = returns.rolling(5, min_periods=5).std()
+        volatility_20 = returns.rolling(20, min_periods=20).std()
+        log_range = np.log(high / low).clip(lower=0)
+        range_mean_20 = log_range.rolling(20, min_periods=20).mean()
+        range_std_20 = log_range.rolling(20, min_periods=20).std()
+        realized_variance_20 = returns.pow(2).rolling(20, min_periods=20).mean()
+        bipower_variance_20 = (
+            np.pi
+            / 2.0
+            * (returns.abs() * returns.abs().shift(1))
+            .rolling(20, min_periods=20)
+            .mean()
+        )
+        parkinson_variance_20 = (
+            log_range.pow(2).rolling(20, min_periods=20).mean()
+            / (4.0 * np.log(2.0))
+        )
+        log_open_close = np.log(close / open_)
+        garman_klass_variance_20 = (
+            0.5 * log_range.pow(2)
+            - (2.0 * np.log(2.0) - 1.0) * log_open_close.pow(2)
+        ).clip(lower=0).rolling(20, min_periods=20).mean()
+
+        def symmetric(current: float, previous: float) -> float:
+            denominator = abs(current) + abs(previous)
+            return 0.0 if denominator == 0 else (current - previous) / denominator
+
+        row_index = int(usable.index[-1])
+        prior_range_median_50 = log_range.rolling(
+            50, min_periods=50
+        ).median().shift(1)
+        expected = np.array(
+            [
+                volatility_5.rolling(20, min_periods=20).std().iloc[row_index]
+                / volatility_5.rolling(20, min_periods=20).mean().iloc[row_index],
+                volatility_5.rolling(50, min_periods=50).std().iloc[row_index]
+                / volatility_5.rolling(50, min_periods=50).mean().iloc[row_index],
+                symmetric(
+                    volatility_5.iloc[row_index],
+                    volatility_5.shift(3).iloc[row_index],
+                ),
+                symmetric(
+                    volatility_20.iloc[row_index],
+                    volatility_20.shift(5).iloc[row_index],
+                ),
+                range_std_20.iloc[row_index] / range_mean_20.iloc[row_index],
+                log_range.rolling(20, min_periods=20)
+                .corr(log_range.shift(1))
+                .iloc[row_index],
+                symmetric(
+                    log_range.iloc[row_index],
+                    log_range.rolling(20, min_periods=20).median().iloc[row_index],
+                ),
+                float(
+                    log_range.lt(prior_range_median_50)
+                    .iloc[row_index - 4 : row_index + 1]
+                    .mean()
+                ),
+                max(
+                    realized_variance_20.iloc[row_index]
+                    - bipower_variance_20.iloc[row_index],
+                    0.0,
+                )
+                / realized_variance_20.iloc[row_index],
+                symmetric(
+                    parkinson_variance_20.iloc[row_index],
+                    realized_variance_20.iloc[row_index],
+                ),
+                symmetric(
+                    garman_klass_variance_20.iloc[row_index],
+                    realized_variance_20.iloc[row_index],
+                ),
+            ]
+        )
+        np.testing.assert_allclose(
+            frame.loc[row_index, state_columns].to_numpy(dtype="float64"),
+            expected,
+            rtol=1e-10,
+            atol=1e-12,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "volatility_state"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[state_columns],
+            scaled_frame[state_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
+        change_timestamp = source.loc[3_500, "timestamp"]
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed["timestamp"] >= change_timestamp, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "volatility_state"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        prior_rows = frame["timestamp"] < change_timestamp.floor("5min")
+        pd.testing.assert_frame_equal(
+            frame.loc[prior_rows, state_columns],
+            changed_frame.loc[prior_rows, state_columns],
+        )
+
+        flat_source = m1_frame(1_000)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 5), 5, "volatility_state"
+        )
+        self.assertTrue(np.isfinite(flat_frame.loc[100:, state_columns]).all().all())
+        self.assertTrue(flat_frame.loc[100:, state_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="volatility_state",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "volatility_state")
+        self.assertEqual(report["config"]["timeframes"], (5,))
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_candle_pressure_state_features_are_stationary_causal_finite_and_run_latest(self):
         source = m1_frame(1800)
         bars = resample_complete_bars(source, 1)
