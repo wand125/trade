@@ -3353,6 +3353,99 @@ class NextBarTests(unittest.TestCase):
         self.assertEqual(report["config"]["feature_set"], "session_relative")
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_session_relative_transfers_to_m5_causally_and_scale_invariant(self):
+        source = m1_frame(33_000)
+        bars = resample_complete_bars(source, 5)
+        frame, feature_columns = build_feature_frame(bars, 5, "session_relative")
+        session_columns = [
+            name for name in feature_columns if name.startswith("session_")
+        ]
+
+        self.assertEqual(len(feature_columns), 43)
+        self.assertEqual(
+            session_columns,
+            [
+                "session_return_z_32",
+                "session_body_z_32",
+                "session_absolute_return_ratio_32",
+                "session_range_ratio_32",
+                "session_direction_bias_32",
+            ],
+        )
+        validate_stationary_feature_set(feature_columns)
+        self.assertFalse({"open", "high", "low", "close"}.intersection(feature_columns))
+        usable = frame[session_columns].dropna()
+        self.assertGreater(len(usable), 0)
+        self.assertTrue(np.isfinite(usable).all().all())
+
+        row_index = int(usable.index[-1])
+        timestamps = pd.to_datetime(bars["timestamp"], utc=True)
+        session_hour = timestamps.dt.dayofweek * 24 + timestamps.dt.hour
+        same_session_prior = bars.index[
+            (bars.index < row_index) & session_hour.eq(session_hour.iloc[row_index])
+        ][-32:]
+        returns = np.log(bars["close"] / bars["close"].shift(1))
+        prior_returns = returns.loc[same_session_prior]
+        expected_return_z = (
+            returns.iloc[row_index] - prior_returns.mean()
+        ) / prior_returns.std(ddof=0)
+        expected_direction_bias = np.sign(prior_returns).mean()
+        self.assertAlmostEqual(
+            float(frame.loc[row_index, "session_return_z_32"]),
+            float(np.clip(expected_return_z, -10, 10)),
+            places=12,
+        )
+        self.assertAlmostEqual(
+            float(frame.loc[row_index, "session_direction_bias_32"]),
+            float(expected_direction_bias),
+            places=12,
+        )
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10.0
+        scaled_frame, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "session_relative"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            frame[session_columns],
+            scaled_frame[session_columns],
+            rtol=1e-7,
+            atol=3e-9,
+            equal_nan=True,
+        )
+
+        change_timestamp = source.loc[25_000, "timestamp"]
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed["timestamp"] >= change_timestamp, column] += 100.0
+        changed_frame, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "session_relative"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        prior_rows = frame["timestamp"] < change_timestamp.floor("5min")
+        pd.testing.assert_frame_equal(
+            frame.loc[prior_rows, session_columns],
+            changed_frame.loc[prior_rows, session_columns],
+        )
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="session_relative",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=10,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "session_relative")
+        self.assertEqual(report["config"]["timeframes"], (5,))
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_sequence_manual_features_preserve_recent_order_without_price_levels(self):
         bars = resample_complete_bars(m1_frame(400), 1)
         _, feature_columns = build_feature_frame(bars, 1, "sequence_manual")
