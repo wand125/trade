@@ -201,6 +201,7 @@ class TrainConfig:
     xgboost_subsample: float = 0.80
     xgboost_column_sample: float = 0.80
     xgboost_l2: float = 5.0
+    xgboost_n_jobs: int = -1
     catboost_iterations: int = 300
     catboost_depth: int = 6
     catboost_learning_rate: float = 0.03
@@ -5579,6 +5580,8 @@ def train_timeframe(
             raise ValueError("xgboost_column_sample must be in (0, 1]")
         if config.xgboost_l2 < 0:
             raise ValueError("xgboost_l2 must not be negative")
+        if config.xgboost_n_jobs == 0 or config.xgboost_n_jobs < -1:
+            raise ValueError("xgboost_n_jobs must be -1 or positive")
         model = XGBClassifier(
             n_estimators=config.xgboost_estimators,
             max_depth=config.xgboost_max_depth,
@@ -5590,7 +5593,7 @@ def train_timeframe(
             objective="binary:logistic",
             eval_metric="logloss",
             tree_method="hist",
-            n_jobs=-1,
+            n_jobs=config.xgboost_n_jobs,
             random_state=config.random_seed,
             verbosity=0,
         )
@@ -6574,6 +6577,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--xgboost-subsample", type=float, default=0.80)
     train.add_argument("--xgboost-column-sample", type=float, default=0.80)
     train.add_argument("--xgboost-l2", type=float, default=5.0)
+    train.add_argument("--xgboost-n-jobs", type=int, default=-1)
     train.add_argument("--catboost-iterations", type=int, default=300)
     train.add_argument("--catboost-depth", type=int, default=6)
     train.add_argument("--catboost-learning-rate", type=float, default=0.03)
@@ -6667,6 +6671,7 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument("--xgboost-subsample", type=float, default=0.80)
     walk_forward.add_argument("--xgboost-column-sample", type=float, default=0.80)
     walk_forward.add_argument("--xgboost-l2", type=float, default=5.0)
+    walk_forward.add_argument("--xgboost-n-jobs", type=int, default=-1)
     walk_forward.add_argument("--catboost-iterations", type=int, default=300)
     walk_forward.add_argument("--catboost-depth", type=int, default=6)
     walk_forward.add_argument("--catboost-learning-rate", type=float, default=0.03)
@@ -6788,6 +6793,7 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         xgboost_subsample=args.xgboost_subsample,
         xgboost_column_sample=args.xgboost_column_sample,
         xgboost_l2=args.xgboost_l2,
+        xgboost_n_jobs=args.xgboost_n_jobs,
         catboost_iterations=args.catboost_iterations,
         catboost_depth=args.catboost_depth,
         catboost_learning_rate=args.catboost_learning_rate,

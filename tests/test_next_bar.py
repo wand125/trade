@@ -5607,6 +5607,8 @@ class NextBarTests(unittest.TestCase):
                     "0.05",
                     "--xgboost-min-child-weight",
                     "5",
+                    "--xgboost-n-jobs",
+                    "2",
                 ],
                 cwd=root,
                 env=environment,
@@ -5639,9 +5641,12 @@ class NextBarTests(unittest.TestCase):
             manifest = json.loads(
                 (output_dir / "manifest.json").read_text(encoding="utf-8")
             )
+            artifact_n_jobs = joblib.load(output_dir / "m1_model.joblib")["model"].n_jobs
 
         self.assertEqual(report["config"]["model_type"], "xgboost")
         self.assertEqual(report["config"]["xgboost_estimators"], 5)
+        self.assertEqual(report["config"]["xgboost_n_jobs"], 2)
+        self.assertEqual(artifact_n_jobs, 2)
         self.assertFalse(
             {"open", "high", "low", "close"}.intersection(
                 manifest["timeframes"]["M1"]["features"]
