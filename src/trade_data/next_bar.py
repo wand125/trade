@@ -208,6 +208,7 @@ class TrainConfig:
     catboost_l2: float = 5.0
     catboost_random_strength: float = 1.0
     catboost_bagging_temperature: float = 1.0
+    catboost_thread_count: int = -1
     lightgbm_estimators: int = 300
     lightgbm_num_leaves: int = 31
     lightgbm_learning_rate: float = 0.03
@@ -5612,6 +5613,8 @@ def train_timeframe(
             raise ValueError("catboost_random_strength must not be negative")
         if config.catboost_bagging_temperature < 0:
             raise ValueError("catboost_bagging_temperature must not be negative")
+        if config.catboost_thread_count == 0 or config.catboost_thread_count < -1:
+            raise ValueError("catboost_thread_count must be -1 or positive")
         model = CatBoostClassifier(
             iterations=config.catboost_iterations,
             depth=config.catboost_depth,
@@ -5624,7 +5627,7 @@ def train_timeframe(
             loss_function="Logloss",
             eval_metric="Logloss",
             random_seed=config.random_seed,
-            thread_count=-1,
+            thread_count=config.catboost_thread_count,
             verbose=False,
             allow_writing_files=False,
         )
@@ -6584,6 +6587,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--catboost-l2", type=float, default=5.0)
     train.add_argument("--catboost-random-strength", type=float, default=1.0)
     train.add_argument("--catboost-bagging-temperature", type=float, default=1.0)
+    train.add_argument("--catboost-thread-count", type=int, default=-1)
     train.add_argument("--lightgbm-estimators", type=int, default=300)
     train.add_argument("--lightgbm-num-leaves", type=int, default=31)
     train.add_argument("--lightgbm-learning-rate", type=float, default=0.03)
@@ -6680,6 +6684,7 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument(
         "--catboost-bagging-temperature", type=float, default=1.0
     )
+    walk_forward.add_argument("--catboost-thread-count", type=int, default=-1)
     walk_forward.add_argument("--lightgbm-estimators", type=int, default=300)
     walk_forward.add_argument("--lightgbm-num-leaves", type=int, default=31)
     walk_forward.add_argument("--lightgbm-learning-rate", type=float, default=0.03)
@@ -6800,6 +6805,7 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         catboost_l2=args.catboost_l2,
         catboost_random_strength=args.catboost_random_strength,
         catboost_bagging_temperature=args.catboost_bagging_temperature,
+        catboost_thread_count=args.catboost_thread_count,
         lightgbm_estimators=args.lightgbm_estimators,
         lightgbm_num_leaves=args.lightgbm_num_leaves,
         lightgbm_learning_rate=args.lightgbm_learning_rate,

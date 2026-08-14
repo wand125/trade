@@ -5666,6 +5666,7 @@ class NextBarTests(unittest.TestCase):
             catboost_l2=5.0,
             catboost_random_strength=1.0,
             catboost_bagging_temperature=1.0,
+            catboost_thread_count=2,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
@@ -5674,10 +5675,15 @@ class NextBarTests(unittest.TestCase):
             manifest = json.loads(
                 (output_dir / "manifest.json").read_text(encoding="utf-8")
             )
+            artifact_thread_count = joblib.load(output_dir / "m1_model.joblib")[
+                "model"
+            ].get_param("thread_count")
 
         self.assertEqual(report["config"]["model_type"], "catboost")
         self.assertEqual(report["config"]["catboost_iterations"], 5)
         self.assertEqual(report["config"]["catboost_depth"], 2)
+        self.assertEqual(report["config"]["catboost_thread_count"], 2)
+        self.assertEqual(artifact_thread_count, 2)
         self.assertFalse(
             {"open", "high", "low", "close"}.intersection(
                 manifest["timeframes"]["M1"]["features"]
