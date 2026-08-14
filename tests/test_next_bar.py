@@ -939,8 +939,65 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(flat_frame.loc[100:, pressure_columns].eq(0).all().all())
 
+        m5_bars = resample_complete_bars(source, 5)
+        m5_frame, m5_feature_columns = build_feature_frame(
+            m5_bars, 5, "candle_pressure_state"
+        )
+        m5_pressure_columns = [
+            name
+            for name in m5_feature_columns
+            if name.startswith(
+                (
+                    "body_pressure_",
+                    "wick_pressure_",
+                    "close_pressure_",
+                    "range_weighted_body_pressure_",
+                    "range_weighted_wick_pressure_",
+                )
+            )
+        ]
+        self.assertEqual(m5_pressure_columns, pressure_columns)
+        self.assertEqual(len(m5_feature_columns), 56)
+        validate_stationary_feature_set(m5_feature_columns)
+        self.assertTrue(
+            np.isfinite(m5_frame[m5_pressure_columns].dropna().to_numpy()).all()
+        )
+
+        scaled_m5_frame, scaled_m5_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "candle_pressure_state"
+        )
+        self.assertEqual(m5_feature_columns, scaled_m5_columns)
+        np.testing.assert_allclose(
+            m5_frame[m5_pressure_columns],
+            scaled_m5_frame[m5_pressure_columns],
+            rtol=1e-8,
+            atol=1e-10,
+            equal_nan=True,
+        )
+
+        changed_m5_frame, changed_m5_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "candle_pressure_state"
+        )
+        self.assertEqual(m5_feature_columns, changed_m5_columns)
+        change_timestamp = source.loc[200, "timestamp"]
+        prior_m5_rows = m5_frame["timestamp"] < change_timestamp.floor("5min")
+        pd.testing.assert_frame_equal(
+            m5_frame.loc[prior_m5_rows, m5_pressure_columns],
+            changed_m5_frame.loc[prior_m5_rows, m5_pressure_columns],
+        )
+
+        flat_m5_frame, _ = build_feature_frame(
+            resample_complete_bars(flat_source, 5), 5, "candle_pressure_state"
+        )
+        self.assertTrue(
+            np.isfinite(flat_m5_frame.loc[25:, m5_pressure_columns]).all().all()
+        )
+        self.assertTrue(
+            flat_m5_frame.loc[25:, m5_pressure_columns].eq(0).all().all()
+        )
+
         config = TrainConfig(
-            timeframes=(1,),
+            timeframes=(1, 5),
             feature_set="candle_pressure_state",
             max_train_rows=1_000,
             max_iter=5,
@@ -952,6 +1009,8 @@ class NextBarTests(unittest.TestCase):
             latest = predict_latest(source, output_dir)
 
         self.assertEqual(report["config"]["feature_set"], "candle_pressure_state")
+        self.assertEqual(report["config"]["timeframes"], (1, 5))
+        self.assertEqual(set(latest["timeframe"]), {"M1", "M5"})
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
     def test_bar_breakout_rejection_features_are_stationary_causal_finite_and_run_latest(self):
