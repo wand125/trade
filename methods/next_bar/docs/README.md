@@ -241,7 +241,7 @@ XGBoostを比較する場合は `--model-type xgboost` を使う。300 trees、d
 
 同じ連続教師の不確実性幅まで使う場合は `--model-type signed_body_quantile_hgb` を使う。25/50/75%分位HGBから `q50 / abs(q75 - q25)` を作り、後続期間で方向確率へ校正する。単体方向モデルは不採用。方向維持型25% blendのconfidence 0.525は `config/m15_signed_body_quantile_confidence_candidate_v1.json` の中coverage選別候補だが、confirmation ECEが僅かに悪化したためfair oddsには使わない。
 
-判定時点の `volatility_20` でlow/normal/high専用HGBへ分ける場合は `--model-type regime_hgb` を使う。分位境界は各foldのtrainだけで決め、calibration/testでは固定する。M15の7foldでは単体方向精度と通常blendのconfirmation精度が悪化し、高信頼selection scoreも全thresholdでbaselineを下回ったため採用しない。方向維持型25% blendはaggregate ECEだけが強く改善したので `config/m15_regime_hgb_confidence_shadow_v1.json` の校正診断shadowに限定する。
+判定時点の `volatility_20` でlow/normal/high専用HGBへ分ける場合は `--model-type regime_hgb` を使う。分位境界は各foldのtrainだけで決め、calibration/testでは固定する。M15の7foldでは単体方向精度と通常blendのconfirmation精度が悪化し、高信頼selection scoreも全thresholdでbaselineを下回ったため採用しない。方向維持型25% blendはaggregate ECEだけが強く改善したので `config/m15_regime_hgb_confidence_shadow_v1.json` の校正診断shadowに限定する。同じ固定仕様のM5単体はbaseline比all -310件、通常25%方向blendは+13件でもconfirmation -42件で、既存Pressure方向候補にaccuracy/score各3/7対4/7だった。方向維持0.515はbaseline比all lane accuracyの日次区間を改善したがcoverageを1.464pt下げ、selection score区間は0を跨いだ。Profile x Transitionにはaccuracy 1/7、selection score 3/7、0.55もFollow-throughへ各1/7で、確認期間の6局面中5局面が3〜66件しかなかったためM5は全用途を再現専用とする。M15 shadow、既存M5候補、authoritative予測・fair odds・policyを変更しない。
 
 2つの同一target予測を固定weightでブレンドする:
 
