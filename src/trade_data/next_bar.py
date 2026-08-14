@@ -214,6 +214,7 @@ class TrainConfig:
     lightgbm_subsample: float = 0.80
     lightgbm_column_sample: float = 0.80
     lightgbm_l2: float = 5.0
+    lightgbm_n_jobs: int = -1
     transition_state_prior_strength: float = 64.0
     transition_parent_prior_strength: float = 256.0
     tcn_epochs: int = 8
@@ -5641,6 +5642,8 @@ def train_timeframe(
             raise ValueError("lightgbm_column_sample must be in (0, 1]")
         if config.lightgbm_l2 < 0:
             raise ValueError("lightgbm_l2 must not be negative")
+        if config.lightgbm_n_jobs == 0 or config.lightgbm_n_jobs < -1:
+            raise ValueError("lightgbm_n_jobs must be -1 or positive")
         model = LGBMClassifier(
             boosting_type="gbdt",
             objective="binary",
@@ -5653,7 +5656,7 @@ def train_timeframe(
             colsample_bytree=config.lightgbm_column_sample,
             reg_lambda=config.lightgbm_l2,
             random_state=config.random_seed,
-            n_jobs=-1,
+            n_jobs=config.lightgbm_n_jobs,
             deterministic=True,
             force_col_wise=True,
             verbosity=-1,
@@ -6584,6 +6587,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--lightgbm-subsample", type=float, default=0.80)
     train.add_argument("--lightgbm-column-sample", type=float, default=0.80)
     train.add_argument("--lightgbm-l2", type=float, default=5.0)
+    train.add_argument("--lightgbm-n-jobs", type=int, default=-1)
     train.add_argument("--transition-state-prior-strength", type=float, default=64.0)
     train.add_argument("--transition-parent-prior-strength", type=float, default=256.0)
     train.add_argument("--tcn-epochs", type=int, default=8)
@@ -6678,6 +6682,7 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument("--lightgbm-subsample", type=float, default=0.80)
     walk_forward.add_argument("--lightgbm-column-sample", type=float, default=0.80)
     walk_forward.add_argument("--lightgbm-l2", type=float, default=5.0)
+    walk_forward.add_argument("--lightgbm-n-jobs", type=int, default=-1)
     walk_forward.add_argument(
         "--transition-state-prior-strength", type=float, default=64.0
     )
@@ -6796,6 +6801,7 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         lightgbm_subsample=args.lightgbm_subsample,
         lightgbm_column_sample=args.lightgbm_column_sample,
         lightgbm_l2=args.lightgbm_l2,
+        lightgbm_n_jobs=args.lightgbm_n_jobs,
         transition_state_prior_strength=args.transition_state_prior_strength,
         transition_parent_prior_strength=args.transition_parent_prior_strength,
         tcn_epochs=args.tcn_epochs,

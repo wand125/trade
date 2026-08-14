@@ -5713,6 +5713,8 @@ class NextBarTests(unittest.TestCase):
                     "0.05",
                     "--lightgbm-min-child-samples",
                     "10",
+                    "--lightgbm-n-jobs",
+                    "2",
                 ],
                 cwd=root,
                 env=environment,
@@ -5745,10 +5747,13 @@ class NextBarTests(unittest.TestCase):
             manifest = json.loads(
                 (output_dir / "manifest.json").read_text(encoding="utf-8")
             )
+            artifact_n_jobs = joblib.load(output_dir / "m1_model.joblib")["model"].n_jobs
 
         self.assertEqual(report["config"]["model_type"], "lightgbm")
         self.assertEqual(report["config"]["lightgbm_estimators"], 5)
         self.assertEqual(report["config"]["lightgbm_num_leaves"], 7)
+        self.assertEqual(report["config"]["lightgbm_n_jobs"], 2)
+        self.assertEqual(artifact_n_jobs, 2)
         self.assertFalse(
             {"open", "high", "low", "close"}.intersection(
                 manifest["timeframes"]["M1"]["features"]
