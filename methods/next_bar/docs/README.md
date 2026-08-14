@@ -205,6 +205,8 @@ Full Pathの15地点を時間×正規化close経路としてまとめる場合�
 
 M5ではM15用Full Path 11地点が5地点へ縮退しProfileの4地点と終点情報を再掲するため、そのまま移植しない。`--feature-set intrabar_profile_signature` はM5の完成M1 close 5点から同じChen signature 3列だけをProfileへ追加し、重複を避けた全68特徴にする。方向維持0.525はbaselineを改善したが、同一閾値の親Profileにdevelopment/confirmation/allのaccuracy・coverage・selection score・proper scoreで負け、固定平均もconfirmationで反転した。再現専用とし、Profile/Profile×Transition/Follow-throughの各M5 roleを維持する。
 
+完成M5内でM1値幅が最終high-low rangeの上端・下端20%へどれだけ滞在したかを使う場合は `--feature-set intrabar_extrema_dwell` を使う。Profile 65列へ上下zoneのrange occupancy、touch fraction、first-last touch spanの固定6列を加えた全71特徴である。high/low到達時刻と相関0.927だったtouch center-of-mass 2列はOOS前の重複監査で除外した。方向維持0.515はbaselineを確認期間で有意に改善したが、親Profileとの差は未確定で、Profileとの固定50/50平均も5/7foldの点改善に対して日次区間が0を跨いだ。Profile×Transition、Pressure方向、Follow-through 0.55を超えないため再現専用とし、zone幅・subset・weight・閾値を同じ履歴で再探索しない。
+
 Full Pathの順序とVolatility Shapeの変動集中を同時に使う固定unionは `--feature-set intrabar_full_path_volatility_shape` で再現できる。52 intrabar・全90特徴になる。単体方向はVolatility Shapeに0/7、方向維持0.525 confidenceも親2候補に各3/7、Signed-body Quantileに1/7、Clear-bodyに2/7しか勝てなかった。Brier/log lossは改善したが高信頼帯の主評価関数を上積みできないため再現専用とし、forward configは発行しない。
 
 完成上位足内のM1買い／売り圧力proxyを使う場合は `--feature-set intrabar_pressure` を使う。Intrabar Profileへ、M1 close-locationの平均/分散/序盤/終盤、range-weighted close-location、signed range、wick/body pressure、両者の乖離、方向一致率の11定常特徴を追加する。M15単体とconfidence用途は不採用。baseline 75% + Pressure 25%の通常方向blendはdevelopment/confirmationの両方、accuracy 5/7、Brier/log loss 7/7 foldを改善したため `config/m15_intrabar_pressure_direction_candidate_v1.json` のparallel forward候補に固定した。paired p=0.224なので現行方向モデルは置換しない。

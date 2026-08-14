@@ -59,6 +59,7 @@ FEATURE_SETS = (
     "intrabar_structure",
     "intrabar_profile",
     "intrabar_profile_signature",
+    "intrabar_extrema_dwell",
     "intrabar_full_path",
     "intrabar_path_signature",
     "intrabar_full_path_volatility_shape",
@@ -131,6 +132,7 @@ INTRABAR_PATH_SIGNATURE_COLUMNS = (
     "intrabar_path_time_time_price_bracket",
     "intrabar_path_price_time_price_bracket",
 )
+INTRABAR_EXTREMA_ZONE_FRACTION = 0.20
 TRAIN_WEIGHTING_MODES = (
     "uniform",
     "body_atr",
@@ -877,6 +879,27 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
     source["_intrabar_low_position"] = normalized_position.where(
         source["low"].eq(bucket_low)
     )
+    positive_bucket_range = bucket_range.gt(0)
+    upper_zone_floor = bucket_high - INTRABAR_EXTREMA_ZONE_FRACTION * bucket_range
+    lower_zone_ceiling = bucket_low + INTRABAR_EXTREMA_ZONE_FRACTION * bucket_range
+    upper_zone_overlap = (
+        source["high"] - np.maximum(source["low"], upper_zone_floor)
+    ).clip(lower=0.0)
+    lower_zone_overlap = (
+        np.minimum(source["high"], lower_zone_ceiling) - source["low"]
+    ).clip(lower=0.0)
+    upper_zone_touch = positive_bucket_range & source["high"].ge(upper_zone_floor)
+    lower_zone_touch = positive_bucket_range & source["low"].le(lower_zone_ceiling)
+    source["_intrabar_upper_zone_overlap"] = upper_zone_overlap
+    source["_intrabar_lower_zone_overlap"] = lower_zone_overlap
+    source["_intrabar_upper_zone_touch"] = upper_zone_touch.astype("float64")
+    source["_intrabar_lower_zone_touch"] = lower_zone_touch.astype("float64")
+    source["_intrabar_upper_zone_touch_position"] = normalized_position.where(
+        upper_zone_touch
+    )
+    source["_intrabar_lower_zone_touch_position"] = normalized_position.where(
+        lower_zone_touch
+    )
     body_direction = np.sign(source["_intrabar_body_return"])
     previous_body_direction = body_direction.groupby(bucket, sort=False).shift(1)
     source["_intrabar_direction_change"] = (
@@ -1157,6 +1180,26 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
         intrabar_late_body_return=("_intrabar_late_body_return", "sum"),
         intrabar_high_position=("_intrabar_high_position", "min"),
         intrabar_low_position=("_intrabar_low_position", "min"),
+        _intrabar_upper_zone_overlap_sum=("_intrabar_upper_zone_overlap", "sum"),
+        _intrabar_lower_zone_overlap_sum=("_intrabar_lower_zone_overlap", "sum"),
+        _intrabar_upper_zone_touch_sum=("_intrabar_upper_zone_touch", "sum"),
+        _intrabar_lower_zone_touch_sum=("_intrabar_lower_zone_touch", "sum"),
+        _intrabar_upper_zone_first_touch=(
+            "_intrabar_upper_zone_touch_position",
+            "min",
+        ),
+        _intrabar_upper_zone_last_touch=(
+            "_intrabar_upper_zone_touch_position",
+            "max",
+        ),
+        _intrabar_lower_zone_first_touch=(
+            "_intrabar_lower_zone_touch_position",
+            "min",
+        ),
+        _intrabar_lower_zone_last_touch=(
+            "_intrabar_lower_zone_touch_position",
+            "max",
+        ),
         intrabar_direction_change_fraction=("_intrabar_direction_change", "mean"),
         _intrabar_close_breakout_up_sum=("_intrabar_close_breakout_up", "sum"),
         _intrabar_close_breakout_down_sum=(
@@ -1406,6 +1449,43 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
     bars["intrabar_high_minus_low_position"] = (
         bars["intrabar_high_position"] - bars["intrabar_low_position"]
     )
+    range_denominator = bars["_intrabar_range_sum"].replace(0, np.nan)
+    extrema_dwell_columns = [
+        "intrabar_upper_zone_range_occupancy",
+        "intrabar_lower_zone_range_occupancy",
+        "intrabar_upper_zone_touch_fraction",
+        "intrabar_lower_zone_touch_fraction",
+        "intrabar_upper_zone_touch_span",
+        "intrabar_lower_zone_touch_span",
+    ]
+    extrema_dwell = pd.DataFrame(
+        {
+            "intrabar_upper_zone_range_occupancy": (
+                bars["_intrabar_upper_zone_overlap_sum"] / range_denominator
+            ),
+            "intrabar_lower_zone_range_occupancy": (
+                bars["_intrabar_lower_zone_overlap_sum"] / range_denominator
+            ),
+            "intrabar_upper_zone_touch_fraction": (
+                bars["_intrabar_upper_zone_touch_sum"] / timeframe_minutes
+            ),
+            "intrabar_lower_zone_touch_fraction": (
+                bars["_intrabar_lower_zone_touch_sum"] / timeframe_minutes
+            ),
+            "intrabar_upper_zone_touch_span": (
+                bars["_intrabar_upper_zone_last_touch"]
+                - bars["_intrabar_upper_zone_first_touch"]
+            ),
+            "intrabar_lower_zone_touch_span": (
+                bars["_intrabar_lower_zone_last_touch"]
+                - bars["_intrabar_lower_zone_first_touch"]
+            ),
+        },
+        index=bars.index,
+    ).fillna(0.0)
+    if list(extrema_dwell.columns) != extrema_dwell_columns:
+        raise AssertionError("extrema dwell feature order changed")
+    bars = pd.concat([bars, extrema_dwell], axis=1)
     bars["intrabar_close_path_efficiency"] = (
         bars["_intrabar_return_sum"].abs()
         / bars["_intrabar_abs_return_sum"].replace(0, np.nan)
@@ -1868,6 +1948,14 @@ def resample_complete_bars(m1: pd.DataFrame, timeframe_minutes: int) -> pd.DataF
             "_intrabar_max_up_run_length",
             "_intrabar_max_down_run_length",
             "_intrabar_profile_mean_square_deviation",
+            "_intrabar_upper_zone_overlap_sum",
+            "_intrabar_lower_zone_overlap_sum",
+            "_intrabar_upper_zone_touch_sum",
+            "_intrabar_lower_zone_touch_sum",
+            "_intrabar_upper_zone_first_touch",
+            "_intrabar_upper_zone_last_touch",
+            "_intrabar_lower_zone_first_touch",
+            "_intrabar_lower_zone_last_touch",
             "_intrabar_range_sum",
             "_intrabar_range_square_sum",
             "_intrabar_range_dct_1_sum",
@@ -3933,6 +4021,7 @@ def build_feature_frame(
         "intrabar_structure",
         "intrabar_profile",
         "intrabar_profile_signature",
+        "intrabar_extrema_dwell",
         "intrabar_full_path",
         "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
@@ -3966,6 +4055,7 @@ def build_feature_frame(
         "intrabar_structure",
         "intrabar_profile",
         "intrabar_profile_signature",
+        "intrabar_extrema_dwell",
         "intrabar_full_path",
         "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
@@ -4011,6 +4101,7 @@ def build_feature_frame(
     if feature_set in (
         "intrabar_profile",
         "intrabar_profile_signature",
+        "intrabar_extrema_dwell",
         "intrabar_full_path",
         "intrabar_path_signature",
         "intrabar_full_path_volatility_shape",
@@ -4074,6 +4165,26 @@ def build_feature_frame(
                 + ", ".join(missing_path_signature)
             )
         for column in INTRABAR_PATH_SIGNATURE_COLUMNS:
+            add(column, bars[column].to_numpy(dtype="float64"))
+
+    if feature_set == "intrabar_extrema_dwell":
+        extrema_dwell_columns = (
+            "intrabar_upper_zone_range_occupancy",
+            "intrabar_lower_zone_range_occupancy",
+            "intrabar_upper_zone_touch_fraction",
+            "intrabar_lower_zone_touch_fraction",
+            "intrabar_upper_zone_touch_span",
+            "intrabar_lower_zone_touch_span",
+        )
+        missing_extrema_dwell = sorted(
+            set(extrema_dwell_columns) - set(bars.columns)
+        )
+        if missing_extrema_dwell:
+            raise ValueError(
+                "bar frame is missing intrabar extrema-dwell columns: "
+                + ", ".join(missing_extrema_dwell)
+            )
+        for column in extrema_dwell_columns:
             add(column, bars[column].to_numpy(dtype="float64"))
 
     if feature_set in ("intrabar_pressure", "intrabar_flow_shape"):

@@ -4111,6 +4111,108 @@ class NextBarTests(unittest.TestCase):
         )
         self.assertTrue(latest["probability_up"].between(0, 1).all())
 
+    def test_m5_intrabar_extrema_dwell_is_exact_stationary_causal_and_finite(self):
+        dwell_columns = [
+            "intrabar_upper_zone_range_occupancy",
+            "intrabar_lower_zone_range_occupancy",
+            "intrabar_upper_zone_touch_fraction",
+            "intrabar_lower_zone_touch_fraction",
+            "intrabar_upper_zone_touch_span",
+            "intrabar_lower_zone_touch_span",
+        ]
+        exact_source = pd.DataFrame(
+            {
+                "timestamp": pd.date_range(
+                    "2024-01-01", periods=5, freq="min", tz="UTC"
+                ),
+                "open": [1.0, 2.0, 5.0, 8.0, 5.0],
+                "high": [2.0, 5.0, 9.0, 10.0, 9.0],
+                "low": [0.0, 1.0, 4.0, 8.0, 1.0],
+                "close": [1.5, 4.0, 8.0, 9.0, 5.0],
+            }
+        )
+        exact_bar = resample_complete_bars(exact_source, 5).iloc[0]
+        expected = {
+            "intrabar_upper_zone_range_occupancy": 4 / 21,
+            "intrabar_lower_zone_range_occupancy": 4 / 21,
+            "intrabar_upper_zone_touch_fraction": 3 / 5,
+            "intrabar_lower_zone_touch_fraction": 3 / 5,
+            "intrabar_upper_zone_touch_span": 0.5,
+            "intrabar_lower_zone_touch_span": 1.0,
+        }
+        for column, value in expected.items():
+            self.assertAlmostEqual(exact_bar[column], value)
+
+        source = m1_frame(5000)
+        bars = resample_complete_bars(source, 5)
+        profile_features, profile_columns = build_feature_frame(
+            bars, 5, "intrabar_profile"
+        )
+        dwell_features, feature_columns = build_feature_frame(
+            bars, 5, "intrabar_extrema_dwell"
+        )
+        self.assertEqual(
+            [name for name in feature_columns if name not in dwell_columns],
+            profile_columns,
+        )
+        self.assertEqual(len(profile_columns), 65)
+        self.assertEqual(len(feature_columns), 71)
+        self.assertTrue(set(dwell_columns).issubset(feature_columns))
+        pd.testing.assert_frame_equal(
+            dwell_features[profile_columns], profile_features[profile_columns]
+        )
+        self.assertTrue(np.isfinite(dwell_features[dwell_columns]).all().all())
+        self.assertTrue(dwell_features[dwell_columns].ge(0).all().all())
+        self.assertTrue(dwell_features[dwell_columns].le(1).all().all())
+        validate_stationary_feature_set(feature_columns)
+
+        scaled = source.copy()
+        for column in ("open", "high", "low", "close"):
+            scaled[column] *= 10
+        scaled_features, scaled_columns = build_feature_frame(
+            resample_complete_bars(scaled, 5), 5, "intrabar_extrema_dwell"
+        )
+        self.assertEqual(feature_columns, scaled_columns)
+        np.testing.assert_allclose(
+            dwell_features[dwell_columns],
+            scaled_features[dwell_columns],
+            rtol=1e-10,
+            atol=1e-10,
+        )
+
+        changed = source.copy()
+        for column in ("open", "high", "low", "close"):
+            changed.loc[changed.index >= 60, column] += 100.0
+        changed_features, changed_columns = build_feature_frame(
+            resample_complete_bars(changed, 5), 5, "intrabar_extrema_dwell"
+        )
+        self.assertEqual(feature_columns, changed_columns)
+        pd.testing.assert_frame_equal(
+            dwell_features.loc[:11, feature_columns],
+            changed_features.loc[:11, feature_columns],
+        )
+
+        flat_source = m1_frame(30)
+        for column in ("open", "high", "low", "close"):
+            flat_source[column] = 100.0
+        flat_bars = resample_complete_bars(flat_source, 5)
+        self.assertTrue(flat_bars[dwell_columns].eq(0).all().all())
+
+        config = TrainConfig(
+            timeframes=(5,),
+            feature_set="intrabar_extrema_dwell",
+            max_train_rows=1_000,
+            max_iter=5,
+            min_samples_leaf=5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            report = train_all_timeframes(source, output_dir, config)
+            latest = predict_latest(source, output_dir)
+
+        self.assertEqual(report["config"]["feature_set"], "intrabar_extrema_dwell")
+        self.assertTrue(latest["probability_up"].between(0, 1).all())
+
     def test_intrabar_pressure_features_are_stationary_causal_and_finite(self):
         source = m1_frame(5000)
         bars = resample_complete_bars(source, 15)
