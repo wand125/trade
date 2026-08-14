@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -5560,6 +5561,7 @@ class NextBarTests(unittest.TestCase):
             extra_trees_max_depth=4,
             extra_trees_min_samples_leaf=10,
             extra_trees_max_features=0.75,
+            extra_trees_n_jobs=2,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
@@ -5567,7 +5569,10 @@ class NextBarTests(unittest.TestCase):
 
             self.assertEqual(report["config"]["model_type"], "extra_trees")
             self.assertEqual(report["config"]["extra_trees_estimators"], 5)
+            self.assertEqual(report["config"]["extra_trees_n_jobs"], 2)
             self.assertTrue((output_dir / "m1_model.joblib").exists())
+            artifact = joblib.load(output_dir / "m1_model.joblib")
+            self.assertEqual(artifact["model"].n_jobs, 2)
 
     def test_xgboost_round_trips_through_processed_latest_prediction(self):
         source = m1_frame(1800)

@@ -149,7 +149,9 @@ def blend_prediction_frames(
 
 
 def assert_latest_artifact_parity(
-    baseline_model_dir: Path, candidate_model_dir: Path
+    baseline_model_dir: Path,
+    candidate_model_dir: Path,
+    allow_model_type_mismatch: bool = False,
 ) -> dict[str, object]:
     """Require matching time boundaries and training settings before runtime blend."""
     reports = []
@@ -166,14 +168,19 @@ def assert_latest_artifact_parity(
     baseline_config = baseline_report.get("config", {})
     candidate_config = candidate_report.get("config", {})
     mismatches: dict[str, dict[str, object]] = {}
+    allowed_differences: dict[str, dict[str, object]] = {}
     for key in PARITY_CONFIG_KEYS:
         baseline_value = baseline_config.get(key)
         candidate_value = candidate_config.get(key)
         if baseline_value != candidate_value:
-            mismatches[key] = {
+            difference = {
                 "baseline": baseline_value,
                 "candidate": candidate_value,
             }
+            if key == "model_type" and allow_model_type_mismatch:
+                allowed_differences[key] = difference
+            else:
+                mismatches[key] = difference
     if mismatches:
         raise ValueError(
             "latest ensemble artifact training settings do not match: "
@@ -181,9 +188,16 @@ def assert_latest_artifact_parity(
         )
     return {
         "split_boundaries": baseline_boundaries,
-        "matched_config": {key: baseline_config.get(key) for key in PARITY_CONFIG_KEYS},
+        "matched_config": {
+            key: baseline_config.get(key)
+            for key in PARITY_CONFIG_KEYS
+            if baseline_config.get(key) == candidate_config.get(key)
+        },
+        "allowed_config_differences": allowed_differences,
         "baseline_feature_set": baseline_config.get("feature_set"),
         "candidate_feature_set": candidate_config.get("feature_set"),
+        "baseline_model_type": baseline_config.get("model_type"),
+        "candidate_model_type": candidate_config.get("model_type"),
     }
 
 
@@ -341,8 +355,13 @@ def predict_latest_ensemble(
     context_policy: dict[str, object] | None = None,
     odds_calibration: dict[str, object] | None = None,
     odds_runtime_authorized: bool = False,
+    allow_model_type_mismatch: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
-    parity = assert_latest_artifact_parity(baseline_model_dir, candidate_model_dir)
+    parity = assert_latest_artifact_parity(
+        baseline_model_dir,
+        candidate_model_dir,
+        allow_model_type_mismatch=allow_model_type_mismatch,
+    )
     baseline = predict_latest(m1, baseline_model_dir)
     candidate = predict_latest(m1, candidate_model_dir)
     blended = blend_latest_prediction_frames(

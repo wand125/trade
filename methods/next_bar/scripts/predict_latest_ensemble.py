@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-model-dir", type=Path, required=True)
     parser.add_argument("--candidate-weight", type=float, default=0.25)
     parser.add_argument("--preserve-baseline-direction", action="store_true")
+    parser.add_argument(
+        "--allow-heterogeneous-models",
+        action="store_true",
+        help="Allow baseline and candidate artifacts to use different model types.",
+    )
     parser.add_argument("--context-policy", type=Path, default=None)
     parser.add_argument("--odds-calibration", type=Path, default=None)
     parser.add_argument(
@@ -44,14 +49,15 @@ def read_optional_json(path: Path | None) -> dict[str, object] | None:
 def main() -> int:
     args = build_parser().parse_args()
     predictions, parity = predict_latest_ensemble(
-        read_ohlcv(args.input),
-        args.baseline_model_dir,
-        args.candidate_model_dir,
-        args.candidate_weight,
-        args.preserve_baseline_direction,
-        read_optional_json(args.context_policy),
-        read_optional_json(args.odds_calibration),
-        args.authorize_odds,
+        m1=read_ohlcv(args.input),
+        baseline_model_dir=args.baseline_model_dir,
+        candidate_model_dir=args.candidate_model_dir,
+        candidate_weight=args.candidate_weight,
+        preserve_baseline_direction=args.preserve_baseline_direction,
+        context_policy=read_optional_json(args.context_policy),
+        odds_calibration=read_optional_json(args.odds_calibration),
+        odds_runtime_authorized=args.authorize_odds,
+        allow_model_type_mismatch=args.allow_heterogeneous_models,
     )
     payload = predictions.to_json(orient="records", date_format="iso", indent=2)
     if args.output is not None:

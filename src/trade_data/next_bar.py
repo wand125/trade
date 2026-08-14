@@ -193,6 +193,7 @@ class TrainConfig:
     extra_trees_max_depth: int = 12
     extra_trees_min_samples_leaf: int = 50
     extra_trees_max_features: float = 0.75
+    extra_trees_n_jobs: int = -1
     xgboost_estimators: int = 300
     xgboost_max_depth: int = 4
     xgboost_learning_rate: float = 0.03
@@ -5547,12 +5548,14 @@ def train_timeframe(
             raise ValueError("extra_trees_min_samples_leaf must be positive")
         if not 0 < config.extra_trees_max_features <= 1:
             raise ValueError("extra_trees_max_features must be in (0, 1]")
+        if config.extra_trees_n_jobs == 0 or config.extra_trees_n_jobs < -1:
+            raise ValueError("extra_trees_n_jobs must be -1 or positive")
         model = ExtraTreesClassifier(
             n_estimators=config.extra_trees_estimators,
             max_depth=config.extra_trees_max_depth,
             min_samples_leaf=config.extra_trees_min_samples_leaf,
             max_features=config.extra_trees_max_features,
-            n_jobs=-1,
+            n_jobs=config.extra_trees_n_jobs,
             random_state=config.random_seed,
         )
     elif config.model_type == "xgboost":
@@ -6560,6 +6563,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--extra-trees-max-depth", type=int, default=12)
     train.add_argument("--extra-trees-min-samples-leaf", type=int, default=50)
     train.add_argument("--extra-trees-max-features", type=float, default=0.75)
+    train.add_argument("--extra-trees-n-jobs", type=int, default=-1)
     train.add_argument("--xgboost-estimators", type=int, default=300)
     train.add_argument("--xgboost-max-depth", type=int, default=4)
     train.add_argument("--xgboost-learning-rate", type=float, default=0.03)
@@ -6651,6 +6655,7 @@ def build_parser() -> argparse.ArgumentParser:
     walk_forward.add_argument("--extra-trees-max-depth", type=int, default=12)
     walk_forward.add_argument("--extra-trees-min-samples-leaf", type=int, default=50)
     walk_forward.add_argument("--extra-trees-max-features", type=float, default=0.75)
+    walk_forward.add_argument("--extra-trees-n-jobs", type=int, default=-1)
     walk_forward.add_argument("--xgboost-estimators", type=int, default=300)
     walk_forward.add_argument("--xgboost-max-depth", type=int, default=4)
     walk_forward.add_argument("--xgboost-learning-rate", type=float, default=0.03)
@@ -6770,6 +6775,7 @@ def _train_config_from_args(args: argparse.Namespace) -> TrainConfig:
         extra_trees_max_depth=args.extra_trees_max_depth,
         extra_trees_min_samples_leaf=args.extra_trees_min_samples_leaf,
         extra_trees_max_features=args.extra_trees_max_features,
+        extra_trees_n_jobs=args.extra_trees_n_jobs,
         xgboost_estimators=args.xgboost_estimators,
         xgboost_max_depth=args.xgboost_max_depth,
         xgboost_learning_rate=args.xgboost_learning_rate,

@@ -217,6 +217,53 @@ class NextBarEnsembleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "split boundaries"):
                 assert_latest_artifact_parity(baseline, candidate)
 
+    def test_latest_artifact_parity_requires_explicit_heterogeneous_models(self):
+        config = {
+            "flat_tolerance": 0.0,
+            "max_train_rows": 100,
+            "random_seed": 42,
+            "max_iter": 5,
+            "learning_rate": 0.05,
+            "max_leaf_nodes": 7,
+            "min_samples_leaf": 5,
+            "l2_regularization": 1.0,
+            "confidence_model": "class_probability",
+            "probability_calibration": "platt",
+            "train_weighting": "uniform",
+            "train_target_filter": "all",
+            "model_type": "hgb",
+            "train_window_days": 0,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            baseline.mkdir()
+            candidate.mkdir()
+            boundaries = {"train_end": "A", "calibration_end": "B", "test_end": "C"}
+            (baseline / "metrics.json").write_text(
+                json.dumps({"split_boundaries": boundaries, "config": config}),
+                encoding="utf-8",
+            )
+            candidate_config = {**config, "model_type": "extra_trees"}
+            (candidate / "metrics.json").write_text(
+                json.dumps({"split_boundaries": boundaries, "config": candidate_config}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "model_type"):
+                assert_latest_artifact_parity(baseline, candidate)
+
+            parity = assert_latest_artifact_parity(
+                baseline, candidate, allow_model_type_mismatch=True
+            )
+            self.assertEqual(parity["baseline_model_type"], "hgb")
+            self.assertEqual(parity["candidate_model_type"], "extra_trees")
+            self.assertEqual(
+                parity["allowed_config_differences"]["model_type"],
+                {"baseline": "hgb", "candidate": "extra_trees"},
+            )
+
     def test_latest_shadow_suppresses_valid_odds_until_explicitly_authorized(self):
         timestamp = pd.Timestamp("2026-01-01", tz="UTC")
         baseline = pd.DataFrame(
