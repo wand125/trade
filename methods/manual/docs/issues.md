@@ -38,6 +38,28 @@
 
 **tmuxセッション `codex` を `/srv/trade` に作成済み**(2026-08-16)。`tmux attach -t codex` で入れる。運用セッションの `ops`、相談セッションの `consult` とは別。
 
+### 2026-08-16 追記: 別端末からのアクセス経路は既に構築済み(実測)
+
+**Tailscale の tailnet が稼働しており、MacBook Neo からこのWSLへ入る経路は設定済み。**新規の構築は不要だった。
+
+| ノード | Tailscale IP | OS | 状態(2026-08-16 実測) |
+|---|---|---|---|
+| **windows-wsl**(この環境) | **100.124.107.37** | linux | 稼働中 |
+| **hiroakimacbook-neo** | **100.110.45.64** | macOS | **active、direct 接続**(120.50.230.52 経由=LAN外) |
+| hiroakimacbook-m4 | 100.105.249.26 | macOS | active、direct(192.168.11.8=LAN内) |
+| hiroakinomacbook-pro | 100.66.212.50 | macOS | — |
+| iphone175 | 100.112.179.73 | iOS | — |
+
+**WSL側のsshd**: ポート22で稼働中(`ssh.service` enabled、2026-08-13から継続)。`permitrootlogin prohibit-password`(鍵のみ)、`pubkeyauthentication yes`。**`/root/.ssh/authorized_keys` に2鍵登録済みで、コメントは `mac-to-windows-wsl` と `neo`** — **Neoの公開鍵は既に入っている**。
+
+**Neoからの接続**: `ssh root@windows-wsl` または `ssh root@100.124.107.37`。接続後、Codex・gitの設定はこのWSL上でそのまま行える(`/srv/trade` が研究側、`/mnt/c/Users/user1/trade` がライブ運用側)。
+
+| ID | 内容 | 実行できる主体 | 状態 |
+|---|---|---|---|
+| **I18** | **Neoからのアクセス経路**: Tailscale + WSLのsshd + Neoの公開鍵登録が**すべて構築済み**であることを実測確認。**新規構築は不要** | — | **判明(2026-08-16)** |
+| **I19** | **`.claude/settings.local.json` への権限ルール追加は本人作業**。Claudeが編集しようとすると分類器にブロックされる(自分に権限を与える操作のため)。`git push` / `git log` 等の許可を入れるなら本人が直接編集するか `/permissions` から行う。**なお `git push*` の常時許可は推奨しない** — CLAUDE.md の「commit/push は本人が求めたときだけ」と衝突する | **本人のみ** | 未処理 |
+| **I20** | **`HomeInfra` の所在が不明**。本人が参照先として挙げたが、ローカル(`/srv`・`/root`・`/mnt/c/Users/user1` の3階層)に該当なし、`github.com/wand125` に HomeInfra / homeinfra / home-infra いずれもなし(`git ls-remote` で確認)。**別アカウントか別ホストにある可能性**。所在が分かれば命名・鍵管理・ポート等の規約をそちらへ合わせる | 本人 | 未処理 |
+
 ## 判断済み・保留にしたもの
 
 - **EAの再コンパイルは今はやらない(2026-08-16)**: リモートアクセスのみの状況で、再コンパイル+EA再読み込みは**チャートのEA入力を既定値に戻す事故**を実際に2種類起こしている(`InpCodexMaxLot`→0.01 が8/11、`InpPollCodexTradeCommands`→false が同日2回)。**入力の復旧にはWindows GUIが要る**ため、リモートでは復旧コストが高い。I2でコンパイル済みと確認できれば、そもそも不要。
