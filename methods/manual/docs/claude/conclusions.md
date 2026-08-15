@@ -263,3 +263,12 @@
   - **検知できた理由**: 前回値を別ソース(bullionvault)で持っており、**桁と水準が合わないことに気づけた**
   - **手順**: 指標の数値を採用する前に、**前回値が手元の別ソースと一致するか**を照合する。一致しなければ年が違う記事を読んでいる
   - 8/10の調査でも「過去年の同月記事が混在」を注記していたが、今回は**具体的にどう混ざるか**が実例で分かった
+
+- **モノレポは1本、作業コピーは2つ(2026-08-16 本人の前提表明を受けて運用化)**: 本人の言明「**モノレポで実験から実トレードまでやっているという形です。その前提で運用を組む**」。したがって**リポジトリを分割する提案はしない**。分けるのは作業コピー。
+  - **`/mnt/c/Users/user1/trade`(Windows FS)= ライブ運用系**。MT5・EA・ブリッジが Windows で動き `runtime/` を直接読み書きするため、この場所でなければならない。Claude(相談・運用)の作業場
+  - **`/srv/trade`(WSLネイティブFS)= 研究開発系**。`experiments/` が **13GB** あり `/mnt/c` 越しのI/Oでは実用にならない。Codexの作業場。branch `agent/m30-directional-clarity`
+  - **git管理外のものが両者で全く違うことが、2つに分ける根拠**: `runtime/` は `/mnt/c` にしか無く、`experiments/`・`data/` は `/srv` にしか無い。**いずれも .gitignore なので同期されないし、させる必要もない**。共有されるのは git 管理下のコードとドキュメントだけ
+  - **実測で役割の分離を確認済み**(直近30コミットの変更パス): `/mnt/c` は `methods/manual/docs` 42件、`/srv` は `methods/next_bar/docs` 90件・`tests/test_next_bar.py` 27件・`src/trade_data/next_bar.py` 8件。**重なっていない**。衝突しうるのは `src/` と `tests/` だけで、`src/bridge/`(ライブ)と `src/trade_data/`(研究)でサブディレクトリが分かれている
+  - **モノレポゆえの防壁**: 発注コード(`src/bridge/create_trade_command.py`)は研究側の作業コピーにも存在する。`AGENTS.md` で Codex に売買を明文禁止した理由がこれ。ただし `/srv/trade/runtime/` にはライブのファイル(`latest_account.json`・`trade_command.json`)が無くMT5テスターの成果物しか無いため、**構造上も誤爆経路は塞がっている**
+  - **同期の型**: 作業開始時に `git fetch origin`。ライブ側は `git push origin main`、研究側は `git fetch origin && git merge origin/main`。研究成果は `/srv` から push してライブ側で pull
+  - 運用の詳細は README.md「作業コピーの運用」に記載

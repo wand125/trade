@@ -35,6 +35,43 @@ experiments/          実験の実行記録(git 管理外)
 tests/                共通ライブラリ(trade_data / bridge)のテスト
 ```
 
+## 作業コピーの運用(2026-08-16 確立)
+
+**このリポジトリは実験からライブトレードまでを1本で扱うモノレポ**。ただし**同一マシン上に2つの作業コピー**を置き、役割で分けている。**リポジトリを分けるのではなく、作業コピーを分ける**。
+
+| 作業コピー | 役割 | 主な担当 | 触るディレクトリ |
+|---|---|---|---|
+| **`/mnt/c/Users/user1/trade`**(Windows FS) | **ライブ運用系** | Claude(相談・運用セッション) | `methods/manual/`、`methods/swing_eval/mt5/`、`src/bridge/`、`campaign.md`、`issues.md` |
+| **`/srv/trade`**(WSLネイティブFS) | **研究開発系** | Codex | `methods/next_bar*/`、`methods/entry_ev/`、`src/trade_data/`、`tests/test_next_bar*.py` |
+
+**なぜ2つ必要か**:
+
+- **ライブ側は Windows FS でなければならない**。MT5・EA・ブリッジが Windows で動き、`runtime/` を直接読み書きするため
+- **研究側は WSL ネイティブFSでなければ遅い**。`experiments/` は13GB規模で、`/mnt/c` 越しのI/Oでは実用にならない
+- **git管理外のものが両者で全く違う**。`runtime/`(ライブ状態)は `/mnt/c` にしか無く、`experiments/` と `data/`(学習成果物)は `/srv` にしか無い。**これらは .gitignore なので同期されないし、させる必要もない**
+
+**共有されるのは git 管理下のコードとドキュメントだけ**。実測(直近30コミット)でも触るパスは重なっていない — `/mnt/c` は `methods/manual/docs` 中心、`/srv` は `methods/next_bar/docs` と `src/trade_data/` 中心。
+
+### 同期の型
+
+```bash
+# ライブ側で書いたドキュメント・設定を幹へ
+git push origin main
+
+# 研究側へ取り込む(作業ブランチにいる場合は merge/rebase の判断を挟む)
+cd /srv/trade && git fetch origin && git merge origin/main
+
+# 研究成果を幹へ戻すときは /srv から push し、ライブ側で pull
+```
+
+**作業開始時に `git fetch origin` を打つ**。両側が同じ幹を見ていることを確認してから作業する。
+
+### モノレポゆえの注意
+
+- **発注コードは研究側の作業コピーにも存在する**(`src/bridge/create_trade_command.py`)。`AGENTS.md` で Codex に売買を明文で禁止しているのはこのため
+- ただし `/srv/trade/runtime/` にはライブのファイル(`latest_account.json` / `trade_command.json`)が無く、MT5テスターの成果物しか無い。**構造上、研究側から誤って実弾に触れる経路は塞がっている**
+- **衝突しうるのは `src/` と `tests/` のみ**。`src/bridge/`(ライブ側)と `src/trade_data/`(研究側)でサブディレクトリが分かれているが、共通ライブラリを触るときは相手側の未pushを確認する
+
 ## 実行規約
 
 - すべてのスクリプトは**リポジトリルートをカレントディレクトリ**として実行する(`runtime/` や `data/` を相対参照するため)。
