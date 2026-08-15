@@ -10,6 +10,7 @@
 2. `claude/conclusions.md` — 合意済みリスクパラメータと確定事実
 3. `runtime/latest_account.md` — ライブの口座・ポジション(古ければ鮮度を必ず指摘する)
 4. 終了した作戦は **`archive/campaign_closed.md`**。**現在の判断には使わない**
+5. 未処理の作業は **`issues.md`**(誰が・いつ・何をすれば閉じるか。設計の提案は `claude/proposals.md`)
 
 ## アーカイブへ移すルール(2026-08-08 合意)
 
