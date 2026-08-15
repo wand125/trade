@@ -58,13 +58,24 @@ tests/                共通ライブラリ(trade_data / bridge)のテスト
 # ライブ側で書いたドキュメント・設定を幹へ
 git push origin main
 
-# 研究側へ取り込む(作業ブランチにいる場合は merge/rebase の判断を挟む)
-cd /srv/trade && git fetch origin && git merge origin/main
+# 研究側へ取り込む(下記の注意を読むこと)
+cd /srv/trade && git fetch origin main
+git merge FETCH_HEAD                      # 幹に追従する場合
+git checkout FETCH_HEAD -- <path>         # 特定ファイルだけ取る場合(推奨)
 
 # 研究成果を幹へ戻すときは /srv から push し、ライブ側で pull
 ```
 
-**作業開始時に `git fetch origin` を打つ**。両側が同じ幹を見ていることを確認してから作業する。
+**注意: `/srv/trade` は single-branch クローン**(2026-08-16 実測)。fetch refspec が
+`+refs/heads/agent/m30-directional-clarity:refs/remotes/origin/agent/m30-directional-clarity`
+に限定されているため、**素の `git fetch origin` では `origin/main` が取れない**(`fatal: invalid reference: origin/main` になる)。
+**ブランチ名を明示して `git fetch origin main` とし、`FETCH_HEAD` を使う**。
+恒久的に直すなら `git remote set-branches --add origin main` を打つ。
+
+**取り込みは「必要なファイルだけ」を既定とする**。研究側の作業ブランチへ幹をフルマージすると、
+裁量トレードのドキュメントが研究の履歴に混ざり、Codex がそのブランチを push したときに差分が読めなくなる。
+
+**作業開始時に `git fetch origin main` を打つ**。両側が同じ幹を見ていることを確認してから作業する。
 
 ### モノレポゆえの注意
 
