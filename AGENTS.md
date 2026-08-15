@@ -55,6 +55,17 @@ Titan FX 口座 **9181575**(JPY建て、実残高 約38万円)がライブで動
 - **探索後に選んだ candidate 同士の比較を昇格の根拠にしない**
 - 未来情報を使わない chronological OOS で評価する。**生の OHLC 価格水準を特徴量に入れない**(ガード実装済み)
 
+## git の扱い(2026-08-16 本人決定)
+
+**このリポジトリはモノレポで、実験からライブトレードまでを1本で扱う。**作業コピーは2つに分かれており、**Codex が使うのは `/srv/trade`**(WSLネイティブFS、`experiments/` 13GB がここにある)。`/mnt/c/Users/user1/trade` はライブ運用系で、Codex は触らない。
+
+- **commit してよい。push も直接してよい**(PR は不要 — 本人決定)
+- 研究の作業は **`agent/*` ブランチ**で行う。現在は `agent/m30-directional-clarity`
+- **`/srv/trade` は single-branch クローン**。fetch refspec が作業ブランチに限定されているため、**素の `git fetch origin` では `origin/main` が取れない**。幹を見るときは **`git fetch origin main` として `FETCH_HEAD` を使う**(恒久対処: `git remote set-branches --add origin main`)
+- 幹から取り込むときは **必要なファイルだけ**を既定とする(`git checkout FETCH_HEAD -- <path>`)。フルマージすると裁量トレードのドキュメントが研究の履歴に混ざる
+- **`runtime/`・`experiments/`・`data/` は .gitignore**。コミット対象にしない
+- **口座情報・認証情報をコミットしない**。ライブの口座番号や残高が載るファイルは `/mnt/c` 側の管轄
+
 ## 実行環境
 
 - 実行はリポジトリルートを cwd とする
