@@ -59,6 +59,22 @@ uv run python methods/next_bar_ev/scripts/entry_delay.py \
 
 元entry価格と同時刻M1 openの差を遅延後openへ引き継ぎ、元のspread/約定補正を維持する。exitは元時刻に固定する。development/confirmationの両方でdelta positive、最低30 delayed rows、worst month非悪化を満たす場合だけ採用する。
 
+固定方向予測を複数bar保有へ延長したcost耐性を診断する:
+
+```bash
+uv run python methods/next_bar_ev/scripts/fixed_horizon.py \
+  --input data/processed/histdata/xauusd/xauusd_m1.parquet \
+  --predictions experiments/next_bar/context_confirmation_001/m15_walk_forward_predictions.parquet \
+  --predictions experiments/next_bar/walk_forward_001/m15_walk_forward_predictions.parquet \
+  --output experiments/next_bar_ev/m15_fixed_horizon_cost_audit_001.json \
+  --holding-bars 1,2,4 \
+  --confidence-threshold 0.54 \
+  --round-trip-cost 0.26 \
+  --exclude-fold test2020
+```
+
+entryはdecision bar open、exitは指定本数目のcloseで、途中に欠損barがある区間を除外する。XAUUSD-mでは2/4本とも1本よりall-fold cost ceilingが悪化したため不採用。保有本数を履歴へ合わせて追加探索しない。詳細はreport 00006。
+
 ## 採用基準
 
 方向単独policyは次を満たす場合だけpaper candidateとする。
