@@ -27,6 +27,17 @@
 | **I12** | **保有期間の延長検証**(next_bar_ev 次の検証1)。次足1本ではなくN本先まで持ち、コスト一定のままgrossが伸びるかを測る。00003のentry delay検証と接続 | Codex | — | 未処理・本命 |
 | **I13** | **`entry_ev` トラックの再開判断**。2026-07-03を最後に停止している(標準policyはNoTrade、selector surfaceのsupport gapで詰まっている)。**再開するか、当面 `next_bar`/`next_bar_ev` に集中するかを決める** | 本人 | — | 未処理(本人判断) |
 
+### 2026-08-16 追記: 開発環境は `/srv/trade` に生きていた(重要な訂正)
+
+| ID | 内容 | 実行できる主体 | 引き金・期限 | 状態 |
+|---|---|---|---|---|
+| **I14** | **系統的トレード開発の実体は `/mnt/c/Users/user1/trade` ではなく `/srv/trade`**(WSLのネイティブFS上の別クローン)。**13GBの実験成果物と175MBのデータが無傷で残っている**。`experiments/next_bar/` に672エントリ、branch は **`agent/m30-directional-clarity`** がチェックアウト済み、作業ツリーはクリーン。**`/mnt/c` 側は `experiments/*` と `data/*` が .gitignore なので空**で、こちらでML作業を再開しようとすると成果物が存在しない。**Codexの開発は `/srv/trade` で行う** | — | — | **判明(2026-08-16)** |
+| **I15** | **2つのクローンが同期していない**。どちらも remote は `github.com/wand125/trade` だが、**`/mnt/c` 側の main に未push commitが77件**あり、`/srv/trade` 側は `origin/main` を取得していない(`agent/m30-directional-clarity` のみ)。**`AGENTS.md`・`issues.md`・裁量トレードのドキュメントは `/mnt/c` にしか存在せず、`/srv/trade` で作業するCodexからは見えない**。暫定対処として `AGENTS.md` を `/srv/trade` へ直接コピーした(未コミット、`?? AGENTS.md`)。**恒久対処には push/pull の運用を決める必要がある** | 本人 + Claude | 開発を本格再開する前 | **未処理** |
+| **I16** | **Codexの認証が再び切れた**。8/13の開発セッションを resume したところ **`Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.`**。復旧は **`codex logout` → `codex login`**(ブラウザ認証のため本人のみ) | **本人のみ** | Codexを使う前 | **未処理・ブロッカー** |
+| **I17** | **resume 対象のセッションを特定済み**: `019ff995-7c72-77f3-a973-358298e15bcb`(2026-08-13、source=`cli`、cwd=`/srv/trade`)。内容は next_bar の **M5 direction_transition_state + transition_bayes**。残作業は「Transition単体のlatest prediction生成、固定設定JSON・実験レポート・status/READMEの記録、テスト、commit/push」。**`codex resume` のピッカーは cwd フィルタが既定で、記録されたcwdが `/srv/trade` および `/mnt/c/users/user1/trade`(小文字users)のため一覧に出ない** — **ID指定で resume する**こと。cwd選択では **「1. Use session directory (/srv/trade)」を選ぶ** | 本人 or Claude | I16の後 | 準備済み |
+
+**tmuxセッション `codex` を `/srv/trade` に作成済み**(2026-08-16)。`tmux attach -t codex` で入れる。運用セッションの `ops`、相談セッションの `consult` とは別。
+
 ## 判断済み・保留にしたもの
 
 - **EAの再コンパイルは今はやらない(2026-08-16)**: リモートアクセスのみの状況で、再コンパイル+EA再読み込みは**チャートのEA入力を既定値に戻す事故**を実際に2種類起こしている(`InpCodexMaxLot`→0.01 が8/11、`InpPollCodexTradeCommands`→false が同日2回)。**入力の復旧にはWindows GUIが要る**ため、リモートでは復旧コストが高い。I2でコンパイル済みと確認できれば、そもそも不要。
