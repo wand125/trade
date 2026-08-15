@@ -70,7 +70,7 @@ uv run python methods/next_bar_ev/scripts/entry_delay.py \
 
 EV選別policyは、上記に加えてEV biasが安定し、特定期間へ利益が集中しないことを要求する。既存戦略overlayはdevelopment/confirmationとstateful replayの両方でbaselineを上回る必要がある。
 
-現在の固定候補は `config/m15_paper_policy_v1.json`。実測costと新規forward期間が未確認なので `live_action=no_trade` である。
+固定設定 `config/m15_paper_policy_v1.json` はhistorical research candidateとして保存する。TitanFX XAUUSD-mの2026-08-11〜08-15 EA snapshot 9,458件ではspread中央値だけで `0.260/oz` とall-fold cost ceiling `0.05415/oz` の約4.80倍だったため、この銘柄のM15次足単独policyはrejectとし、paper/live資格を与えず `live_action=no_trade` を維持する。commission/slippageは未取得だが、spreadだけでadmission failの結論は変わらない。詳細はreport 00005。
 
 ## 記録
 
