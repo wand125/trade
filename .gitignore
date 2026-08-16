@@ -23,3 +23,7 @@ runtime/
 *.parquet
 *.joblib
 *.zip
+
+# Codex 無人ループのログ・停止フラグ
+.codex-loop.log
+.codex-loop.stop
