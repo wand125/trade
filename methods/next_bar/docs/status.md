@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-16 10:30 JST
+更新日時: 2026-08-16 11:04 JST
 
 ## 現在の状態
 
@@ -548,6 +548,8 @@
 154. M1/M15/M30固定Extra Treesを、baseline 38加工特徴、200 trees、depth 12、min leaf 50、max features 0.75、Platt、25% blend、標準損失1.0のまま未検証M5へ移植した。最初の実行でコード固定`n_jobs=-1`がworkerの8-thread環境変数を無視して約18 coreを使うことを検出し、今回のworkerだけを中断、3fold artifactを削除せず退避した。`--extra-trees-n-jobs` とテストを追加し、8 jobs、nice/I/O低優先度、GPU非表示、memory/load/singleton gateで439,881行・7foldを最初から再実行した。単体はbaseline比+148/+55/+203件でもaccuracy 4/7、McNemar p=0.291、proper score各2/7。通常25%方向blendは+54/-5/+49件でconfirmationが反転し、Pressureへ単体all +107件でもaccuracy 3/7・proper score悪化のため方向用途は不採用。方向維持0.515は221,046件・coverage 50.25132%・accuracy 52.71889%・score 0.0177980で、baseline比accuracy 7/7、score 6/7、proper score各5/7fold。20,000回日次bootstrapはall accuracy差+0.07489pt、score +0.0004917、Brier/log lossの改善区間を支持したが、confirmation単独は未確定でcoverage -0.21097ptが確定した。Profileにはdevelopmentで勝ってconfirmationで反転。Profile×Transitionにはcoverage +2.29835ptでもaccuracy -0.09286ptとproper scoreの悪化区間が確定し、年別accuracy 2/7・score 3/7。固定50/50平均も親へaccuracy 1/7・score 2/7で棄却した。0.55はFollow-throughへaccuracy 2/7・score 1/7。固定band accuracyは全期間で単調だが、confirmation down-normalは4,157件・50.06014%・mean confidence 52.08431%でedge未確認かつ局所不整合だった。異種latest artifactは明示flag時だけmodel type差を許し他設定を厳密照合するguard/testを追加し、最新up、`p(up)=0.534286`、odds非認可を確認した。M5 Extra Treesを再現専用とし、config・registry・Profile×Transition/Profile/Pressure/Follow-through、authoritative予測・fair odds・policyを変更しない。parameter、weight、0.515/0.55、subgroup filterを同履歴で再探索しない。
 
 155. M5 Transitionの2本の固定3-source shadowへ、保存済みwalk-forward最終fold modelを読むmulti-source latest runtimeを追加した。7fold境界、学習・校正設定、decision timestamp、重み合計をguardし、再学習なしで2026-06-01 04:55 UTCを再現した。Pressure方向shadowはbaseline/Pressure/Transition=`0.5233518569/0.5176241393/0.5036710893`、75/12.5/12.5固定式で`p(up)=0.5201757962`。Profile confidence shadowはProfile=`0.5197680287`、同固定式・baseline方向維持で`p(up)=0.5204437824`となり0.515を通過した。丸め後の直接式との差は最大`5.1e-11`未満、両方up、odds非認可・strict非適格でfull runtime parityを達成した。これは既存最終fold/既存時点の機能確認でfresh edgeではないため、Pressure/Profile/Profile×TCN/Follow-through、authoritative方向/confidence、fair odds、registry、paper/live policyを変更しない。low-priority worker、CPU only、標準損失1.0を維持した。
+
+156. M5 Profile×TCN固定confidence shadowにも同じmulti-source latest runtimeを適用した。baseline/Profile/TCN=`0.5233518569/0.5197680287/0.5161988528`、固定75/12.5/12.5、baseline方向維持で2026-06-01 04:55 UTCの`p(up)=0.5220097528`、up、0.515通過を再現した。7fold境界、主要train/calibration設定、時刻、重みをguardし、丸め後の直接式との差`6.3e-11`未満、odds非認可・strict非適格を確認した。full runtime parityはacceptedだがfresh edgeではなく、親ProfileへのOOS増分とdown-normal Wilson edgeは未確定のままなので、Profile/EWMA/Profile×Transition/Follow-through、authoritative confidence・fair odds・registry・policyを変更しない。再学習なし、low-priority worker、CPU only、標準損失1.0を維持した。
 
 ## ベースライン評価
 

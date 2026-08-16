@@ -64,7 +64,9 @@
     "ewma_bootstrap": "experiments/next_bar/profile_tcn_equal_vs_ewma_m5_0515_bootstrap_20000.json",
     "reliability": "experiments/next_bar/profile_tcn_equal_vs_profile_m5_reliability_windows.json",
     "fixed_subgroups": "experiments/next_bar/profile_tcn_equal_m5_subgroups_windows.json",
-    "tcn_latest_prediction": "experiments/next_bar/tcn_m5_latest_prediction_windows.json"
+    "tcn_latest_prediction": "experiments/next_bar/tcn_m5_latest_prediction_windows.json",
+    "confidence_shadow_latest_prediction": "experiments/next_bar/profile_tcn_m5_latest_confidence_shadow_windows.json",
+    "confidence_shadow_latest_parity": "experiments/next_bar/profile_tcn_m5_latest_confidence_shadow_parity_windows.json"
   },
   "evidence": {
     "oos_rows": 439881,
@@ -170,6 +172,17 @@
       "weak_confirmation_cell_accuracy": 0.5096339113680154,
       "weak_confirmation_cell_wilson_lower": 0.49442597051812903,
       "subgroup_filter_created": false
+    },
+    "runtime_parity": {
+      "completed": true,
+      "decision_timestamp": "2026-06-01T04:55:00.000Z",
+      "confidence_shadow_probability_up": 0.5220097528,
+      "confidence_shadow_passes_fixed_0515_threshold": true,
+      "direct_formula_absolute_difference": 6.250000517127319e-11,
+      "fold_boundaries_and_training_settings_matched": true,
+      "retraining_performed": false,
+      "odds_runtime_authorized": false,
+      "fresh_edge_evidence_added": false
     }
   },
   "promotion": {
