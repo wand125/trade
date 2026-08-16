@@ -38,6 +38,123 @@ PARITY_CONFIG_KEYS = (
 )
 
 
+def assert_walk_forward_artifact_parity(
+    model_dirs: Sequence[Path],
+) -> dict[str, object]:
+    """Validate aligned walk-forward artifacts before multi-source latest inference."""
+    if len(model_dirs) < 2:
+        raise ValueError("multi-source parity requires at least two model directories")
+    reports: list[dict[str, object]] = []
+    for directory in model_dirs:
+        path = directory / "walk_forward_metrics.json"
+        if not path.exists():
+            raise FileNotFoundError(path)
+        reports.append(json.loads(path.read_text(encoding="utf-8")))
+    reference = reports[0]
+    reference_folds = reference.get("folds")
+    reference_config = reference.get("config", {})
+    if not isinstance(reference_config, dict):
+        raise ValueError("walk-forward config must be an object")
+    mismatches: dict[str, list[object]] = {}
+    for index, report in enumerate(reports[1:], start=1):
+        if report.get("folds") != reference_folds:
+            mismatches.setdefault("folds", []).append(index)
+        config = report.get("config", {})
+        if not isinstance(config, dict):
+            raise ValueError("walk-forward config must be an object")
+        for key in PARITY_CONFIG_KEYS:
+            if key == "model_type":
+                continue
+            if config.get(key) != reference_config.get(key):
+                mismatches.setdefault(key, []).append(index)
+    if mismatches:
+        raise ValueError(
+            "walk-forward artifact settings do not match: "
+            + ", ".join(sorted(mismatches))
+        )
+    return {
+        "folds": reference_folds,
+        "matched_config": {
+            key: reference_config.get(key)
+            for key in PARITY_CONFIG_KEYS
+            if key != "model_type"
+        },
+        "sources": [
+            {
+                "model_dir": str(directory),
+                "feature_set": report.get("config", {}).get("feature_set"),
+                "model_type": report.get("config", {}).get("model_type"),
+            }
+            for directory, report in zip(model_dirs, reports, strict=True)
+        ],
+    }
+
+
+def blend_latest_prediction_sources(
+    sources: Sequence[tuple[str, pd.DataFrame, float]],
+    *,
+    preserve_first_direction: bool = False,
+) -> pd.DataFrame:
+    """Blend aligned latest prediction frames with explicit weights."""
+    if len(sources) < 2:
+        raise ValueError("multi-source latest blend requires at least two sources")
+    labels = [label for label, _, _ in sources]
+    if len(set(labels)) != len(labels) or any(not label for label in labels):
+        raise ValueError("source labels must be non-empty and unique")
+    weights = np.asarray([weight for _, _, weight in sources], dtype="float64")
+    if not np.isfinite(weights).all() or np.any(weights < 0) or not np.isclose(weights.sum(), 1.0):
+        raise ValueError("source weights must be finite, non-negative, and sum to one")
+    keys = ["timeframe", "timeframe_minutes", "bar_start", "decision_timestamp"]
+    required = {*keys, "probability_up", "volatility_regime"}
+    reference = sources[0][1].copy()
+    for label, frame, _ in sources:
+        missing = sorted(required - set(frame.columns))
+        if missing:
+            raise ValueError(f"{label} latest predictions are missing: {', '.join(missing)}")
+        if frame.duplicated(keys).any():
+            raise ValueError(f"{label} latest predictions contain duplicate keys")
+        if len(frame) != len(reference) or not frame[keys].reset_index(drop=True).equals(
+            reference[keys].reset_index(drop=True)
+        ):
+            raise ValueError(f"latest prediction keys do not align for source: {label}")
+    probability_matrix = np.column_stack(
+        [frame["probability_up"].to_numpy(dtype="float64") for _, frame, _ in sources]
+    )
+    if not np.isfinite(probability_matrix).all() or np.any(
+        (probability_matrix < 0) | (probability_matrix > 1)
+    ):
+        raise ValueError("source probabilities must be finite and between zero and one")
+    probability = probability_matrix @ weights
+    first_probability = probability_matrix[:, 0]
+    if preserve_first_direction:
+        first_sign = np.where(first_probability >= 0.5, 1.0, -1.0)
+        probability = 0.5 + first_sign * np.maximum(
+            first_sign * (probability - 0.5), np.finfo("float64").eps
+        )
+    for index, label in enumerate(labels):
+        reference[f"source_{label}_probability_up"] = probability_matrix[:, index]
+        reference[f"source_{label}_weight"] = float(weights[index])
+    reference["probability_up"] = probability
+    reference["probability_down"] = 1 - probability
+    reference["predicted_direction"] = np.where(probability >= 0.5, "up", "down")
+    reference["direction_score"] = (2 * probability - 1) * 100
+    reference["class_confidence"] = np.maximum(probability, 1 - probability)
+    reference["model_confidence"] = reference["class_confidence"]
+    reference["confidence"] = reference["class_confidence"]
+    reference["fair_decimal_odds"] = 1 / reference["class_confidence"]
+    reference["odds_ratio"] = reference["class_confidence"] / (1 - reference["class_confidence"])
+    reference["odds_support"] = 0
+    reference["odds_calibration_level"] = "model_probability"
+    reference["odds_calibration_source"] = "multi_source_shadow"
+    reference["odds_empirical_accuracy"] = None
+    reference["odds_locally_consistent"] = False
+    reference["odds_valid"] = False
+    reference["odds_edge_confirmed"] = False
+    reference["strict_prediction_eligible"] = False
+    reference["multi_source_preserve_first_direction"] = preserve_first_direction
+    return reference.sort_values("timeframe_minutes").reset_index(drop=True)
+
+
 def blend_probability_values(
     baseline_probability: np.ndarray | Sequence[float] | float,
     candidate_probability: np.ndarray | Sequence[float] | float,

@@ -79,7 +79,11 @@
     "confidence_profile_tcn_bootstrap": "experiments/next_bar/profile_transition_bayes_equal_vs_profile_tcn_m5_0515_bootstrap_20000_windows.json",
     "reliability": "experiments/next_bar/profile_transition_bayes_vs_profile_m5_reliability_windows.json",
     "subgroup_reliability": "experiments/next_bar/profile_transition_bayes_m5_subgroup_reliability_windows.json",
-    "transition_latest_prediction": "experiments/next_bar/direction_transition_bayes_m5_latest_prediction_windows.json"
+    "transition_latest_prediction": "experiments/next_bar/direction_transition_bayes_m5_latest_prediction_windows.json",
+    "direction_shadow_latest_prediction": "experiments/next_bar/pressure_transition_bayes_m5_latest_direction_shadow_windows.json",
+    "direction_shadow_latest_parity": "experiments/next_bar/pressure_transition_bayes_m5_latest_direction_shadow_parity_windows.json",
+    "confidence_shadow_latest_prediction": "experiments/next_bar/profile_transition_bayes_m5_latest_confidence_shadow_windows.json",
+    "confidence_shadow_latest_parity": "experiments/next_bar/profile_transition_bayes_m5_latest_confidence_shadow_parity_windows.json"
   },
   "evidence": {
     "oos_rows": 439881,
@@ -172,6 +176,18 @@
       "subgroup_filter_created": false,
       "latest_probability_up": 0.5036710893,
       "latest_odds_valid": false
+    },
+    "runtime_parity": {
+      "completed": true,
+      "decision_timestamp": "2026-06-01T04:55:00.000Z",
+      "direction_shadow_probability_up": 0.5201757962,
+      "confidence_shadow_probability_up": 0.5204437824,
+      "confidence_shadow_passes_fixed_0515_threshold": true,
+      "direct_formula_max_absolute_difference": 5.000000413701855e-11,
+      "fold_boundaries_and_training_settings_matched": true,
+      "retraining_performed": false,
+      "odds_runtime_authorized": false,
+      "fresh_edge_evidence_added": false
     }
   },
   "promotion": {

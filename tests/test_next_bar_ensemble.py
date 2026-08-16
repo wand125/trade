@@ -7,7 +7,9 @@ import numpy as np
 import pandas as pd
 
 from trade_data.next_bar_ensemble import (
+    assert_walk_forward_artifact_parity,
     assert_latest_artifact_parity,
+    blend_latest_prediction_sources,
     blend_latest_prediction_frames,
     blend_prediction_frames,
     blend_probability_values,
@@ -48,6 +50,86 @@ def prediction_frame(probabilities: list[float]) -> pd.DataFrame:
 
 
 class NextBarEnsembleTests(unittest.TestCase):
+
+    @staticmethod
+    def latest_source(probability: float, *, decision: str = "2026-06-01T04:55:00Z") -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "timeframe": ["M5"],
+                "timeframe_minutes": [5],
+                "bar_start": [pd.Timestamp("2026-06-01T04:50:00Z")],
+                "decision_timestamp": [pd.Timestamp(decision)],
+                "probability_up": [probability],
+                "volatility_regime": ["normal"],
+            }
+        )
+
+    def test_multi_source_latest_blend_uses_fixed_weights_and_blocks_odds(self):
+        result = blend_latest_prediction_sources(
+            [
+                ("baseline", self.latest_source(0.52), 0.75),
+                ("pressure", self.latest_source(0.60), 0.125),
+                ("transition", self.latest_source(0.40), 0.125),
+            ]
+        )
+        self.assertAlmostEqual(result.loc[0, "probability_up"], 0.515)
+        self.assertEqual(result.loc[0, "predicted_direction"], "up")
+        self.assertFalse(result.loc[0, "odds_valid"])
+        self.assertFalse(result.loc[0, "strict_prediction_eligible"])
+        self.assertAlmostEqual(result.loc[0, "source_pressure_weight"], 0.125)
+
+    def test_multi_source_latest_blend_preserves_first_direction_and_alignment(self):
+        result = blend_latest_prediction_sources(
+            [
+                ("baseline", self.latest_source(0.51), 0.5),
+                ("first", self.latest_source(0.10), 0.25),
+                ("second", self.latest_source(0.10), 0.25),
+            ],
+            preserve_first_direction=True,
+        )
+        self.assertEqual(result.loc[0, "predicted_direction"], "up")
+        self.assertGreater(result.loc[0, "probability_up"], 0.5)
+        with self.assertRaisesRegex(ValueError, "do not align"):
+            blend_latest_prediction_sources(
+                [
+                    ("baseline", self.latest_source(0.51), 0.5),
+                    ("other", self.latest_source(0.52, decision="2026-06-01T05:00:00Z"), 0.5),
+                ]
+            )
+        with self.assertRaisesRegex(ValueError, "sum to one"):
+            blend_latest_prediction_sources(
+                [
+                    ("baseline", self.latest_source(0.51), 0.8),
+                    ("other", self.latest_source(0.52), 0.3),
+                ]
+            )
+
+    def test_walk_forward_multi_source_parity_rejects_fold_or_config_mismatch(self):
+        base_report = {
+            "folds": [{"name": "test2026", "train_end": "2025-01-01"}],
+            "config": {
+                "flat_tolerance": 0.0,
+                "max_train_rows": 750000,
+                "model_type": "hgb",
+                "feature_set": "baseline",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = [root / name for name in ("baseline", "candidate")]
+            for path in paths:
+                path.mkdir()
+            (paths[0] / "walk_forward_metrics.json").write_text(json.dumps(base_report), encoding="utf-8")
+            candidate = json.loads(json.dumps(base_report))
+            candidate["config"]["model_type"] = "transition_bayes"
+            candidate["config"]["feature_set"] = "direction_transition_state"
+            (paths[1] / "walk_forward_metrics.json").write_text(json.dumps(candidate), encoding="utf-8")
+            parity = assert_walk_forward_artifact_parity(paths)
+            self.assertEqual(parity["sources"][1]["model_type"], "transition_bayes")
+            candidate["config"]["flat_tolerance"] = 0.01
+            (paths[1] / "walk_forward_metrics.json").write_text(json.dumps(candidate), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "flat_tolerance"):
+                assert_walk_forward_artifact_parity(paths)
 
     @staticmethod
     def pairwise_source(probabilities: list[float], candidate: list[float]) -> pd.DataFrame:
