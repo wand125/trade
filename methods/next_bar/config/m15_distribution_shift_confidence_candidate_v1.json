@@ -47,7 +47,9 @@
     "profile_oos": "experiments/next_bar/intrabar_profile_m15_windows_canonical_001",
     "profile_blend": "experiments/next_bar/intrabar_profile_m15_confidence_blend_windows_canonical_001",
     "profile_comparison": "experiments/next_bar/distribution_shift_m15_vs_profile_windows_comparison.json",
-    "profile_bootstrap": "experiments/next_bar/distribution_shift_m15_vs_profile_windows_bootstrap_20000.json"
+    "profile_bootstrap": "experiments/next_bar/distribution_shift_m15_vs_profile_windows_bootstrap_20000.json",
+    "latest_prediction": "experiments/next_bar/distribution_shift_m15_latest_confidence_candidate_windows.json",
+    "latest_parity": "experiments/next_bar/distribution_shift_m15_latest_confidence_candidate_parity_windows.json"
   },
   "evidence": {
     "rows": 145140,
@@ -101,6 +103,21 @@
       "profile_selection_score_wins": 3,
       "distribution_shift_selection_score_wins": 4,
       "decision": "insufficient to challenge the existing precision role"
+    },
+    "runtime_parity": {
+      "status": "completed",
+      "completed_at": "2026-08-16T18:27:00+09:00",
+      "latest_decision_timestamp": "2026-06-01T04:45:00.000Z",
+      "baseline_probability_up": 0.5583611895,
+      "candidate_probability_up": 0.5514037088,
+      "blended_probability_up": 0.5566218193,
+      "passes_fixed_confidence_threshold": true,
+      "direct_formula_absolute_difference": 2.5000002068509275e-11,
+      "walk_forward_settings_matched": true,
+      "retrained": false,
+      "fresh_edge_evidence": false,
+      "odds_runtime_authorized": false,
+      "strict_prediction_eligible": false
     }
   },
   "promotion": {
@@ -113,7 +130,6 @@
     "replace_paper_or_live_policy": false,
     "requirements": [
       "rebuild the full M15 registry on one canonical platform before registry activation",
-      "verify latest inference parity",
       "pass fresh global and local calibration gates"
     ]
   }
