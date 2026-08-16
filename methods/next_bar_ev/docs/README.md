@@ -77,6 +77,19 @@ entryはdecision bar open、exitは指定本数目のcloseで、途中に欠損b
 
 同じCLIへcandidateの方向維持prediction parquetと固定閾値を渡せば、confidence lane単位の実コスト耐性も監査できる。出力にはfold別gross/net mean、最弱foldから求めるcost ceiling、実コストとの差 `cost_headroom_per_oz`、全fold net positive gateを含む。M15 precision championのIntrabar Structure 0.55はgross meanをbaseline 0.55より点改善したが、spread中央値後 `-0.10375/oz`・3/6 fold positiveのためXAUUSD-m売買laneには使わない。詳細はreport 00007。
 
+bridge event JSONLから銘柄別spreadを監査する:
+
+```bash
+uv run python methods/next_bar_ev/scripts/spread_audit.py \
+  --events path/to/events.jsonl \
+  --output experiments/next_bar_ev/spread_audit.json \
+  --cost-ceilings path/to/cost_ceilings_by_symbol.json \
+  --min-observations 5000 \
+  --min-unique-days 5
+```
+
+spreadは価格単位の `ask - bid`。minimum/median/p90、日数・時間coverage、invalid件数を出力する。無条件policyのspread-only gateはp90がhistorical all-fold cost ceiling以下であること。ただしcommission、slippage、fresh prediction edgeが欠ける限りall-in costを認可しない。公式平均spreadは `fx_cost_first_research_shortlist_v1.json` の測定順にだけ使い、利益率や銘柄採用の根拠にはしない。詳細はreport 00008。
+
 ## 採用基準
 
 方向単独policyは次を満たす場合だけpaper candidateとする。

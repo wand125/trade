@@ -1,6 +1,6 @@
 # Next-bar EV status
 
-更新日時: 2026-08-16 03:37 JST
+更新日時: 2026-08-16 09:32 JST
 
 ## 現在の判断
 
@@ -16,11 +16,14 @@
 - commission、slippage、元集計の `runtime/events.jsonl` は現在の `/srv/trade` から取得できず、推測で補完しない。spread数値の出典は `AGENTS.md`、判断の記録はreport 00005。
 - 同じM15 OOS予測・confidence 0.54を固定した2本/4本保有は、17,134/16,663件、gross mean `+0.12298/+0.16761/oz`でも実spread中央値後 `-0.13702/-0.09239/oz`。各5/6 foldだけgross positiveで、all-fold cost ceilingは `-0.06681/-0.12203`へ悪化した。長期化によるXAUUSD-m M15 policy救済もreject / NoTrade（report 00006）。
 - 固定precision championのIntrabar Structure 0.55も、評価6 fold 9,523件・accuracy 55.0982%・gross `+0.15625/oz`に対しspread中央値後 `-0.10375/oz`、net positive 3/6 fold。test2023はcost前 `-0.02731/oz`でall-fold cost ceilingが負のため、XAUUSD-m売買laneとしてreject / NoTrade。precision候補としての研究監視だけ維持する（report 00007）。
+- Titan FX公式Micro平均spreadからEURUSD-m 1.40、USDJPY-m 1.53、AUDUSD-m 1.72、EURGBP-m 1.73、GBPUSD-m 1.77 pipsをmarket-data測定shortlistへ固定した。利益率順位ではなく測定順だけで、account type、実測p90、commission、slippage、bar値幅、fresh edgeが揃うまで学習・paper/live採用を認可しない（report 00008）。
+- 銘柄別event JSONLからask-bidを集計するspread auditを追加。最低5,000件・5 UTC日、無条件policyはp90 <= historical all-fold cost ceilingをspread-only gateとし、commission/slippage/fresh edge不足時は常にall-in非認可とする。
 
 ## 次の検証
 
-1. spreadの薄い別銘柄で、予測開発前に必要gross edgeと実測all-in costの間に余力があるかscreenする。XAUUSD-mのM15保有本数は追加探索しない。
+1. shortlist順に銘柄別bid/askを最低5 UTC日・5,000件取得し、`spread_audit.py` でminimum/median/p90、時間coverage、invalid件数を固定集計する。売買・EA設定変更は行わない。
 2. commission/slippageのdeal履歴を取得できた場合は、別銘柄候補の1 oz往復all-in costへ換算する。XAUUSD-m M15の不採用判断を覆す用途には使わない。
 3. `m15_paper_policy_v1` は研究再現用に固定したまま、追加期間の予測品質だけを監視する。TitanFX XAUUSD-mでの売買forward適用は行わない。
 4. entry delayは追加supportを得るまで現4policyを変更せず監視する。
 5. registryのbroad/balanced/selective laneはprediction artifactを取得できた場合だけ同じcost診断へ通す。再学習して過去期間を再選択せず、precision 0.55の不採用を別閾値探索で救済しない。
+6. spread p90とcommission/slippageを含むall-in costに十分な余力がある銘柄だけ、履歴OHLC取得とbaseline予測研究へ進める。公式平均spreadだけでモデル学習やpolicy採用を始めない。

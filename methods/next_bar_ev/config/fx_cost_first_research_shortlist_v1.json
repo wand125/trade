@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "status": "research_measurement_shortlist_only",
+  "created_at": "2026-08-16T09:32:00+09:00",
+  "broker": "Titan FX",
+  "official_source": "https://www.titanfx.com/trading-instruments/forex",
+  "official_source_checked_at": "2026-08-16",
+  "ranking_basis": "lowest published average Micro spread among liquid majors/minors already supported by the broker; not a profitability ranking",
+  "candidates": [
+    {"symbol": "EURUSD-m", "official_average_spread_pips": 1.40, "measurement_priority": 1},
+    {"symbol": "USDJPY-m", "official_average_spread_pips": 1.53, "measurement_priority": 2},
+    {"symbol": "AUDUSD-m", "official_average_spread_pips": 1.72, "measurement_priority": 3},
+    {"symbol": "EURGBP-m", "official_average_spread_pips": 1.73, "measurement_priority": 4},
+    {"symbol": "GBPUSD-m", "official_average_spread_pips": 1.77, "measurement_priority": 5}
+  ],
+  "measurement_gate": {
+    "minimum_observations": 5000,
+    "minimum_unique_utc_days": 5,
+    "spread_statistic_for_unfiltered_policy": "p90",
+    "require_p90_spread_not_above_historical_all_fold_cost_ceiling": true,
+    "require_commission_in_all_in_cost": true,
+    "require_slippage_in_all_in_cost": true,
+    "require_fresh_prediction_edge": true
+  },
+  "promotion": {
+    "authorize_market_data_collection": true,
+    "authorize_model_training": false,
+    "authorize_paper_or_live_trading": false,
+    "replace_current_prediction_or_policy": false,
+    "reason": "Published average spread is suitable only for prioritizing measurement. Symbol-specific live bid/ask, commission, slippage, historical edge, and fresh OOS evidence remain required."
+  }
+}
