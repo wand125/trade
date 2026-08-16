@@ -77,7 +77,11 @@
     "confidence_reliability": "experiments/next_bar/distribution_shift_vs_transition_guard_champion_m1_confidence_reliability.json",
     "confidence_subgroups": "experiments/next_bar/distribution_shift_m1_confidence_subgroups.json",
     "candidate_registry": "experiments/next_bar/m1_candidate_registry_distribution_shift_001.json",
-    "latest_runtime_output": "experiments/next_bar/distribution_shift_m1_latest_prediction.json"
+    "legacy_latest_runtime_output": "experiments/next_bar/distribution_shift_m1_latest_prediction.json",
+    "windows_baseline_oos": "experiments/next_bar/baseline_m1_windows_canonical_001",
+    "windows_candidate_oos": "experiments/next_bar/distribution_shift_m1_windows_canonical_001",
+    "latest_runtime_output": "experiments/next_bar/distribution_shift_m1_latest_direction_candidate_windows.json",
+    "latest_runtime_parity": "experiments/next_bar/distribution_shift_m1_latest_direction_candidate_parity_windows.json"
   },
   "evidence": {
     "source_rows": 6025170,
@@ -214,7 +218,17 @@
     "latest_runtime": {
       "decision_timestamp": "2026-06-01T04:59:00.000Z",
       "predicted_direction": "down",
-      "probability_up": 0.4985584768,
+      "probability_up": 0.4974296583,
+      "baseline_probability_up": 0.4972960077,
+      "candidate_probability_up": 0.4978306101,
+      "passes_fixed_confidence_threshold_051": false,
+      "direct_formula_absolute_difference": 0.0,
+      "walk_forward_settings_matched": true,
+      "canonical_platform": "Windows/WSL2 x86 Linux",
+      "legacy_probability_up": 0.4985584768,
+      "windows_minus_legacy_probability_up": -0.0011288184999999618,
+      "retrained": false,
+      "fresh_edge_evidence": false,
       "odds_valid": false,
       "strict_prediction_eligible": false
     }
