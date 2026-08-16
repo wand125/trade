@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-16 18:27 JST
+更新日時: 2026-08-16 18:36 JST
 
 ## 現在の状態
 
@@ -711,3 +711,4 @@
 148. M5 causal GRU固定移植は16完成足 x 5加工系列、単層hidden 16・1,121 parameter、8 epoch、Platt、expanding、uniform sample、標準損失1.0を固定し、sequence・hidden・epoch・learning rate・weight・閾値・subgroup filterを履歴内再探索しない。単体はbaseline比all -298件。通常25%方向blendは+76/+50/+126件、accuracy 6/7、all Brier/log loss日次区間を改善したがaccuracy区間は0跨ぎ、Pressureにはall +30件でもaccuracy/score 3/7・proper score点劣後、固定Pressure x GRU平均も両親を超えなかった。方向維持0.515はProfileにscore 2/7、Profile x Transitionにaccuracy/score各1/7、0.55もFollow-throughへ各2/7。Profile x GRU固定50/50 confidence 0.515は親Profileへaccuracy/score各6/7、all accuracy差区間を改善したがcoverage -0.497ptでscore区間0跨ぎ、confirmation score反転、Profile x Transitionにはall accuracy/Brier/log lossが有意に劣った。down-normal edgeも未確認のため全用途を再現専用とし、Pressure/Profile/Profile x TCN/Profile x Transition/Follow-through、config・registry・authoritative予測・fair odds・paper/live policyを維持する。共有Windowsでは単独worker、最大8 threads、CPU only、nice/I/O低優先度を明示する。
 149. M30 Distribution Shift方向維持75/25・confidence 0.52 coverage challengerは、保存済みWindows canonical baseline/Shift artifactによるfull runtime parityを完了した。latestは2026-06-01 04:30 UTC、up、`p(up)=0.5299834177`で固定閾値を通過し、直接式との差`5.00e-11`、7fold境界と主要学習設定一致、odds無効・strict非eligibleを確認した。再学習なしの機能確認でfresh edgeではない。完全未使用期間のPressure head-to-headとglobal/local calibrationまで、Pressure 0.52、Pressure + AR 0.55、authoritative direction/confidence、fair odds、registry、paper/live policyを変更しない。Rolling AR等の保存済み生モデルがないruntime候補は不要な再学習をせず保留する。
 150. M15 Distribution Shift方向維持75/25・confidence 0.515 broad候補は、保存済みWindows canonical baseline/Shift artifactによるfull runtime parityを完了した。latestは2026-06-01 04:45 UTC、up、`p(up)=0.5566218193`で固定閾値を通過し、直接式との差`2.50e-11`、7fold境界と主要学習設定一致、odds無効・strict非eligibleを確認した。再学習なしの機能確認でfresh edgeではない。M15全候補の同一platform registry再構築とfresh global/local calibrationまで、authoritative confidence、fair odds、paper/live policyを変更しない。
+151. M5 EWMA Asymmetry方向維持75/25・confidence 0.515 broad候補は、保存済みWindows canonical baseline/EWMA artifactによるfull runtime parityを完了した。latestは2026-06-01 04:55 UTC、up、`p(up)=0.5249062717`で固定閾値を通過し、直接式との差`2.50e-11`、7fold境界と主要学習設定一致、odds無効・strict非eligibleを確認した。候補model単体latestとは別に実際のblend出力を固定した。再学習なしの機能確認でfresh edgeではない。完全未使用期間の4指標と固定6セル局所校正まで、Profile/Profile×TCN/Profile×Transition、authoritative confidence、fair odds、paper/live policyを変更しない。

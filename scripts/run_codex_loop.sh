@@ -32,6 +32,16 @@ cd "$REPO" || { echo "cannot cd $REPO"; exit 1; }
 [ -f "$PROMPT" ] || { echo "prompt not found: $PROMPT"; exit 1; }
 rm -f "$STOP"
 
+# --- 事前確認: 排他 ---
+# 同じリポジトリで Codex を2つ走らせると status.md と git index を奪い合う。
+# 2026-08-16 に対話セッション稼働中へループを起動して実際に危険な状態を作ったため追加。
+others=$(pgrep -af "codex (exec|resume)" | grep -v "run_codex_loop.sh" || true)
+if [ -n "$others" ]; then
+  log "ABORT: another Codex is already running. Stop it first."
+  printf '%s\n' "$others" | tee -a "$LOG"
+  exit 1
+fi
+
 # --- 事前確認: 認証 ---
 if ! codex login status 2>&1 | grep -qi "logged in"; then
   log "ABORT: codex is not logged in. Run 'codex logout && codex login' first."
