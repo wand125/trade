@@ -1,6 +1,6 @@
 # Next-bar EV status
 
-更新日時: 2026-08-16 09:41 JST
+更新日時: 2026-08-16 10:00 JST
 
 ## 現在の判断
 
@@ -20,11 +20,12 @@
 - 銘柄別event JSONLからask-bidを集計するspread auditを追加。最低5,000件・5 UTC日、無条件policyはp90 <= historical all-fold cost ceilingをspread-only gateとし、commission/slippage/fresh edge不足時は常にall-in非認可とする。
 - M30固有予測も実spreadで監査した。baseline 0.55は4,253件・gross `+0.28154/oz`・spread後`+0.02154/oz`、Pressure × AR 0.55は4,088件・`+0.28441/+0.02441/oz`だが、いずれもnet positive 3/6 foldで2024〜2026へ集中しall-fold cost ceilingは`-0.06162/-0.20876`。Pressure 0.52は22,556件・spread後`-0.21514/oz`・0/6 fold。3 laneともXAUUSD-m売買用途はreject / NoTrade、予測研究上のcandidate/shadowだけ維持する（report 00009）。
 - M30 baseline 0.55方向の固定60/120分延長もscreenした。60分はgross/spread後`+0.19974/-0.06026/oz`・net 3/6 foldへ悪化。120分は`+0.36225/+0.10225/oz`・gross 6/6でもnet 4/6、all-fold cost ceiling `0.036996/oz`は実spreadの約14.2%だけだった。両保有をrejectし、独立M60/M120新規学習もcost余力不足で見送る（report 00010）。
+- deal/order artifactを再監査したが、実約定exportは0件でcommission/slippageは取得できなかった。Bridge JSONとForward CSVを読むoffline `deal_cost_audit.py`を追加し、両commission leg、contract size、account-to-quote換算、方向付きentry slippageを検証できるようにした。exit requested priceが現schemaにないため、実データ取得後もexit slippageなしではall-in非認可とする（report 00011）。
 
 ## 次の検証
 
 1. shortlist順に銘柄別bid/askを最低5 UTC日・5,000件取得し、`spread_audit.py` でminimum/median/p90、時間coverage、invalid件数を固定集計する。売買・EA設定変更は行わない。
-2. commission/slippageのdeal履歴を取得できた場合は、別銘柄候補の1 oz往復all-in costへ換算する。XAUUSD-m M15の不採用判断を覆す用途には使わない。
+2. 人間の運用手順でdeal履歴とForward CSVが安全に配置された場合だけ`deal_cost_audit.py`を実行する。時点別通貨換算、両commission leg、entry/exit requested priceが揃わない項目は取得不能のままにし、XAUUSD-m M15の不採用判断を覆す用途には使わない。
 3. `m15_paper_policy_v1` は研究再現用に固定したまま、追加期間の予測品質だけを監視する。TitanFX XAUUSD-mでの売買forward適用は行わない。
 4. entry delayは追加supportを得るまで現4policyを変更せず監視する。
 5. registryのbroad/balanced/selective laneはprediction artifactを取得できた場合だけ同じcost診断へ通す。再学習して過去期間を再選択せず、precision 0.55の不採用を別閾値探索で救済しない。

@@ -90,6 +90,18 @@ uv run python methods/next_bar_ev/scripts/spread_audit.py \
 
 spreadは価格単位の `ask - bid`。minimum/median/p90、日数・時間coverage、invalid件数を出力する。無条件policyのspread-only gateはp90がhistorical all-fold cost ceiling以下であること。ただしcommission、slippage、fresh prediction edgeが欠ける限りall-in costを認可しない。公式平均spreadは `fx_cost_first_research_shortlist_v1.json` の測定順にだけ使い、利益率や銘柄採用の根拠にはしない。詳細はreport 00008。
 
+既存MT5 exportからcommissionとslippageをoffline監査する:
+
+```bash
+uv run python methods/next_bar_ev/scripts/deal_cost_audit.py \
+  --deal-history path/to/latest_deal_history.json \
+  --forward-csv path/to/swing_evaluation_trades.csv \
+  --config path/to/symbol_contract_and_conversion.json \
+  --output experiments/next_bar_ev/deal_cost_audit.json
+```
+
+commissionの価格単位換算にはsymbol別contract sizeとaccount-to-quote換算率を明示する。Bridge履歴の`entry=in/out`両legがある場合だけround-trip commissionを出す。slippageは計画`entry`と`deal_price`があるentry legだけを方向付きで集計し、現schemaにrequested exit priceがないためall-in costを自動認可しない。実exportが取得できなければ数字を補わない。詳細はreport 00011。
+
 固定保有診断はM30 OOSにも同じ形で使える。XAUUSD-mではbaseline 0.55とPressure × AR 0.55がaggregate spread後にそれぞれ`+0.02154/+0.02441/oz`でも、net positiveは各3/6 fold、all-fold cost ceilingは負だった。Pressure 0.52も0/6 foldのため、aggregate正を採用せず全laneをNoTradeとする。詳細はreport 00009。
 
 M30 baseline 0.55を固定60/120分へ延長しても、60分はspread後aggregate負、120分はaggregate`+0.10225/oz`でもnet 4/6 fold、all-fold cost ceiling `0.036996/oz`だった。実spread`0.260/oz`に対する余力がなく、追加holdingや独立M60/M120モデルへ進まない。詳細はreport 00010。
