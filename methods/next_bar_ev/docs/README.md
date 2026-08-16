@@ -1,5 +1,7 @@
 # Next-bar EV research
 
+M15 broad confidenceのWindows canonical Profile/Distribution Shift 0.515は、実spread中央値`0.260/oz`控除後に両方0/6 foldとなるため、XAUUSD-m売買用途ではreject / NoTradeとする。予測研究上の候補は維持し、閾値やholdingで救済探索しない。
+
 `next_bar` のout-of-sample方向予測を、売買期待値へ変換する独立層。方向モデルを損益で再学習せず、次の要素を別々に扱う。
 
 - `confidence`: 予測方向が正しい確率。

@@ -1,6 +1,6 @@
 # Next-bar EV status
 
-更新日時: 2026-08-16 10:00 JST
+更新日時: 2026-08-16 18:49 JST
 
 ## 現在の判断
 
@@ -21,6 +21,7 @@
 - M30固有予測も実spreadで監査した。baseline 0.55は4,253件・gross `+0.28154/oz`・spread後`+0.02154/oz`、Pressure × AR 0.55は4,088件・`+0.28441/+0.02441/oz`だが、いずれもnet positive 3/6 foldで2024〜2026へ集中しall-fold cost ceilingは`-0.06162/-0.20876`。Pressure 0.52は22,556件・spread後`-0.21514/oz`・0/6 fold。3 laneともXAUUSD-m売買用途はreject / NoTrade、予測研究上のcandidate/shadowだけ維持する（report 00009）。
 - M30 baseline 0.55方向の固定60/120分延長もscreenした。60分はgross/spread後`+0.19974/-0.06026/oz`・net 3/6 foldへ悪化。120分は`+0.36225/+0.10225/oz`・gross 6/6でもnet 4/6、all-fold cost ceiling `0.036996/oz`は実spreadの約14.2%だけだった。両保有をrejectし、独立M60/M120新規学習もcost余力不足で見送る（report 00010）。
 - deal/order artifactを再監査したが、実約定exportは0件でcommission/slippageは取得できなかった。Bridge JSONとForward CSVを読むoffline `deal_cost_audit.py`を追加し、両commission leg、contract size、account-to-quote換算、方向付きentry slippageを検証できるようにした。exit requested priceが現schemaにないため、実データ取得後もexit slippageなしではall-in非認可とする（report 00011）。
+- M15 broad laneのWindows canonical Profile/Distribution Shift 0.515を固定cost診断した。67,497/66,189件、gross mean `+0.03323/+0.03952/oz`、gross 6/6 fold正でも、実spread中央値後は`-0.22677/-0.22048/oz`、両方0/6 foldだった。Shiftのall-fold cost ceilingも`0.00972/oz`で実spreadの約3.7%だけなので、両broad候補をXAUUSD-m売買用途ではreject / NoTradeとする。予測研究上の候補は維持する（report 00012）。
 
 ## 次の検証
 
@@ -28,7 +29,7 @@
 2. 人間の運用手順でdeal履歴とForward CSVが安全に配置された場合だけ`deal_cost_audit.py`を実行する。時点別通貨換算、両commission leg、entry/exit requested priceが揃わない項目は取得不能のままにし、XAUUSD-m M15の不採用判断を覆す用途には使わない。
 3. `m15_paper_policy_v1` は研究再現用に固定したまま、追加期間の予測品質だけを監視する。TitanFX XAUUSD-mでの売買forward適用は行わない。
 4. entry delayは追加supportを得るまで現4policyを変更せず監視する。
-5. registryのbroad/balanced/selective laneはprediction artifactを取得できた場合だけ同じcost診断へ通す。再学習して過去期間を再選択せず、precision 0.55の不採用を別閾値探索で救済しない。
+5. registryのbroad lane cost診断は完了しXAUUSD-m売買用途を不採用とした。balanced/selective laneはprediction artifactを取得できた場合だけ同じ固定cost診断へ通す。再学習して過去期間を再選択せず、既存laneの不採用を別閾値探索で救済しない。
 6. spread p90とcommission/slippageを含むall-in costに十分な余力がある銘柄だけ、履歴OHLC取得とbaseline予測研究へ進める。公式平均spreadだけでモデル学習やpolicy採用を始めない。
 7. M30 baseline/Pressure/Pressure × ARはfresh予測品質だけを固定監視し、XAUUSD-m売買candidateとして閾値・filter・weightを追加探索しない。
 8. XAUUSD-mではM30の追加holdingと独立M60/M120研究を停止する。別銘柄の実測cost gateを通るまで高時間足モデルを増やさない。
