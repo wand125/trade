@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-16 18:36 JST
+更新日時: 2026-08-16 19:07 JST
 
 ## 現在の状態
 
@@ -712,3 +712,4 @@
 149. M30 Distribution Shift方向維持75/25・confidence 0.52 coverage challengerは、保存済みWindows canonical baseline/Shift artifactによるfull runtime parityを完了した。latestは2026-06-01 04:30 UTC、up、`p(up)=0.5299834177`で固定閾値を通過し、直接式との差`5.00e-11`、7fold境界と主要学習設定一致、odds無効・strict非eligibleを確認した。再学習なしの機能確認でfresh edgeではない。完全未使用期間のPressure head-to-headとglobal/local calibrationまで、Pressure 0.52、Pressure + AR 0.55、authoritative direction/confidence、fair odds、registry、paper/live policyを変更しない。Rolling AR等の保存済み生モデルがないruntime候補は不要な再学習をせず保留する。
 150. M15 Distribution Shift方向維持75/25・confidence 0.515 broad候補は、保存済みWindows canonical baseline/Shift artifactによるfull runtime parityを完了した。latestは2026-06-01 04:45 UTC、up、`p(up)=0.5566218193`で固定閾値を通過し、直接式との差`2.50e-11`、7fold境界と主要学習設定一致、odds無効・strict非eligibleを確認した。再学習なしの機能確認でfresh edgeではない。M15全候補の同一platform registry再構築とfresh global/local calibrationまで、authoritative confidence、fair odds、paper/live policyを変更しない。
 151. M5 EWMA Asymmetry方向維持75/25・confidence 0.515 broad候補は、保存済みWindows canonical baseline/EWMA artifactによるfull runtime parityを完了した。latestは2026-06-01 04:55 UTC、up、`p(up)=0.5249062717`で固定閾値を通過し、直接式との差`2.50e-11`、7fold境界と主要学習設定一致、odds無効・strict非eligibleを確認した。候補model単体latestとは別に実際のblend出力を固定した。再学習なしの機能確認でfresh edgeではない。完全未使用期間の4指標と固定6セル局所校正まで、Profile/Profile×TCN/Profile×Transition、authoritative confidence、fair odds、paper/live policyを変更しない。
+152. M1 Path Persistence通常75/25方向候補は、保存済みWindows canonical baseline/Path artifactによるfull runtime parityを完了した。latestは2026-06-01 04:59 UTC、baseline down `p(up)=0.4972960077`、Path up `0.5026628577`の不一致に対し、blendはdown `0.4986377202`、直接式との差`5.55e-17`、7fold境界と主要学習設定一致、odds無効・strict非eligibleを確認した。再学習なしの機能確認でfresh edgeではない。完全未使用期間のaccuracy/Brier/log lossまでauthoritative direction/confidence、fair odds、paper/live policyを変更しない。

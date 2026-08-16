@@ -43,7 +43,11 @@
     "direction_blend": "experiments/next_bar/path_persistence_m1_blend_current_001",
     "rejected_confidence_blend": "experiments/next_bar/path_persistence_m1_confidence_blend_current_001",
     "analysis": "experiments/next_bar/path_persistence_m1_candidate_analysis.json",
-    "direction_bootstrap": "experiments/next_bar/path_persistence_m1_direction_bootstrap.json"
+    "direction_bootstrap": "experiments/next_bar/path_persistence_m1_direction_bootstrap.json",
+    "windows_baseline_oos": "experiments/next_bar/baseline_m1_windows_canonical_001",
+    "windows_candidate_oos": "experiments/next_bar/path_persistence_m1_windows_canonical_001",
+    "latest_prediction": "experiments/next_bar/path_persistence_m1_latest_direction_candidate_windows.json",
+    "latest_parity": "experiments/next_bar/path_persistence_m1_latest_direction_candidate_parity_windows.json"
   },
   "evidence": {
     "rows": 2183717,
@@ -95,6 +99,22 @@
       "confirmation_candidate_score": 0.007290319284273611,
       "confirmation_accuracy_improved_folds": 0,
       "confirmation_evaluated_folds": 3
+    },
+    "runtime_parity": {
+      "status": "completed_on_windows_canonical_artifacts",
+      "completed_at": "2026-08-16T19:07:00+09:00",
+      "latest_decision_timestamp": "2026-06-01T04:59:00.000Z",
+      "baseline_probability_up": 0.4972960077,
+      "candidate_probability_up": 0.5026628577,
+      "blended_probability_up": 0.4986377202,
+      "predicted_direction": "down",
+      "baseline_candidate_disagree": true,
+      "direct_formula_absolute_difference": 5.551115123125783e-17,
+      "walk_forward_settings_matched": true,
+      "retrained": false,
+      "fresh_edge_evidence": false,
+      "odds_runtime_authorized": false,
+      "strict_prediction_eligible": false
     }
   },
   "promotion": {
