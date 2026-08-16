@@ -90,6 +90,8 @@ uv run python methods/next_bar_ev/scripts/spread_audit.py \
 
 spreadは価格単位の `ask - bid`。minimum/median/p90、日数・時間coverage、invalid件数を出力する。無条件policyのspread-only gateはp90がhistorical all-fold cost ceiling以下であること。ただしcommission、slippage、fresh prediction edgeが欠ける限りall-in costを認可しない。公式平均spreadは `fx_cost_first_research_shortlist_v1.json` の測定順にだけ使い、利益率や銘柄採用の根拠にはしない。詳細はreport 00008。
 
+固定保有診断はM30 OOSにも同じ形で使える。XAUUSD-mではbaseline 0.55とPressure × AR 0.55がaggregate spread後にそれぞれ`+0.02154/+0.02441/oz`でも、net positiveは各3/6 fold、all-fold cost ceilingは負だった。Pressure 0.52も0/6 foldのため、aggregate正を採用せず全laneをNoTradeとする。詳細はreport 00009。
+
 ## 採用基準
 
 方向単独policyは次を満たす場合だけpaper candidateとする。
