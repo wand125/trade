@@ -92,6 +92,8 @@ spreadは価格単位の `ask - bid`。minimum/median/p90、日数・時間cover
 
 固定保有診断はM30 OOSにも同じ形で使える。XAUUSD-mではbaseline 0.55とPressure × AR 0.55がaggregate spread後にそれぞれ`+0.02154/+0.02441/oz`でも、net positiveは各3/6 fold、all-fold cost ceilingは負だった。Pressure 0.52も0/6 foldのため、aggregate正を採用せず全laneをNoTradeとする。詳細はreport 00009。
 
+M30 baseline 0.55を固定60/120分へ延長しても、60分はspread後aggregate負、120分はaggregate`+0.10225/oz`でもnet 4/6 fold、all-fold cost ceiling `0.036996/oz`だった。実spread`0.260/oz`に対する余力がなく、追加holdingや独立M60/M120モデルへ進まない。詳細はreport 00010。
+
 ## 採用基準
 
 方向単独policyは次を満たす場合だけpaper candidateとする。

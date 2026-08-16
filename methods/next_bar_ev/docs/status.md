@@ -1,6 +1,6 @@
 # Next-bar EV status
 
-更新日時: 2026-08-16 09:38 JST
+更新日時: 2026-08-16 09:41 JST
 
 ## 現在の判断
 
@@ -19,6 +19,7 @@
 - Titan FX公式Micro平均spreadからEURUSD-m 1.40、USDJPY-m 1.53、AUDUSD-m 1.72、EURGBP-m 1.73、GBPUSD-m 1.77 pipsをmarket-data測定shortlistへ固定した。利益率順位ではなく測定順だけで、account type、実測p90、commission、slippage、bar値幅、fresh edgeが揃うまで学習・paper/live採用を認可しない（report 00008）。
 - 銘柄別event JSONLからask-bidを集計するspread auditを追加。最低5,000件・5 UTC日、無条件policyはp90 <= historical all-fold cost ceilingをspread-only gateとし、commission/slippage/fresh edge不足時は常にall-in非認可とする。
 - M30固有予測も実spreadで監査した。baseline 0.55は4,253件・gross `+0.28154/oz`・spread後`+0.02154/oz`、Pressure × AR 0.55は4,088件・`+0.28441/+0.02441/oz`だが、いずれもnet positive 3/6 foldで2024〜2026へ集中しall-fold cost ceilingは`-0.06162/-0.20876`。Pressure 0.52は22,556件・spread後`-0.21514/oz`・0/6 fold。3 laneともXAUUSD-m売買用途はreject / NoTrade、予測研究上のcandidate/shadowだけ維持する（report 00009）。
+- M30 baseline 0.55方向の固定60/120分延長もscreenした。60分はgross/spread後`+0.19974/-0.06026/oz`・net 3/6 foldへ悪化。120分は`+0.36225/+0.10225/oz`・gross 6/6でもnet 4/6、all-fold cost ceiling `0.036996/oz`は実spreadの約14.2%だけだった。両保有をrejectし、独立M60/M120新規学習もcost余力不足で見送る（report 00010）。
 
 ## 次の検証
 
@@ -29,3 +30,4 @@
 5. registryのbroad/balanced/selective laneはprediction artifactを取得できた場合だけ同じcost診断へ通す。再学習して過去期間を再選択せず、precision 0.55の不採用を別閾値探索で救済しない。
 6. spread p90とcommission/slippageを含むall-in costに十分な余力がある銘柄だけ、履歴OHLC取得とbaseline予測研究へ進める。公式平均spreadだけでモデル学習やpolicy採用を始めない。
 7. M30 baseline/Pressure/Pressure × ARはfresh予測品質だけを固定監視し、XAUUSD-m売買candidateとして閾値・filter・weightを追加探索しない。
+8. XAUUSD-mではM30の追加holdingと独立M60/M120研究を停止する。別銘柄の実測cost gateを通るまで高時間足モデルを増やさない。
