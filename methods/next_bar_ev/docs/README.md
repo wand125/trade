@@ -75,6 +75,8 @@ uv run python methods/next_bar_ev/scripts/fixed_horizon.py \
 
 entryはdecision bar open、exitは指定本数目のcloseで、途中に欠損barがある区間を除外する。XAUUSD-mでは2/4本とも1本よりall-fold cost ceilingが悪化したため不採用。保有本数を履歴へ合わせて追加探索しない。詳細はreport 00006。
 
+同じCLIへcandidateの方向維持prediction parquetと固定閾値を渡せば、confidence lane単位の実コスト耐性も監査できる。出力にはfold別gross/net mean、最弱foldから求めるcost ceiling、実コストとの差 `cost_headroom_per_oz`、全fold net positive gateを含む。M15 precision championのIntrabar Structure 0.55はgross meanをbaseline 0.55より点改善したが、spread中央値後 `-0.10375/oz`・3/6 fold positiveのためXAUUSD-m売買laneには使わない。詳細はreport 00007。
+
 ## 採用基準
 
 方向単独policyは次を満たす場合だけpaper candidateとする。

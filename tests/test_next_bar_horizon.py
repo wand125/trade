@@ -91,6 +91,14 @@ class FixedHorizonTests(unittest.TestCase):
         self.assertAlmostEqual(
             result["net_mean_per_oz"], result["gross_mean_per_oz"] - 0.26
         )
+        self.assertAlmostEqual(
+            result["cost_headroom_per_oz"],
+            result["all_fold_cost_ceiling_per_oz"] - 0.26,
+        )
+        self.assertEqual(
+            result["all_fold_net_positive"],
+            result["positive_net_folds"] == result["fold_count"],
+        )
 
     def test_summary_can_exclude_seed_training_fold(self):
         outcomes = build_fixed_horizon_outcomes(source_frame(), prediction_frame(), 15, (1,))

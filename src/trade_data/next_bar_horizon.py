@@ -141,6 +141,7 @@ def summarize_fixed_horizons(
             )
         gross_mean = float(valid[column].mean()) if len(valid) else None
         cost_ceiling = min(row["gross_mean_per_oz"] for row in folds) if folds else None
+        positive_net_folds = int(sum(row["net_mean_per_oz"] > 0 for row in folds))
         results.append(
             {
                 "holding_bars": int(horizon),
@@ -150,9 +151,13 @@ def summarize_fixed_horizons(
                 "gross_mean_per_oz": gross_mean,
                 "net_mean_per_oz": gross_mean - round_trip_cost if gross_mean is not None else None,
                 "positive_gross_folds": int(sum(row["gross_mean_per_oz"] > 0 for row in folds)),
-                "positive_net_folds": int(sum(row["net_mean_per_oz"] > 0 for row in folds)),
+                "positive_net_folds": positive_net_folds,
                 "fold_count": int(len(folds)),
                 "all_fold_cost_ceiling_per_oz": cost_ceiling,
+                "cost_headroom_per_oz": (
+                    cost_ceiling - round_trip_cost if cost_ceiling is not None else None
+                ),
+                "all_fold_net_positive": bool(folds) and positive_net_folds == len(folds),
                 "round_trip_cost_per_oz": float(round_trip_cost),
                 "folds": folds,
             }
