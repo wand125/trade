@@ -55,7 +55,9 @@
     "profile_blend": "experiments/next_bar/intrabar_profile_m30_confidence_blend_windows_canonical_001",
     "profile_comparison": "experiments/next_bar/distribution_shift_m30_vs_profile_052_windows_comparison.json",
     "profile_bootstrap": "experiments/next_bar/distribution_shift_m30_vs_profile_052_windows_bootstrap_20000.json",
-    "reliability": "experiments/next_bar/distribution_shift_m30_vs_pressure_windows_reliability.json"
+    "reliability": "experiments/next_bar/distribution_shift_m30_vs_pressure_windows_reliability.json",
+    "latest_prediction": "experiments/next_bar/distribution_shift_m30_latest_confidence_candidate_windows.json",
+    "latest_parity": "experiments/next_bar/distribution_shift_m30_latest_confidence_candidate_parity_windows.json"
   },
   "evidence": {
     "rows": 71260,
@@ -122,6 +124,21 @@
       "confidence_055_score_wins_against_pressure": 3,
       "confidence_055_score_losses_against_pressure": 4,
       "equal_shift_pressure_052": "rejected because development and all selection score were below Shift alone"
+    },
+    "runtime_parity": {
+      "status": "completed",
+      "completed_at": "2026-08-16T14:01:00+09:00",
+      "latest_decision_timestamp": "2026-06-01T04:30:00.000Z",
+      "baseline_probability_up": 0.5323172046,
+      "candidate_probability_up": 0.5229820568,
+      "blended_probability_up": 0.5299834177,
+      "passes_fixed_confidence_threshold": true,
+      "direct_formula_absolute_difference": 5.000000413701855e-11,
+      "walk_forward_settings_matched": true,
+      "retrained": false,
+      "fresh_edge_evidence": false,
+      "odds_runtime_authorized": false,
+      "strict_prediction_eligible": false
     }
   },
   "promotion": {
@@ -133,7 +150,6 @@
     "replace_authoritative_fair_odds": false,
     "replace_paper_or_live_policy": false,
     "requirements": [
-      "verify latest inference parity",
       "pass a fresh head-to-head accuracy and selection-score gate against Pressure",
       "pass fresh global and local calibration gates"
     ]
