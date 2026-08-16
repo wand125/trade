@@ -40,6 +40,8 @@ PARITY_CONFIG_KEYS = (
 
 def assert_walk_forward_artifact_parity(
     model_dirs: Sequence[Path],
+    *,
+    allowed_config_differences: Iterable[str] = (),
 ) -> dict[str, object]:
     """Validate aligned walk-forward artifacts before multi-source latest inference."""
     if len(model_dirs) < 2:
@@ -55,18 +57,31 @@ def assert_walk_forward_artifact_parity(
     reference_config = reference.get("config", {})
     if not isinstance(reference_config, dict):
         raise ValueError("walk-forward config must be an object")
+    source_configs: list[dict[str, object]] = [reference_config]
+    allowed = set(allowed_config_differences)
+    unknown_allowed = allowed - set(PARITY_CONFIG_KEYS)
+    if unknown_allowed:
+        raise ValueError(
+            "unknown allowed walk-forward config differences: "
+            + ", ".join(sorted(unknown_allowed))
+        )
     mismatches: dict[str, list[object]] = {}
+    observed_allowed: set[str] = set()
     for index, report in enumerate(reports[1:], start=1):
         if report.get("folds") != reference_folds:
             mismatches.setdefault("folds", []).append(index)
         config = report.get("config", {})
         if not isinstance(config, dict):
             raise ValueError("walk-forward config must be an object")
+        source_configs.append(config)
         for key in PARITY_CONFIG_KEYS:
             if key == "model_type":
                 continue
             if config.get(key) != reference_config.get(key):
-                mismatches.setdefault(key, []).append(index)
+                if key in allowed:
+                    observed_allowed.add(key)
+                else:
+                    mismatches.setdefault(key, []).append(index)
     if mismatches:
         raise ValueError(
             "walk-forward artifact settings do not match: "
@@ -77,7 +92,11 @@ def assert_walk_forward_artifact_parity(
         "matched_config": {
             key: reference_config.get(key)
             for key in PARITY_CONFIG_KEYS
-            if key != "model_type"
+            if key != "model_type" and key not in observed_allowed
+        },
+        "allowed_config_differences": {
+            key: [config.get(key) for config in source_configs]
+            for key in sorted(observed_allowed)
         },
         "sources": [
             {

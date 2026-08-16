@@ -1,6 +1,6 @@
 # Next-bar research status
 
-更新日時: 2026-08-16 11:04 JST
+更新日時: 2026-08-16 12:32 JST
 
 ## 現在の状態
 
@@ -550,6 +550,8 @@
 155. M5 Transitionの2本の固定3-source shadowへ、保存済みwalk-forward最終fold modelを読むmulti-source latest runtimeを追加した。7fold境界、学習・校正設定、decision timestamp、重み合計をguardし、再学習なしで2026-06-01 04:55 UTCを再現した。Pressure方向shadowはbaseline/Pressure/Transition=`0.5233518569/0.5176241393/0.5036710893`、75/12.5/12.5固定式で`p(up)=0.5201757962`。Profile confidence shadowはProfile=`0.5197680287`、同固定式・baseline方向維持で`p(up)=0.5204437824`となり0.515を通過した。丸め後の直接式との差は最大`5.1e-11`未満、両方up、odds非認可・strict非適格でfull runtime parityを達成した。これは既存最終fold/既存時点の機能確認でfresh edgeではないため、Pressure/Profile/Profile×TCN/Follow-through、authoritative方向/confidence、fair odds、registry、paper/live policyを変更しない。low-priority worker、CPU only、標準損失1.0を維持した。
 
 156. M5 Profile×TCN固定confidence shadowにも同じmulti-source latest runtimeを適用した。baseline/Profile/TCN=`0.5233518569/0.5197680287/0.5161988528`、固定75/12.5/12.5、baseline方向維持で2026-06-01 04:55 UTCの`p(up)=0.5220097528`、up、0.515通過を再現した。7fold境界、主要train/calibration設定、時刻、重みをguardし、丸め後の直接式との差`6.3e-11`未満、odds非認可・strict非適格を確認した。full runtime parityはacceptedだがfresh edgeではなく、親ProfileへのOOS増分とdown-normal Wilson edgeは未確定のままなので、Profile/EWMA/Profile×Transition/Follow-through、authoritative confidence・fair odds・registry・policyを変更しない。再学習なし、low-priority worker、CPU only、標準損失1.0を維持した。
+
+157. M5 Directional Follow-through固定75/25・方向維持confidence shadowにもlatest parityを追加した。候補の本質である`train_weighting=uniform/directional_follow_through`差だけをCLIで明示許可し、parity manifestへ両値を記録する。その他の7fold境界・train/calibration設定と時刻は一致した。2026-06-01 04:55 UTCはbaseline/weighted=`0.5233518569/0.5231690506`、shadow `p(up)=0.5233061553`、upで、固定0.55には届かず非選択だった。直接式との差`2.6e-11`未満、odds非認可・strict非適格を確認しfull runtime parityはaccepted。既存時点の機能確認でfresh edgeではなく、confirmation support 1,277件の不足は残るため、Profile/Profile×Transition、authoritative confidence・fair odds・registry・policyを変更しない。再学習なし、low-priority worker、CPU only、標準損失1.0を維持した。
 
 ## ベースライン評価
 

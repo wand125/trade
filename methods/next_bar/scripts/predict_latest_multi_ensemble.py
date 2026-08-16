@@ -36,11 +36,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--source", action="append", type=source, required=True)
     parser.add_argument("--preserve-first-direction", action="store_true")
+    parser.add_argument(
+        "--allow-config-difference",
+        action="append",
+        default=[],
+        help="Explicit walk-forward config key allowed to differ across sources.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--parity-output", type=Path, required=True)
     args = parser.parse_args(argv)
     directories = [path for _, path, _ in args.source]
-    parity = assert_walk_forward_artifact_parity(directories)
+    parity = assert_walk_forward_artifact_parity(
+        directories,
+        allowed_config_differences=args.allow_config_difference,
+    )
     m1 = read_ohlcv(args.input)
     frames = [(label, predict_latest(m1, path), weight) for label, path, weight in args.source]
     predictions = blend_latest_prediction_sources(

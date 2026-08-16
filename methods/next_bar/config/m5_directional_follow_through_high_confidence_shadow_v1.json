@@ -52,7 +52,9 @@
     "profile_055_bootstrap": "experiments/next_bar/directional_follow_through_m5_confidence_vs_profile_055_bootstrap.json",
     "pressure_equal_direction": "experiments/next_bar/pressure_directional_follow_through_equal_m5_direction_fixed_001",
     "profile_equal_confidence": "experiments/next_bar/profile_directional_follow_through_equal_m5_confidence_fixed_001",
-    "latest_teacher_quality_artifact": "experiments/next_bar/directional_follow_through_weighted_m5_latest_prediction.json"
+    "latest_teacher_quality_artifact": "experiments/next_bar/directional_follow_through_weighted_m5_latest_prediction.json",
+    "confidence_shadow_latest_prediction": "experiments/next_bar/directional_follow_through_m5_latest_confidence_shadow_windows.json",
+    "confidence_shadow_latest_parity": "experiments/next_bar/directional_follow_through_m5_latest_confidence_shadow_parity_windows.json"
   },
   "evidence": {
     "rows": 439881,
@@ -162,7 +164,21 @@
       "candidate_only_accuracy": 0.5691536419935123,
       "profile_only_rows": 1616,
       "profile_only_accuracy": 0.536509900990099,
-      "caveat": "Confirmation contains only 1,277 selected rows and the full direction-preserving runtime blend has not been issued."
+      "caveat": "Confirmation contains only 1,277 selected rows; issued runtime parity is not fresh edge evidence."
+    },
+    "runtime_parity": {
+      "completed": true,
+      "decision_timestamp": "2026-06-01T04:55:00.000Z",
+      "confidence_shadow_probability_up": 0.5233061553,
+      "confidence_shadow_passes_fixed_055_threshold": false,
+      "direct_formula_absolute_difference": 2.5000002068509275e-11,
+      "allowed_config_difference": {
+        "train_weighting": ["uniform", "directional_follow_through"]
+      },
+      "fold_boundaries_and_other_training_settings_matched": true,
+      "retraining_performed": false,
+      "odds_runtime_authorized": false,
+      "fresh_edge_evidence_added": false
     }
   },
   "promotion": {
@@ -179,6 +195,6 @@
     "require_fresh_forward_coverage_not_below_profile_055": true,
     "require_fresh_forward_selection_score_not_below_profile_055": true,
     "require_fresh_forward_global_and_local_calibration": true,
-    "reason": "The fixed 0.55 selector beat Profile in aggregate accuracy, coverage, Wilson lower bound, and selection score; won selection score in all seven folds; and had supportive daily bootstrap intervals for the aggregate lane. The broad 0.515 lane and global proper scores were worse, confirmation support was sparse, and runtime parity is not available, so only a non-authoritative high-confidence forward shadow is emitted."
+    "reason": "The fixed 0.55 selector beat Profile in aggregate accuracy, coverage, Wilson lower bound, and selection score; won selection score in all seven folds; and had supportive daily bootstrap intervals for the aggregate lane. The broad 0.515 lane and global proper scores were worse, confirmation support was sparse, and runtime parity adds no fresh evidence, so only a non-authoritative high-confidence forward shadow is emitted."
   }
 }

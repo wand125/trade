@@ -130,6 +130,17 @@ class NextBarEnsembleTests(unittest.TestCase):
             (paths[1] / "walk_forward_metrics.json").write_text(json.dumps(candidate), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "flat_tolerance"):
                 assert_walk_forward_artifact_parity(paths)
+            parity = assert_walk_forward_artifact_parity(
+                paths, allowed_config_differences=["flat_tolerance"]
+            )
+            self.assertEqual(
+                parity["allowed_config_differences"]["flat_tolerance"],
+                [0.0, 0.01],
+            )
+            with self.assertRaisesRegex(ValueError, "unknown allowed"):
+                assert_walk_forward_artifact_parity(
+                    paths, allowed_config_differences=["feature_set"]
+                )
 
     @staticmethod
     def pairwise_source(probabilities: list[float], candidate: list[float]) -> pd.DataFrame:
