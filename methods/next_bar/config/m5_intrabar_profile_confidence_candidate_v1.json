@@ -45,7 +45,11 @@
     "baseline_latest_artifact": "experiments/next_bar/baseline_m5_latest_artifact_001",
     "latest_artifact": "experiments/next_bar/intrabar_profile_m5_latest_artifact_001",
     "latest_ensemble": "experiments/next_bar/intrabar_profile_m5_latest_ensemble_001",
-    "runtime_shadow_policy": "methods/next_bar/config/m5_intrabar_profile_runtime_shadow_policy_v1.json"
+    "runtime_shadow_policy": "methods/next_bar/config/m5_intrabar_profile_runtime_shadow_policy_v1.json",
+    "windows_baseline_oos": "experiments/next_bar/baseline_m5_windows_canonical_001",
+    "windows_candidate_oos": "experiments/next_bar/intrabar_profile_m5_windows_canonical_001",
+    "windows_latest_prediction": "experiments/next_bar/intrabar_profile_m5_latest_confidence_candidate_windows.json",
+    "windows_latest_parity": "experiments/next_bar/intrabar_profile_m5_latest_confidence_candidate_parity_windows.json"
   },
   "selection_objective": {
     "formula": "coverage^0.5 * (wilson_accuracy_lower_bound - 0.50)",
@@ -139,6 +143,21 @@
       "normal_blend_fixes": 4929,
       "normal_blend_harms": 4953,
       "normal_blend_mcnemar_exact_p": 0.8170294809305811
+    },
+    "runtime_parity": {
+      "status": "completed_on_windows_canonical_artifacts",
+      "completed_at": "2026-08-16T19:48:00+09:00",
+      "latest_decision_timestamp": "2026-06-01T04:55:00.000Z",
+      "baseline_probability_up": 0.5233518569,
+      "candidate_probability_up": 0.5197680287,
+      "blended_probability_up": 0.5224558998,
+      "passes_fixed_confidence_threshold": true,
+      "direct_formula_absolute_difference": 5.000000413701855e-11,
+      "walk_forward_settings_matched": true,
+      "retrained": false,
+      "fresh_edge_evidence": false,
+      "odds_runtime_authorized": false,
+      "strict_prediction_eligible": false
     }
   },
   "promotion": {
